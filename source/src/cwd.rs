@@ -67,10 +67,7 @@ impl Reported {
 	/// the loop that feeds the tap owns the PTY.
 	#[cfg(unix)]
 	pub fn for_tty(tty: std::os::unix::io::RawFd) -> Self {
-		Self {
-			tty: Some(tty),
-			..Self::default()
-		}
+		Self { tty: Some(tty), ..Self::default() }
 	}
 
 	// The directory as last reported, or None where no shell has said anything,
@@ -132,20 +129,13 @@ pub struct TappedPty<P> {
 
 impl<P> std::fmt::Debug for TappedPty<P> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("TappedPty")
-			.field("reported", &self.reported)
-			.finish_non_exhaustive()
+		f.debug_struct("TappedPty").field("reported", &self.reported).finish_non_exhaustive()
 	}
 }
 
 impl<P> TappedPty<P> {
 	pub fn new(pty: P, reported: Reported) -> Self {
-		Self {
-			pty,
-			cap: OscCap::new(OSC_HELD_MAX),
-			scan: Scan::default(),
-			reported,
-		}
+		Self { pty, cap: OscCap::new(OSC_HELD_MAX), scan: Scan::default(), reported }
 	}
 }
 
@@ -166,23 +156,13 @@ impl<P: EventedReadWrite> EventedReadWrite for TappedPty<P> {
 	type Reader = Self;
 	type Writer = P::Writer;
 
-	unsafe fn register(
-		&mut self,
-		poll: &Arc<Poller>,
-		interest: PollEvent,
-		mode: PollMode,
-	) -> io::Result<()> {
+	unsafe fn register(&mut self, poll: &Arc<Poller>, interest: PollEvent, mode: PollMode) -> io::Result<()> {
 		// SAFETY: the caller's contract (the sources outlive the registration)
 		// is passed straight through to the PTY that owns them.
 		unsafe { self.pty.register(poll, interest, mode) }
 	}
 
-	fn reregister(
-		&mut self,
-		poll: &Arc<Poller>,
-		interest: PollEvent,
-		mode: PollMode,
-	) -> io::Result<()> {
+	fn reregister(&mut self, poll: &Arc<Poller>, interest: PollEvent, mode: PollMode) -> io::Result<()> {
 		self.pty.reregister(poll, interest, mode)
 	}
 
@@ -236,11 +216,7 @@ enum CapState {
 
 impl OscCap {
 	fn new(limit: usize) -> Self {
-		Self {
-			limit,
-			state: CapState::Other,
-			held: 0,
-		}
+		Self { limit, state: CapState::Other, held: 0 }
 	}
 
 	fn feed(&mut self, bytes: &mut [u8]) {
@@ -263,9 +239,7 @@ impl OscCap {
 					self.held = 0;
 					CapState::Osc
 				}
-				(CapState::Esc, CAN | SUB | 0x20..=0x7e) | (CapState::Osc, BEL | CAN | SUB) => {
-					CapState::Other
-				}
+				(CapState::Esc, CAN | SUB | 0x20..=0x7e) | (CapState::Osc, BEL | CAN | SUB) => CapState::Other,
 				(CapState::Osc, ESC) => CapState::Esc,
 				// vte keeps a parameter break as an index, not a byte
 				(CapState::Osc, byte) if byte >= 0x20 && byte != b';' => {
@@ -394,13 +368,7 @@ impl Scan {
 // the moment it can be, so a title change or a clipboard write costs a couple
 // of comparisons and no memory.
 fn wanted(payload: &[u8]) -> bool {
-	[b"7;".as_slice(), b"9;9;".as_slice()].iter().any(|prefix| {
-		if payload.len() < prefix.len() {
-			prefix.starts_with(payload)
-		} else {
-			payload.starts_with(prefix)
-		}
-	})
+	[b"7;".as_slice(), b"9;9;".as_slice()].iter().any(|prefix| if payload.len() < prefix.len() { prefix.starts_with(payload) } else { payload.starts_with(prefix) })
 }
 
 /// The directory an OSC payload names, in either spelling. `local_host` is what
@@ -419,10 +387,7 @@ pub fn directory(payload: &str, local_host: &str) -> Option<PathBuf> {
 // documents it, but a shell that writes one means the same thing.
 fn from_url(url: &str, local_host: &str) -> Option<PathBuf> {
 	let Some(rest) = url.strip_prefix("file://") else {
-		return url
-			.starts_with('/')
-			.then(|| as_path(&decode(url)))
-			.flatten();
+		return url.starts_with('/').then(|| as_path(&decode(url))).flatten();
 	};
 	// the host runs to the path's leading separator, which the path keeps
 	let split = rest.find('/')?;
@@ -430,10 +395,7 @@ fn from_url(url: &str, local_host: &str) -> Option<PathBuf> {
 	// A directory on another machine isn't one we can open. Rejecting it
 	// matters most where the 2 agree by accident: an ssh session whose remote
 	// path also exists locally would otherwise open a pane in the wrong one.
-	if !(host.is_empty()
-		|| host.eq_ignore_ascii_case("localhost")
-		|| host.eq_ignore_ascii_case(local_host))
-	{
+	if !(host.is_empty() || host.eq_ignore_ascii_case("localhost") || host.eq_ignore_ascii_case(local_host)) {
 		return None;
 	}
 	as_path(&decode(path))
@@ -456,15 +418,7 @@ fn as_path(text: &str) -> Option<PathBuf> {
 	#[cfg(windows)]
 	{
 		let bytes = text.as_bytes();
-		let text = if bytes.len() >= 3
-			&& bytes[0] == b'/'
-			&& bytes[1].is_ascii_alphabetic()
-			&& bytes[2] == b':'
-		{
-			&text[1..]
-		} else {
-			text
-		};
+		let text = if bytes.len() >= 3 && bytes[0] == b'/' && bytes[1].is_ascii_alphabetic() && bytes[2] == b':' { &text[1..] } else { text };
 		Some(PathBuf::from(text.replace('/', "\\")))
 	}
 	#[cfg(not(windows))]
@@ -509,9 +463,7 @@ fn host_name() -> String {
 	if !ok {
 		return String::new();
 	}
-	std::ffi::CStr::from_bytes_until_nul(&buf)
-		.map(|name| name.to_string_lossy().into_owned())
-		.unwrap_or_default()
+	std::ffi::CStr::from_bytes_until_nul(&buf).map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
 }
 
 // %COMPUTERNAME% rather than GetComputerNameEx: it's always set, and it saves
@@ -547,10 +499,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_report_is_dropped_once_the_program_that_sent_it_exits() {
-		let mut child = std::process::Command::new("sleep")
-			.arg("30")
-			.spawn()
-			.expect("start sleep");
+		let mut child = std::process::Command::new("sleep").arg("30").spawn().expect("start sleep");
 		let reported = Reported::default();
 		reported.set_from(native("/srv"), Some(child.id()));
 		assert_eq!(reported.live(), Some(native("/srv")), "while it runs");
@@ -578,19 +527,10 @@ mod tests {
 	// Test ID: dbhew
 	#[test]
 	fn an_osc7_url_names_the_directory_it_encodes() {
-		assert_eq!(
-			directory("7;file://box/home/u/two%20words", "box"),
-			Some(native("/home/u/two words"))
-		);
+		assert_eq!(directory("7;file://box/home/u/two%20words", "box"), Some(native("/home/u/two words")));
 		// no host and "localhost" both mean this machine
-		assert_eq!(
-			directory("7;file:///srv/log", "box"),
-			Some(native("/srv/log"))
-		);
-		assert_eq!(
-			directory("7;file://localhost/srv/log", "box"),
-			Some(native("/srv/log"))
-		);
+		assert_eq!(directory("7;file:///srv/log", "box"), Some(native("/srv/log")));
+		assert_eq!(directory("7;file://localhost/srv/log", "box"), Some(native("/srv/log")));
 		// the name isn't case-sensitive, and a bare path is taken as meant
 		assert_eq!(directory("7;file://BOX/srv", "box"), Some(native("/srv")));
 		assert_eq!(directory("7;/srv", "box"), Some(native("/srv")));
@@ -615,10 +555,7 @@ mod tests {
 	fn the_conemu_spelling_is_read_too() {
 		assert_eq!(directory("9;9;/srv/log", "box"), Some(native("/srv/log")));
 		// it's usually sent quoted, and it's never encoded
-		assert_eq!(
-			directory("9;9;\"/srv/two words\"", "box"),
-			Some(native("/srv/two words"))
-		);
+		assert_eq!(directory("9;9;\"/srv/two words\"", "box"), Some(native("/srv/two words")));
 		assert_eq!(directory("9;9;", "box"), None);
 	}
 
@@ -629,20 +566,11 @@ mod tests {
 	fn a_report_split_across_reads_still_arrives() {
 		let whole = b"ok\x1b]7;file:///srv/log\x07more";
 		assert_eq!(feed(&[whole]), Some(native("/srv/log")));
-		assert_eq!(
-			feed(&[b"ok\x1b", b"]7;file://", b"/srv/log\x07"]),
-			Some(native("/srv/log"))
-		);
+		assert_eq!(feed(&[b"ok\x1b", b"]7;file://", b"/srv/log\x07"]), Some(native("/srv/log")));
 		// ST, split between its 2 bytes
-		assert_eq!(
-			feed(&[b"\x1b]7;file:///srv/log\x1b", b"\\rest"]),
-			Some(native("/srv/log"))
-		);
+		assert_eq!(feed(&[b"\x1b]7;file:///srv/log\x1b", b"\\rest"]), Some(native("/srv/log")));
 		// the last report wins
-		assert_eq!(
-			feed(&[b"\x1b]7;file:///srv\x07", b"\x1b]7;file:///tmp\x07"]),
-			Some(native("/tmp"))
-		);
+		assert_eq!(feed(&[b"\x1b]7;file:///srv\x07", b"\x1b]7;file:///tmp\x07"]), Some(native("/tmp")));
 	}
 
 	// Every other OSC goes past all the time, such as a title on every prompt or
@@ -676,14 +604,8 @@ mod tests {
 	#[cfg(windows)]
 	#[test]
 	fn a_windows_drive_letter_survives_the_url_it_arrived_in() {
-		assert_eq!(
-			directory("7;file:///C:/Users/u", "box"),
-			Some(PathBuf::from(r"C:\Users\u"))
-		);
-		assert_eq!(
-			directory("9;9;\"C:\\Users\\u\"", "box"),
-			Some(PathBuf::from(r"C:\Users\u"))
-		);
+		assert_eq!(directory("7;file:///C:/Users/u", "box"), Some(PathBuf::from(r"C:\Users\u")));
+		assert_eq!(directory("9;9;\"C:\\Users\\u\"", "box"), Some(PathBuf::from(r"C:\Users\u")));
 	}
 
 	// A reported directory names the tab and shows in the window title, so it has
@@ -728,15 +650,8 @@ mod tests {
 		fn execute(&mut self, byte: u8) {
 			self.0.push(Event::Execute(byte));
 		}
-		fn hook(
-			&mut self,
-			p: &alacritty_terminal::vte::Params,
-			inter: &[u8],
-			ignore: bool,
-			action: char,
-		) {
-			self.0
-				.push(Event::Hook(params(p), inter.to_vec(), ignore, action));
+		fn hook(&mut self, p: &alacritty_terminal::vte::Params, inter: &[u8], ignore: bool, action: char) {
+			self.0.push(Event::Hook(params(p), inter.to_vec(), ignore, action));
 		}
 		fn put(&mut self, byte: u8) {
 			self.0.push(Event::Put(byte));
@@ -745,18 +660,10 @@ mod tests {
 			self.0.push(Event::Unhook);
 		}
 		fn osc_dispatch(&mut self, p: &[&[u8]], bell: bool) {
-			self.0
-				.push(Event::Osc(p.iter().map(|x| x.len()).sum(), bell));
+			self.0.push(Event::Osc(p.iter().map(|x| x.len()).sum(), bell));
 		}
-		fn csi_dispatch(
-			&mut self,
-			p: &alacritty_terminal::vte::Params,
-			inter: &[u8],
-			ignore: bool,
-			action: char,
-		) {
-			self.0
-				.push(Event::Csi(params(p), inter.to_vec(), ignore, action));
+		fn csi_dispatch(&mut self, p: &alacritty_terminal::vte::Params, inter: &[u8], ignore: bool, action: char) {
+			self.0.push(Event::Csi(params(p), inter.to_vec(), ignore, action));
 		}
 		fn esc_dispatch(&mut self, inter: &[u8], ignore: bool, byte: u8) {
 			self.0.push(Event::Esc(inter.to_vec(), ignore, byte));
@@ -783,14 +690,7 @@ mod tests {
 		let mut end = b"\x07ok".to_vec();
 		cap.feed(&mut end);
 		parser.advance(&mut events, &end);
-		assert_eq!(
-			events.0,
-			[
-				Event::Osc(OSC_HELD_MAX, true),
-				Event::Print('o'),
-				Event::Print('k')
-			]
-		);
+		assert_eq!(events.0, [Event::Osc(OSC_HELD_MAX, true), Event::Print('o'), Event::Print('k')]);
 
 		// The largest clipboard write that's kept goes through whole.
 		let mut cap = OscCap::new(OSC_HELD_MAX);
@@ -830,21 +730,14 @@ mod tests {
 						raw.extend_from_slice(rng.pick(&OPENERS));
 					}
 					for _ in 0..rng.below(4 * LIMIT) {
-						let byte = if rng.chance(3) {
-							*rng.pick(&BODY)
-						} else {
-							b'y'
-						};
+						let byte = if rng.chance(3) { *rng.pick(&BODY) } else { b'y' };
 						raw.push(byte);
 					}
 				}
 			}
 			let mut cap = OscCap::new(LIMIT);
 			let (mut plain, mut capped) = (Events::default(), Events::default());
-			let (mut p1, mut p2) = (
-				alacritty_terminal::vte::Parser::new(),
-				alacritty_terminal::vte::Parser::new(),
-			);
+			let (mut p1, mut p2) = (alacritty_terminal::vte::Parser::new(), alacritty_terminal::vte::Parser::new());
 			let mut rest = raw.as_slice();
 			while !rest.is_empty() {
 				let (chunk, tail) = rest.split_at(1 + rng.below(rest.len()));
@@ -895,10 +788,7 @@ mod tests {
 					assert!(!text.is_empty(), "{payload:?} gave an empty path");
 					// A control character would end up in the tab label and the
 					// window title, so it may not come out of here.
-					assert!(
-						!text.chars().any(char::is_control),
-						"{payload:?} gave {text:?}"
-					);
+					assert!(!text.chars().any(char::is_control), "{payload:?} gave {text:?}");
 				}
 			};
 			for case in &corpus {

@@ -55,7 +55,7 @@ param(
 
 ##	===================  Per-project settings - edit only these  ==================
 
-$installerVersion = '1.3.2'
+$installerVersion = '1.3.3'
 $ownerRepo        = 'yottacore/silkterm'
 $appName          = 'SilkTerm'
 $exeName          = 'silkterm'
@@ -375,17 +375,21 @@ function fDesktopExec {
 }
 
 ##	True when an Exec line in the desktop entry names the program, quoted and
-##	escaped the way fDesktopExec writes it, or plain between spaces. Arguments
-##	or a wrapper added by hand still count. An entry that can't be read counts
-##	too, so it's left alone.
+##	escaped the way fDesktopExec writes it, or plain, by its path or its bare
+##	name. Plain means after a space, a quote or '=', and before a space or a
+##	quote, so `sh -c "<path> --x"` counts. Arguments or a wrapper added by hand
+##	still count. An entry that can't be read counts too, so it's left alone.
 function fLauncherNames {
 	param([string]$Entry, [string]$Program)
 	try { $lines = Get-Content -LiteralPath $Entry -ErrorAction Stop } catch { return $true }
 	$quoted = '"' + (fDesktopExec $Program) + '"'
+	$name = ($Program -split '/')[-1]
+	##	Case-sensitive, as the paths are.
+	$plain = '[ "''=](' + [regex]::Escape($Program) + '|' + [regex]::Escape($name) + ')[ "'']'
 	foreach ($line in $lines) {
 		if (-not $line.StartsWith('Exec=')) { continue }
 		$val = ' ' + $line.Substring(5) + ' '
-		if ($val.Contains($quoted) -or $val.Contains(" $Program ")) { return $true }
+		if ($val.Contains($quoted) -or [regex]::IsMatch($val, $plain)) { return $true }
 	}
 	return $false
 }
@@ -959,4 +963,6 @@ if ($state.failed -and $runningAsScriptFile) { exit 1 }
 ##		  unless it names some other program.
 ##		- 20261119 JC: Detects the BSDs, which it used to take for Linux. The PATH
 ##		  note reads a folder with brackets in its name right.
+##		- 20261120 JC: A launcher that wraps the program in sh -c, or names it bare,
+##		  is kept on upgrade.
 

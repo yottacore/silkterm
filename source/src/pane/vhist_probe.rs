@@ -55,34 +55,19 @@ fn screen(term: &Term<Quiet>) -> (Vec<u64>, Vec<String>) {
 		.map(|i| {
 			let row = &grid[Line(i as i32)];
 			let chars = || (0..cols).map(|c| row[Column(c)].c);
-			(
-				fnv_row(chars()),
-				chars().collect::<String>().trim_end().to_string(),
-			)
+			(fnv_row(chars()), chars().collect::<String>().trim_end().to_string())
 		})
 		.unzip()
 }
 
 impl Probe {
 	fn new(lines: usize) -> Self {
-		Self {
-			rows: Vec::new(),
-			top: None,
-			region: 0..lines,
-			last: Vec::new(),
-			pending: None,
-			last_text: Vec::new(),
-			tally: Tally::default(),
-		}
+		Self { rows: Vec::new(), top: None, region: 0..lines, last: Vec::new(), pending: None, last_text: Vec::new(), tally: Tally::default() }
 	}
 
 	// Where in the transcript the region's rows sit, by the best run of matches.
 	fn find(&self, text: &[String]) -> Option<usize> {
-		let want: Vec<(usize, &String)> = text[self.region.clone()]
-			.iter()
-			.enumerate()
-			.filter(|(_, t)| !t.is_empty())
-			.collect();
+		let want: Vec<(usize, &String)> = text[self.region.clone()].iter().enumerate().filter(|(_, t)| !t.is_empty()).collect();
 		let need = (want.len() / 2).max(3);
 		let (&(first, key), _) = want.split_first()?;
 		let mut best = None;
@@ -92,10 +77,7 @@ impl Probe {
 				continue;
 			}
 			let at = p - first;
-			let score = want
-				.iter()
-				.filter(|(i, t)| self.rows.get(at + i) == Some(t))
-				.count();
+			let score = want.iter().filter(|(i, t)| self.rows.get(at + i) == Some(t)).count();
 			if score >= need && score > best_score {
 				(best, best_score) = (Some(at), score);
 			}
@@ -122,11 +104,7 @@ impl Probe {
 				.iter()
 				.map(|row| {
 					let n = cols.min(row.len());
-					(0..n)
-						.map(|c| row[Column(c)].c)
-						.collect::<String>()
-						.trim_end()
-						.to_string()
+					(0..n).map(|c| row[Column(c)].c).collect::<String>().trim_end().to_string()
 				})
 				.collect();
 			self.tally.by_ledger += 1;
@@ -141,11 +119,7 @@ impl Probe {
 		}
 		// a scroll of rows inside the transcript's region, below its top, is an edit
 		// in place (vim deleting a line): nothing went into the history
-		if shift != 0
-			&& self.top.is_some()
-			&& region.start > self.region.start
-			&& region.end <= self.region.end
-		{
+		if shift != 0 && self.top.is_some() && region.start > self.region.start && region.end <= self.region.end {
 			self.tally.inside += 1;
 			shift = 0;
 			gone.clear();
@@ -171,13 +145,7 @@ impl Probe {
 			}
 		}
 		if std::env::var_os("SILK_VHIST_TRACE").is_some() {
-			eprintln!(
-				"frame {} shift {shift} region {region:?} gone {} top {:?} first {:?}",
-				self.tally.frames,
-				gone.len(),
-				self.top,
-				text.get(3)
-			);
+			eprintln!("frame {} shift {shift} region {region:?} gone {} top {:?} first {:?}", self.tally.frames, gone.len(), self.top, text.get(3));
 		}
 		term.scroll_ledger_mut().clear();
 		let changed = self.last.len() != cur.len() || cur != self.last;
@@ -223,8 +191,7 @@ impl Probe {
 			.filter_map(|i| {
 				let idx = top + i as isize;
 				let row = &text[region.start + i];
-				(idx >= 0 && (idx as usize) < self.rows.len() && !row.is_empty())
-					.then(|| self.rows[idx as usize] == *row)
+				(idx >= 0 && (idx as usize) < self.rows.len() && !row.is_empty()).then(|| self.rows[idx as usize] == *row)
 			})
 			.collect();
 		let agrees = known.len() < 3 || known.iter().filter(|&&m| m).count() * 2 >= known.len();
@@ -248,11 +215,7 @@ impl Probe {
 		// the ledger's rows are the ones that crossed the region's edge, the last of
 		// them nearest it; past a screenful between frames, some were never drawn
 		for (i, row) in gone.iter().enumerate() {
-			let at = if shift > 0 {
-				top - (gone.len() - i) as isize
-			} else {
-				top + (height + i) as isize
-			};
+			let at = if shift > 0 { top - (gone.len() - i) as isize } else { top + (height + i) as isize };
 			self.put(at, row, &mut top);
 		}
 		for i in 0..height {
@@ -266,8 +229,7 @@ impl Probe {
 	fn put(&mut self, at: isize, row: &str, top: &mut isize) {
 		if at < 0 {
 			let n = (-at) as usize;
-			self.rows
-				.splice(0..0, std::iter::repeat_n(String::new(), n));
+			self.rows.splice(0..0, std::iter::repeat_n(String::new(), n));
 			*top += n as isize;
 			self.rows[0] = row.to_string();
 			return;
@@ -290,10 +252,7 @@ impl Probe {
 // The number after `tag` in a row, as the recorded file and the scenes number them.
 fn number(row: &str, tag: char) -> Option<usize> {
 	let at = row.find(tag)?;
-	let digits: String = row[at + 1..]
-		.chars()
-		.take_while(char::is_ascii_digit)
-		.collect();
+	let digits: String = row[at + 1..].chars().take_while(char::is_ascii_digit).collect();
 	(digits.len() == 5).then(|| digits.parse().ok()).flatten()
 }
 
@@ -315,19 +274,12 @@ fn score(rows: &[String], printed: &std::collections::BTreeSet<usize>, tag: char
 		}
 	}
 	let kept: std::collections::BTreeSet<usize> = seq.iter().copied().collect();
-	Score {
-		printed: printed.len(),
-		kept: kept.intersection(printed).count(),
-		breaks: seq.windows(2).filter(|w| w[1] != w[0] + 1).count(),
-		junk,
-	}
+	Score { printed: printed.len(), kept: kept.intersection(printed).count(), breaks: seq.windows(2).filter(|w| w[1] != w[0] + 1).count(), junk }
 }
 
 fn printed_numbers(bytes: &[u8], tag: char) -> std::collections::BTreeSet<usize> {
 	let text = String::from_utf8_lossy(bytes);
-	text.match_indices(tag)
-		.filter_map(|(at, _)| number(&text[at..], tag))
-		.collect()
+	text.match_indices(tag).filter_map(|(at, _)| number(&text[at..], tag)).collect()
 }
 
 // When the pane builds a frame: after every read, after every n reads, or at most
@@ -339,20 +291,9 @@ enum Frames {
 	Hz(f64),
 }
 
-fn replay(
-	chunks: &[(f64, Vec<u8>)],
-	cols: usize,
-	lines: usize,
-	frames: Frames,
-) -> (Probe, std::time::Duration) {
-	let dims = crate::term::TermDimensions {
-		columns: cols,
-		screen_lines: lines,
-	};
-	let cfg = TermConfig {
-		scrolling_history: 1000,
-		..Default::default()
-	};
+fn replay(chunks: &[(f64, Vec<u8>)], cols: usize, lines: usize, frames: Frames) -> (Probe, std::time::Duration) {
+	let dims = crate::term::TermDimensions { columns: cols, screen_lines: lines };
+	let cfg = TermConfig { scrolling_history: 1000, ..Default::default() };
 	let mut term = Term::new(cfg, &dims, Quiet);
 	term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
 	let mut parser: Processor = Processor::new();
@@ -365,11 +306,7 @@ fn replay(
 			Frames::Every(n) => i + n.max(1),
 			Frames::Hz(rate) => {
 				let until = chunks[i].0 + 1.0 / rate;
-				i + chunks[i..]
-					.iter()
-					.take_while(|(t, _)| *t < until)
-					.count()
-					.max(1)
+				i + chunks[i..].iter().take_while(|(t, _)| *t < until).count().max(1)
 			}
 		}
 		.min(chunks.len());
@@ -377,9 +314,7 @@ fn replay(
 			parser.advance(&mut term, chunk);
 		}
 		// output that stops for a moment has finished drawing
-		let quiet = chunks
-			.get(end)
-			.is_none_or(|(t, _)| t - chunks[end - 1].0 >= 0.05);
+		let quiet = chunks.get(end).is_none_or(|(t, _)| t - chunks[end - 1].0 >= 0.05);
 		let t = std::time::Instant::now();
 		probe.frame(&mut term, quiet);
 		spent += t.elapsed();
@@ -389,16 +324,8 @@ fn replay(
 }
 
 // Every numbered row that was on screen after any read: what the program showed.
-fn shown_numbers(
-	chunks: &[(f64, Vec<u8>)],
-	cols: usize,
-	lines: usize,
-	tag: char,
-) -> std::collections::BTreeSet<usize> {
-	let dims = crate::term::TermDimensions {
-		columns: cols,
-		screen_lines: lines,
-	};
+fn shown_numbers(chunks: &[(f64, Vec<u8>)], cols: usize, lines: usize, tag: char) -> std::collections::BTreeSet<usize> {
+	let dims = crate::term::TermDimensions { columns: cols, screen_lines: lines };
 	let mut term = Term::new(TermConfig::default(), &dims, Quiet);
 	let mut parser: Processor = Processor::new();
 	let mut shown = std::collections::BTreeSet::new();
@@ -410,11 +337,7 @@ fn shown_numbers(
 }
 
 fn timed(chunks: Vec<Vec<u8>>) -> Vec<(f64, Vec<u8>)> {
-	chunks
-		.into_iter()
-		.enumerate()
-		.map(|(i, c)| (i as f64 * 0.01, c))
-		.collect()
+	chunks.into_iter().enumerate().map(|(i, c)| (i as f64 * 0.01, c)).collect()
 }
 
 fn joined(chunks: &[(f64, Vec<u8>)]) -> Vec<u8> {
@@ -430,19 +353,12 @@ fn transcript_scene(lines: usize, repaint: bool) -> (Vec<Vec<u8>>, usize) {
 	let (top, bottom) = (3, lines - 4);
 	let height = bottom - top + 1;
 	let line = |n: usize| format!("M{n:05} tool output for step {n} with some text");
-	let mut chunks = vec![format!(
-		"\x1b[?1049h\x1b[1;1H\x1b[7m header \x1b[0m\x1b[K\x1b[2;1H session\x1b[K\x1b[{};1H> \x1b[K\x1b[{lines};1H footer\x1b[K",
-		lines - 3
-	)];
+	let mut chunks = vec![format!("\x1b[?1049h\x1b[1;1H\x1b[7m header \x1b[0m\x1b[K\x1b[2;1H session\x1b[K\x1b[{};1H> \x1b[K\x1b[{lines};1H footer\x1b[K", lines - 3)];
 	let paint = |first: usize, last_shown: usize| {
 		let mut s = String::from("\x1b[?2026h");
 		for r in 0..height {
 			let n = last_shown as isize + 1 - height as isize + r as isize;
-			let text = if n >= first as isize {
-				line(n as usize)
-			} else {
-				String::new()
-			};
+			let text = if n >= first as isize { line(n as usize) } else { String::new() };
 			let _ = write!(s, "\x1b[{};1H{text}\x1b[K", top + r);
 		}
 		s + "\x1b[?2026l"
@@ -455,10 +371,7 @@ fn transcript_scene(lines: usize, repaint: bool) -> (Vec<Vec<u8>>, usize) {
 		} else {
 			for _ in 0..k {
 				*newest += 1;
-				chunks.push(format!(
-					"\x1b[{top};{bottom}r\x1b[{bottom};1H\x1b[S\x1b[r\x1b[{bottom};1H{}\x1b[K",
-					line(*newest)
-				));
+				chunks.push(format!("\x1b[{top};{bottom}r\x1b[{bottom};1H\x1b[S\x1b[r\x1b[{bottom};1H{}\x1b[K", line(*newest)));
 			}
 		}
 	};
@@ -470,26 +383,11 @@ fn transcript_scene(lines: usize, repaint: bool) -> (Vec<Vec<u8>>, usize) {
 	for _ in 0..10 {
 		shown -= 3;
 		let first = shown + 1 - height;
-		chunks.push(format!(
-			"\x1b[{top};{bottom}r\x1b[{top};1H\x1b[3T\x1b[r\x1b[{top};1H{}\x1b[K\x1b[{};1H{}\x1b[K\x1b[{};1H{}\x1b[K\x1b[{bottom};1H{}\x1b[7m 1 new message \x1b[0m\x1b[K",
-			line(first),
-			top + 1,
-			line(first + 1),
-			top + 2,
-			line(first + 2),
-			line(shown)
-		));
+		chunks.push(format!("\x1b[{top};{bottom}r\x1b[{top};1H\x1b[3T\x1b[r\x1b[{top};1H{}\x1b[K\x1b[{};1H{}\x1b[K\x1b[{};1H{}\x1b[K\x1b[{bottom};1H{}\x1b[7m 1 new message \x1b[0m\x1b[K", line(first), top + 1, line(first + 1), top + 2, line(first + 2), line(shown)));
 	}
 	for _ in 0..10 {
 		shown += 3;
-		chunks.push(format!(
-			"\x1b[{top};{bottom}r\x1b[{bottom};1H\x1b[3S\x1b[r\x1b[{};1H{}\x1b[K\x1b[{};1H{}\x1b[K\x1b[{bottom};1H{}\x1b[K",
-			bottom - 2,
-			line(shown - 2),
-			bottom - 1,
-			line(shown - 1),
-			line(shown)
-		));
+		chunks.push(format!("\x1b[{top};{bottom}r\x1b[{bottom};1H\x1b[3S\x1b[r\x1b[{};1H{}\x1b[K\x1b[{};1H{}\x1b[K\x1b[{bottom};1H{}\x1b[K", bottom - 2, line(shown - 2), bottom - 1, line(shown - 1), line(shown)));
 	}
 	// Enter: the box collapses and the transcript is repainted 2 rows up
 	newest += 2;
@@ -567,9 +465,7 @@ fn recorded_programs_rebuild_what_they_showed() {
 	let Ok(dir) = std::env::var("SILK_VHIST_REC") else {
 		return;
 	};
-	println!(
-		"app\tframe\tshown\tkept\tbreaks\tjunk\tledger\tprint\tinside\tpinned\tplaced\tgaps\trewrite\tmisplace\trows\tus/frame"
-	);
+	println!("app\tframe\tshown\tkept\tbreaks\tjunk\tledger\tprint\tinside\tpinned\tplaced\tgaps\trewrite\tmisplace\trows\tus/frame");
 	for app in ["less", "vim", "nano", "htop"] {
 		let Ok(bytes) = std::fs::read(format!("{dir}/{app}.rec")) else {
 			continue;
@@ -578,8 +474,7 @@ fn recorded_programs_rebuild_what_they_showed() {
 		let mut at = 0;
 		while at + 12 <= bytes.len() {
 			let t = f64::from_le_bytes(bytes[at..at + 8].try_into().unwrap_or_default());
-			let n =
-				u32::from_le_bytes(bytes[at + 8..at + 12].try_into().unwrap_or_default()) as usize;
+			let n = u32::from_le_bytes(bytes[at + 8..at + 12].try_into().unwrap_or_default()) as usize;
 			chunks.push((t, bytes[at + 12..(at + 12 + n).min(bytes.len())].to_vec()));
 			at += 12 + n;
 		}
@@ -588,25 +483,8 @@ fn recorded_programs_rebuild_what_they_showed() {
 			let (probe, spent) = replay(&chunks, 100, 30, per);
 			let s = score(&probe.rows, &printed, 'L');
 			let t = &probe.tally;
-			println!(
-				"{app}\t{per:?}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.1}",
-				s.printed,
-				s.kept,
-				s.breaks,
-				s.junk,
-				t.by_ledger,
-				t.by_print,
-				t.inside,
-				t.pinned,
-				t.placed,
-				t.gaps,
-				t.rewrites,
-				t.misplaced,
-				probe.rows.iter().filter(|r| !r.is_empty()).count(),
-				spent.as_secs_f64() * 1e6 / t.frames.max(1) as f64
-			);
-			let kept: std::collections::BTreeSet<usize> =
-				probe.rows.iter().filter_map(|r| number(r, 'L')).collect();
+			println!("{app}\t{per:?}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.1}", s.printed, s.kept, s.breaks, s.junk, t.by_ledger, t.by_print, t.inside, t.pinned, t.placed, t.gaps, t.rewrites, t.misplaced, probe.rows.iter().filter(|r| !r.is_empty()).count(), spent.as_secs_f64() * 1e6 / t.frames.max(1) as f64);
+			let kept: std::collections::BTreeSet<usize> = probe.rows.iter().filter_map(|r| number(r, 'L')).collect();
 			let missing: Vec<&usize> = printed.difference(&kept).collect();
 			println!("\tmissing {missing:?}");
 			if std::env::var_os("SILK_VHIST_DUMP").is_some() {

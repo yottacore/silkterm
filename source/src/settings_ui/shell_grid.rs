@@ -7,10 +7,7 @@
 //! from the left, and the command takes what's left between them, so a wider
 //! panel widens the column that needs it.
 
-use super::{
-	Chrome, Dlg, Focus, Prompt, PromptFocus, PromptJob, SettingsDialog, border, font_gap, lay,
-	quad, shell_field_row, square_box,
-};
+use super::{Chrome, Dlg, Focus, Prompt, PromptFocus, PromptJob, SettingsDialog, border, font_gap, lay, quad, shell_field_row, square_box};
 use crate::config;
 use crate::gfx::{QuadMode, RectInstance};
 use crate::pane::Rect;
@@ -39,12 +36,7 @@ impl ShellWidths {
 	// `seen_w` and `active_w` are the measured ones, floors already applied.
 	fn at(line_h: f32, seen_w: f32, active_w: f32) -> ShellWidths {
 		let l = lay();
-		ShellWidths {
-			name: font_gap(l.shell_name_width, line_h),
-			seen: seen_w,
-			active: active_w.max(square_box(l.swatch, line_h)),
-			gap: font_gap(l.shell_col_gap, line_h),
-		}
+		ShellWidths { name: font_gap(l.shell_name_width, line_h), seen: seen_w, active: active_w.max(square_box(l.swatch, line_h)), gap: font_gap(l.shell_col_gap, line_h) }
 	}
 }
 
@@ -64,12 +56,7 @@ pub(super) enum ShellPart {
 
 impl ShellPart {
 	pub(super) const COUNT: u16 = 4;
-	const ALL: [ShellPart; 4] = [
-		ShellPart::Name,
-		ShellPart::Command,
-		ShellPart::Remove,
-		ShellPart::Active,
-	];
+	const ALL: [ShellPart; 4] = [ShellPart::Name, ShellPart::Command, ShellPart::Remove, ShellPart::Active];
 	pub(super) fn of(stop: u16) -> ShellPart {
 		ShellPart::ALL[(stop % ShellPart::COUNT) as usize]
 	}
@@ -107,16 +94,11 @@ pub(super) enum ShellStop {
 
 pub(super) fn shell_stop(part: u16, entries: usize) -> ShellStop {
 	let entry = (part / ShellPart::COUNT) as usize;
-	if entry >= entries {
-		ShellStop::Add
-	} else {
-		ShellStop::Entry(entry, ShellPart::of(part))
-	}
+	if entry >= entries { ShellStop::Add } else { ShellStop::Entry(entry, ShellPart::of(part)) }
 }
 
 fn shell_part_index(entry: usize, part: ShellPart) -> u16 {
-	entry as u16 * ShellPart::COUNT
-		+ ShellPart::ALL.iter().position(|p| *p == part).unwrap_or(0) as u16
+	entry as u16 * ShellPart::COUNT + ShellPart::ALL.iter().position(|p| *p == part).unwrap_or(0) as u16
 }
 
 impl SettingsDialog {
@@ -154,18 +136,9 @@ impl SettingsDialog {
 		let Some(entry) = self.edited.shells.get(shell_index) else {
 			return;
 		};
-		let name = if entry.title.trim().is_empty() {
-			entry.command.clone()
-		} else {
-			entry.title.clone()
-		};
+		let name = if entry.title.trim().is_empty() { entry.command.clone() } else { entry.title.clone() };
 		self.commit_edit();
-		self.prompt = Some(Prompt {
-			job: PromptJob::DropShell(shell_index),
-			title: format!("Really remove \"{name}\" from the list?"),
-			focus: PromptFocus::Ok,
-			warn: None,
-		});
+		self.prompt = Some(Prompt { job: PromptJob::DropShell(shell_index), title: format!("Really remove \"{name}\" from the list?"), focus: PromptFocus::Ok, warn: None });
 	}
 
 	/// A scan arrived while this dialog was open. Both copies move, so a user who
@@ -193,11 +166,7 @@ impl SettingsDialog {
 		let l = lay();
 		let w = ShellWidths::at(line_h, chrome.seen_w, chrome.active_w);
 		let font_scale = (line_h / l.base_line_height).max(1.0);
-		w.name
-			+ l.shell_command_width
-			+ w.seen + w.active
-			+ w.gap * 5.0
-			+ (l.shell_grip + l.shell_button) * font_scale
+		w.name + l.shell_command_width + w.seen + w.active + w.gap * 5.0 + (l.shell_grip + l.shell_button) * font_scale
 	}
 
 	pub(super) fn shell_widths(&self) -> ShellWidths {
@@ -229,15 +198,7 @@ impl SettingsDialog {
 		let name = left + self.shell_grip_w() + w.gap;
 		let command = name + w.name + w.gap;
 		let command_w = (remove - w.gap - command).max(l.shell_command_width / 2.0);
-		ShellCols {
-			grip: left,
-			name,
-			command,
-			command_w,
-			remove,
-			seen,
-			active,
-		}
+		ShellCols { grip: left, name, command, command_w, remove, seen, active }
 	}
 
 	/// Top of the grid's column titles, and of entry `shell_index`'s own line.
@@ -246,31 +207,18 @@ impl SettingsDialog {
 	}
 
 	pub(super) fn shell_line_y(&self, i: usize, shell_index: usize) -> f32 {
-		self.shell_head_y(i)
-			+ self.line_h
-			+ lay().shell_head_gap
-			+ shell_index as f32 * self.shell_line_h()
+		self.shell_head_y(i) + self.line_h + lay().shell_head_gap + shell_index as f32 * self.shell_line_h()
 	}
 
 	// A boxed control centered in entry `shell_index`'s line, at `x` and `w` wide.
 	fn shell_box(&self, i: usize, shell_index: usize, x: f32, w: f32) -> Rect {
 		let line = self.shell_line_h();
 		let h = self.field_h();
-		Rect {
-			x,
-			y: self.shell_line_y(i, shell_index) + (line - h) / 2.0,
-			w,
-			h,
-		}
+		Rect { x, y: self.shell_line_y(i, shell_index) + (line - h) / 2.0, w, h }
 	}
 
 	pub(super) fn shell_name_box(&self, i: usize, shell_index: usize) -> Rect {
-		self.shell_box(
-			i,
-			shell_index,
-			self.shell_cols().name,
-			self.shell_widths().name,
-		)
+		self.shell_box(i, shell_index, self.shell_cols().name, self.shell_widths().name)
 	}
 
 	pub(super) fn shell_cmd_box(&self, i: usize, shell_index: usize) -> Rect {
@@ -283,12 +231,7 @@ impl SettingsDialog {
 	fn shell_active_box(&self, i: usize, shell_index: usize) -> Rect {
 		let size = self.check_sz();
 		let line = self.shell_line_h();
-		Rect {
-			x: self.shell_cols().active + (self.shell_widths().active - size) / 2.0,
-			y: self.shell_line_y(i, shell_index) + (line - size) / 2.0,
-			w: size,
-			h: size,
-		}
+		Rect { x: self.shell_cols().active + (self.shell_widths().active - size) / 2.0, y: self.shell_line_y(i, shell_index) + (line - size) / 2.0, w: size, h: size }
 	}
 
 	// The drag handle. It's as tall as the fields beside it rather than square,
@@ -300,22 +243,12 @@ impl SettingsDialog {
 	fn shell_remove_box(&self, i: usize, shell_index: usize) -> Rect {
 		let size = self.shell_button_w();
 		let line = self.shell_line_h();
-		Rect {
-			x: self.shell_cols().remove,
-			y: self.shell_line_y(i, shell_index) + (line - size) / 2.0,
-			w: size,
-			h: size,
-		}
+		Rect { x: self.shell_cols().remove, y: self.shell_line_y(i, shell_index) + (line - size) / 2.0, w: size, h: size }
 	}
 
 	pub(super) fn shell_add_box(&self, i: usize) -> Rect {
 		let n = self.edited.shells.len();
-		Rect {
-			x: self.shell_cols().grip,
-			y: self.shell_line_y(i, n) + lay().shell_add_gap,
-			w: self.row_btn_w,
-			h: self.btn_h(),
-		}
+		Rect { x: self.shell_cols().grip, y: self.shell_line_y(i, n) + lay().shell_add_gap, w: self.row_btn_w, h: self.btn_h() }
 	}
 
 	/// The rect the keyboard ring goes around, for any stop in the grid.
@@ -324,12 +257,8 @@ impl SettingsDialog {
 			ShellStop::Add => self.shell_add_box(i),
 			ShellStop::Entry(shell_index, ShellPart::Name) => self.shell_name_box(i, shell_index),
 			ShellStop::Entry(shell_index, ShellPart::Command) => self.shell_cmd_box(i, shell_index),
-			ShellStop::Entry(shell_index, ShellPart::Active) => {
-				self.shell_active_box(i, shell_index)
-			}
-			ShellStop::Entry(shell_index, ShellPart::Remove) => {
-				self.shell_remove_box(i, shell_index)
-			}
+			ShellStop::Entry(shell_index, ShellPart::Active) => self.shell_active_box(i, shell_index),
+			ShellStop::Entry(shell_index, ShellPart::Remove) => self.shell_remove_box(i, shell_index),
 		}
 	}
 
@@ -374,30 +303,18 @@ impl SettingsDialog {
 		let entry = crate::shells::adopted("", &self.edited.shells);
 		self.edited.shells.push(entry);
 		let shell_index = self.edited.shells.len() - 1;
-		self.focus = Some(Focus::Row(
-			i,
-			shell_part_index(shell_index, ShellPart::Command),
-		));
+		self.focus = Some(Focus::Row(i, shell_part_index(shell_index, ShellPart::Command)));
 		self.open_edit(shell_field_row(shell_index, true), true);
 	}
 
 	/// A click somewhere in the grid. Returns whether it hit something.
-	pub(super) fn shell_mouse_down(
-		&mut self,
-		i: usize,
-		x: f32,
-		y: f32,
-		measure: &mut impl FnMut(&str) -> f32,
-	) -> bool {
+	pub(super) fn shell_mouse_down(&mut self, i: usize, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) -> bool {
 		// The grip first, and outside the part walk: it isn't a keyboard stop,
 		// so there is no part index that names it.
 		for shell_index in 0..self.edited.shells.len() {
 			if self.shell_grip_box(i, shell_index).contains(x, y) {
 				self.commit_edit();
-				self.shell_drag = Some(ShellDrag {
-					at: shell_index,
-					grab_dy: y - self.shell_line_y(i, shell_index),
-				});
+				self.shell_drag = Some(ShellDrag { at: shell_index, grab_dy: y - self.shell_line_y(i, shell_index) });
 				return true;
 			}
 		}
@@ -443,16 +360,8 @@ impl SettingsDialog {
 				continue;
 			}
 			return match shell_stop(part, self.edited.shells.len()) {
-				ShellStop::Entry(shell_index, ShellPart::Name) => Some((
-					shell_field_row(shell_index, false),
-					self.shell_name_box(i, shell_index),
-					part,
-				)),
-				ShellStop::Entry(shell_index, ShellPart::Command) => Some((
-					shell_field_row(shell_index, true),
-					self.shell_cmd_box(i, shell_index),
-					part,
-				)),
+				ShellStop::Entry(shell_index, ShellPart::Name) => Some((shell_field_row(shell_index, false), self.shell_name_box(i, shell_index), part)),
+				ShellStop::Entry(shell_index, ShellPart::Command) => Some((shell_field_row(shell_index, true), self.shell_cmd_box(i, shell_index), part)),
 				ShellStop::Add | ShellStop::Entry(_, ShellPart::Remove | ShellPart::Active) => None,
 			};
 		}
@@ -463,28 +372,13 @@ impl SettingsDialog {
 	/// remove button per entry, and the Add button. The remove mark is drawn by
 	/// the shader, as the tab close mark is, since no interface font can be
 	/// relied on to have one, and a glyph's metrics would place it.
-	pub(super) fn shell_rects(
-		&self,
-		colors: &Dlg,
-		i: usize,
-		out: &mut Vec<RectInstance>,
-		measure: &mut impl FnMut(&str) -> f32,
-	) {
+	pub(super) fn shell_rects(&self, colors: &Dlg, i: usize, out: &mut Vec<RectInstance>, measure: &mut impl FnMut(&str) -> f32) {
 		let scale = self.ui_scale();
 		let mut field = |out: &mut Vec<RectInstance>, r: Rect, row: usize, part: u16| {
 			out.push(quad(r.x, r.y, r.w, r.h, colors.field_bg));
 			let focused = matches!(&self.edit, Some(edit) if edit.row == row);
 			if !self.ring_on(i, part) {
-				border(
-					out,
-					r,
-					1.0,
-					if focused {
-						colors.focus_out
-					} else {
-						colors.panel_border
-					},
-				);
+				border(out, r, 1.0, if focused { colors.focus_out } else { colors.panel_border });
 			}
 			if focused {
 				self.caret_quad(colors, out, r, measure);
@@ -492,46 +386,22 @@ impl SettingsDialog {
 		};
 		for shell_index in 0..self.edited.shells.len() {
 			let name = self.shell_name_box(i, shell_index);
-			field(
-				out,
-				name,
-				shell_field_row(shell_index, false),
-				shell_part_index(shell_index, ShellPart::Name),
-			);
+			field(out, name, shell_field_row(shell_index, false), shell_part_index(shell_index, ShellPart::Name));
 			let cmd = self.shell_cmd_box(i, shell_index);
-			field(
-				out,
-				cmd,
-				shell_field_row(shell_index, true),
-				shell_part_index(shell_index, ShellPart::Command),
-			);
+			field(out, cmd, shell_field_row(shell_index, true), shell_part_index(shell_index, ShellPart::Command));
 			// Active checkbox, drawn the way every other checkbox in the dialog is
 			let box_r = self.shell_active_box(i, shell_index);
 			out.push(quad(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
 			border(out, box_r, 1.0, colors.panel_border);
-			if self
-				.edited
-				.shells
-				.get(shell_index)
-				.is_some_and(|e| e.active)
-			{
+			if self.edited.shells.get(shell_index).is_some_and(|e| e.active) {
 				let inset = (box_r.w * 0.25).max(3.0);
-				out.push(quad(
-					box_r.x + inset,
-					box_r.y + inset,
-					box_r.w - inset * 2.0,
-					box_r.h - inset * 2.0,
-					colors.handle,
-				));
+				out.push(quad(box_r.x + inset, box_r.y + inset, box_r.w - inset * 2.0, box_r.h - inset * 2.0, colors.handle));
 			}
 			// The grip: 3 stacked bars, as every reorderable list uses. There's no
 			// box or border, since it's something to grab rather than a button,
 			// and a button look would invite a click that does nothing.
 			let grip = self.shell_grip_box(i, shell_index);
-			let held = self
-				.shell_drag
-				.as_ref()
-				.is_some_and(|d| d.at == shell_index);
+			let held = self.shell_drag.as_ref().is_some_and(|d| d.at == shell_index);
 			let bar_h = (1.0 * scale).max(1.0);
 			let bar_w = (grip.w * 0.56).max(4.0);
 			let bar_x = grip.x + (grip.w - bar_w) / 2.0;
@@ -539,13 +409,7 @@ impl SettingsDialog {
 			let stack = bar_h + pitch * 2.0;
 			let top = grip.y + (grip.h - stack) / 2.0;
 			for n in 0..3 {
-				out.push(quad(
-					bar_x,
-					top + n as f32 * pitch,
-					bar_w,
-					bar_h,
-					if held { colors.handle } else { colors.dim },
-				));
+				out.push(quad(bar_x, top + n as f32 * pitch, bar_w, bar_h, if held { colors.handle } else { colors.dim }));
 			}
 			// Remove, between the command and the date. It's red because it's the
 			// one control in the dialog that deletes something.
@@ -554,12 +418,7 @@ impl SettingsDialog {
 			if !self.ring_on(i, shell_part_index(shell_index, ShellPart::Remove)) {
 				border(out, r, 1.0, colors.panel_border);
 			}
-			out.push(RectInstance {
-				pos: [r.x, r.y],
-				size: [r.w, r.h],
-				color: config::srgb_f32(colors.danger),
-				params: [QuadMode::CloseMark.code(), (r.w * 0.12).max(1.2)],
-			});
+			out.push(RectInstance { pos: [r.x, r.y], size: [r.w, r.h], color: config::srgb_f32(colors.danger), params: [QuadMode::CloseMark.code(), (r.w * 0.12).max(1.2)] });
 		}
 		let add = self.shell_add_box(i);
 		out.push(quad(add.x, add.y, add.w, add.h, colors.btn_bg));
@@ -586,40 +445,17 @@ mod tests {
 	fn the_shells_grid_fields_have_a_right_click_menu() {
 		let mut m = |s: &str| s.chars().count() as f32;
 		let mut d = mk_dialog(4000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| matches!(s.kind, Kind::ShellList))
-			.expect("the shells grid");
+		let i = d.specs.iter().position(|s| matches!(s.kind, Kind::ShellList)).expect("the shells grid");
 		d.tab = d.specs[i].tab;
 		// its own entry: the live config decides what is in the list otherwise,
 		// and another test can have a config override in place while this runs
-		d.edited.shells = vec![crate::shells::ShellEntry {
-			slug: "bash".into(),
-			title: "Bash".into(),
-			command: "/bin/bash".into(),
-			active: true,
-			comment: String::new(),
-			last_seen: String::new(),
-		}];
+		d.edited.shells = vec![crate::shells::ShellEntry { slug: "bash".into(), title: "Bash".into(), command: "/bin/bash".into(), active: true, comment: String::new(), last_seen: String::new() }];
 
 		for command in [false, true] {
-			let field = if command {
-				d.shell_cmd_box(i, 0)
-			} else {
-				d.shell_name_box(i, 0)
-			};
+			let field = if command { d.shell_cmd_box(i, 0) } else { d.shell_name_box(i, 0) };
 			d.mouse_right_dip(field.x + 4.0, field.y + field.h / 2.0, true, &mut m);
-			assert!(
-				d.emenu.is_some(),
-				"no menu on the {} field",
-				if command { "command" } else { "name" }
-			);
-			assert_eq!(
-				d.edit.as_ref().map(|e| e.row),
-				Some(super::super::shell_field_row(0, command)),
-				"the menu acts on the field that was clicked"
-			);
+			assert!(d.emenu.is_some(), "no menu on the {} field", if command { "command" } else { "name" });
+			assert_eq!(d.edit.as_ref().map(|e| e.row), Some(super::super::shell_field_row(0, command)), "the menu acts on the field that was clicked");
 			d.emenu = None;
 		}
 
@@ -632,15 +468,9 @@ mod tests {
 	// A dialog sitting on the Shell tab with `n` shells in it.
 	fn mk_shell_dialog(n: usize) -> (SettingsDialog, usize) {
 		let mut d = mk_dialog(4000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| matches!(s.kind, super::super::Kind::ShellList))
-			.expect("a shells grid");
+		let i = d.specs.iter().position(|s| matches!(s.kind, super::super::Kind::ShellList)).expect("a shells grid");
 		d.tab = d.specs[i].tab;
-		d.edited.shells = (0..n)
-			.map(|k| shell_entry(&format!("Shell {k}"), &format!("/bin/sh{k}")))
-			.collect();
+		d.edited.shells = (0..n).map(|k| shell_entry(&format!("Shell {k}"), &format!("/bin/sh{k}"))).collect();
 		d.orig.shells.clone_from(&d.edited.shells);
 		(d, i)
 	}
@@ -665,10 +495,7 @@ mod tests {
 				}
 			}
 		}
-		assert!(matches!(
-			super::super::shell_stop(d.parts_of(i) - 1, 3),
-			super::super::ShellStop::Add
-		));
+		assert!(matches!(super::super::shell_stop(d.parts_of(i) - 1, 3), super::super::ShellStop::Add));
 	}
 
 	// Reordering left the keyboard when the arrows did, so the grip isn't a
@@ -688,10 +515,7 @@ mod tests {
 			let grip = d.shell_grip_box(i, k);
 			let (cx, cy) = (grip.x + grip.w / 2.0, grip.y + grip.h / 2.0);
 			for part in 0..d.parts_of(i) {
-				assert!(
-					!d.shell_stop_rect(i, part).contains(cx, cy),
-					"part {part} hit-tests over line {k}'s grip"
-				);
+				assert!(!d.shell_stop_rect(i, part).contains(cx, cy), "part {part} hit-tests over line {k}'s grip");
 			}
 		}
 	}
@@ -705,15 +529,10 @@ mod tests {
 		let (mut d, i) = mk_shell_dialog(3);
 		let mut measure = |s: &str| s.chars().count() as f32 * 7.0;
 		let line = d.shell_line_h();
-		let titles = |d: &super::super::SettingsDialog| -> Vec<String> {
-			d.edited.shells.iter().map(|e| e.title.clone()).collect()
-		};
+		let titles = |d: &super::super::SettingsDialog| -> Vec<String> { d.edited.shells.iter().map(|e| e.title.clone()).collect() };
 		let grip = d.shell_grip_box(i, 0);
 		let (x, y) = (grip.x + grip.w / 2.0, grip.y + grip.h / 2.0);
-		assert!(
-			d.shell_mouse_down(i, x, y, &mut measure),
-			"the grip did not take the press"
-		);
+		assert!(d.shell_mouse_down(i, x, y, &mut measure), "the grip did not take the press");
 		// less than half a line isn't yet a move
 		d.mouse_move_dip(x, y + line * 0.4, &mut measure);
 		assert_eq!(titles(&d), ["Shell 0", "Shell 1", "Shell 2"]);
@@ -763,10 +582,7 @@ mod tests {
 		d.open_edit(row, true);
 		d.select_all();
 		d.backspace();
-		assert_eq!(
-			d.edited.shells[1].command, "/bin/sh1",
-			"an emptied field leaves the stored command standing"
-		);
+		assert_eq!(d.edited.shells[1].command, "/bin/sh1", "an emptied field leaves the stored command standing");
 		// a real value does apply, so the guard isn't inert
 		d.insert_str("/usr/bin/fish");
 		assert_eq!(d.edited.shells[1].command, "/usr/bin/fish");
@@ -798,17 +614,8 @@ mod tests {
 		d.shell_add(i);
 		assert_eq!(d.edited.shells.len(), 2);
 		assert!(d.edited.shells[1].command.is_empty());
-		assert_eq!(
-			d.edit.as_ref().map(|e| e.row),
-			Some(super::super::shell_field_row(1, true))
-		);
-		assert_eq!(
-			d.focus,
-			Some(super::super::Focus::Row(
-				i,
-				super::shell_part_index(1, super::super::ShellPart::Command)
-			))
-		);
+		assert_eq!(d.edit.as_ref().map(|e| e.row), Some(super::super::shell_field_row(1, true)));
+		assert_eq!(d.focus, Some(super::super::Focus::Row(i, super::shell_part_index(1, super::super::ShellPart::Command))));
 	}
 
 	// Removing is the one grid action that can't be undone, so it asks first,
@@ -819,15 +626,8 @@ mod tests {
 	fn removing_a_shell_asks_before_it_happens() {
 		let (mut d, _) = mk_shell_dialog(3);
 		d.shell_confirm_remove(1);
-		assert_eq!(
-			d.edited.shells.len(),
-			3,
-			"the question alone changes nothing"
-		);
-		assert!(matches!(
-			d.prompt.as_ref().map(|p| p.job),
-			Some(super::super::PromptJob::DropShell(1))
-		));
+		assert_eq!(d.edited.shells.len(), 3, "the question alone changes nothing");
+		assert!(matches!(d.prompt.as_ref().map(|p| p.job), Some(super::super::PromptJob::DropShell(1))));
 		d.prompt_accept();
 		let titles: Vec<&str> = d.edited.shells.iter().map(|e| e.title.as_str()).collect();
 		assert_eq!(titles, vec!["Shell 0", "Shell 2"]);
@@ -856,18 +656,9 @@ mod tests {
 			assert!(name.x + name.w <= cmd.x + 0.01, "name runs into command");
 			assert!(cmd.w > 0.0, "the command column collapsed");
 			assert!(cmd.x + cmd.w <= remove.x + 0.01, "command runs into remove");
-			assert!(
-				remove.x + remove.w <= cols.seen + 0.01,
-				"remove runs into the date"
-			);
-			assert!(
-				cols.seen + d.shell_widths().seen <= active.x + 0.01,
-				"the date runs into active"
-			);
-			assert!(
-				active.x + active.w <= right + 0.01,
-				"the last column overruns the panel"
-			);
+			assert!(remove.x + remove.w <= cols.seen + 0.01, "remove runs into the date");
+			assert!(cols.seen + d.shell_widths().seen <= active.x + 0.01, "the date runs into active");
+			assert!(active.x + active.w <= right + 0.01, "the last column overruns the panel");
 			// and every line sits below the column titles
 			assert!(d.shell_line_y(i, k) > d.shell_head_y(i));
 		}
@@ -889,21 +680,11 @@ mod tests {
 		let dim = super::super::config::srgb_f32(super::super::dlg().dim);
 
 		// the X: one per line, in the danger color, inside the remove box
-		let marks: Vec<_> = rows
-			.iter()
-			.filter(|r| r.mode() == QuadMode::CloseMark)
-			.collect();
+		let marks: Vec<_> = rows.iter().filter(|r| r.mode() == QuadMode::CloseMark).collect();
 		assert_eq!(marks.len(), 2, "one remove mark per line");
 		for (k, mark) in marks.iter().enumerate() {
-			assert_eq!(
-				mark.color, danger,
-				"the remove mark is not the danger color"
-			);
-			assert_ne!(
-				mark.color,
-				super::super::config::srgb_f32(super::super::dlg().text),
-				"the remove mark reads as ordinary text"
-			);
+			assert_eq!(mark.color, danger, "the remove mark is not the danger color");
+			assert_ne!(mark.color, super::super::config::srgb_f32(super::super::dlg().text), "the remove mark reads as ordinary text");
 			let box_r = d.shell_remove_box(i, k);
 			assert!((mark.pos[0] - box_r.x).abs() < 0.01, "mark off its own box");
 		}
@@ -911,36 +692,17 @@ mod tests {
 		// the grip: 3 bars of one width, stacked inside the grip column
 		for k in 0..2 {
 			let grip = d.shell_grip_box(i, k);
-			let bars: Vec<_> = rows
-				.iter()
-				.filter(|r| {
-					r.color == dim
-						&& r.pos[0] > grip.x - 0.01
-						&& r.pos[0] + r.size[0] < grip.x + grip.w + 0.01
-						&& r.pos[1] >= grip.y - 0.01
-						&& r.pos[1] <= grip.y + grip.h + 0.01
-				})
-				.collect();
+			let bars: Vec<_> = rows.iter().filter(|r| r.color == dim && r.pos[0] > grip.x - 0.01 && r.pos[0] + r.size[0] < grip.x + grip.w + 0.01 && r.pos[1] >= grip.y - 0.01 && r.pos[1] <= grip.y + grip.h + 0.01).collect();
 			assert_eq!(bars.len(), 3, "line {k}'s grip is not three bars");
-			assert!(
-				bars.iter()
-					.all(|b| (b.size[0] - bars[0].size[0]).abs() < 0.01),
-				"the grip's bars are not one width"
-			);
+			assert!(bars.iter().all(|b| (b.size[0] - bars[0].size[0]).abs() < 0.01), "the grip's bars are not one width");
 			let mut ys: Vec<f32> = bars.iter().map(|b| b.pos[1]).collect();
 			ys.sort_by(f32::total_cmp);
 			assert!(ys[0] < ys[1] && ys[1] < ys[2], "the bars are not stacked");
-			assert!(
-				(ys[1] - ys[0] - (ys[2] - ys[1])).abs() < 0.01,
-				"the bars are not evenly spaced"
-			);
+			assert!((ys[1] - ys[0] - (ys[2] - ys[1])).abs() < 0.01, "the bars are not evenly spaced");
 		}
 
 		// and nothing in the grid still draws a triangle
-		assert!(
-			!rows.iter().any(|r| r.mode() == QuadMode::Triangle),
-			"an arrow is still being drawn in the shells grid"
-		);
+		assert!(!rows.iter().any(|r| r.mode() == QuadMode::Triangle), "an arrow is still being drawn in the shells grid");
 	}
 
 	// Nothing else tests the draw path, and a grid that draws nothing still
@@ -954,29 +716,11 @@ mod tests {
 		let mut measure = |s: &str| s.chars().count() as f32 * 7.0;
 		let texts = d.texts_dip(d.line_h, &mut measure);
 		let said: Vec<&str> = texts.iter().map(|t| t.text.as_ref()).collect();
-		for want in [
-			"Name",
-			"Command",
-			"Last seen",
-			"Active",
-			"Add",
-			"Shell 0",
-			"Shell 1",
-			"Shell 2",
-			"/bin/sh0",
-			"/bin/sh2",
-		] {
-			assert!(
-				said.contains(&want),
-				"the grid never drew {want:?}: {said:?}"
-			);
+		for want in ["Name", "Command", "Last seen", "Active", "Add", "Shell 0", "Shell 1", "Shell 2", "/bin/sh0", "/bin/sh2"] {
+			assert!(said.contains(&want), "the grid never drew {want:?}: {said:?}");
 		}
 		// a shell no scan has seen says so rather than leaving a blank
-		assert_eq!(
-			said.iter().filter(|t| **t == "never").count(),
-			3,
-			"one 'last seen' per line"
-		);
+		assert_eq!(said.iter().filter(|t| **t == "never").count(), 3, "one 'last seen' per line");
 		// and the quads scale with the list rather than being drawn once
 		let count = |n: usize| {
 			let (mut d, _) = mk_shell_dialog(n);
@@ -987,11 +731,7 @@ mod tests {
 			rows.len()
 		};
 		let (one, three) = (count(1), count(3));
-		assert!(
-			three > one && three - one == 2 * (one - count(0)),
-			"each line costs the same quads: 0->{} 1->{one} 3->{three}",
-			count(0)
-		);
+		assert!(three > one && three - one == 2 * (one - count(0)), "each line costs the same quads: 0->{} 1->{one} 3->{three}", count(0));
 	}
 
 	// An entry being edited shows the buffer rather than the stored value, or the
@@ -1023,10 +763,7 @@ mod tests {
 		// the command is the one already stored, so nothing is added
 		let found = vec![crate::shells::Found::new("Fish", "/bin/sh0".into(), "")];
 		d.fold_shells(&found);
-		assert_eq!(
-			d.edited.shells[0].title, "Renamed by hand",
-			"a scan never rewrites what the user typed"
-		);
+		assert_eq!(d.edited.shells[0].title, "Renamed by hand", "a scan never rewrites what the user typed");
 		assert_eq!(d.orig.shells.len(), d.edited.shells.len());
 	}
 
@@ -1040,13 +777,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_shells_grid_columns_fit_their_text_at_a_large_interface_font() {
 		use super::{ACTIVE_TITLE, NEVER_SEEN, SEEN_TITLE};
-		let names = [
-			"PowerShell 7",
-			"POSIX shell",
-			"Bash (no rc)",
-			"Python 3",
-			"Nushell",
-		];
+		let names = ["PowerShell 7", "POSIX shell", "Bash (no rc)", "Python 3", "Nushell"];
 		let mut fit_at_base: Vec<&str> = Vec::new();
 		// (font size, display scale)
 		for (big, scale) in [(1.0, 1.0), (1.0, 2.0), (2.2, 1.0), (2.2, 2.0)] {
@@ -1054,66 +785,33 @@ mod tests {
 			// after the context, which is what picks the family
 			let attrs = crate::text::ui_attrs();
 			let chrome = super::super::chrome_widths(&mut text, scale);
-			let mut d = SettingsDialog::new(
-				0.0,
-				0.0,
-				text.ui_line_h,
-				chrome,
-				f32::MAX,
-				4000.0 * scale,
-				scale,
-			);
+			let mut d = SettingsDialog::new(0.0, 0.0, text.ui_line_h, chrome, f32::MAX, 4000.0 * scale, scale);
 			let (w, h) = d.natural;
 			d.set_size(w * scale, h * scale);
-			let i = d
-				.specs
-				.iter()
-				.position(|s| matches!(s.kind, Kind::ShellList))
-				.expect("a shells grid");
+			let i = d.specs.iter().position(|s| matches!(s.kind, Kind::ShellList)).expect("a shells grid");
 			d.tab = d.specs[i].tab;
-			d.edited.shells = vec![
-				shell_entry("Bash", "/bin/bash"),
-				shell_entry("Dash", "/bin/dash"),
-			];
+			d.edited.shells = vec![shell_entry("Bash", "/bin/bash"), shell_entry("Dash", "/bin/dash")];
 			d.edited.shells[0].last_seen = "2026-10-09".into();
 			let at = format!("{big}x the font, {scale}x");
-			let tw =
-				|text: &mut crate::text::TextCtx, s: &str| text.measure_ui_text(s, &attrs) / scale;
+			let tw = |text: &mut crate::text::TextCtx, s: &str| text.measure_ui_text(s, &attrs) / scale;
 			let cols = d.shell_cols();
 			let gap = d.shell_widths().gap;
 			let right = d.content_x() + d.layout_w() - lay().pad;
 			// a part pixel of text may run into the gap, never more
 			for s in [SEEN_TITLE, "2026-10-09", "8888-88-88", NEVER_SEEN] {
 				let end = cols.seen + tw(&mut text, s);
-				assert!(
-					end + gap <= cols.active + 1.0,
-					"{at}: {s:?} ends at {end}, Active starts at {}",
-					cols.active
-				);
+				assert!(end + gap <= cols.active + 1.0, "{at}: {s:?} ends at {end}, Active starts at {}", cols.active);
 			}
 			let active_end = cols.active + tw(&mut text, ACTIVE_TITLE);
-			assert!(
-				active_end <= right + 1.0,
-				"{at}: Active runs to {active_end}, past the edge at {right}"
-			);
+			assert!(active_end <= right + 1.0, "{at}: Active runs to {active_end}, past the edge at {right}");
 			for k in 0..2 {
 				let tick = d.shell_active_box(i, k);
 				let date_end = cols.seen + tw(&mut text, "2026-10-09");
-				assert!(
-					date_end + gap <= tick.x + 1.0,
-					"{at}: line {k}'s date runs under its checkbox"
-				);
-				assert!(
-					tick.x + tick.w <= right + 0.01,
-					"{at}: line {k}'s checkbox overruns the panel"
-				);
+				assert!(date_end + gap <= tick.x + 1.0, "{at}: line {k}'s date runs under its checkbox");
+				assert!(tick.x + tick.w <= right + 0.01, "{at}: line {k}'s checkbox overruns the panel");
 			}
 			// the gap reads as a gap, not as a word space
-			assert!(
-				gap >= lay().shell_col_gap * (d.line_h / super::super::GAPS_DRAWN_AT) - 0.01,
-				"{at}: the column gap stayed {gap} at line height {}",
-				d.line_h
-			);
+			assert!(gap >= lay().shell_col_gap * (d.line_h / super::super::GAPS_DRAWN_AT) - 0.01, "{at}: the column gap stayed {gap} at line height {}", d.line_h);
 			let room = d.shell_name_box(i, 0).w - 2.0 * lay().field_pad;
 			for name in names {
 				let fits = tw(&mut text, name) <= room;
@@ -1122,17 +820,11 @@ mod tests {
 						fit_at_base.push(name);
 					}
 				} else if fit_at_base.contains(&name) {
-					assert!(
-						fits,
-						"{at}: {name:?} fit its box at the base size and not here"
-					);
+					assert!(fits, "{at}: {name:?} fit its box at the base size and not here");
 				}
 			}
 		}
-		assert!(
-			!fit_at_base.is_empty(),
-			"no name fit at the base size, so nothing was checked"
-		);
+		assert!(!fit_at_base.is_empty(), "no name fit at the base size, so nothing was checked");
 	}
 
 	// The Active box on a shell's line is a checkbox like any other: square, and
@@ -1147,10 +839,7 @@ mod tests {
 			let name = d.shell_name_box(i, k);
 			assert!((active.w - lay().swatch).abs() < 0.01);
 			assert!((active.h - lay().swatch).abs() < 0.01);
-			assert!(
-				(active.y + active.h / 2.0 - (name.y + name.h / 2.0)).abs() < 0.5,
-				"line {k}'s box is off the line's center"
-			);
+			assert!((active.y + active.h / 2.0 - (name.y + name.h / 2.0)).abs() < 0.5, "line {k}'s box is off the line's center");
 		}
 	}
 }

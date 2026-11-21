@@ -31,17 +31,8 @@ pub fn gpu_line(tag: &str, device: &wgpu::Device) -> String {
 	}
 	let mut parts: Vec<(&str, (u64, usize))> = by_label.into_iter().collect();
 	parts.sort_by_key(|&(_, (size, _))| std::cmp::Reverse(size));
-	let blocks: Vec<String> = report
-		.blocks
-		.iter()
-		.map(|block| format!("{:.0}", block.size as f64 / MIB))
-		.collect();
-	let mut line = format!(
-		"{tag}: {:.1} MiB in use, {:.1} MiB reserved in blocks of {};",
-		report.total_allocated_bytes as f64 / MIB,
-		report.total_reserved_bytes as f64 / MIB,
-		blocks.join("+")
-	);
+	let blocks: Vec<String> = report.blocks.iter().map(|block| format!("{:.0}", block.size as f64 / MIB)).collect();
+	let mut line = format!("{tag}: {:.1} MiB in use, {:.1} MiB reserved in blocks of {};", report.total_allocated_bytes as f64 / MIB, report.total_reserved_bytes as f64 / MIB, blocks.join("+"));
 	for (label, (size, count)) in parts {
 		let label = if label.is_empty() { "unlabeled" } else { label };
 		let _ = write!(line, " {label} {:.2}", size as f64 / MIB);

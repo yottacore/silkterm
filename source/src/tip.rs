@@ -87,24 +87,12 @@ pub struct Wrapped {
 impl Wrapped {
 	/// The lines and the widest of them. `generation` is `TextCtx::generation`,
 	/// which is new after a font, size, or scale change.
-	pub fn lay(
-		&mut self,
-		said: &str,
-		budget: f32,
-		generation: u64,
-		mut measure: impl FnMut(&str) -> f32,
-	) -> (&[String], f32) {
+	pub fn lay(&mut self, said: &str, budget: f32, generation: u64, mut measure: impl FnMut(&str) -> f32) -> (&[String], f32) {
 		let budget_bits = budget.to_bits();
-		let same = !self.lines.is_empty()
-			&& self.generation == generation
-			&& self.budget == budget_bits
-			&& self.said == said;
+		let same = !self.lines.is_empty() && self.generation == generation && self.budget == budget_bits && self.said == said;
 		if !same {
 			self.lines = wrap(said, budget, &mut measure);
-			self.widest = self
-				.lines
-				.iter()
-				.fold(0.0f32, |widest, line| widest.max(measure(line)));
+			self.widest = self.lines.iter().fold(0.0f32, |widest, line| widest.max(measure(line)));
 			said.clone_into(&mut self.said);
 			self.budget = budget_bits;
 			self.generation = generation;
@@ -130,11 +118,7 @@ pub fn place(anchor: Rect, size: (f32, f32), win: (f32, f32), gap: f32, edge: f3
 	let (win_w, win_h) = win;
 	let x = (anchor.x + anchor.w * 0.5 - box_w * 0.5).clamp(edge, (win_w - box_w - edge).max(edge));
 	let below = anchor.y + anchor.h + gap;
-	let y = if below + box_h + edge <= win_h {
-		below
-	} else {
-		(anchor.y - gap - box_h).max(edge)
-	};
+	let y = if below + box_h + edge <= win_h { below } else { (anchor.y - gap - box_h).max(edge) };
 	(x, y)
 }
 
@@ -152,58 +136,28 @@ pub struct Placed {
 /// Lay a tip out. `text_w` is the widest line and `line_h` the line height,
 /// both measured in the caller's font and so already physical. The box's own
 /// numbers are DIPs converted once here, so a tip at 2x is the 1x tip doubled.
-pub fn lay_out(
-	anchor: Rect,
-	lines: usize,
-	text_w: f32,
-	line_h: f32,
-	win: (f32, f32),
-	scale: f32,
-) -> Placed {
+pub fn lay_out(anchor: Rect, lines: usize, text_w: f32, line_h: f32, win: (f32, f32), scale: f32) -> Placed {
 	let pad_x = config::dip(PAD_X, scale);
 	let pad_y = config::dip(PAD_Y, scale);
 	let border = config::dip(BORDER, scale);
 	let box_w = text_w + pad_x * 2.0;
 	let box_h = line_h * lines.max(1) as f32 + pad_y * 2.0;
-	let (x, y) = place(
-		anchor,
-		(box_w, box_h),
-		win,
-		config::dip(DROP, scale),
-		config::dip(EDGE, scale),
-	);
-	Placed {
-		border: Rect {
-			x: x - border,
-			y: y - border,
-			w: box_w + border * 2.0,
-			h: box_h + border * 2.0,
-		},
-		fill: Rect {
-			x,
-			y,
-			w: box_w,
-			h: box_h,
-		},
-		text_x: x + pad_x,
-		text_y: y + pad_y,
-	}
+	let (x, y) = place(anchor, (box_w, box_h), win, config::dip(DROP, scale), config::dip(EDGE, scale));
+	Placed { border: Rect { x: x - border, y: y - border, w: box_w + border * 2.0, h: box_h + border * 2.0 }, fill: Rect { x, y, w: box_w, h: box_h }, text_x: x + pad_x, text_y: y + pad_y }
 }
 
 /// How wide a tip's text may run before it wraps: the window, less a margin and
 /// the box's own padding. A tip wraps rather than being clamped to the window
 /// edge, so neither a longer sentence nor a larger interface font runs off it.
 pub fn wrap_budget(win_w: f32, scale: f32) -> f32 {
-	(win_w - config::dip(WRAP_MARGIN, scale) - config::dip(PAD_X, scale) * 2.0)
-		.max(config::dip(MIN_WRAP, scale))
+	(win_w - config::dip(WRAP_MARGIN, scale) - config::dip(PAD_X, scale) * 2.0).max(config::dip(MIN_WRAP, scale))
 }
 
 /// How wide a tip placed by `beside` may run: its own cap, or less in a window
 /// too narrow for that, so the box and its padding fit between the edges. The
 /// main window has no minimum width (2026111709545547).
 pub fn beside_budget(cap: f32, win_w: f32, pad: f32, edge: f32, scale: f32) -> f32 {
-	cap.min(win_w - 2.0 * (pad + edge))
-		.max(config::dip(MIN_WRAP, scale))
+	cap.min(win_w - 2.0 * (pad + edge)).max(config::dip(MIN_WRAP, scale))
 }
 
 /// Where a tip goes when it must not cover what it describes: clear of the
@@ -214,11 +168,7 @@ pub fn beside(anchor: Rect, size: (f32, f32), win: (f32, f32), gap: f32, edge: f
 	let (box_w, box_h) = size;
 	let (win_w, win_h) = win;
 	let right = anchor.x + anchor.w + gap;
-	let x = if right + box_w + edge <= win_w {
-		right
-	} else {
-		(anchor.x - gap - box_w).max(edge)
-	};
+	let x = if right + box_w + edge <= win_w { right } else { (anchor.x - gap - box_w).max(edge) };
 	let y = anchor.y.clamp(edge, (win_h - box_h - edge).max(edge));
 	(x, y)
 }
@@ -348,23 +298,12 @@ mod tests {
 	// Test ID: dbzej
 	#[test]
 	fn a_tip_wraps_on_words_and_never_splits_one() {
-		let lines = wrap(
-			"Apply changes now, without closing Settings.",
-			120.0,
-			measure,
-		);
+		let lines = wrap("Apply changes now, without closing Settings.", 120.0, measure);
 		assert!(lines.len() > 1);
 		assert!(lines.iter().all(|line| measure(line) <= 120.0));
-		assert_eq!(
-			lines.join(" "),
-			"Apply changes now, without closing Settings.",
-			"wrapping lost or added text"
-		);
+		assert_eq!(lines.join(" "), "Apply changes now, without closing Settings.", "wrapping lost or added text");
 		// a word too long for the budget still gets a line of its own
-		assert_eq!(
-			wrap("a supercalifragilistic word", 48.0, measure),
-			vec!["a", "supercalifragilistic", "word"]
-		);
+		assert_eq!(wrap("a supercalifragilistic word", 48.0, measure), vec!["a", "supercalifragilistic", "word"]);
 		// text that already fits stays on one line, and empty text is one empty
 		// line rather than none
 		assert_eq!(wrap("short", 240.0, measure), vec!["short"]);
@@ -376,19 +315,10 @@ mod tests {
 	// Test ID: ddqac
 	#[test]
 	fn a_tip_keeps_its_line_breaks() {
-		assert_eq!(
-			wrap("Font names.\n\nAutomatic.", 240.0, measure),
-			vec!["Font names.", "", "Automatic."]
-		);
-		assert_eq!(
-			wrap("one two\nthree", 240.0, measure),
-			vec!["one two", "three"]
-		);
+		assert_eq!(wrap("Font names.\n\nAutomatic.", 240.0, measure), vec!["Font names.", "", "Automatic."]);
+		assert_eq!(wrap("one two\nthree", 240.0, measure), vec!["one two", "three"]);
 		// a paragraph still wraps within itself
-		assert_eq!(
-			wrap("one two three\n\nfour", 48.0, measure),
-			vec!["one two", "three", "", "four"]
-		);
+		assert_eq!(wrap("one two three\n\nfour", 48.0, measure), vec!["one two", "three", "", "four"]);
 	}
 
 	// A tip that can't fit below what it describes flips above it, rather than
@@ -421,44 +351,13 @@ mod tests {
 	// Test ID: dcq5t
 	#[test]
 	fn a_tip_at_twice_the_scale_is_the_1x_tip_doubled() {
-		let one = lay_out(
-			rect(100.0, 60.0, 80.0, 24.0),
-			2,
-			150.0,
-			18.0,
-			(600.0, 400.0),
-			1.0,
-		);
-		let two = lay_out(
-			rect(200.0, 120.0, 160.0, 48.0),
-			2,
-			300.0,
-			36.0,
-			(1200.0, 800.0),
-			2.0,
-		);
-		assert_eq!(
-			(two.fill.x, two.fill.y),
-			(one.fill.x * 2.0, one.fill.y * 2.0)
-		);
-		assert_eq!(
-			(two.fill.w, two.fill.h),
-			(one.fill.w * 2.0, one.fill.h * 2.0)
-		);
-		assert_eq!(
-			(two.border.w, two.border.h),
-			(one.border.w * 2.0, one.border.h * 2.0)
-		);
-		assert_eq!(
-			two.fill.x - two.border.x,
-			(one.fill.x - one.border.x) * 2.0,
-			"the rule stayed 1 pixel"
-		);
-		assert_eq!(
-			two.text_x - two.fill.x,
-			(one.text_x - one.fill.x) * 2.0,
-			"the padding stayed its 1x size"
-		);
+		let one = lay_out(rect(100.0, 60.0, 80.0, 24.0), 2, 150.0, 18.0, (600.0, 400.0), 1.0);
+		let two = lay_out(rect(200.0, 120.0, 160.0, 48.0), 2, 300.0, 36.0, (1200.0, 800.0), 2.0);
+		assert_eq!((two.fill.x, two.fill.y), (one.fill.x * 2.0, one.fill.y * 2.0));
+		assert_eq!((two.fill.w, two.fill.h), (one.fill.w * 2.0, one.fill.h * 2.0));
+		assert_eq!((two.border.w, two.border.h), (one.border.w * 2.0, one.border.h * 2.0));
+		assert_eq!(two.fill.x - two.border.x, (one.fill.x - one.border.x) * 2.0, "the rule stayed 1 pixel");
+		assert_eq!(two.text_x - two.fill.x, (one.text_x - one.fill.x) * 2.0, "the padding stayed its 1x size");
 		assert_eq!(two.text_y - two.fill.y, (one.text_y - one.fill.y) * 2.0);
 		assert_eq!(wrap_budget(1200.0, 2.0), wrap_budget(600.0, 1.0) * 2.0);
 	}
@@ -483,36 +382,20 @@ mod tests {
 	// Test ID: dfe6n
 	#[test]
 	fn a_menu_tip_fits_a_window_narrower_than_its_cap() {
-		let said =
-			"Read the config file again, so hand edits made since it was opened take effect.";
+		let said = "Read the config file again, so hand edits made since it was opened take effect.";
 		let (pad, edge, cap) = (6.0, 6.0, 320.0);
 		for win_w in [120.0, 200.0, 300.0, 340.0, 800.0] {
 			let budget = beside_budget(cap, win_w, pad, edge, 1.0);
 			let lines = wrap(said, budget, measure);
 			let widest = lines.iter().map(|line| measure(line)).fold(0.0, f32::max);
 			let size = (widest + 2.0 * pad, 40.0);
-			for row in [
-				rect(0.0, 30.0, 100.0, 24.0),
-				rect(win_w - 100.0, 30.0, 100.0, 24.0),
-			] {
+			for row in [rect(0.0, 30.0, 100.0, 24.0), rect(win_w - 100.0, 30.0, 100.0, 24.0)] {
 				let (x, _) = beside(row, size, (win_w, 300.0), pad, edge);
-				assert!(
-					x >= edge && x + size.0 <= win_w - edge,
-					"{win_w} wide: box at {x}, {} wide",
-					size.0
-				);
+				assert!(x >= edge && x + size.0 <= win_w - edge, "{win_w} wide: box at {x}, {} wide", size.0);
 			}
 		}
-		assert_eq!(
-			beside_budget(cap, 800.0, pad, edge, 1.0),
-			cap,
-			"a wide window keeps the cap"
-		);
-		assert_eq!(
-			beside_budget(cap, 10.0, pad, edge, 2.0),
-			80.0,
-			"never under the floor"
-		);
+		assert_eq!(beside_budget(cap, 800.0, pad, edge, 1.0), cap, "a wide window keeps the cap");
+		assert_eq!(beside_budget(cap, 10.0, pad, edge, 2.0), 80.0, "never under the floor");
 	}
 
 	// A tip left up too long goes away, and moving about on the same target
@@ -530,21 +413,14 @@ mod tests {
 		assert_eq!(dwell.ripe_at(at(29), limit), Some(1));
 		assert_eq!(dwell.ripe_at(at(31), limit), None);
 		assert_eq!(dwell.ripe_at(at(600), limit), None, "stays down");
-		assert_eq!(
-			dwell.ripe_at(at(600), Duration::ZERO),
-			Some(1),
-			"zero never hides"
-		);
+		assert_eq!(dwell.ripe_at(at(600), Duration::ZERO), Some(1), "zero never hides");
 		dwell.point_at(Some(1));
 		assert_eq!(dwell.over.unwrap().1, since, "same target keeps its clock");
 		dwell.point_at(None);
 		dwell.point_at(Some(1));
 		let (_, back) = dwell.over.unwrap();
 		assert!(back >= since);
-		assert_eq!(
-			dwell.ripe_at(back + DELAY + Duration::from_secs(1), limit),
-			Some(1)
-		);
+		assert_eq!(dwell.ripe_at(back + DELAY + Duration::from_secs(1), limit), Some(1));
 	}
 
 	// No tips while the window is in the background, and none after it comes
@@ -558,17 +434,10 @@ mod tests {
 		assert_eq!(here.changed(true), Focus::Here);
 		let away = here.changed(false);
 		assert!(!away.tips());
-		assert_eq!(
-			away.moved(),
-			Focus::Away,
-			"a move in the background raised tips"
-		);
+		assert_eq!(away.moved(), Focus::Away, "a move in the background raised tips");
 		assert_eq!(away.changed(false), Focus::Away);
 		let back = away.changed(true);
-		assert!(
-			!back.tips(),
-			"a tip could pop up the moment the focus came back"
-		);
+		assert!(!back.tips(), "a tip could pop up the moment the focus came back");
 		assert_eq!(back.changed(true), Focus::Back);
 		assert!(back.moved().tips(), "a move after coming back allows tips");
 		// focus dropped and handed back before any move, as one WM's animation does
@@ -604,10 +473,7 @@ mod tests {
 		let mut kept = super::Wrapped::default();
 		let (lines, widest) = kept.lay(said, 120.0, 1, measure);
 		assert_eq!(lines, wrap(said, 120.0, measure).as_slice());
-		assert_eq!(
-			widest,
-			lines.iter().map(|line| measure(line)).fold(0.0, f32::max)
-		);
+		assert_eq!(widest, lines.iter().map(|line| measure(line)).fold(0.0, f32::max));
 		let before = crate::perf::thread_allocs();
 		let mut measured = 0;
 		for _ in 0..240 {
@@ -616,11 +482,7 @@ mod tests {
 				measure(line)
 			});
 		}
-		assert_eq!(
-			crate::perf::thread_allocs() - before,
-			0,
-			"allocations over 240 frames"
-		);
+		assert_eq!(crate::perf::thread_allocs() - before, 0, "allocations over 240 frames");
 		assert_eq!((kept.wraps, measured), (1, 0), "wrapped or measured again");
 		let before = crate::perf::thread_allocs();
 		let _ = kept.lay("Open a new window.", 120.0, 1, measure);
@@ -632,9 +494,6 @@ mod tests {
 		let _ = kept.lay("Open a new window.", 60.0, 1, measure);
 		assert_eq!(kept.lines(), ["Open a new", "window."]);
 		let _ = kept.lay("Open a new window.", 60.0, 2, measure);
-		assert_eq!(
-			kept.wraps, 4,
-			"a change of words, width, or context kept the old lines"
-		);
+		assert_eq!(kept.wraps, 4, "a change of words, width, or context kept the old lines");
 	}
 }

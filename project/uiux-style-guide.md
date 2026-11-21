@@ -93,6 +93,7 @@ For prose, comments, naming, and Rust conventions, see [`style-guide.md`](../sty
 - A submenu is for one homogeneous list that would otherwise swamp its parent. The installed shells are the only case today. It opens beside its parent row, never over it.
 
 - Accelerator letters are unique within one menu, and the first match wins, so a letter spent early is spent. A row that can't get a distinct letter goes without one rather than stealing one.
+	- A letter picks its row on its own, with Shift, or with Alt alone. With Ctrl or Command held it's a chord, and does nothing while a menu is open, so Ctrl+Shift+C over the Tabs menu can't close the tab.
 
 - Nothing in a menu is disabled and left visible unless its absence would be more confusing than its being gray.
 	- "New tab in tmux" is left out where tmux can't be found, which is always on Windows.

@@ -79,13 +79,7 @@ pub fn tab_bar_takes_press(menu_open: bool, bar_shown: bool, y: f32, top: f32, h
 /// A tab close armed by a press fires only if the release is still over that
 /// tab's close box. `close_x` is the left edge of the armed tab's box, None when
 /// the tab is gone. Dragging off before releasing cancels, like any button.
-pub fn close_on_release(
-	armed: usize,
-	x: f32,
-	in_bar: bool,
-	close_x: Option<f32>,
-	tab_at: Option<usize>,
-) -> bool {
+pub fn close_on_release(armed: usize, x: f32, in_bar: bool, close_x: Option<f32>, tab_at: Option<usize>) -> bool {
 	in_bar && close_x.is_some_and(|left| x >= left) && tab_at == Some(armed)
 }
 
@@ -94,18 +88,8 @@ pub const MULTI_CLICK: Duration = Duration::from_millis(400);
 
 /// A press's place in a run of clicks on one spot: 1, 2, or 3, and a fourth
 /// starts over. One too late, or more than a cell away, starts a new run.
-pub fn click_count(
-	last: Option<(Instant, f32, f32)>,
-	count: u32,
-	now: Instant,
-	at: (f32, f32),
-	cell: (f32, f32),
-) -> u32 {
-	let near = last.is_some_and(|(when, x, y)| {
-		now.duration_since(when) < MULTI_CLICK
-			&& (at.0 - x).abs() <= cell.0
-			&& (at.1 - y).abs() <= cell.1
-	});
+pub fn click_count(last: Option<(Instant, f32, f32)>, count: u32, now: Instant, at: (f32, f32), cell: (f32, f32)) -> u32 {
+	let near = last.is_some_and(|(when, x, y)| now.duration_since(when) < MULTI_CLICK && (at.0 - x).abs() <= cell.0 && (at.1 - y).abs() <= cell.1);
 	if near { (count % 3) + 1 } else { 1 }
 }
 
@@ -131,21 +115,13 @@ pub fn click_select(count: u32, shortcut: bool) -> ClickSelect {
 /// Ctrl elsewhere. It is also what opens a link on a click and makes a block
 /// selection on a drag. On a Mac a Ctrl chord goes to the shell.
 pub fn shortcut_held(mods: ModifiersState, mac: bool) -> bool {
-	if mac {
-		mods.super_key()
-	} else {
-		mods.control_key()
-	}
+	if mac { mods.super_key() } else { mods.control_key() }
 }
 
 /// The button a press acts as. On a Mac, Ctrl+click is the right-click, as in
 /// every Mac app there. Elsewhere a press is the button pressed.
 pub fn acting_button(button: MouseButton, mods: ModifiersState, mac: bool) -> MouseButton {
-	if mac && button == MouseButton::Left && mods.control_key() {
-		MouseButton::Right
-	} else {
-		button
-	}
+	if mac && button == MouseButton::Left && mods.control_key() { MouseButton::Right } else { button }
 }
 
 /// What the held keys mean to a text box in a dialog.
@@ -170,25 +146,7 @@ pub struct EditKeys {
 /// and Option plus a letter types whatever the layout puts there.
 /// Elsewhere Ctrl does the first 2.
 pub fn edit_keys(mods: ModifiersState, mac: bool) -> EditKeys {
-	if mac {
-		EditKeys {
-			alt: false,
-			shift: mods.shift_key(),
-			shortcut: mods.super_key(),
-			word: mods.alt_key(),
-			line: mods.super_key(),
-			types: !mods.super_key() && !mods.control_key(),
-		}
-	} else {
-		EditKeys {
-			alt: mods.alt_key(),
-			shift: mods.shift_key(),
-			shortcut: mods.control_key(),
-			word: mods.control_key(),
-			line: false,
-			types: !mods.control_key(),
-		}
-	}
+	if mac { EditKeys { alt: false, shift: mods.shift_key(), shortcut: mods.super_key(), word: mods.alt_key(), line: mods.super_key(), types: !mods.super_key() && !mods.control_key() } } else { EditKeys { alt: mods.alt_key(), shift: mods.shift_key(), shortcut: mods.control_key(), word: mods.control_key(), line: false, types: !mods.control_key() } }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -204,8 +162,7 @@ pub enum WheelRoute {
 pub fn wheel_route(mode: TermMode, shift: bool) -> WheelRoute {
 	if !shift && wants_mouse(mode) {
 		WheelRoute::Report
-	} else if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL) && !wants_mouse(mode)
-	{
+	} else if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL) && !wants_mouse(mode) {
 		WheelRoute::CursorKeys
 	} else {
 		WheelRoute::Scrollback
@@ -252,13 +209,7 @@ pub fn reaches_shell(mods: ModifiersState, mac: bool) -> bool {
 
 /// Which hotkey a press is, if any, by the bindings in force.
 pub fn hotkey_for(key: &Key, mods: ModifiersState, menu_bar: bool) -> Option<Hotkey> {
-	hotkey_in(
-		&crate::config::settings().keys,
-		key,
-		mods,
-		menu_bar,
-		cfg!(target_os = "macos"),
-	)
+	hotkey_in(&crate::config::settings().keys, key, mods, menu_bar, cfg!(target_os = "macos"))
 }
 
 // `hotkey_for` on the default bindings, with the platform passed in, so either
@@ -271,13 +222,7 @@ fn hotkey_on(key: &Key, mods: ModifiersState, menu_bar: bool, mac: bool) -> Opti
 // The bound chords come first, so a binding on Alt+letter wins over the menu
 // title. Alt+letter opens a title only where there is an in-window bar, which a
 // Mac doesn't have.
-fn hotkey_in(
-	keys: &Bindings,
-	key: &Key,
-	mods: ModifiersState,
-	menu_bar: bool,
-	mac: bool,
-) -> Option<Hotkey> {
+fn hotkey_in(keys: &Bindings, key: &Key, mods: ModifiersState, menu_bar: bool, mac: bool) -> Option<Hotkey> {
 	if let Some(hotkey) = keys.hotkey(key, mods) {
 		return Some(hotkey);
 	}
@@ -298,6 +243,16 @@ fn hotkey_in(
 /// Windows reports as Ctrl+Alt; Shift or Super makes it some other chord.
 pub fn opens_menu_title(mods: ModifiersState) -> bool {
 	mods == ModifiersState::ALT
+}
+
+/// Whether a letter typed into an open menu picks the row underlined with it:
+/// on its own, with Shift, or with Alt alone, so Alt+F then Alt+N rolls as it
+/// does on Windows. Ctrl or Super held makes it a hotkey, and winit reports
+/// Ctrl+Shift+C as a plain "C", so without this the copy chord closed the tab
+/// from the Tabs menu. Alt+Shift is the pane chords' family, so it picks
+/// nothing either.
+pub fn picks_menu_row(mods: ModifiersState) -> bool {
+	mods.difference(ModifiersState::SHIFT).is_empty() || opens_menu_title(mods)
 }
 
 /// Where a write to the desktop clipboard comes from.
@@ -327,15 +282,7 @@ pub fn copy_allowed(from: CopyFrom, window_focused: bool, pane_in_use: bool) -> 
 /// 1006 or the legacy X10 form) with modifier bits. `col` and `row` are 0-based
 /// cells in the viewport, `pressed` is press or release (the wheel only presses),
 /// and `motion` marks a drag or move report. None when no tracking mode is set.
-pub fn mouse_report(
-	mode: TermMode,
-	btn: MouseBtn,
-	pressed: bool,
-	motion: bool,
-	col: usize,
-	row: usize,
-	mods: ModifiersState,
-) -> Option<Vec<u8>> {
+pub fn mouse_report(mode: TermMode, btn: MouseBtn, pressed: bool, motion: bool, col: usize, row: usize, mods: ModifiersState) -> Option<Vec<u8>> {
 	if !wants_mouse(mode) {
 		return None;
 	}
@@ -344,8 +291,7 @@ pub fn mouse_report(
 		button_code += 32;
 	}
 	// modifier bits: shift 4, alt 8, ctrl 16
-	button_code +=
-		(mods.shift_key() as u8) * 4 + (mods.alt_key() as u8) * 8 + (mods.control_key() as u8) * 16;
+	button_code += (mods.shift_key() as u8) * 4 + (mods.alt_key() as u8) * 8 + (mods.control_key() as u8) * 16;
 
 	let (wire_col, wire_row) = (col + 1, row + 1); // 1-based on the wire
 
@@ -358,20 +304,9 @@ pub fn mouse_report(
 	// Legacy X10 form: ESC [ M <Cb+32> <Cx+32> <Cy+32>, one byte each, so a
 	// coordinate past 223 can't be encoded and is clamped. Release reports button 3,
 	// and the wheel never releases, so this only hits real buttons.
-	let button_code = if pressed || btn.is_wheel() {
-		button_code
-	} else {
-		(button_code & !0b11) | 3
-	};
+	let button_code = if pressed || btn.is_wheel() { button_code } else { (button_code & !0b11) | 3 };
 	let encode_coord = |coord: usize| (coord.min(223) as u8).wrapping_add(32);
-	Some(vec![
-		0x1b,
-		b'[',
-		b'M',
-		button_code.wrapping_add(32),
-		encode_coord(wire_col),
-		encode_coord(wire_row),
-	])
+	Some(vec![0x1b, b'[', b'M', button_code.wrapping_add(32), encode_coord(wire_col), encode_coord(wire_row)])
 }
 
 /// Cursor-key sequence. In application-cursor-keys mode (DECCKM, set by full
@@ -385,19 +320,8 @@ pub fn cursor_seq(letter: u8, app_cursor: bool) -> Vec<u8> {
 /// Translate a key press into the bytes a PTY expects. Returns None for keys
 /// we don't forward (modifiers alone, unhandled named keys, etc.).
 /// `as_alt` is Option acting as Alt for this press (`OptionAlt::held`).
-pub fn encode(
-	ev: &KeyEvent,
-	mods: ModifiersState,
-	app_cursor: bool,
-	as_alt: bool,
-) -> Option<Vec<u8>> {
-	encode_key(
-		&ev.logical_key,
-		ev.text.as_deref(),
-		mods,
-		app_cursor,
-		cfg!(target_os = "macos") && !as_alt,
-	)
+pub fn encode(ev: &KeyEvent, mods: ModifiersState, app_cursor: bool, as_alt: bool) -> Option<Vec<u8>> {
+	encode_key(&ev.logical_key, ev.text.as_deref(), mods, app_cursor, cfg!(target_os = "macos") && !as_alt)
 }
 
 /// Which Option key on a Mac acts as Alt, sending ESC and the plain key rather
@@ -460,9 +384,7 @@ impl OptionAlt {
 // an unnamed key with text on it, so the text is what was typed.
 fn typed_key(key: &Key, text: Option<&str>) -> Option<Key> {
 	match (key, text) {
-		(Key::Unidentified(_), Some(text)) if !text.is_empty() => {
-			Some(Key::Character(SmolStr::new(text)))
-		}
+		(Key::Unidentified(_), Some(text)) if !text.is_empty() => Some(Key::Character(SmolStr::new(text))),
 		_ => None,
 	}
 }
@@ -643,24 +565,12 @@ mod tests {
 	fn modified_arrows_use_csi_mod_form() {
 		// Ctrl+Right = word skip in readline/most TUIs
 		let ctrl = ModifiersState::CONTROL;
-		assert_eq!(
-			enc(NamedKey::ArrowRight, ctrl, false).unwrap(),
-			b"\x1b[1;5C"
-		);
+		assert_eq!(enc(NamedKey::ArrowRight, ctrl, false).unwrap(), b"\x1b[1;5C");
 		// modified keys stay CSI even in app-cursor mode
 		assert_eq!(enc(NamedKey::ArrowRight, ctrl, true).unwrap(), b"\x1b[1;5C");
-		assert_eq!(
-			enc(NamedKey::ArrowLeft, ModifiersState::SHIFT, false).unwrap(),
-			b"\x1b[1;2D"
-		);
-		assert_eq!(
-			enc(NamedKey::ArrowUp, ModifiersState::ALT, false).unwrap(),
-			b"\x1b[1;3A"
-		);
-		assert_eq!(
-			enc(NamedKey::ArrowDown, ctrl | ModifiersState::SHIFT, false).unwrap(),
-			b"\x1b[1;6B"
-		);
+		assert_eq!(enc(NamedKey::ArrowLeft, ModifiersState::SHIFT, false).unwrap(), b"\x1b[1;2D");
+		assert_eq!(enc(NamedKey::ArrowUp, ModifiersState::ALT, false).unwrap(), b"\x1b[1;3A");
+		assert_eq!(enc(NamedKey::ArrowDown, ctrl | ModifiersState::SHIFT, false).unwrap(), b"\x1b[1;6B");
 	}
 
 	// Test ID: d9b1p
@@ -671,14 +581,8 @@ mod tests {
 		assert_eq!(enc(NamedKey::F6, NONE, false).unwrap(), b"\x1b[17~");
 		assert_eq!(enc(NamedKey::F10, NONE, false).unwrap(), b"\x1b[21~");
 		assert_eq!(enc(NamedKey::F12, NONE, false).unwrap(), b"\x1b[24~");
-		assert_eq!(
-			enc(NamedKey::F1, ModifiersState::CONTROL, false).unwrap(),
-			b"\x1b[1;5P"
-		);
-		assert_eq!(
-			enc(NamedKey::F5, ModifiersState::SHIFT, false).unwrap(),
-			b"\x1b[15;2~"
-		);
+		assert_eq!(enc(NamedKey::F1, ModifiersState::CONTROL, false).unwrap(), b"\x1b[1;5P");
+		assert_eq!(enc(NamedKey::F5, ModifiersState::SHIFT, false).unwrap(), b"\x1b[15;2~");
 	}
 
 	// Test ID: d9b1q
@@ -690,10 +594,7 @@ mod tests {
 		assert_eq!(enc(NamedKey::Backspace, NONE, false).unwrap(), [0x7f]);
 		assert_eq!(enc(NamedKey::Backspace, ctrl, false).unwrap(), [0x08]);
 		assert_eq!(enc(NamedKey::PageUp, NONE, false).unwrap(), b"\x1b[5~");
-		assert_eq!(
-			enc(NamedKey::Tab, ModifiersState::SHIFT, false).unwrap(),
-			b"\x1b[Z"
-		);
+		assert_eq!(enc(NamedKey::Tab, ModifiersState::SHIFT, false).unwrap(), b"\x1b[Z");
 	}
 
 	// Test ID: d9dqj
@@ -701,47 +602,17 @@ mod tests {
 	fn mouse_sgr_and_x10() {
 		let sgr = TermMode::MOUSE_REPORT_CLICK | TermMode::SGR_MOUSE;
 		// wheel down at col 5 / row 10 -> button 65, 1-based coords
-		assert_eq!(
-			mouse_report(sgr, MouseBtn::WheelDown, true, false, 5, 10, NONE).unwrap(),
-			b"\x1b[<65;6;11M"
-		);
+		assert_eq!(mouse_report(sgr, MouseBtn::WheelDown, true, false, 5, 10, NONE).unwrap(), b"\x1b[<65;6;11M");
 		// left press vs release: same Cb, M vs m
-		assert_eq!(
-			mouse_report(sgr, MouseBtn::Left, true, false, 0, 0, NONE).unwrap(),
-			b"\x1b[<0;1;1M"
-		);
-		assert_eq!(
-			mouse_report(sgr, MouseBtn::Left, false, false, 0, 0, NONE).unwrap(),
-			b"\x1b[<0;1;1m"
-		);
+		assert_eq!(mouse_report(sgr, MouseBtn::Left, true, false, 0, 0, NONE).unwrap(), b"\x1b[<0;1;1M");
+		assert_eq!(mouse_report(sgr, MouseBtn::Left, false, false, 0, 0, NONE).unwrap(), b"\x1b[<0;1;1m");
 		// ctrl adds 16; a bare motion uses button 3 + motion bit 32 = 35
-		assert_eq!(
-			mouse_report(
-				sgr,
-				MouseBtn::Left,
-				true,
-				false,
-				0,
-				0,
-				ModifiersState::CONTROL
-			)
-			.unwrap(),
-			b"\x1b[<16;1;1M"
-		);
-		assert_eq!(
-			mouse_report(sgr, MouseBtn::None, true, true, 0, 0, NONE).unwrap(),
-			b"\x1b[<35;1;1M"
-		);
+		assert_eq!(mouse_report(sgr, MouseBtn::Left, true, false, 0, 0, ModifiersState::CONTROL).unwrap(), b"\x1b[<16;1;1M");
+		assert_eq!(mouse_report(sgr, MouseBtn::None, true, true, 0, 0, NONE).unwrap(), b"\x1b[<35;1;1M");
 		// legacy X10 form: ESC [ M, then (Cb+32)(Cx+32)(Cy+32)
 		let x10 = TermMode::MOUSE_REPORT_CLICK;
-		assert_eq!(
-			mouse_report(x10, MouseBtn::Left, true, false, 0, 0, NONE).unwrap(),
-			[0x1b, b'[', b'M', 32, 33, 33]
-		);
-		assert_eq!(
-			mouse_report(x10, MouseBtn::WheelUp, true, false, 0, 0, NONE).unwrap(),
-			[0x1b, b'[', b'M', 96, 33, 33]
-		);
+		assert_eq!(mouse_report(x10, MouseBtn::Left, true, false, 0, 0, NONE).unwrap(), [0x1b, b'[', b'M', 32, 33, 33]);
+		assert_eq!(mouse_report(x10, MouseBtn::WheelUp, true, false, 0, 0, NONE).unwrap(), [0x1b, b'[', b'M', 96, 33, 33]);
 	}
 
 	// Test ID: d9dqk
@@ -750,9 +621,7 @@ mod tests {
 		// no tracking mode set -> nothing to report
 		assert!(mouse_report(TermMode::empty(), MouseBtn::Left, true, false, 0, 0, NONE).is_none());
 		// SGR flag alone (no click/drag/motion) isn't tracking
-		assert!(
-			mouse_report(TermMode::SGR_MOUSE, MouseBtn::Left, true, false, 0, 0, NONE).is_none()
-		);
+		assert!(mouse_report(TermMode::SGR_MOUSE, MouseBtn::Left, true, false, 0, 0, NONE).is_none());
 	}
 
 	// winit calls the spacebar a named key, so Ctrl+Space never got to the
@@ -765,10 +634,7 @@ mod tests {
 		assert_eq!(enc(NamedKey::Space, ctrl, false).unwrap(), [0x00]);
 		assert_eq!(enc(NamedKey::Space, NONE, false).unwrap(), b" ");
 		// Ctrl+Alt+Space still takes the alt prefix
-		assert_eq!(
-			enc(NamedKey::Space, ctrl | ModifiersState::ALT, false).unwrap(),
-			[0x1b, 0x00]
-		);
+		assert_eq!(enc(NamedKey::Space, ctrl | ModifiersState::ALT, false).unwrap(), [0x1b, 0x00]);
 	}
 
 	// A character handed to the window instead of typed at it arrives as a key
@@ -777,20 +643,11 @@ mod tests {
 	#[test]
 	fn an_unnamed_key_is_read_as_its_text() {
 		let injected = Key::Unidentified(NativeKey::Windows(0xe7));
-		assert_eq!(
-			typed_key(&injected, Some("e")),
-			Some(Key::Character("e".into()))
-		);
+		assert_eq!(typed_key(&injected, Some("e")), Some(Key::Character("e".into())));
 		// what the shell would then get
-		assert_eq!(
-			encode_key(&Key::Character("e".into()), Some("e"), NONE, false, false).unwrap(),
-			b"e".to_vec()
-		);
+		assert_eq!(encode_key(&Key::Character("e".into()), Some("e"), NONE, false, false).unwrap(), b"e".to_vec());
 		// a character no keyboard layout here has a key for
-		assert_eq!(
-			typed_key(&injected, Some("\u{e9}")),
-			Some(Key::Character("\u{e9}".into()))
-		);
+		assert_eq!(typed_key(&injected, Some("\u{e9}")), Some(Key::Character("\u{e9}".into())));
 	}
 
 	// Test ID: dcdcz
@@ -818,18 +675,9 @@ mod tests {
 	fn ctrl_chars_and_alt_prefix() {
 		let ctrl = ModifiersState::CONTROL;
 		let a = Key::Character("a".into());
-		assert_eq!(
-			encode_key(&a, Some("a"), ctrl, false, false).unwrap(),
-			[0x01]
-		);
-		assert_eq!(
-			encode_key(&a, Some("a"), NONE, false, false).unwrap(),
-			b"a".to_vec()
-		);
-		assert_eq!(
-			encode_key(&a, Some("a"), ModifiersState::ALT, false, false).unwrap(),
-			b"\x1ba".to_vec()
-		);
+		assert_eq!(encode_key(&a, Some("a"), ctrl, false, false).unwrap(), [0x01]);
+		assert_eq!(encode_key(&a, Some("a"), NONE, false, false).unwrap(), b"a".to_vec());
+		assert_eq!(encode_key(&a, Some("a"), ModifiersState::ALT, false, false).unwrap(), b"\x1ba".to_vec());
 	}
 
 	// German Option+5 is "[", which with an ESC in front started an escape
@@ -838,9 +686,7 @@ mod tests {
 	#[test]
 	fn option_types_its_character_on_a_mac() {
 		let alt = ModifiersState::ALT;
-		let typed = |ch: &str, mods: ModifiersState, mac: bool| {
-			encode_key(&Key::Character(ch.into()), Some(ch), mods, false, mac).unwrap()
-		};
+		let typed = |ch: &str, mods: ModifiersState, mac: bool| encode_key(&Key::Character(ch.into()), Some(ch), mods, false, mac).unwrap();
 		for ch in ["[", "{", "@", "|", "\\", "~", "\u{192}"] {
 			assert_eq!(typed(ch, alt, true), ch.as_bytes(), "{ch}");
 			let mut meta = vec![0x1b];
@@ -849,10 +695,7 @@ mod tests {
 		}
 		assert_eq!(typed("}", alt | ModifiersState::SHIFT, true), b"}");
 		// Ctrl rules out a composed character, so these keep their ESC
-		assert_eq!(
-			typed("a", alt | ModifiersState::CONTROL, true),
-			[0x1b, 0x01]
-		);
+		assert_eq!(typed("a", alt | ModifiersState::CONTROL, true), [0x1b, 0x01]);
 		let named = |key: NamedKey| encode_key(&Key::Named(key), None, alt, false, true).unwrap();
 		assert_eq!(named(NamedKey::Backspace), [0x1b, 0x7f]);
 		assert_eq!(named(NamedKey::ArrowLeft), b"\x1b[1;3D");
@@ -883,14 +726,8 @@ mod tests {
 			encode_key(&Key::Character(ch.into()), Some(ch), mods, false, composes).unwrap()
 		};
 		assert_eq!(typed("f", alt, OptionAlt::Left, left), b"\x1bf");
-		assert_eq!(
-			typed("F", alt | ModifiersState::SHIFT, OptionAlt::Both, right),
-			b"\x1bF"
-		);
-		assert_eq!(
-			typed("\u{192}", alt, OptionAlt::Left, right),
-			"\u{192}".as_bytes()
-		);
+		assert_eq!(typed("F", alt | ModifiersState::SHIFT, OptionAlt::Both, right), b"\x1bF");
+		assert_eq!(typed("\u{192}", alt, OptionAlt::Left, right), "\u{192}".as_bytes());
 		assert_eq!(typed("{", alt, OptionAlt::Off, left), b"{");
 
 		for setting in OptionAlt::ALL {
@@ -931,14 +768,8 @@ mod tests {
 	// Test ID: dd5nz
 	#[test]
 	fn ctrl_shift_page_keys_move_the_tab() {
-		assert_eq!(
-			named(NamedKey::PageUp, CTRL_SHIFT),
-			Some(Hotkey::MoveTab { forward: false })
-		);
-		assert_eq!(
-			named(NamedKey::PageDown, CTRL_SHIFT),
-			Some(Hotkey::MoveTab { forward: true })
-		);
+		assert_eq!(named(NamedKey::PageUp, CTRL_SHIFT), Some(Hotkey::MoveTab { forward: false }));
+		assert_eq!(named(NamedKey::PageDown, CTRL_SHIFT), Some(Hotkey::MoveTab { forward: true }));
 	}
 
 	// Test ID: dd5p0
@@ -953,10 +784,7 @@ mod tests {
 	// Test ID: dd5p1
 	#[test]
 	fn the_menu_key_settings_and_fullscreen_are_hotkeys() {
-		assert_eq!(
-			named(NamedKey::ContextMenu, NONE),
-			Some(Hotkey::ContextMenu)
-		);
+		assert_eq!(named(NamedKey::ContextMenu, NONE), Some(Hotkey::ContextMenu));
 		assert_eq!(chord(",", CTRL), Some(Hotkey::Settings));
 		assert_eq!(named(NamedKey::F11, NONE), Some(Hotkey::Fullscreen));
 		assert_eq!(chord("V", CTRL_SHIFT), Some(Hotkey::Paste));
@@ -1074,12 +902,7 @@ mod tests {
 
 	fn held(chord: Chord) -> ModifiersState {
 		let mut mods = NONE;
-		for (on, flag) in [
-			(chord.command, COMMAND),
-			(chord.shift, ModifiersState::SHIFT),
-			(chord.alt, ModifiersState::ALT),
-			(chord.ctrl, CTRL),
-		] {
+		for (on, flag) in [(chord.command, COMMAND), (chord.shift, ModifiersState::SHIFT), (chord.alt, ModifiersState::ALT), (chord.ctrl, CTRL)] {
 			if on {
 				mods |= flag;
 			}
@@ -1100,15 +923,7 @@ mod tests {
 	// Every default chord on a platform with Command held, and its hotkey.
 	fn command_defaults(mac: bool) -> Vec<(Hotkey, Chord)> {
 		let keys = Bindings::defaults(mac);
-		crate::keys::config_paths()
-			.flat_map(|(hotkey, _)| {
-				keys.chords(hotkey)
-					.iter()
-					.filter(|chord| chord.command)
-					.map(move |chord| (hotkey, *chord))
-					.collect::<Vec<_>>()
-			})
-			.collect()
+		crate::keys::config_paths().flat_map(|(hotkey, _)| keys.chords(hotkey).iter().filter(|chord| chord.command).map(move |chord| (hotkey, *chord)).collect::<Vec<_>>()).collect()
 	}
 
 	// Command+, is Settings on a Mac, and Ctrl+, goes to the shell there.
@@ -1139,43 +954,18 @@ mod tests {
 		assert!(mac_chords.len() > 15, "{mac_chords:?}");
 		for (hotkey, chord) in mac_chords {
 			let press = pressed(chord);
-			assert_eq!(
-				hotkey_on(&press, held(chord), true, true),
-				Some(hotkey),
-				"{chord:?}"
-			);
-			assert_eq!(
-				hotkey_on(&press, held(chord), true, false),
-				None,
-				"{chord:?} off macOS"
-			);
+			assert_eq!(hotkey_on(&press, held(chord), true, true), Some(hotkey), "{chord:?}");
+			assert_eq!(hotkey_on(&press, held(chord), true, false), None, "{chord:?} off macOS");
 		}
 		assert!(command_defaults(false).is_empty());
 		let mac_keys = Bindings::defaults(true);
 		let find = |hotkey| mac_keys.shown(hotkey).map(|chord| chord.spoken(true));
-		for (hotkey, spoken) in [
-			(Hotkey::NewTab, "Command+T"),
-			(Hotkey::CloseTab, "Command+W"),
-			(Hotkey::NewWindow, "Command+N"),
-			(Hotkey::Copy, "Command+C"),
-			(Hotkey::Paste, "Command+V"),
-			(Hotkey::Settings, "Command+,"),
-			(Hotkey::Quit, "Command+Q"),
-			(Hotkey::Zoom(1), "Command+Plus"),
-			(Hotkey::Zoom(-1), "Command+Minus"),
-			(Hotkey::ZoomReset, "Command+0"),
-			(Hotkey::Fullscreen, "Control+Command+F"),
-			(Hotkey::PrevTab, "Shift+Command+["),
-			(Hotkey::NextTab, "Shift+Command+]"),
-		] {
+		for (hotkey, spoken) in [(Hotkey::NewTab, "Command+T"), (Hotkey::CloseTab, "Command+W"), (Hotkey::NewWindow, "Command+N"), (Hotkey::Copy, "Command+C"), (Hotkey::Paste, "Command+V"), (Hotkey::Settings, "Command+,"), (Hotkey::Quit, "Command+Q"), (Hotkey::Zoom(1), "Command+Plus"), (Hotkey::Zoom(-1), "Command+Minus"), (Hotkey::ZoomReset, "Command+0"), (Hotkey::Fullscreen, "Control+Command+F"), (Hotkey::PrevTab, "Shift+Command+["), (Hotkey::NextTab, "Shift+Command+]")] {
 			assert_eq!(find(hotkey).as_deref(), Some(spoken));
 		}
 		// "+" is Shift+"=", so Command+= counts too
 		assert_eq!(on("=", COMMAND, true), Some(Hotkey::Zoom(1)));
-		assert_eq!(
-			on("+", COMMAND.union(ModifiersState::SHIFT), true),
-			Some(Hotkey::Zoom(1))
-		);
+		assert_eq!(on("+", COMMAND.union(ModifiersState::SHIFT), true), Some(Hotkey::Zoom(1)));
 		// a different modifier set is a different chord
 		assert_eq!(on("t", COMMAND.union(ModifiersState::SHIFT), true), None);
 		assert_eq!(on("c", COMMAND.union(ModifiersState::ALT), true), None);
@@ -1185,12 +975,7 @@ mod tests {
 		let mut keys: Vec<String> = ('a'..='z').map(String::from).collect();
 		keys.extend([",", "-", "=", "+", "0", ".", "[", "]"].map(String::from));
 		let mut elsewhere = 0;
-		for mods in [
-			CTRL,
-			CTRL_SHIFT,
-			CTRL.union(ModifiersState::ALT),
-			ModifiersState::ALT,
-		] {
+		for mods in [CTRL, CTRL_SHIFT, CTRL.union(ModifiersState::ALT), ModifiersState::ALT] {
 			for typed in &keys {
 				assert_eq!(on(typed, mods, true), None, "{mods:?} {typed}");
 				elsewhere += usize::from(on(typed, mods, false).is_some());
@@ -1217,8 +1002,7 @@ mod tests {
 	#[test]
 	fn command_shift_brackets_walk_the_tabs_on_macos() {
 		let shifted = COMMAND.union(ModifiersState::SHIFT);
-		let on =
-			|typed: &str, mods, mac| hotkey_on(&Key::Character(typed.into()), mods, false, mac);
+		let on = |typed: &str, mods, mac| hotkey_on(&Key::Character(typed.into()), mods, false, mac);
 		for typed in ["[", "{"] {
 			assert_eq!(on(typed, shifted, true), Some(Hotkey::PrevTab), "{typed}");
 			assert_eq!(on(typed, shifted, false), None, "{typed} off macOS");
@@ -1234,14 +1018,8 @@ mod tests {
 		let page = |key, mods| hotkey_on(&Key::Named(key), mods, false, true);
 		assert_eq!(page(NamedKey::PageUp, COMMAND), Some(Hotkey::PrevTab));
 		assert_eq!(page(NamedKey::PageDown, COMMAND), Some(Hotkey::NextTab));
-		assert_eq!(
-			page(NamedKey::PageUp, shifted),
-			Some(Hotkey::MoveTab { forward: false })
-		);
-		assert_eq!(
-			page(NamedKey::PageDown, shifted),
-			Some(Hotkey::MoveTab { forward: true })
-		);
+		assert_eq!(page(NamedKey::PageUp, shifted), Some(Hotkey::MoveTab { forward: false }));
+		assert_eq!(page(NamedKey::PageDown, shifted), Some(Hotkey::MoveTab { forward: true }));
 		assert_eq!(page(NamedKey::PageUp, COMMAND.union(CTRL)), None);
 		assert_eq!(page(NamedKey::Home, COMMAND), None);
 	}
@@ -1260,11 +1038,7 @@ mod tests {
 		let (mac_keys, pc_keys) = (Bindings::defaults(true), Bindings::defaults(false));
 		assert!(is_copy_chord(&mac_keys, COMMAND, &c));
 		assert!(!is_copy_chord(&mac_keys, CTRL_SHIFT, &c));
-		assert!(!is_copy_chord(
-			&mac_keys,
-			COMMAND.union(ModifiersState::SHIFT),
-			&c
-		));
+		assert!(!is_copy_chord(&mac_keys, COMMAND.union(ModifiersState::SHIFT), &c));
 		assert!(is_copy_chord(&pc_keys, CTRL_SHIFT, &c));
 		assert!(!is_copy_chord(&pc_keys, COMMAND, &c));
 		let option = ModifiersState::ALT;
@@ -1279,14 +1053,7 @@ mod tests {
 		assert!(!pc(CTRL).line);
 		assert!(!pc(COMMAND).shortcut && pc(COMMAND).types);
 		assert!(!pc(option).word && pc(option).alt);
-		assert_eq!(
-			pc(ModifiersState::SHIFT),
-			EditKeys {
-				shift: true,
-				types: true,
-				..EditKeys::default()
-			}
-		);
+		assert_eq!(pc(ModifiersState::SHIFT), EditKeys { shift: true, types: true, ..EditKeys::default() });
 	}
 
 	// Ctrl alone counts, whatever else is held. Linux and Windows keep
@@ -1294,38 +1061,14 @@ mod tests {
 	// Test ID: dde2x
 	#[test]
 	fn ctrl_click_is_the_right_click_on_macos_only() {
-		let buttons = [
-			MouseButton::Left,
-			MouseButton::Right,
-			MouseButton::Middle,
-			MouseButton::Back,
-			MouseButton::Forward,
-			MouseButton::Other(5),
-		];
-		let keys = [
-			ModifiersState::CONTROL,
-			ModifiersState::SHIFT,
-			ModifiersState::ALT,
-			ModifiersState::SUPER,
-		];
+		let buttons = [MouseButton::Left, MouseButton::Right, MouseButton::Middle, MouseButton::Back, MouseButton::Forward, MouseButton::Other(5)];
+		let keys = [ModifiersState::CONTROL, ModifiersState::SHIFT, ModifiersState::ALT, ModifiersState::SUPER];
 		for mac in [true, false] {
 			for button in buttons {
 				for combo in 0..16usize {
-					let mods = keys
-						.iter()
-						.enumerate()
-						.filter(|(bit, _)| combo & (1 << bit) != 0)
-						.fold(ModifiersState::empty(), |acc, (_, key)| acc | *key);
-					let expected = if mac && button == MouseButton::Left && mods.control_key() {
-						MouseButton::Right
-					} else {
-						button
-					};
-					assert_eq!(
-						acting_button(button, mods, mac),
-						expected,
-						"{button:?} {mods:?} mac={mac}"
-					);
+					let mods = keys.iter().enumerate().filter(|(bit, _)| combo & (1 << bit) != 0).fold(ModifiersState::empty(), |acc, (_, key)| acc | *key);
+					let expected = if mac && button == MouseButton::Left && mods.control_key() { MouseButton::Right } else { button };
+					assert_eq!(acting_button(button, mods, mac), expected, "{button:?} {mods:?} mac={mac}");
 				}
 			}
 		}
@@ -1398,12 +1141,7 @@ mod tests {
 		assert_eq!(chord("+", ALT_SHIFT), Some(Hotkey::SplitRight));
 		assert_eq!(chord("_", ALT_SHIFT), Some(Hotkey::SplitDown));
 		assert_eq!(chord("W", ALT_SHIFT), Some(Hotkey::ClosePane));
-		for (key, toward) in [
-			(NamedKey::ArrowLeft, Toward::Left),
-			(NamedKey::ArrowRight, Toward::Right),
-			(NamedKey::ArrowUp, Toward::Up),
-			(NamedKey::ArrowDown, Toward::Down),
-		] {
+		for (key, toward) in [(NamedKey::ArrowLeft, Toward::Left), (NamedKey::ArrowRight, Toward::Right), (NamedKey::ArrowUp, Toward::Up), (NamedKey::ArrowDown, Toward::Down)] {
 			assert_eq!(named(key, ALT), Some(Hotkey::Focus(toward)));
 			assert_eq!(named(key, ALT_SHIFT), None, "{key:?}");
 			assert_eq!(named(key, CTRL), None, "{key:?}");
@@ -1417,11 +1155,7 @@ mod tests {
 		for (typed, title) in [("f", 'F'), ("p", 'P'), ("b", 'B')] {
 			assert_eq!(chord(typed, ALT), Some(Hotkey::MenuTitle(title)));
 		}
-		assert_eq!(
-			hotkey_on(&Key::Character("w".into()), ALT, false, false),
-			None,
-			"Alt+W with no menu bar"
-		);
+		assert_eq!(hotkey_on(&Key::Character("w".into()), ALT, false, false), None, "Alt+W with no menu bar");
 		for c in 'a'..='z' {
 			let hotkey = chord(&c.to_string(), CTRL_SHIFT);
 			match c {
@@ -1440,27 +1174,29 @@ mod tests {
 		const ALT: ModifiersState = ModifiersState::ALT;
 		let on = |mods| hotkey_on(&Key::Character("f".into()), mods, true, false);
 		assert_eq!(on(ALT), Some(Hotkey::MenuTitle('F')));
-		assert_eq!(
-			hotkey_on(
-				&Key::Character("F".into()),
-				ALT.union(ModifiersState::SHIFT),
-				true,
-				false
-			),
-			None
-		);
-		for extra in [
-			ModifiersState::SHIFT,
-			COMMAND,
-			CTRL,
-			COMMAND.union(ModifiersState::SHIFT),
-			COMMAND.union(CTRL),
-		] {
+		assert_eq!(hotkey_on(&Key::Character("F".into()), ALT.union(ModifiersState::SHIFT), true, false), None);
+		for extra in [ModifiersState::SHIFT, COMMAND, CTRL, COMMAND.union(ModifiersState::SHIFT), COMMAND.union(CTRL)] {
 			assert_eq!(on(ALT.union(extra)), None, "{extra:?}");
 			assert!(!opens_menu_title(ALT.union(extra)), "{extra:?}");
 		}
 		assert!(opens_menu_title(ALT));
 		assert!(!opens_menu_title(NONE));
+	}
+
+	// A letter in an open menu is the row's own key on its own, with Shift, or
+	// with Alt alone. Ctrl or Super held makes it a hotkey, and Alt+Shift is
+	// the pane chords', so none of those pick a row.
+	// Test ID: dfjvm
+	#[test]
+	fn a_letter_picks_a_menu_row_only_alone_or_with_shift_or_alt() {
+		const ALT: ModifiersState = ModifiersState::ALT;
+		const SHIFT: ModifiersState = ModifiersState::SHIFT;
+		for mods in [NONE, SHIFT, ALT] {
+			assert!(picks_menu_row(mods), "{mods:?}");
+		}
+		for mods in [CTRL, CTRL.union(SHIFT), CTRL.union(ALT), COMMAND, COMMAND.union(SHIFT), ALT.union(SHIFT), ALT.union(COMMAND)] {
+			assert!(!picks_menu_row(mods), "{mods:?}");
+		}
 	}
 
 	// On a Mac the pane chords are iTerm2's: Command+D splits right,
@@ -1474,39 +1210,21 @@ mod tests {
 		let mac = |key: Key, mods| hotkey_on(&key, mods, false, true);
 		let d = || Key::Character("d".into());
 		assert_eq!(mac(d(), COMMAND), Some(Hotkey::SplitRight));
-		assert_eq!(
-			mac(
-				Key::Character("D".into()),
-				COMMAND.union(ModifiersState::SHIFT)
-			),
-			Some(Hotkey::SplitDown)
-		);
+		assert_eq!(mac(Key::Character("D".into()), COMMAND.union(ModifiersState::SHIFT)), Some(Hotkey::SplitDown));
 		assert_eq!(mac(d(), CTRL), None);
 		// Command suppresses the character Option would type, so the press
 		// arrives as "w"
 		let w = || Key::Character("w".into());
 		assert_eq!(mac(w(), COMMAND.union(OPTION)), Some(Hotkey::ClosePane));
 		assert_eq!(mac(w(), COMMAND), Some(Hotkey::CloseTab));
-		for (key, toward) in [
-			(NamedKey::ArrowLeft, Toward::Left),
-			(NamedKey::ArrowRight, Toward::Right),
-			(NamedKey::ArrowUp, Toward::Up),
-			(NamedKey::ArrowDown, Toward::Down),
-		] {
-			assert_eq!(
-				mac(Key::Named(key), COMMAND.union(OPTION)),
-				Some(Hotkey::Focus(toward))
-			);
+		for (key, toward) in [(NamedKey::ArrowLeft, Toward::Left), (NamedKey::ArrowRight, Toward::Right), (NamedKey::ArrowUp, Toward::Up), (NamedKey::ArrowDown, Toward::Down)] {
+			assert_eq!(mac(Key::Named(key), COMMAND.union(OPTION)), Some(Hotkey::Focus(toward)));
 			assert_eq!(mac(Key::Named(key), OPTION), None, "{key:?}");
 			assert_eq!(mac(Key::Named(key), COMMAND), None, "{key:?}");
 		}
 		let alt_shift = OPTION.union(ModifiersState::SHIFT);
 		for typed in ["+", "_", "W"] {
-			assert_eq!(
-				mac(Key::Character(typed.into()), alt_shift),
-				None,
-				"{typed}"
-			);
+			assert_eq!(mac(Key::Character(typed.into()), alt_shift), None, "{typed}");
 		}
 	}
 
@@ -1552,25 +1270,11 @@ mod tests {
 		let alt_scroll = TermMode::ALTERNATE_SCROLL;
 		let alt_screen = TermMode::ALT_SCREEN | alt_scroll;
 		assert_eq!(wheel_route(alt_scroll, false), WheelRoute::Scrollback);
-		assert_eq!(
-			wheel_route(TermMode::empty(), false),
-			WheelRoute::Scrollback
-		);
+		assert_eq!(wheel_route(TermMode::empty(), false), WheelRoute::Scrollback);
 		assert_eq!(wheel_route(alt_screen, false), WheelRoute::CursorKeys);
-		assert_eq!(
-			wheel_route(TermMode::ALT_SCREEN, false),
-			WheelRoute::Scrollback,
-			"no alternate scroll"
-		);
-		for tracking in [
-			TermMode::MOUSE_REPORT_CLICK,
-			TermMode::MOUSE_DRAG,
-			TermMode::MOUSE_MOTION,
-		] {
-			assert_eq!(
-				wheel_route(alt_screen | tracking, false),
-				WheelRoute::Report
-			);
+		assert_eq!(wheel_route(TermMode::ALT_SCREEN, false), WheelRoute::Scrollback, "no alternate scroll");
+		for tracking in [TermMode::MOUSE_REPORT_CLICK, TermMode::MOUSE_DRAG, TermMode::MOUSE_MOTION] {
+			assert_eq!(wheel_route(alt_screen | tracking, false), WheelRoute::Report);
 			assert_eq!(wheel_route(tracking, false), WheelRoute::Report);
 		}
 	}
@@ -1580,13 +1284,7 @@ mod tests {
 	fn shift_keeps_the_wheel_local_over_a_tracking_app() {
 		let tracking = TermMode::MOUSE_REPORT_CLICK;
 		assert_eq!(wheel_route(tracking, true), WheelRoute::Scrollback);
-		assert_eq!(
-			wheel_route(
-				tracking | TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL,
-				true
-			),
-			WheelRoute::Scrollback
-		);
+		assert_eq!(wheel_route(tracking | TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL, true), WheelRoute::Scrollback);
 		// with no tracking app, Shift changes nothing
 		let alt_screen = TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL;
 		assert_eq!(wheel_route(alt_screen, true), WheelRoute::CursorKeys);
@@ -1623,10 +1321,7 @@ mod tests {
 		assert_eq!(click_count(last, 1, t0 + MULTI_CLICK, at, cell), 1);
 		assert_eq!(click_count(last, 1, soon, (at.0 + 9.0, at.1), cell), 1);
 		assert_eq!(click_count(last, 1, soon, (at.0, at.1 - 17.0), cell), 1);
-		assert_eq!(
-			click_count(last, 1, soon, (at.0 + 8.0, at.1 + 16.0), cell),
-			2
-		);
+		assert_eq!(click_count(last, 1, soon, (at.0 + 8.0, at.1 + 16.0), cell), 2);
 	}
 
 	// Test ID: dd5pa

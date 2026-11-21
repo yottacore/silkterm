@@ -33,14 +33,7 @@ pub enum Profile {
 
 impl Profile {
 	/// dialog order, which is also the order they cost in
-	pub const ALL: [Profile; 6] = [
-		Profile::Custom,
-		Profile::Max,
-		Profile::High,
-		Profile::Low,
-		Profile::Standard,
-		Profile::Remote,
-	];
+	pub const ALL: [Profile; 6] = [Profile::Custom, Profile::Max, Profile::High, Profile::Low, Profile::Standard, Profile::Remote];
 
 	/// the spelling the config file uses
 	pub fn key(self) -> &'static str {
@@ -68,10 +61,7 @@ impl Profile {
 	/// An unknown spelling reads as the default, the way every other
 	/// named option in the config does.
 	pub fn parse(text: &str) -> Profile {
-		Profile::ALL
-			.into_iter()
-			.find(|p| p.key().eq_ignore_ascii_case(text.trim()))
-			.unwrap_or(Profile::Max)
+		Profile::ALL.into_iter().find(|p| p.key().eq_ignore_ascii_case(text.trim())).unwrap_or(Profile::Max)
 	}
 
 	pub fn index(self) -> usize {
@@ -112,12 +102,7 @@ pub fn current(settings: &Settings) -> Profile {
 
 /// Whether the Remote profile is on for this run.
 pub fn remote(settings: &Settings) -> bool {
-	settings
-		.model
-		.values
-		.session
-		.get(crate::fields::PROFILE)
-		.is_some_and(|key| key == Profile::Remote.key())
+	settings.model.values.session.get(crate::fields::PROFILE).is_some_and(|key| key == Profile::Remote.key())
 }
 
 /// Put the Remote profile on or off for this run. Nothing is stored.
@@ -130,26 +115,13 @@ pub fn set_remote(settings: &mut Settings, on: bool) {
 /// Names the adapter closely enough that a new card or a switch to software
 /// rendering reads as new hardware, and a driver update doesn't.
 pub fn fingerprint(info: &wgpu::AdapterInfo) -> String {
-	format!(
-		"{} ({:?}, {:?})",
-		info.name.trim(),
-		info.device_type,
-		info.backend
-	)
+	format!("{} ({:?}, {:?})", info.name.trim(), info.device_type, info.backend)
 }
 
 // The names a driver gives itself when there is no card behind it. wgpu reports
 // most of these as DeviceType::Cpu already. The ones it doesn't are the remote
 // and virtual display drivers, which is where the pick went wrong.
-const SOFTWARE_ADAPTERS: &[&str] = &[
-	"llvmpipe",
-	"softpipe",
-	"swrast",
-	"lavapipe",
-	"basic render",
-	"remote display",
-	"microsoft remote",
-];
+const SOFTWARE_ADAPTERS: &[&str] = &["llvmpipe", "softpipe", "swrast", "lavapipe", "basic render", "remote display", "microsoft remote"];
 
 /// Is there a real graphics processor behind this adapter?
 pub fn software_adapter(info: &wgpu::AdapterInfo) -> bool {
@@ -173,9 +145,7 @@ pub fn remote_session() -> bool {
 		// logon moved to the console, Explorer still passes down RDP-Tcp#N.
 		const SM_REMOTESESSION: i32 = 0x1000;
 		// SAFETY: takes an index and no pointer, and returns 0 for one it doesn't know.
-		let metric = unsafe {
-			windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(SM_REMOTESESSION)
-		};
+		let metric = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(SM_REMOTESESSION) };
 		metric != 0 || station_name().is_some_and(|name| rdp_station(&name))
 	}
 	#[cfg(not(windows))]
@@ -183,10 +153,7 @@ pub fn remote_session() -> bool {
 		// A VNC or xrdp server says so in the environment it starts the session
 		// with. A forwarded X display names a host before the colon, where a local
 		// one is bare or says unix.
-		["VNCDESKTOP", "XRDP_SESSION", "RFB_PORT"]
-			.iter()
-			.any(|key| std::env::var_os(key).is_some())
-			|| std::env::var("DISPLAY").is_ok_and(|d| forwarded_display(&d))
+		["VNCDESKTOP", "XRDP_SESSION", "RFB_PORT"].iter().any(|key| std::env::var_os(key).is_some()) || std::env::var("DISPLAY").is_ok_and(|d| forwarded_display(&d))
 	}
 }
 
@@ -201,23 +168,13 @@ fn rdp_station(name: &str) -> bool {
 // moved between RDP and the console.
 #[cfg(windows)]
 fn station_name() -> Option<String> {
-	use windows_sys::Win32::System::RemoteDesktop::{
-		WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION, WTSFreeMemory, WTSQuerySessionInformationW,
-		WTSWinStationName,
-	};
+	use windows_sys::Win32::System::RemoteDesktop::{WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION, WTSFreeMemory, WTSQuerySessionInformationW, WTSWinStationName};
 	let mut buf: windows_sys::core::PWSTR = std::ptr::null_mut();
 	let mut bytes: u32 = 0;
 	// SAFETY: both out pointers are locals. On success the buffer contains `bytes`
 	// bytes of UTF-16 and is freed below, the way the call asks.
 	unsafe {
-		if WTSQuerySessionInformationW(
-			WTS_CURRENT_SERVER_HANDLE,
-			WTS_CURRENT_SESSION,
-			WTSWinStationName,
-			&raw mut buf,
-			&raw mut bytes,
-		) == 0 || buf.is_null()
-		{
+		if WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION, WTSWinStationName, &raw mut buf, &raw mut bytes) == 0 || buf.is_null() {
 			return None;
 		}
 		let wide = std::slice::from_raw_parts(buf, bytes as usize / 2);
@@ -283,15 +240,7 @@ fn cpu_name() -> String {
 	#[cfg(windows)]
 	let model = std::env::var("PROCESSOR_IDENTIFIER").unwrap_or_default();
 	#[cfg(not(windows))]
-	let model = std::fs::read_to_string("/proc/cpuinfo")
-		.ok()
-		.and_then(|text| {
-			text.lines()
-				.find(|line| line.starts_with("model name"))
-				.and_then(|line| line.split_once(':'))
-				.map(|(_, value)| value.trim().to_string())
-		})
-		.unwrap_or_default();
+	let model = std::fs::read_to_string("/proc/cpuinfo").ok().and_then(|text| text.lines().find(|line| line.starts_with("model name")).and_then(|line| line.split_once(':')).map(|(_, value)| value.trim().to_string())).unwrap_or_default();
 	format!("{model}/{threads}")
 }
 
@@ -318,11 +267,7 @@ fn memory_gib() -> u64 {
 		let pages = unsafe { libc::sysconf(libc::_SC_PHYS_PAGES) };
 		// SAFETY: as above.
 		let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
-		if pages > 0 && page > 0 {
-			(pages as u64).saturating_mul(page as u64) / (1 << 30)
-		} else {
-			0
-		}
+		if pages > 0 && page > 0 { (pages as u64).saturating_mul(page as u64) / (1 << 30) } else { 0 }
 	}
 }
 
@@ -330,11 +275,7 @@ fn memory_gib() -> u64 {
 /// there is nothing worth measuring: an adapter with no card behind it isn't
 /// going to hold any rung above Low.
 pub fn first_pick(info: &wgpu::AdapterInfo) -> Profile {
-	if software_adapter(info) {
-		Profile::Low
-	} else {
-		Profile::Max
-	}
+	if software_adapter(info) { Profile::Low } else { Profile::Max }
 }
 
 /// Is there anything to time here, or is the first pick already the answer?
@@ -392,15 +333,7 @@ impl Bench {
 	const LADDER: &'static [Profile] = &[Profile::Max, Profile::High, Profile::Low];
 
 	pub fn new() -> Bench {
-		Bench {
-			rungs: Bench::LADDER,
-			at: 0,
-			seen: 0,
-			periods: Vec::with_capacity(BENCH_FRAMES),
-			last: None,
-			rung_start: None,
-			floor: false,
-		}
+		Bench { rungs: Bench::LADDER, at: 0, seen: 0, periods: Vec::with_capacity(BENCH_FRAMES), last: None, rung_start: None, floor: false }
 	}
 
 	/// The profile whose settings must be live while this rung is measured.
@@ -408,10 +341,7 @@ impl Bench {
 		if self.floor {
 			return Profile::Standard;
 		}
-		self.rungs
-			.get(self.at)
-			.copied()
-			.unwrap_or(Profile::Standard)
+		self.rungs.get(self.at).copied().unwrap_or(Profile::Standard)
 	}
 
 	/// A frame went out; return what to do next.
@@ -426,22 +356,15 @@ impl Bench {
 			self.periods.push((now - last).as_secs_f32() * 1000.0);
 		}
 		self.last = Some(now);
-		let elapsed = self
-			.rung_start
-			.map_or(0.0, |start| (now - start).as_secs_f32() * 1000.0);
-		let enough = self.periods.len() >= BENCH_FRAMES
-			|| (elapsed >= BENCH_RUNG_MS && self.periods.len() >= BENCH_MIN_FRAMES);
+		let elapsed = self.rung_start.map_or(0.0, |start| (now - start).as_secs_f32() * 1000.0);
+		let enough = self.periods.len() >= BENCH_FRAMES || (elapsed >= BENCH_RUNG_MS && self.periods.len() >= BENCH_MIN_FRAMES);
 		if !enough {
 			return Step::Measuring;
 		}
 		let period = median(&mut self.periods);
 		let stalled = period > budget_ms * STALL_FACTOR;
 		if self.floor {
-			return if stalled {
-				Step::Stalled
-			} else {
-				Step::Done(Profile::Standard)
-			};
+			return if stalled { Step::Stalled } else { Step::Done(Profile::Standard) };
 		}
 		if period <= budget_ms {
 			return Step::Done(self.profile());
@@ -485,10 +408,7 @@ pub struct FrameBudget {
 
 impl FrameBudget {
 	pub fn new(now: Instant, refresh_hz: f32) -> FrameBudget {
-		FrameBudget {
-			ms: budget_ms(refresh_hz),
-			read_at: now,
-		}
+		FrameBudget { ms: budget_ms(refresh_hz), read_at: now }
 	}
 
 	pub fn at(&mut self, now: Instant, refresh_hz: impl FnOnce() -> f32) -> f32 {
@@ -518,12 +438,7 @@ pub struct Rating {
 
 impl Rating {
 	pub fn new() -> Rating {
-		Rating {
-			periods: Vec::with_capacity(WINDOW),
-			last: None,
-			noted: None,
-			budget: 0.0,
-		}
+		Rating { periods: Vec::with_capacity(WINDOW), last: None, noted: None, budget: 0.0 }
 	}
 
 	/// A frame just went out while an ease was running. Only the gap to the
@@ -531,10 +446,7 @@ impl Rating {
 	/// past the stall ceiling isn't a slow frame, and the frames either side of
 	/// it were paced under the same condition, so the window goes with it.
 	pub fn note(&mut self, now: Instant, budget_ms: f32) {
-		if self
-			.noted
-			.is_some_and(|at| now.saturating_duration_since(at).as_secs_f32() > STALE_S)
-		{
+		if self.noted.is_some_and(|at| now.saturating_duration_since(at).as_secs_f32() > STALE_S) {
 			self.periods.clear();
 		}
 		// Frames paced by another monitor say nothing against this one's budget.
@@ -588,9 +500,7 @@ fn median(values: &mut [f32]) -> f32 {
 
 #[cfg(test)]
 mod tests {
-	use super::{
-		Bench, FrameBudget, Profile, Rating, Step, WINDOW, budget_ms, first_pick, software_adapter,
-	};
+	use super::{Bench, FrameBudget, Profile, Rating, Step, WINDOW, budget_ms, first_pick, software_adapter};
 	use crate::config::Settings;
 	use crate::fields;
 	use crate::ui_spec::Key;
@@ -598,19 +508,7 @@ mod tests {
 	use std::time::{Duration, Instant};
 
 	fn adapter(name: &str, device_type: wgpu::DeviceType) -> wgpu::AdapterInfo {
-		wgpu::AdapterInfo {
-			name: name.to_string(),
-			vendor: 0,
-			device: 0,
-			device_type,
-			device_pci_bus_id: String::new(),
-			driver: String::new(),
-			driver_info: String::new(),
-			backend: wgpu::Backend::Gl,
-			subgroup_min_size: 0,
-			subgroup_max_size: 0,
-			transient_saves_memory: false,
-		}
+		wgpu::AdapterInfo { name: name.to_string(), vendor: 0, device: 0, device_type, device_pci_bus_id: String::new(), driver: String::new(), driver_info: String::new(), backend: wgpu::Backend::Gl, subgroup_min_size: 0, subgroup_max_size: 0, transient_saves_memory: false }
 	}
 
 	// Test ID: dc7fs
@@ -622,26 +520,11 @@ mod tests {
 		assert_eq!(first_pick(&none), Profile::Low);
 		// wgpu labels most software renderers Cpu, but the remote and virtual
 		// display drivers arrive as something else and have to be named
-		assert!(software_adapter(&adapter(
-			"Anything At All",
-			wgpu::DeviceType::Cpu
-		)));
-		assert!(software_adapter(&adapter(
-			"llvmpipe (LLVM 19.1.7, 256 bits)",
-			wgpu::DeviceType::Other
-		)));
-		assert!(software_adapter(&adapter(
-			"Microsoft Basic Render Driver",
-			wgpu::DeviceType::VirtualGpu
-		)));
-		assert!(!software_adapter(&adapter(
-			"NVIDIA GeForce RTX 3060 Ti",
-			wgpu::DeviceType::DiscreteGpu
-		)));
-		assert!(!software_adapter(&adapter(
-			"Intel(R) UHD Graphics",
-			wgpu::DeviceType::IntegratedGpu
-		)));
+		assert!(software_adapter(&adapter("Anything At All", wgpu::DeviceType::Cpu)));
+		assert!(software_adapter(&adapter("llvmpipe (LLVM 19.1.7, 256 bits)", wgpu::DeviceType::Other)));
+		assert!(software_adapter(&adapter("Microsoft Basic Render Driver", wgpu::DeviceType::VirtualGpu)));
+		assert!(!software_adapter(&adapter("NVIDIA GeForce RTX 3060 Ti", wgpu::DeviceType::DiscreteGpu)));
+		assert!(!software_adapter(&adapter("Intel(R) UHD Graphics", wgpu::DeviceType::IntegratedGpu)));
 	}
 
 	// Test ID: dc6ff
@@ -653,12 +536,7 @@ mod tests {
 			assert!(!forwarded_display(local), "{local} is this machine");
 		}
 		// ssh -X points DISPLAY at a port on localhost
-		for away in [
-			"b29w:0",
-			"192.168.1.9:0.0",
-			"localhost:10.0",
-			"127.0.0.1:10.0",
-		] {
+		for away in ["b29w:0", "192.168.1.9:0.0", "localhost:10.0", "127.0.0.1:10.0"] {
 			assert!(forwarded_display(away), "{away} is somewhere else");
 		}
 	}
@@ -682,8 +560,7 @@ mod tests {
 	#[test]
 	fn a_stale_rdp_session_name_is_not_a_remote_screen() {
 		// SAFETY: takes an index and no pointer.
-		let metric =
-			unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(0x1000) };
+		let metric = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(0x1000) };
 		if metric != 0 || super::station_name().is_some_and(|n| super::rdp_station(&n)) {
 			return; // a real remote session, where Remote is right
 		}
@@ -709,10 +586,7 @@ mod tests {
 	}
 
 	// The same with the period each profile draws at. None is a stalled run.
-	fn run_bench_by(
-		period: impl Fn(Profile) -> f32,
-		budget_ms: f32,
-	) -> (Option<Profile>, Vec<Profile>) {
+	fn run_bench_by(period: impl Fn(Profile) -> f32, budget_ms: f32) -> (Option<Profile>, Vec<Profile>) {
 		let mut bench = Bench::new();
 		let mut now = Instant::now();
 		let mut rungs = vec![bench.profile()];
@@ -740,22 +614,14 @@ mod tests {
 		// a little over: the ladder is walked and Standard is what is left
 		let (pick, rungs) = run_bench(budget * 1.2, budget);
 		assert_eq!(pick, Profile::Standard);
-		assert_eq!(
-			rungs,
-			vec![Profile::Max, Profile::High, Profile::Low],
-			"each rung has to go live before it is judged"
-		);
+		assert_eq!(rungs, vec![Profile::Max, Profile::High, Profile::Low], "each rung has to go live before it is judged");
 		// far over: nothing on the ladder can help, so the rest isn't timed.
 		// This used to stop at Max and return Standard whatever Standard drew at:
 		//   let (pick, rungs) = run_bench(budget * 6.0, budget);
 		//   assert_eq!(rungs, vec![Profile::Max]);
 		// Standard is timed now, to see whether the machine or the display is slow.
 		let slow = |profile| {
-			if profile == Profile::Standard {
-				budget * 0.9
-			} else {
-				budget * 6.0
-			}
+			if profile == Profile::Standard { budget * 0.9 } else { budget * 6.0 }
 		};
 		let (pick, rungs) = run_bench_by(slow, budget);
 		assert_eq!(pick, Some(Profile::Standard));
@@ -776,20 +642,12 @@ mod tests {
 		// a machine that is slow with no effects on either, but not stalled, is
 		// still a slow machine
 		let crawl = |profile| {
-			if profile == Profile::Standard {
-				budget * 3.0
-			} else {
-				budget * 6.0
-			}
+			if profile == Profile::Standard { budget * 3.0 } else { budget * 6.0 }
 		};
 		assert_eq!(run_bench_by(crawl, budget).0, Some(Profile::Standard));
 		// a stall that starts partway down the ladder is settled the same way
 		let late = |profile| {
-			if profile == Profile::Max {
-				budget * 1.2
-			} else {
-				1000.0
-			}
+			if profile == Profile::Max { budget * 1.2 } else { 1000.0 }
 		};
 		let (pick, rungs) = run_bench_by(late, budget);
 		assert_eq!(pick, None);
@@ -798,27 +656,12 @@ mod tests {
 
 	// Custom values of its own, and the profile picked by hand.
 	fn tuned(profile: &str) -> Settings {
-		fields::owning(
-			Settings::default(),
-			&[
-				(Key::ScrollEaseIn, Value::Float(300.0)),
-				(Key::SmoothScroll, Value::Bool(false)),
-				(Key::CursorBlinking, Value::Bool(false)),
-				(Key::ScrimRadius, Value::Float(9.0)),
-				(Key::BgEnabled, Value::Bool(false)),
-				(Key::PerfAuto, Value::Bool(false)),
-				(Key::PerfProfile, Value::Text(profile.into())),
-			],
-		)
+		fields::owning(Settings::default(), &[(Key::ScrollEaseIn, Value::Float(300.0)), (Key::SmoothScroll, Value::Bool(false)), (Key::CursorBlinking, Value::Bool(false)), (Key::ScrimRadius, Value::Float(9.0)), (Key::BgEnabled, Value::Bool(false)), (Key::PerfAuto, Value::Bool(false)), (Key::PerfProfile, Value::Text(profile.into()))])
 	}
 
 	// Choose automatically on, the machine test's pick, and a step if any.
 	fn tested(pick: Profile, step: Option<Profile>) -> Settings {
-		let mut s = Settings {
-			tested_profile: Some(pick),
-			stepped_profile: step,
-			..Settings::default()
-		};
+		let mut s = Settings { tested_profile: Some(pick), stepped_profile: step, ..Settings::default() };
 		fields::fill(&mut s, None);
 		s
 	}
@@ -862,10 +705,7 @@ mod tests {
 		// outline over a pixel wide any more, so Low relies on the default one.
 		assert_eq!(s.text_outline, 1.0, "and leans on the outline");
 		for name in ["max", "high", "low", "standard"] {
-			assert!(
-				tuned(name).text_outline <= 1.0,
-				"{name} draws a fat outline"
-			);
+			assert!(tuned(name).text_outline <= 1.0, "{name} draws a fat outline");
 		}
 		let mut remote = tuned("low");
 		super::set_remote(&mut remote, true);
@@ -888,16 +728,8 @@ mod tests {
 		assert_eq!(super::current(&s), Profile::Remote);
 		assert!(super::remote(&s));
 		assert!(!s.scroll_smooth);
-		assert_eq!(
-			s.performance_profile,
-			Profile::Max,
-			"the stored profile is untouched"
-		);
-		assert!(
-			!fields::lines_of(&s)
-				.iter()
-				.any(|(_, v)| v.as_text() == "remote")
-		);
+		assert_eq!(s.performance_profile, Profile::Max, "the stored profile is untouched");
+		assert!(!fields::lines_of(&s).iter().any(|(_, v)| v.as_text() == "remote"));
 		super::set_remote(&mut s, false);
 		assert_eq!(super::current(&s), Profile::Max);
 		assert!(s.scroll_smooth);
@@ -913,26 +745,15 @@ mod tests {
 		assert_eq!(super::current(&s), Profile::Low);
 		assert!(s.wallpaper_enabled, "Low keeps the wallpaper");
 		assert!(!s.text_scrim);
-		assert_eq!(
-			super::current(&tested(Profile::Low, Some(Profile::High))),
-			Profile::Low,
-			"never heavier"
-		);
-		assert_eq!(
-			super::current(&tested(Profile::Standard, Some(Profile::Low))),
-			Profile::Standard
-		);
+		assert_eq!(super::current(&tested(Profile::Low, Some(Profile::High))), Profile::Low, "never heavier");
+		assert_eq!(super::current(&tested(Profile::Standard, Some(Profile::Low))), Profile::Standard);
 		let mut remote = tested(Profile::Max, Some(Profile::Low));
 		super::set_remote(&mut remote, true);
 		assert_eq!(super::current(&remote), Profile::Remote);
 		let mut by_hand = tuned("max");
 		by_hand.stepped_profile = Some(Profile::Low);
 		fields::fill(&mut by_hand, None);
-		assert_eq!(
-			super::current(&by_hand),
-			Profile::Max,
-			"a hand pick is not the watch's to change"
-		);
+		assert_eq!(super::current(&by_hand), Profile::Max, "a hand pick is not the watch's to change");
 		assert_eq!(super::current(&tuned("custom")), Profile::Custom);
 	}
 
@@ -944,10 +765,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "Miri can't ask how much memory the machine has")]
 	fn a_rating_from_before_the_version_is_stale() {
 		let card = adapter("NVIDIA GeForce RTX 3060 Ti", wgpu::DeviceType::DiscreteGpu);
-		let machine = super::MACHINE
-			.get()
-			.cloned()
-			.unwrap_or_else(super::machine_parts);
+		let machine = super::MACHINE.get().cloned().unwrap_or_else(super::machine_parts);
 		let unversioned = format!("{machine}|{}", super::fingerprint(&card));
 		let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
 		for byte in unversioned.as_bytes() {
@@ -955,11 +773,7 @@ mod tests {
 		}
 		let id = super::hardware_id(&card);
 		assert_ne!(id, format!("{hash:016x}"), "an old id no longer matches");
-		assert_eq!(
-			super::hardware_id(&card),
-			id,
-			"and the new one is stable, so the rating happens once"
-		);
+		assert_eq!(super::hardware_id(&card), id, "and the new one is stable, so the rating happens once");
 	}
 
 	// Test ID: dcf3w
@@ -967,12 +781,7 @@ mod tests {
 	fn watched_lower_stops_at_low() {
 		assert_eq!(Profile::Max.watched_lower(), Some(Profile::High));
 		assert_eq!(Profile::High.watched_lower(), Some(Profile::Low));
-		for p in [
-			Profile::Low,
-			Profile::Standard,
-			Profile::Custom,
-			Profile::Remote,
-		] {
+		for p in [Profile::Low, Profile::Standard, Profile::Custom, Profile::Remote] {
 			assert_eq!(p.watched_lower(), None, "{p:?}");
 		}
 	}
@@ -985,11 +794,7 @@ mod tests {
 		assert_eq!(Profile::Remote.lower(), None);
 		assert_eq!(Profile::Custom.lower(), None);
 		assert_eq!(Profile::parse("LOW"), Profile::Low);
-		assert_eq!(
-			Profile::parse("silky"),
-			Profile::Max,
-			"unknown reads as the default"
-		);
+		assert_eq!(Profile::parse("silky"), Profile::Max, "unknown reads as the default");
 		for p in Profile::ALL {
 			assert_eq!(Profile::from_index(p.index()), p);
 		}
@@ -1057,11 +862,7 @@ mod tests {
 			t += Duration::from_micros(16_667);
 			let now = budget.at(t, || 60.0);
 			r.note(t, now);
-			assert_ne!(
-				r.verdict(now),
-				Some(true),
-				"a display keeping up read as missing"
-			);
+			assert_ne!(r.verdict(now), Some(true), "a display keeping up read as missing");
 		}
 		assert_eq!(budget.at(t, || 60.0), budget_ms(60.0));
 	}

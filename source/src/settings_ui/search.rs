@@ -8,10 +8,7 @@
 //! row's `aliases:`, then loosely: the letters in order, or a word one or two
 //! typos off.
 
-use super::{
-	Dlg, Focus, Kind, Marks, SEARCH_ROW, SettingsDialog, TextItem, border, clip_rect, lay,
-	leaf_node, path_to, quad, tab_nodes, ui,
-};
+use super::{Dlg, Focus, Kind, Marks, SEARCH_ROW, SettingsDialog, TextItem, border, clip_rect, lay, leaf_node, path_to, quad, tab_nodes, ui};
 use crate::config;
 use crate::gfx::RectInstance;
 use crate::pane::Rect;
@@ -90,10 +87,7 @@ impl Folded {
 		(self.from[a].0, self.from[b - 1].1)
 	}
 	fn word_start(&self, at: usize) -> bool {
-		!self.text[..at]
-			.chars()
-			.next_back()
-			.is_some_and(char::is_alphanumeric)
+		!self.text[..at].chars().next_back().is_some_and(char::is_alphanumeric)
 	}
 }
 
@@ -179,9 +173,7 @@ fn typos(a: &[char], b: &[char]) -> usize {
 	for i in 1..=a.len() {
 		for j in 1..=b.len() {
 			let cost = usize::from(a[i - 1] != b[j - 1]);
-			let mut d = (table[at(i - 1, j)] + 1)
-				.min(table[at(i, j - 1)] + 1)
-				.min(table[at(i - 1, j - 1)] + cost);
+			let mut d = (table[at(i - 1, j)] + 1).min(table[at(i, j - 1)] + 1).min(table[at(i - 1, j - 1)] + cost);
 			if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
 				d = d.min(table[at(i - 2, j - 2)] + 1);
 			}
@@ -220,11 +212,7 @@ fn near(hay: &Folded, query: &str) -> Option<(usize, (usize, usize))> {
 	for (start, end) in spans {
 		// and each one cut to the query's length, for a word still being typed,
 		// though a short one cut that way is a typo away from too much
-		let cut = if want.len() >= 6 {
-			(start + want.len()).min(end)
-		} else {
-			end
-		};
+		let cut = if want.len() >= 6 { (start + want.len()).min(end) } else { end };
 		for end in [end, cut] {
 			if end <= start {
 				continue;
@@ -253,44 +241,16 @@ fn targets(specs: &[Spec]) -> Vec<(Target, Names, usize)> {
 	for (node, n) in nodes.iter().enumerate() {
 		// a tab sorts just ahead of its first row, and lends the aliases of the
 		// heading that only repeats its title
-		let first_leaf = n
-			.leaf
-			.unwrap_or_else(|| super::first_leaf_under(nodes, node));
-		let first_row = specs
-			.iter()
-			.position(|s| s.tab == first_leaf)
-			.unwrap_or(specs.len());
-		let aliases = n
-			.leaf
-			.and_then(|leaf| {
-				specs.iter().find(|s| {
-					s.tab == leaf
-						&& matches!(s.kind, Kind::Header(_))
-						&& SettingsDialog::header_is_tab_title(s)
-				})
-			})
-			.map_or(&[][..], |s| s.aliases);
-		out.push((
-			Target::Tab(node),
-			Names {
-				label: n.title,
-				aliases,
-			},
-			first_row,
-		));
+		let first_leaf = n.leaf.unwrap_or_else(|| super::first_leaf_under(nodes, node));
+		let first_row = specs.iter().position(|s| s.tab == first_leaf).unwrap_or(specs.len());
+		let aliases = n.leaf.and_then(|leaf| specs.iter().find(|s| s.tab == leaf && matches!(s.kind, Kind::Header(_)) && SettingsDialog::header_is_tab_title(s))).map_or(&[][..], |s| s.aliases);
+		out.push((Target::Tab(node), Names { label: n.title, aliases }, first_row));
 	}
 	for (row, spec) in specs.iter().enumerate() {
 		if spec.label.is_empty() || SettingsDialog::header_is_tab_title(spec) {
 			continue;
 		}
-		out.push((
-			Target::Row(row),
-			Names {
-				label: spec.label,
-				aliases: spec.aliases,
-			},
-			row,
-		));
+		out.push((Target::Row(row), Names { label: spec.label, aliases: spec.aliases }, row));
 	}
 	out
 }
@@ -306,68 +266,31 @@ pub(super) fn rank(specs: &[Spec], query: &str) -> Vec<Hit> {
 	let mut found: Vec<((Tier, u8, usize, u8, usize), Hit)> = Vec::new();
 	for (to, names, at) in targets(specs) {
 		let kind = u8::from(matches!(to, Target::Row(_)));
-		let hit = |tier, alias, marks| Hit {
-			to,
-			tier,
-			alias,
-			marks,
-		};
+		let hit = |tier, alias, marks| Hit { to, tier, alias, marks };
 		let label = fold(names.label);
 		if let Some((how, mark)) = literal(&label, &query) {
-			found.push((
-				(Tier::Label, how, 0, kind, at),
-				hit(Tier::Label, None, vec![mark]),
-			));
+			found.push(((Tier::Label, how, 0, kind, at), hit(Tier::Label, None, vec![mark])));
 			continue;
 		}
-		let aliases: Vec<(&'static str, Folded)> =
-			names.aliases.iter().map(|&a| (a, fold(a))).collect();
-		let by_alias = aliases
-			.iter()
-			.filter_map(|(alias, f)| literal(f, &query).map(|(how, mark)| (how, *alias, mark)))
-			.min_by_key(|&(how, _, _)| how);
+		let aliases: Vec<(&'static str, Folded)> = names.aliases.iter().map(|&a| (a, fold(a))).collect();
+		let by_alias = aliases.iter().filter_map(|(alias, f)| literal(f, &query).map(|(how, mark)| (how, *alias, mark))).min_by_key(|&(how, _, _)| how);
 		if let Some((how, alias, mark)) = by_alias {
-			found.push((
-				(Tier::Alias, how, 0, kind, at),
-				hit(Tier::Alias, Some(alias), vec![mark]),
-			));
+			found.push(((Tier::Alias, how, 0, kind, at), hit(Tier::Alias, Some(alias), vec![mark])));
 			continue;
 		}
 		// loose: the letters in order, then near misses, a label before an
 		// alias each time
 		let in_label = in_order(&label, &query).map(|(key, marks)| (key, None, marks));
-		let in_alias = || {
-			aliases
-				.iter()
-				.filter_map(|(alias, f)| in_order(f, &query).map(|(key, m)| (key, Some(*alias), m)))
-				.min_by_key(|(key, _, _)| *key)
-		};
+		let in_alias = || aliases.iter().filter_map(|(alias, f)| in_order(f, &query).map(|(key, m)| (key, Some(*alias), m))).min_by_key(|(key, _, _)| *key);
 		if let Some(((runs, span), alias, marks)) = in_label.or_else(in_alias) {
-			found.push((
-				(
-					Tier::Loose,
-					u8::from(alias.is_some()),
-					runs * 100 + span,
-					kind,
-					at,
-				),
-				hit(Tier::Loose, alias, marks),
-			));
+			found.push(((Tier::Loose, u8::from(alias.is_some()), runs * 100 + span, kind, at), hit(Tier::Loose, alias, marks)));
 			continue;
 		}
 		let near_label = near(&label, &query).map(|(d, mark)| (d, None, mark));
-		let near_alias = || {
-			aliases
-				.iter()
-				.filter_map(|(alias, f)| near(f, &query).map(|(d, mark)| (d, Some(*alias), mark)))
-				.min_by_key(|(d, _, _)| *d)
-		};
+		let near_alias = || aliases.iter().filter_map(|(alias, f)| near(f, &query).map(|(d, mark)| (d, Some(*alias), mark))).min_by_key(|(d, _, _)| *d);
 		if let Some((d, alias, mark)) = near_label.or_else(near_alias) {
 			let class = 2 + u8::from(alias.is_some());
-			found.push((
-				(Tier::Loose, class, d, kind, at),
-				hit(Tier::Loose, alias, vec![mark]),
-			));
+			found.push(((Tier::Loose, class, d, kind, at), hit(Tier::Loose, alias, vec![mark])));
 		}
 	}
 	found.sort_by_key(|(key, _)| *key);
@@ -380,10 +303,7 @@ fn heading_of(specs: &[Spec], row: usize) -> Option<usize> {
 		return None;
 	}
 	let tab = specs[row].tab;
-	let at = (0..row)
-		.rev()
-		.take_while(|&i| specs[i].tab == tab)
-		.find(|&i| matches!(specs[i].kind, Kind::Header(_)))?;
+	let at = (0..row).rev().take_while(|&i| specs[i].tab == tab).find(|&i| matches!(specs[i].kind, Kind::Header(_)))?;
 	(!SettingsDialog::header_is_tab_title(&specs[at])).then_some(at)
 }
 
@@ -392,19 +312,11 @@ fn heading_of(specs: &[Spec], row: usize) -> Option<usize> {
 fn leader_of(specs: &[Spec], row: usize) -> Option<usize> {
 	let me = &specs[row];
 	let mine = heading_of(specs, row);
-	let twin = (0..specs.len()).any(|j| {
-		j != row
-			&& specs[j].tab == me.tab
-			&& specs[j].label == me.label
-			&& heading_of(specs, j) == mine
-	});
+	let twin = (0..specs.len()).any(|j| j != row && specs[j].tab == me.tab && specs[j].label == me.label && heading_of(specs, j) == mine);
 	if !twin {
 		return None;
 	}
-	(0..row)
-		.rev()
-		.take_while(|&i| specs[i].tab == me.tab && !matches!(specs[i].kind, Kind::Header(_)))
-		.find(|&i| specs[i].indent < me.indent && !specs[i].label.is_empty())
+	(0..row).rev().take_while(|&i| specs[i].tab == me.tab && !matches!(specs[i].kind, Kind::Header(_))).find(|&i| specs[i].indent < me.indent && !specs[i].label.is_empty())
 }
 
 // Result lines worked out on this thread. Test builds only.
@@ -432,10 +344,7 @@ pub(super) fn crumb(specs: &[Spec], hit: &Hit) -> (String, Vec<(usize, usize)>) 
 			(up, nodes[node].title)
 		}
 		Target::Row(row) => {
-			let mut parts: Vec<&str> = path_to(nodes, specs[row].tab)
-				.into_iter()
-				.map(|n| nodes[n].title)
-				.collect();
+			let mut parts: Vec<&str> = path_to(nodes, specs[row].tab).into_iter().map(|n| nodes[n].title).collect();
 			if let Some(h) = heading_of(specs, row) {
 				parts.push(specs[h].label);
 			}
@@ -462,11 +371,7 @@ pub(super) fn crumb(specs: &[Spec], hit: &Hit) -> (String, Vec<(usize, usize)>) 
 		line.push_str(subject);
 		from
 	};
-	let marks = hit
-		.marks
-		.iter()
-		.map(|&(a, b)| (a + marked_from, b + marked_from))
-		.collect();
+	let marks = hit.marks.iter().map(|&(a, b)| (a + marked_from, b + marked_from)).collect();
 	(line, marks)
 }
 
@@ -485,12 +390,7 @@ impl SettingsDialog {
 	pub(super) fn search_box(&self) -> Rect {
 		let h = self.field_h();
 		let x = self.rows_x0() + lay().pad;
-		Rect {
-			x,
-			y: self.rows_y0() - 1.0 - lay().search_gap - h,
-			w: (self.rect.x + self.rect.w - lay().pad - x).max(0.0),
-			h,
-		}
+		Rect { x, y: self.rows_y0() - 1.0 - lay().search_gap - h, w: (self.rect.x + self.rect.w - lay().pad - x).max(0.0), h }
 	}
 
 	pub(super) fn search_content_h(&self) -> f32 {
@@ -504,12 +404,7 @@ impl SettingsDialog {
 	// The same, in viewport `vp`, for a walk down the list that has it already.
 	fn hit_rect_in(&self, vp: Rect, k: usize) -> Rect {
 		let h = self.line_row_h();
-		Rect {
-			x: vp.x + lay().pad / 2.0,
-			y: vp.y + lay().rows_pad - self.scroll + k as f32 * h,
-			w: (vp.w - lay().pad * 1.5).max(0.0),
-			h,
-		}
+		Rect { x: vp.x + lay().pad / 2.0, y: vp.y + lay().rows_pad - self.scroll + k as f32 * h, w: (vp.w - lay().pad * 1.5).max(0.0), h }
 	}
 
 	fn hit_at(&self, x: f32, y: f32) -> Option<usize> {
@@ -537,12 +432,7 @@ impl SettingsDialog {
 		let was = self.searching();
 		self.search.query = text.to_string();
 		self.search.hits = rank(self.specs, text);
-		self.search.lines = self
-			.search
-			.hits
-			.iter()
-			.map(|hit| crumb(self.specs, hit))
-			.collect();
+		self.search.lines = self.search.hits.iter().map(|hit| crumb(self.specs, hit)).collect();
 		self.search.sel = 0;
 		match (was, self.searching()) {
 			(false, true) => {
@@ -573,11 +463,7 @@ impl SettingsDialog {
 		if n == 0 {
 			return;
 		}
-		self.search.sel = if forward {
-			(self.search.sel + 1).min(n - 1)
-		} else {
-			self.search.sel.saturating_sub(1)
-		};
+		self.search.sel = if forward { (self.search.sel + 1).min(n - 1) } else { self.search.sel.saturating_sub(1) };
 		let vp = self.viewport();
 		let r = self.hit_rect(self.search.sel);
 		if r.y < vp.y {
@@ -612,13 +498,7 @@ impl SettingsDialog {
 		};
 		self.go_to_tab(leaf_node(tab_nodes(), self.specs[row].tab));
 		self.hscroll = 0.0;
-		self.focus = if matches!(self.specs[row].kind, Kind::Header(_)) {
-			None
-		} else {
-			(0..self.parts_of(row))
-				.find(|&p| !self.part_disabled(row, p))
-				.map(|p| Focus::Row(row, p))
-		};
+		self.focus = if matches!(self.specs[row].kind, Kind::Header(_)) { None } else { (0..self.parts_of(row)).find(|&p| !self.part_disabled(row, p)).map(|p| Focus::Row(row, p)) };
 		// a third of the way down, unless it is already in full view
 		let vp = self.viewport();
 		let top = self.row_y(row);
@@ -632,12 +512,7 @@ impl SettingsDialog {
 
 	/// A click on the box or the list. False when it was on neither, or the
 	/// list isn't up, so the rows behind can take it.
-	pub(super) fn search_mouse_down(
-		&mut self,
-		x: f32,
-		y: f32,
-		measure: &mut impl FnMut(&str) -> f32,
-	) -> bool {
+	pub(super) fn search_mouse_down(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) -> bool {
 		let field = self.search_box();
 		if field.contains(x, y) {
 			self.open = None;
@@ -681,36 +556,17 @@ impl SettingsDialog {
 	}
 
 	fn flash_alpha(t: f32) -> f32 {
-		if t <= FLASH_HOLD_S {
-			FLASH_ALPHA
-		} else {
-			FLASH_ALPHA * (1.0 - (t - FLASH_HOLD_S) / (FLASH_S - FLASH_HOLD_S)).clamp(0.0, 1.0)
-		}
+		if t <= FLASH_HOLD_S { FLASH_ALPHA } else { FLASH_ALPHA * (1.0 - (t - FLASH_HOLD_S) / (FLASH_S - FLASH_HOLD_S)).clamp(0.0, 1.0) }
 	}
 
 	/// The box goes in the fixed chrome, the list's pick and a row's mark in
 	/// the scrolled rows. One outline on the box: the focus color takes the
 	/// place of its own border.
-	pub(super) fn search_rects(
-		&self,
-		colors: &Dlg,
-		fixed: &mut Vec<RectInstance>,
-		rows: &mut Vec<RectInstance>,
-		measure: &mut impl FnMut(&str) -> f32,
-	) {
+	pub(super) fn search_rects(&self, colors: &Dlg, fixed: &mut Vec<RectInstance>, rows: &mut Vec<RectInstance>, measure: &mut impl FnMut(&str) -> f32) {
 		let field = self.search_box();
 		fixed.push(quad(field.x, field.y, field.w, field.h, colors.field_bg));
 		let focused = self.focus == Some(Focus::Search);
-		border(
-			fixed,
-			field,
-			1.0,
-			if focused {
-				colors.focus_out
-			} else {
-				colors.panel_border
-			},
-		);
+		border(fixed, field, 1.0, if focused { colors.focus_out } else { colors.panel_border });
 		if self.edit.as_ref().is_some_and(|e| e.row == SEARCH_ROW) {
 			self.caret_quad(colors, fixed, field, measure);
 		}
@@ -743,28 +599,13 @@ impl SettingsDialog {
 		let field = self.search_box();
 		let text_y = |y: f32, h: f32| y + (h - self.line_h) / 2.0;
 		let editing = self.edit.as_ref().filter(|e| e.row == SEARCH_ROW);
-		let (typed, view) = editing.map_or_else(
-			|| (self.search.query.clone(), 0.0),
-			|e| (e.buf.clone(), e.view),
-		);
+		let (typed, view) = editing.map_or_else(|| (self.search.query.clone(), 0.0), |e| (e.buf.clone(), e.view));
 		let x = field.x + lay().field_pad - view;
 		if typed.is_empty() {
 			let chord = if self.mac { "Command+F" } else { "Ctrl+F" };
-			out.push(TextItem {
-				color: colors.dim,
-				clip: Some(field),
-				..TextItem::plain(
-					format!("Search ({chord})"),
-					x,
-					text_y(field.y, field.h),
-					colors.dim,
-				)
-			});
+			out.push(TextItem { color: colors.dim, clip: Some(field), ..TextItem::plain(format!("Search ({chord})"), x, text_y(field.y, field.h), colors.dim) });
 		} else {
-			out.push(TextItem {
-				clip: Some(field),
-				..TextItem::plain(typed, x, text_y(field.y, field.h), colors.text)
-			});
+			out.push(TextItem { clip: Some(field), ..TextItem::plain(typed, x, text_y(field.y, field.h), colors.text) });
 		}
 		if !self.searching() {
 			return;
@@ -772,15 +613,7 @@ impl SettingsDialog {
 		let vp = self.viewport();
 		if self.search.hits.is_empty() {
 			let r = self.hit_rect(0);
-			out.push(TextItem {
-				clip: Some(vp),
-				..TextItem::plain(
-					format!("No settings match \"{}\"", self.search.query.trim()),
-					r.x + lay().pad / 2.0,
-					text_y(r.y, r.h),
-					colors.dim,
-				)
-			});
+			out.push(TextItem { clip: Some(vp), ..TextItem::plain(format!("No settings match \"{}\"", self.search.query.trim()), r.x + lay().pad / 2.0, text_y(r.y, r.h), colors.dim) });
 			return;
 		}
 		for (k, (line, spans)) in self.search.lines.iter().enumerate() {
@@ -792,20 +625,7 @@ impl SettingsDialog {
 			if r.y + r.h < vp.y {
 				continue;
 			}
-			out.push(TextItem {
-				clip: Some(clip_rect(r, vp)),
-				marks: Some(Marks {
-					spans: spans.clone(),
-					color: colors.handle,
-					scale: MARK_SCALE,
-				}),
-				..TextItem::plain(
-					line.clone(),
-					r.x + lay().pad / 2.0,
-					text_y(r.y, r.h),
-					colors.text,
-				)
-			});
+			out.push(TextItem { clip: Some(clip_rect(r, vp)), marks: Some(Marks { spans: spans.clone(), color: colors.handle, scale: MARK_SCALE }), ..TextItem::plain(line.clone(), r.x + lay().pad / 2.0, text_y(r.y, r.h), colors.text) });
 		}
 	}
 }
@@ -818,22 +638,13 @@ mod tests {
 	use crate::ui_spec::Key;
 
 	fn row_of(key: Key) -> usize {
-		ui().specs
-			.iter()
-			.position(|s| s.key == key && !matches!(s.kind, Kind::Header(_)))
-			.unwrap_or_else(|| panic!("no row for {key:?}"))
+		ui().specs.iter().position(|s| s.key == key && !matches!(s.kind, Kind::Header(_))).unwrap_or_else(|| panic!("no row for {key:?}"))
 	}
 	fn heading(label: &str) -> usize {
-		ui().specs
-			.iter()
-			.position(|s| matches!(s.kind, Kind::Header(l) if l == label))
-			.unwrap_or_else(|| panic!("no heading {label}"))
+		ui().specs.iter().position(|s| matches!(s.kind, Kind::Header(l) if l == label)).unwrap_or_else(|| panic!("no heading {label}"))
 	}
 	fn tab(path: &str) -> usize {
-		tab_nodes()
-			.iter()
-			.position(|n| n.path == path)
-			.unwrap_or_else(|| panic!("no tab {path}"))
+		tab_nodes().iter().position(|n| n.path == path).unwrap_or_else(|| panic!("no tab {path}"))
 	}
 	fn tiers(hits: &[Hit]) -> Vec<Tier> {
 		hits.iter().map(|h| h.tier).collect()
@@ -850,17 +661,10 @@ mod tests {
 		seen.dedup();
 		assert_eq!(seen, [Tier::Label, Tier::Alias], "{hits:?}");
 		assert_eq!(hits[0].to, Target::Row(row_of(Key::Opacity)));
-		assert!(
-			hits.iter()
-				.any(|h| h.to == Target::Row(row_of(Key::BgOpacity)) && h.tier == Tier::Alias),
-			"Visibility % comes up by its alias"
-		);
+		assert!(hits.iter().any(|h| h.to == Target::Row(row_of(Key::BgOpacity)) && h.tier == Tier::Alias), "Visibility % comes up by its alias");
 		// a typo finds it only loosely, after everything spelled right
 		let hits = rank(&ui().specs, "opactiy");
-		assert!(
-			!hits.is_empty() && hits.iter().all(|h| h.tier == Tier::Loose),
-			"{hits:?}"
-		);
+		assert!(!hits.is_empty() && hits.iter().all(|h| h.tier == Tier::Loose), "{hits:?}");
 		assert_eq!(hits[0].to, Target::Row(row_of(Key::Opacity)));
 
 		let hits = rank(&ui().specs, "font");
@@ -868,9 +672,7 @@ mod tests {
 		assert!(at(Key::SystemFont) < at(Key::FontFamily), "{hits:?}");
 		assert_eq!(hits[at(Key::FontFamily).unwrap()].tier, Tier::Alias);
 		// whatever the query, the tiers come in order and nothing is listed twice
-		for q in [
-			"e", "col", "colr", "scroll", "size", "trans", "width", "zoom", "tab",
-		] {
+		for q in ["e", "col", "colr", "scroll", "size", "trans", "width", "zoom", "tab"] {
 			let hits = rank(&ui().specs, q);
 			let seen = tiers(&hits);
 			assert!(seen.is_sorted(), "{q}: {hits:?}");
@@ -893,14 +695,8 @@ mod tests {
 	fn a_whole_label_beats_a_word_start_beats_the_middle_of_one() {
 		let hits = rank(&ui().specs, "cursor");
 		let first: Vec<Target> = hits.iter().take(2).map(|h| h.to).collect();
-		assert!(
-			first.contains(&Target::Tab(tab("Appearance/Cursor"))),
-			"{hits:?}"
-		);
-		assert!(
-			first.contains(&Target::Row(row_of(Key::ColCursor))),
-			"{hits:?}"
-		);
+		assert!(first.contains(&Target::Tab(tab("Appearance/Cursor"))), "{hits:?}");
+		assert!(first.contains(&Target::Row(row_of(Key::ColCursor))), "{hits:?}");
 		// "Ease-out" starts a word; nothing in front of it starts with "out"
 		let hits = rank(&ui().specs, "out");
 		let at = |key: Key| hits.iter().position(|h| h.to == Target::Row(row_of(key)));
@@ -923,10 +719,7 @@ mod tests {
 		assert!(rank(&ui().specs, "zqxj").is_empty());
 		assert!(rank(&ui().specs, "   ").is_empty());
 		// case and extra spaces don't matter
-		assert_eq!(
-			rank(&ui().specs, "LINE  height"),
-			rank(&ui().specs, "line height")
-		);
+		assert_eq!(rank(&ui().specs, "LINE  height"), rank(&ui().specs, "line height"));
 	}
 
 	// The line a result shows: the tabs it is under, its heading where that
@@ -940,28 +733,19 @@ mod tests {
 		let specs = &ui().specs;
 		let first = |q: &str, to: Target| {
 			let hits = rank(specs, q);
-			let hit = hits
-				.into_iter()
-				.find(|h| h.to == to)
-				.unwrap_or_else(|| panic!("{q}"));
+			let hit = hits.into_iter().find(|h| h.to == to).unwrap_or_else(|| panic!("{q}"));
 			let (line, marks) = crumb(specs, &hit);
 			let marked: Vec<String> = marks.iter().map(|&(a, b)| line[a..b].to_string()).collect();
 			(line, marked)
 		};
 		let (line, marked) = first("fami", Target::Row(row_of(Key::FontFamily)));
-		assert_eq!(
-			line,
-			format!("Appearance {sep} Text {sep} Font {sep} Family")
-		);
+		assert_eq!(line, format!("Appearance {sep} Text {sep} Font {sep} Family"));
 		assert_eq!(marked, ["Fami"]);
 		// a heading that is the tab's title says nothing more
 		let (line, _) = first("columns", Target::Row(row_of(Key::Columns)));
 		assert_eq!(line, format!("Window {sep} Columns"));
 		let (line, marked) = first("typeface", Target::Row(row_of(Key::FontFamily)));
-		assert_eq!(
-			line,
-			format!("Appearance {sep} Text {sep} Font {sep} Family (typeface)")
-		);
+		assert_eq!(line, format!("Appearance {sep} Text {sep} Font {sep} Family (typeface)"));
 		assert_eq!(marked, ["typeface"]);
 		// a tab is its own path
 		let (line, marked) = first("them", Target::Tab(tab("Appearance/Themes")));
@@ -1008,28 +792,16 @@ mod tests {
 				continue;
 			}
 			// a tab-title heading lends its aliases to the tab
-			let to = if super::SettingsDialog::header_is_tab_title(spec) {
-				Target::Tab(super::leaf_node(tab_nodes(), spec.tab))
-			} else {
-				Target::Row(row)
-			};
+			let to = if super::SettingsDialog::header_is_tab_title(spec) { Target::Tab(super::leaf_node(tab_nodes(), spec.tab)) } else { Target::Row(row) };
 			let label = spec.label.to_lowercase();
 			let mut mine = std::collections::HashSet::new();
 			for alias in spec.aliases {
 				count += 1;
 				let lower = alias.to_lowercase();
-				assert!(
-					!label.contains(&lower),
-					"{}: {alias} is in the label",
-					spec.label
-				);
+				assert!(!label.contains(&lower), "{}: {alias} is in the label", spec.label);
 				assert!(mine.insert(lower), "{}: {alias} twice", spec.label);
 				let hits = rank(specs, alias);
-				assert!(
-					hits.iter().any(|h| h.to == to && h.tier != Tier::Loose),
-					"{}: {alias} doesn't find it: {hits:?}",
-					spec.label
-				);
+				assert!(hits.iter().any(|h| h.to == to && h.tier != Tier::Loose), "{}: {alias} doesn't find it: {hits:?}", spec.label);
 			}
 		}
 		assert!(count > 100, "only {count} aliases");
@@ -1054,23 +826,14 @@ mod tests {
 		d.key_vertical(true);
 		assert_eq!(d.search.sel, 1);
 		let want = d.search.hits[1].to;
-		let Target::Row(row) = want else {
-			panic!("{want:?}")
-		};
-		assert_eq!(
-			d.key_enter(),
-			super::super::Action::None,
-			"Enter is the pick, not OK"
-		);
+		let Target::Row(row) = want else { panic!("{want:?}") };
+		assert_eq!(d.key_enter(), super::super::Action::None, "Enter is the pick, not OK");
 		assert!(!d.searching() && d.search.query.is_empty());
 		assert_eq!(d.tab, d.specs[row].tab);
 		assert_eq!(d.focus, Some(Focus::Row(row, 0)));
 		let vp = d.viewport();
 		let top = d.row_y(row);
-		assert!(
-			top >= vp.y && top + d.row_screen_h(row) <= vp.y + vp.h,
-			"in view"
-		);
+		assert!(top >= vp.y && top + d.row_screen_h(row) <= vp.y + vp.h, "in view");
 		assert_eq!(d.flash.map(|(r, _)| r), Some(row));
 		let _ = d.rects_dip(d.line_h, &mut m);
 		// the mark fades out, and the frame loop is woken until it's gone
@@ -1083,27 +846,11 @@ mod tests {
 			d.char_input(c);
 		}
 		assert!(d.searching() && d.search.hits.is_empty());
-		assert_eq!(
-			d.key_enter(),
-			super::super::Action::None,
-			"nothing to go to"
-		);
-		assert_eq!(
-			d.key_escape(),
-			super::super::Action::None,
-			"first Esc empties"
-		);
+		assert_eq!(d.key_enter(), super::super::Action::None, "nothing to go to");
+		assert_eq!(d.key_escape(), super::super::Action::None, "first Esc empties");
 		assert!(!d.searching());
-		assert!(
-			d.edit
-				.as_ref()
-				.is_some_and(|e| e.row == SEARCH_ROW && e.buf.is_empty())
-		);
-		assert_eq!(
-			d.key_escape(),
-			super::super::Action::Cancel,
-			"then it cancels"
-		);
+		assert!(d.edit.as_ref().is_some_and(|e| e.row == SEARCH_ROW && e.buf.is_empty()));
+		assert_eq!(d.key_escape(), super::super::Action::Cancel, "then it cancels");
 	}
 
 	// While the list is up the rows behind it take no clicks and no keys, and
@@ -1122,28 +869,19 @@ mod tests {
 		// Tab walks the box and the footer only
 		for _ in 0..5 {
 			d.key_tab();
-			assert!(
-				matches!(d.focus, Some(Focus::Search | Focus::Button(_))),
-				"{:?}",
-				d.focus
-			);
+			assert!(matches!(d.focus, Some(Focus::Search | Focus::Button(_))), "{:?}", d.focus);
 		}
 		let (_, rows) = d.rects_dip(d.line_h, &mut m);
 		assert!(rows.len() <= 1, "only the pick's shade: {}", rows.len());
 		let texts = d.texts_dip(d.line_h, &mut m);
 		assert!(texts.iter().any(|t| t.marks.is_some()), "results drawn");
-		assert!(
-			!texts.iter().any(|t| t.text == "Wheel lines"),
-			"no row labels"
-		);
+		assert!(!texts.iter().any(|t| t.text == "Wheel lines"), "no row labels");
 		assert_eq!(d.tab, page);
 		let want = d.search.hits[0].to;
 		let r = d.hit_rect(0);
 		let _ = d.mouse_down_dip(r.x + 20.0, r.y + r.h / 2.0, &mut m);
 		assert!(!d.searching());
-		let Target::Row(row) = want else {
-			panic!("{want:?}")
-		};
+		let Target::Row(row) = want else { panic!("{want:?}") };
 		assert_eq!(d.tab, d.specs[row].tab);
 		// a tab click empties the box and goes to that tab, as it always does
 		d.search_focus();
@@ -1225,10 +963,7 @@ mod tests {
 		assert!(field.x >= vp.x && field.x + field.w <= vp.x + vp.w);
 		for node in 0..tab_nodes().len() {
 			let t = d.tab_rect(node);
-			assert!(
-				t.w == 0.0 || t.x + t.w <= field.x || t.y + t.h <= field.y,
-				"the box overlaps tab {node}"
-			);
+			assert!(t.w == 0.0 || t.x + t.w <= field.x || t.y + t.h <= field.y, "the box overlaps tab {node}");
 		}
 	}
 
@@ -1249,16 +984,7 @@ mod tests {
 		let before = crumbs();
 		let again = d.texts_dip(d.line_h, chars7);
 		assert_eq!(crumbs() - before, 0, "a frame worked the lines out again");
-		let lines = |texts: &[super::super::TextItem]| {
-			texts
-				.iter()
-				.filter_map(|t| {
-					t.marks
-						.as_ref()
-						.map(|m| (t.text.to_string(), m.spans.clone()))
-				})
-				.collect::<Vec<_>>()
-		};
+		let lines = |texts: &[super::super::TextItem]| texts.iter().filter_map(|t| t.marks.as_ref().map(|m| (t.text.to_string(), m.spans.clone()))).collect::<Vec<_>>();
 		let want: Vec<_> = d.search.hits.iter().map(|h| crumb(d.specs, h)).collect();
 		let drawn = lines(&first);
 		assert!(!drawn.is_empty());

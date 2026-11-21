@@ -42,18 +42,7 @@ pub struct Palette {
 /// The 10 palette colors a user can edit, named as the `colors.*` keys name them.
 /// The dialog's rows, a saved theme's config block, and the index accessors below
 /// all use this one order, so they can't drift apart.
-pub const PALETTE_KEYS: [&str; 10] = [
-	"background",
-	"foreground",
-	"cursor",
-	"highlight",
-	"focus",
-	"menu_background",
-	"menu_foreground",
-	"dialog_background",
-	"dialog_foreground",
-	"gutter",
-];
+pub const PALETTE_KEYS: [&str; 10] = ["background", "foreground", "cursor", "highlight", "focus", "menu_background", "menu_foreground", "dialog_background", "dialog_foreground", "gutter"];
 
 impl Palette {
 	pub fn get(&self, i: usize) -> [u8; 3] {
@@ -333,8 +322,15 @@ pub fn all_names(user: &[UserTheme]) -> Vec<String> {
 }
 
 pub fn find_user<'a>(user: &'a [UserTheme], name: &str) -> Option<&'a UserTheme> {
-	user.iter()
-		.find(|t| t.name.eq_ignore_ascii_case(name.trim()))
+	user.iter().find(|t| t.name.eq_ignore_ascii_case(name.trim()))
+}
+
+/// `base`, or the first of `base2`, `base3` and on that isn't `taken`.
+pub fn free_slug(base: &str, taken: impl Fn(&str) -> bool) -> String {
+	if !taken(base) {
+		return base.to_string();
+	}
+	(2..=u32::from(u16::MAX)).map(|n| format!("{base}{n}")).find(|s| !taken(s)).unwrap_or_else(|| base.to_string())
 }
 
 /// Which variant of the theme to use, `theme_mode`.
@@ -375,10 +371,7 @@ pub fn resolve_in(user: &[UserTheme], name: &str, mode: Mode, system_dark: bool)
 	if let Some(t) = find_user(user, name) {
 		return if dark { t.dark } else { t.light };
 	}
-	let theme = THEMES
-		.iter()
-		.find(|(n, _)| n.eq_ignore_ascii_case(name.trim()))
-		.map_or(&THEMES[0].1, |(_, t)| t);
+	let theme = THEMES.iter().find(|(n, _)| n.eq_ignore_ascii_case(name.trim())).map_or(&THEMES[0].1, |(_, t)| t);
 	if dark { theme.dark } else { theme.light }
 }
 
@@ -398,18 +391,9 @@ mod tests {
 		// unknown name falls back to the first theme (SilkTerm)
 		assert_eq!(resolve("nope", Mode::Dark, true).bg, THEMES[0].1.dark.bg);
 		// mode selects the variant; "system" honors system_dark
-		assert_eq!(
-			resolve("Matrix", Mode::Light, true).bg,
-			find("Matrix").light.bg
-		);
-		assert_eq!(
-			resolve("Matrix", Mode::System, true).bg,
-			find("Matrix").dark.bg
-		);
-		assert_eq!(
-			resolve("Matrix", Mode::System, false).bg,
-			find("Matrix").light.bg
-		);
+		assert_eq!(resolve("Matrix", Mode::Light, true).bg, find("Matrix").light.bg);
+		assert_eq!(resolve("Matrix", Mode::System, true).bg, find("Matrix").dark.bg);
+		assert_eq!(resolve("Matrix", Mode::System, false).bg, find("Matrix").light.bg);
 		// case/space tolerant
 		let dark = Mode::parse("DARK").unwrap();
 		assert_eq!(resolve(" matrix ", dark, true).fg, find("Matrix").dark.fg);
@@ -439,9 +423,7 @@ mod tests {
 	fn the_two_attention_colors_stay_apart() {
 		for (name, t) in THEMES {
 			for pal in [t.dark, t.light] {
-				let apart: i32 = (0..3)
-					.map(|k| (i32::from(pal.highlight[k]) - i32::from(pal.focus[k])).abs())
-					.sum();
+				let apart: i32 = (0..3).map(|k| (i32::from(pal.highlight[k]) - i32::from(pal.focus[k])).abs()).sum();
 				assert!(apart >= 120, "{name}: highlight and focus are too close");
 			}
 		}
@@ -458,17 +440,9 @@ mod tests {
 		for (name, t) in THEMES {
 			for pal in [t.dark, t.light] {
 				let floor = floor_of(&pal);
-				assert_eq!(
-					crate::palette::readable(pal.fg, pal.bg, floor),
-					pal.fg,
-					"{name}: the theme's own fg would be repainted"
-				);
+				assert_eq!(crate::palette::readable(pal.fg, pal.bg, floor), pal.fg, "{name}: the theme's own fg would be repainted");
 			}
-			assert_ne!(
-				crate::palette::readable(t.dark.ansi[0], t.dark.bg, floor_of(&t.dark)),
-				t.dark.ansi[0],
-				"{name}: ansi black on a dark ground should be lifted"
-			);
+			assert_ne!(crate::palette::readable(t.dark.ansi[0], t.dark.bg, floor_of(&t.dark)), t.dark.ansi[0], "{name}: ansi black on a dark ground should be lifted");
 		}
 	}
 
@@ -485,11 +459,7 @@ mod tests {
 			for (mode, pal) in [("dark", t.dark), ("light", t.light)] {
 				let bg = crate::config::tip_bg_of(pal.menu_bg);
 				let fg = crate::config::tip_fg_of(pal.menu_fg);
-				assert_eq!(
-					crate::palette::readable(fg, bg, floor),
-					fg,
-					"{name} {mode}: a tip's text would be repainted on its own box"
-				);
+				assert_eq!(crate::palette::readable(fg, bg, floor), fg, "{name} {mode}: a tip's text would be repainted on its own box");
 			}
 		}
 	}
@@ -510,14 +480,8 @@ mod tests {
 		for (name, t) in THEMES {
 			assert_eq!(floor_of(&t.dark), floor, "{name} dark");
 			let light = floor_of(&t.light);
-			assert!(
-				light > floor + 0.02 && light < floor * 1.2,
-				"{name} light: {light} against {floor}"
-			);
-			assert_eq!(
-				crate::config::min_contrast_for(t.light.fg, t.light.bg, 0.0),
-				0.0
-			);
+			assert!(light > floor + 0.02 && light < floor * 1.2, "{name} light: {light} against {floor}");
+			assert_eq!(crate::config::min_contrast_for(t.light.fg, t.light.bg, 0.0), 0.0);
 		}
 	}
 
@@ -539,11 +503,7 @@ mod tests {
 			for (mode, pal) in [("dark", t.dark), ("light", t.light)] {
 				let floor = floor_of(&pal);
 				let plate = cursor_plate(&pal, floor);
-				assert_eq!(
-					crate::palette::readable(pal.fg, plate, floor),
-					pal.fg,
-					"{name} {mode}: text on the cursor would be repainted"
-				);
+				assert_eq!(crate::palette::readable(pal.fg, plate, floor), pal.fg, "{name} {mode}: text on the cursor would be repainted");
 			}
 		}
 	}
@@ -560,10 +520,7 @@ mod tests {
 		for (name, t) in THEMES {
 			let pal = t.light;
 			let gap = lightness(pal.bg) - lightness(cursor_plate(&pal, floor_of(&pal)));
-			assert!(
-				gap >= 0.24,
-				"{name} light: the cursor plate is only {gap:.3} off the background"
-			);
+			assert!(gap >= 0.24, "{name} light: the cursor plate is only {gap:.3} off the background");
 		}
 	}
 
@@ -580,26 +537,15 @@ mod tests {
 			let pal = t.light;
 			let paper = lab(pal.bg).0;
 			let gap = paper - lab(pal.fg).0;
-			assert!(
-				gap >= 0.74,
-				"{name}: the text sits only {gap:.3} off the paper"
-			);
+			assert!(gap >= 0.74, "{name}: the text sits only {gap:.3} off the paper");
 			let mut sum = 0.0;
 			for i in (1..=6).chain(9..=14) {
 				let (l, a, b) = lab(pal.ansi[i]);
-				assert!(
-					paper - l >= floor_of(&pal),
-					"{name} ansi {i} sits only {:.3} off the paper",
-					paper - l
-				);
+				assert!(paper - l >= floor_of(&pal), "{name} ansi {i} sits only {:.3} off the paper", paper - l);
 				assert!(a.hypot(b) / l >= 0.15, "{name} ansi {i} has gone gray");
 				sum += paper - l;
 			}
-			assert!(
-				sum / 12.0 >= 0.51,
-				"{name}: the colors average {:.3} off the paper",
-				sum / 12.0
-			);
+			assert!(sum / 12.0 >= 0.51, "{name}: the colors average {:.3} off the paper", sum / 12.0);
 		}
 	}
 
@@ -621,10 +567,7 @@ mod tests {
 		}
 		for pal in [find("Retro Amber").dark, find("Retro Amber").light] {
 			for c in std::iter::once(pal.fg).chain(pal.ansi) {
-				assert!(
-					c[0] > c[1] && c[1] > c[2],
-					"Retro Amber {c:02x?} is not amber"
-				);
+				assert!(c[0] > c[1] && c[1] > c[2], "Retro Amber {c:02x?} is not amber");
 			}
 		}
 	}
@@ -646,10 +589,6 @@ mod tests {
 	}
 
 	fn find(name: &str) -> &'static Theme {
-		THEMES
-			.iter()
-			.find(|(n, _)| *n == name)
-			.map(|(_, t)| t)
-			.unwrap()
+		THEMES.iter().find(|(n, _)| *n == name).map(|(_, t)| t).unwrap()
 	}
 }

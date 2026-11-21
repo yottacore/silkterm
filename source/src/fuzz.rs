@@ -35,11 +35,7 @@ impl Rng {
 	}
 
 	pub fn below(&mut self, n: usize) -> usize {
-		if n == 0 {
-			0
-		} else {
-			(self.next_u64() % n as u64) as usize
-		}
+		if n == 0 { 0 } else { (self.next_u64() % n as u64) as usize }
 	}
 
 	/// 1 in n.
@@ -66,19 +62,14 @@ const MIN_CASES: u64 = 10;
 // the pipeline sets SILK_FUZZ_SECS for a real soak. Seeds run in order from 0, so
 // a longer budget only adds cases.
 fn budget() -> Duration {
-	match std::env::var("SILK_FUZZ_SECS")
-		.ok()
-		.and_then(|v| v.parse::<f64>().ok())
-	{
+	match std::env::var("SILK_FUZZ_SECS").ok().and_then(|v| v.parse::<f64>().ok()) {
 		Some(secs) if secs > 0.0 => Duration::from_secs_f64(secs.min(3600.0)),
 		_ => Duration::from_millis(250),
 	}
 }
 
 fn one_seed() -> Option<u64> {
-	std::env::var("SILK_FUZZ_SEED")
-		.ok()
-		.and_then(|v| v.parse().ok())
+	std::env::var("SILK_FUZZ_SEED").ok().and_then(|v| v.parse().ok())
 }
 
 /// Run `case` over seeds, at least `MIN_CASES`, then on while the budget lasts. A
@@ -106,11 +97,7 @@ pub fn soak(name: &str, mut case: impl FnMut(u64)) {
 }
 
 fn corpus_dir(target: &str) -> PathBuf {
-	PathBuf::from(concat!(
-		env!("CARGO_MANIFEST_DIR"),
-		"/../cicd/tests/fuzz-corpus"
-	))
-	.join(target)
+	PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../cicd/tests/fuzz-corpus")).join(target)
 }
 
 /// Saved cases for one target: anything a fuzz run once broke, kept so it's
@@ -119,11 +106,7 @@ pub fn corpus(target: &str) -> Vec<Vec<u8>> {
 	let Ok(entries) = std::fs::read_dir(corpus_dir(target)) else {
 		return Vec::new();
 	};
-	let mut out: Vec<_> = entries
-		.flatten()
-		.filter(|e| e.path().is_file())
-		.filter_map(|e| std::fs::read(e.path()).ok())
-		.collect();
+	let mut out: Vec<_> = entries.flatten().filter(|e| e.path().is_file()).filter_map(|e| std::fs::read(e.path()).ok()).collect();
 	out.sort();
 	out
 }
@@ -168,11 +151,7 @@ pub fn mutate(rng: &mut Rng, parent: &[u8]) -> Vec<u8> {
 
 /// One case's input: either freshly generated, or a saved case chewed on. With
 /// no corpus every case is generated, which is the normal state.
-pub fn input(
-	rng: &mut Rng,
-	corpus: &[Vec<u8>],
-	generate: impl FnOnce(&mut Rng) -> Vec<u8>,
-) -> Vec<u8> {
+pub fn input(rng: &mut Rng, corpus: &[Vec<u8>], generate: impl FnOnce(&mut Rng) -> Vec<u8>) -> Vec<u8> {
 	if corpus.is_empty() || rng.chance(2) {
 		return generate(rng);
 	}
@@ -223,9 +202,7 @@ pub fn vt_stream(rng: &mut Rng) -> Vec<u8> {
 }
 
 const C0: [u8; 10] = [0x00, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f];
-const ESC_FINALS: [u8; 12] = [
-	b'7', b'8', b'c', b'D', b'E', b'H', b'M', b'=', b'>', b'(', b')', b'#',
-];
+const ESC_FINALS: [u8; 12] = [b'7', b'8', b'c', b'D', b'E', b'H', b'M', b'=', b'>', b'(', b')', b'#'];
 
 #[rustfmt::skip]
 const BAD_UTF8: [&[u8]; 6] = [
@@ -356,15 +333,10 @@ mod tests {
 	// Test ID: dcdjn
 	#[test]
 	fn the_corpus_is_where_the_targets_look_for_it() {
-		for target in [
-			"vt", "config", "links", "title", "cwd", "paste", "shapes", "pairs", "xmp",
-		] {
+		for target in ["vt", "config", "links", "title", "cwd", "paste", "shapes", "pairs", "xmp"] {
 			let cases = corpus(target);
 			assert!(!cases.is_empty(), "no corpus found for '{target}'");
-			assert!(
-				cases.iter().all(|case| !case.is_empty()),
-				"an empty file in the '{target}' corpus"
-			);
+			assert!(cases.iter().all(|case| !case.is_empty()), "an empty file in the '{target}' corpus");
 		}
 	}
 }

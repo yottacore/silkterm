@@ -231,27 +231,14 @@ impl Prepared {
 		let (w, h) = (w.saturating_sub(2 * ring), h.saturating_sub(2 * ring));
 		let small = fit_within(w, h, STANDIN_EDGE).unwrap_or((w, h));
 		let inner = image::imageops::crop_imm(&self.rgba, ring, ring, w, h);
-		Prepared {
-			rgba: box_shrink(&*inner, small),
-			sizing: self.sizing,
-			opacity: self.opacity,
-			fit: self.fit,
-			anchor: self.anchor,
-			summary: self.summary,
-			held: self.held,
-			border: false,
-			blocks: None,
-		}
+		Prepared { rgba: box_shrink(&*inner, small), sizing: self.sizing, opacity: self.opacity, fit: self.fit, anchor: self.anchor, summary: self.summary, held: self.held, border: false, blocks: None }
 	}
 }
 
 // Each small pixel the plain average of the block it covers, in linear light,
 // the way the sampler filters an sRGB texture. One read per source pixel, and
 // no float copy of the picture.
-fn box_shrink(
-	src: &impl image::GenericImageView<Pixel = image::Rgba<u8>>,
-	(w, h): (u32, u32),
-) -> image::RgbaImage {
+fn box_shrink(src: &impl image::GenericImageView<Pixel = image::Rgba<u8>>, (w, h): (u32, u32)) -> image::RgbaImage {
 	let (fw, fh) = src.dimensions();
 	let span = |i: u32, to: u32, from: u32| {
 		let start = (u64::from(i) * u64::from(from) / u64::from(to)) as u32;
@@ -278,16 +265,7 @@ fn box_shrink(
 		}
 		for (ox, (sum, cols)) in sums.iter().zip(&columns).enumerate() {
 			let n = (tall * cols.len()) as f32;
-			out.put_pixel(
-				ox as u32,
-				oy,
-				image::Rgba([
-					config::from_linear_u8(sum[0] / n),
-					config::from_linear_u8(sum[1] / n),
-					config::from_linear_u8(sum[2] / n),
-					(sum[3] / n * 255.0 + 0.5) as u8,
-				]),
-			);
+			out.put_pixel(ox as u32, oy, image::Rgba([config::from_linear_u8(sum[0] / n), config::from_linear_u8(sum[1] / n), config::from_linear_u8(sum[2] / n), (sum[3] / n * 255.0 + 0.5) as u8]));
 		}
 	}
 	out
@@ -301,13 +279,11 @@ fn box_shrink(
 /// worker gives up between stages.
 pub fn spawn(proxy: &EventLoopProxy<UserEvent>, request: Request) {
 	let proxy = proxy.clone();
-	let spawned = std::thread::Builder::new()
-		.name("wallpaper".into())
-		.spawn(move || {
-			answer(&request, |loaded| {
-				let _ = proxy.send_event(UserEvent::WallpaperReady(Box::new(loaded)));
-			});
+	let spawned = std::thread::Builder::new().name("wallpaper".into()).spawn(move || {
+		answer(&request, |loaded| {
+			let _ = proxy.send_event(UserEvent::WallpaperReady(Box::new(loaded)));
 		});
+	});
 	if let Err(e) = spawned {
 		eprintln!("{}: couldn't start wallpaper loader: {e}", config::APP_NAME);
 	}
@@ -337,11 +313,7 @@ fn run(request: &Request) -> Loaded {
 	let mut rotation = None;
 	let mut path = settings.wallpaper.clone();
 	if request.scan {
-		let showing = request
-			.current
-			.as_ref()
-			.and_then(|path| path.file_name())
-			.map(|name| name.to_string_lossy().into_owned());
+		let showing = request.current.as_ref().and_then(|path| path.file_name()).map(|name| name.to_string_lossy().into_owned());
 		rotation = rotate(settings, showing.as_deref());
 		if let Some(picked) = &rotation {
 			path = Some(picked.current.clone());
@@ -352,39 +324,16 @@ fn run(request: &Request) -> Loaded {
 	// A configured folder that supplies images replaces the built-in. A scan knows
 	// what's in the folder, and otherwise this falls back to whether one is
 	// configured at all.
-	let folder_active = if request.scan {
-		rotation.is_some()
-	} else {
-		settings.rotation_folder().is_some()
-	};
+	let folder_active = if request.scan { rotation.is_some() } else { settings.rotation_folder().is_some() };
 	let prepared = (settings.wallpaper_enabled && !request.cleared)
 		.then(|| {
-			let hold = Hold {
-				window: request.window,
-				summary: request.summary,
-				per_sigma: per_sigma(settings),
-				packing: packing(settings),
-			};
-			prepare_keeping(
-				settings,
-				path.as_deref(),
-				folder_active,
-				hold,
-				&|| request.stale(),
-				request.kept.as_deref(),
-			)
+			let hold = Hold { window: request.window, summary: request.summary, per_sigma: per_sigma(settings), packing: packing(settings) };
+			prepare_keeping(settings, path.as_deref(), folder_active, hold, &|| request.stale(), request.kept.as_deref())
 		})
 		.flatten();
 	let (image, keep) = prepared.map_or((None, None), |(image, keep)| (Some(image), keep));
 	let standin = image.as_ref().map(Prepared::standin);
-	Loaded {
-		seq: request.seq,
-		image,
-		standin,
-		rotation,
-		scanned: request.scan,
-		keep,
-	}
+	Loaded { seq: request.seq, image, standin, rotation, scanned: request.scan, keep }
 }
 
 // Scan the rotation folder, pick the next image, and record the pick.
@@ -395,31 +344,21 @@ fn rotate(settings: &Settings, current: Option<&str>) -> Option<Rotation> {
 		// Silent when the folder was auto-detected. Rotation wasn't asked for, so
 		// an absent or empty dir isn't a mistake to report.
 		if !settings.wallpaper_folder_auto {
-			eprintln!(
-				"{}: wallpaper.rotate.folder {} has no images",
-				config::APP_NAME,
-				dir.display()
-			);
+			eprintln!("{}: wallpaper.rotate.folder {} has no images", config::APP_NAME, dir.display());
 		}
 		return None;
 	}
 	let mut recent = load_history();
 	let showing = current.and_then(|name| index_of(&images, name));
 	let index = if settings.wallpaper_rotate_random {
-		let held: Vec<usize> = recent
-			.iter()
-			.filter_map(|name| index_of(&images, name))
-			.collect();
+		let held: Vec<usize> = recent.iter().filter_map(|name| index_of(&images, name)).collect();
 		shuffle_pick(images.len(), &held, time_entropy())
 	} else {
 		next_wallpaper_index(images.len(), showing.unwrap_or(0))
 	};
 	let count = images.len();
 	let current = images.swap_remove(index);
-	if let Some(name) = current
-		.file_name()
-		.map(|n| n.to_string_lossy().into_owned())
-	{
+	if let Some(name) = current.file_name().map(|n| n.to_string_lossy().into_owned()) {
 		recent.retain(|seen| *seen != name);
 		recent.insert(0, name);
 		recent.truncate(WP_AVOID_MAX);
@@ -429,9 +368,7 @@ fn rotate(settings: &Settings, current: Option<&str>) -> Option<Rotation> {
 }
 
 fn index_of(images: &[PathBuf], name: &str) -> Option<usize> {
-	images
-		.iter()
-		.position(|path| path.file_name().is_some_and(|f| f == name))
+	images.iter().position(|path| path.file_name().is_some_and(|f| f == name))
 }
 
 // The longest edge a wallpaper is kept at. Past a 4K display's own width there
@@ -445,10 +382,7 @@ fn fit_within(w: u32, h: u32, max: u32) -> Option<(u32, u32)> {
 		return None;
 	}
 	let scale = f64::from(max) / f64::from(w.max(h));
-	Some((
-		((f64::from(w) * scale).round() as u32).max(1),
-		((f64::from(h) * scale).round() as u32).max(1),
-	))
+	Some((((f64::from(w) * scale).round() as u32).max(1), ((f64::from(h) * scale).round() as u32).max(1)))
 }
 
 /// How big a prepared wallpaper is, so the window can tell when a new size wants
@@ -469,10 +403,7 @@ impl Sizing {
 		let (fw, fh) = full;
 		let most = if blur > per_sigma && per_sigma > 0.0 {
 			let scale = f64::from(per_sigma) / f64::from(blur);
-			(
-				((f64::from(fw) * scale).round() as u32).clamp(1, fw.max(1)),
-				((f64::from(fh) * scale).round() as u32).clamp(1, fh.max(1)),
-			)
+			(((f64::from(fw) * scale).round() as u32).clamp(1, fw.max(1)), ((f64::from(fh) * scale).round() as u32).clamp(1, fh.max(1)))
 		} else {
 			full
 		};
@@ -502,10 +433,7 @@ impl Sizing {
 		if scale >= 1.0 {
 			return self.full;
 		}
-		(
-			((f64::from(fw) * scale).round() as u32).clamp(1, fw),
-			((f64::from(fh) * scale).round() as u32).clamp(1, fh),
-		)
+		(((f64::from(fw) * scale).round() as u32).clamp(1, fw), ((f64::from(fh) * scale).round() as u32).clamp(1, fh))
 	}
 
 	/// Whether a picture held at `held` keeps a one texel border of what lies
@@ -543,12 +471,7 @@ pub fn packing(settings: &Settings) -> Packing {
 
 // The sizing for a picture `full` big, read the same way for a kept copy's
 // key as for the decode, so the 2 agree.
-fn sizing_of(
-	settings: &Settings,
-	tags: &crate::xmp::Tags,
-	(w, h): (u32, u32),
-	per_sigma: f32,
-) -> Sizing {
+fn sizing_of(settings: &Settings, tags: &crate::xmp::Tags, (w, h): (u32, u32), per_sigma: f32) -> Sizing {
 	let full = fit_within(w, h, MAX_EDGE).unwrap_or((w, h));
 	Sizing::new(full, held_blur(look(settings, tags).1, 1.0), per_sigma)
 }
@@ -575,10 +498,7 @@ enum Origin<'a> {
 // the settings'. In the settings' units, so in pixels of the full image.
 fn look(settings: &Settings, tags: &crate::xmp::Tags) -> (f32, f32) {
 	if settings.wallpaper_honor_xmp_look {
-		return (
-			tags.opacity.unwrap_or(settings.wallpaper_opacity),
-			tags.blur.unwrap_or(settings.wallpaper_blur),
-		);
+		return (tags.opacity.unwrap_or(settings.wallpaper_opacity), tags.blur.unwrap_or(settings.wallpaper_blur));
 	}
 	(settings.wallpaper_opacity, settings.wallpaper_blur)
 }
@@ -611,12 +531,7 @@ fn held_blur(blur: f32, scale: f32) -> f32 {
 // the stored pixels goes in, bar the held size, which names the copy, and the
 // border, which `prepare_keeping` adds once it knows the size. Light or dark
 // mode isn't one of them, since it's applied when the picture is drawn (G116).
-fn kept_key(
-	settings: &Settings,
-	origin: Origin,
-	tags: &crate::xmp::Tags,
-	per_sigma: f32,
-) -> Option<(wpcache::Key, Sizing)> {
+fn kept_key(settings: &Settings, origin: Origin, tags: &crate::xmp::Tags, per_sigma: f32) -> Option<(wpcache::Key, Sizing)> {
 	let mut key = wpcache::Key::default();
 	let (w, h) = match origin {
 		Origin::File(path) => {
@@ -626,11 +541,7 @@ fn kept_key(
 		Origin::Builtin => {
 			key.push_bytes(b"built-in");
 			key.push_hash(DEFAULT_BACKGROUND);
-			image::ImageReader::new(std::io::Cursor::new(DEFAULT_BACKGROUND))
-				.with_guessed_format()
-				.ok()?
-				.into_dimensions()
-				.ok()?
+			image::ImageReader::new(std::io::Cursor::new(DEFAULT_BACKGROUND)).with_guessed_format().ok()?.into_dimensions().ok()?
 		}
 	};
 	let sizing = sizing_of(settings, tags, (w, h), per_sigma);
@@ -663,14 +574,7 @@ fn works(settings: &Settings, sizing: Sizing, held: (u32, u32), blur: f32) -> bo
 // superseded. With `kept` set, a kept copy near the size is used, or else the key
 // to keep this one under comes back with it. A change to the pixels this makes
 // needs `wpcache`'s FORMAT bumped, or kept copies go on showing the old look.
-fn prepare_keeping(
-	settings: &Settings,
-	path: Option<&Path>,
-	folder_active: bool,
-	hold: Hold,
-	stale: &dyn Fn() -> bool,
-	kept: Option<&Path>,
-) -> Option<(Prepared, Option<wpcache::Key>)> {
+fn prepare_keeping(settings: &Settings, path: Option<&Path>, folder_active: bool, hold: Hold, stale: &dyn Fn() -> bool, kept: Option<&Path>) -> Option<(Prepared, Option<wpcache::Key>)> {
 	if stale() {
 		return None;
 	}
@@ -685,15 +589,11 @@ fn prepare_keeping(
 	// The image's own tags: layout, and the 2 look values. The embedded
 	// default wallpaper has no path, and keeps the configured values.
 	let mut tags = match origin {
-		Origin::File(path) if settings.wallpaper_honor_xmp || settings.wallpaper_honor_xmp_look => {
-			crate::xmp::read(path)
-		}
+		Origin::File(path) if settings.wallpaper_honor_xmp || settings.wallpaper_honor_xmp_look => crate::xmp::read(path),
 		_ => crate::xmp::Tags::default(),
 	};
 	let mut keep = None;
-	if let Some((dir, (mut key, sizing))) =
-		kept.and_then(|dir| Some((dir, kept_key(settings, origin, &tags, hold.per_sigma)?)))
-	{
+	if let Some((dir, (mut key, sizing))) = kept.and_then(|dir| Some((dir, kept_key(settings, origin, &tags, hold.per_sigma)?))) {
 		let held = sizing.held(hold.window);
 		let border = sizing.bordered(held);
 		let (opacity, blur) = look(settings, &tags);
@@ -707,29 +607,10 @@ fn prepare_keeping(
 				key.push_bytes(b"bc7");
 			}
 			if let Some(copy) = wpcache::find(dir, &key, stored) {
-				memdbg(&format!(
-					"used {}x{} for {}x{}",
-					copy.rgba.width(),
-					copy.rgba.height(),
-					stored.0,
-					stored.1
-				));
+				memdbg(&format!("used {}x{} for {}x{}", copy.rgba.width(), copy.rgba.height(), stored.0, stored.1));
 				let (fit, anchor) = layout(settings, &tags);
-				let summary = hold.summary.unwrap_or_else(|| crate::autotheme::Summary {
-					opacity: opacity.clamp(0.0, 1.0),
-					..copy.summary
-				});
-				let image = Prepared {
-					rgba: copy.rgba,
-					sizing,
-					opacity,
-					fit,
-					anchor,
-					summary,
-					held,
-					border,
-					blocks: copy.blocks,
-				};
+				let summary = hold.summary.unwrap_or_else(|| crate::autotheme::Summary { opacity: opacity.clamp(0.0, 1.0), ..copy.summary });
+				let image = Prepared { rgba: copy.rgba, sizing, opacity, fit, anchor, summary, held, border, blocks: copy.blocks };
 				return Some((image, None));
 			}
 			keep = Some((key, sizing));
@@ -739,11 +620,7 @@ fn prepare_keeping(
 		Origin::File(path) => match image::open(path) {
 			Ok(loaded) => loaded,
 			Err(e) => {
-				eprintln!(
-					"{}: background image {}: {e}",
-					config::APP_NAME,
-					path.display()
-				);
+				eprintln!("{}: background image {}: {e}", config::APP_NAME, path.display());
 				// A file that won't open supplies nothing, folder or not, and
 				// neither its tags nor its key belong to the built-in.
 				tags = crate::xmp::Tags::default();
@@ -753,12 +630,7 @@ fn prepare_keeping(
 		},
 		Origin::Builtin => builtin(settings)?,
 	};
-	let sizing = sizing_of(
-		settings,
-		&tags,
-		(decoded.width(), decoded.height()),
-		hold.per_sigma,
-	);
+	let sizing = sizing_of(settings, &tags, (decoded.width(), decoded.height()), hold.per_sigma);
 	let keep = keep.and_then(|(key, header)| (header == sizing).then_some(key));
 	let held = sizing.held(hold.window);
 	let mut img = cut_to_rgba(decoded, sizing.full);
@@ -782,12 +654,7 @@ fn prepare_keeping(
 		let (w, h) = img.dimensions();
 		let mut linear = Linear::new(w, h);
 		for (dst, src) in linear.pixels_mut().zip(img.pixels()) {
-			*dst = image::Rgba([
-				config::to_linear(src[0]),
-				config::to_linear(src[1]),
-				config::to_linear(src[2]),
-				f32::from(src[3]) / 255.0,
-			]);
+			*dst = image::Rgba([config::to_linear(src[0]), config::to_linear(src[1]), config::to_linear(src[2]), f32::from(src[3]) / 255.0]);
 		}
 		if held == sizing.full {
 			if blur > 0.0 {
@@ -798,11 +665,7 @@ fn prepare_keeping(
 			// would be a held pixel standing for several rows of the image, so
 			// the margin it reads is shrunk from the image's own edge instead,
 			// and cut off after, bar the border.
-			let margin = if blur > 0.0 {
-				(blur * 3.0).ceil() as u32 + 1
-			} else {
-				0
-			};
+			let margin = if blur > 0.0 { (blur * 3.0).ceil() as u32 + 1 } else { 0 };
 			linear = shrink(&linear, held, margin);
 			if blur > 0.0 {
 				linear = image::imageops::blur(&linear, blur);
@@ -817,22 +680,11 @@ fn prepare_keeping(
 			return None;
 		}
 		if settings.wallpaper_contrast_mask {
-			crate::contrast::apply(
-				&mut linear,
-				settings.wallpaper_contrast_mask_size,
-				settings.wallpaper_contrast_mask_strength,
-				settings.wallpaper_contrast_mask_auto,
-				scale,
-			);
+			crate::contrast::apply(&mut linear, settings.wallpaper_contrast_mask_size, settings.wallpaper_contrast_mask_strength, settings.wallpaper_contrast_mask_auto, scale);
 		}
 		img = image::RgbaImage::new(linear.width(), linear.height());
 		for (dst, src) in img.pixels_mut().zip(linear.pixels()) {
-			*dst = image::Rgba([
-				config::from_linear_u8(src[0]),
-				config::from_linear_u8(src[1]),
-				config::from_linear_u8(src[2]),
-				(src[3].clamp(0.0, 1.0) * 255.0 + 0.5) as u8,
-			]);
+			*dst = image::Rgba([config::from_linear_u8(src[0]), config::from_linear_u8(src[1]), config::from_linear_u8(src[2]), (src[3].clamp(0.0, 1.0) * 255.0 + 0.5) as u8]);
 		}
 	}
 	if stale() {
@@ -846,17 +698,7 @@ fn prepare_keeping(
 		}
 		crate::autotheme::summarize(&img, opacity)
 	});
-	let image = Prepared {
-		blocks: compressed(&img, border, hold.packing),
-		rgba: img,
-		sizing,
-		opacity,
-		fit,
-		anchor,
-		summary,
-		held,
-		border,
-	};
+	let image = Prepared { blocks: compressed(&img, border, hold.packing), rgba: img, sizing, opacity, fit, anchor, summary, held, border };
 	Some((image, keep))
 }
 
@@ -867,10 +709,7 @@ fn prepare_keeping(
 // since a BC1 texel is either opaque or black and clear, and bc7.rs writes
 // opaque blocks.
 fn compressed(img: &image::RgbaImage, border: bool, packing: Packing) -> Option<Blocks> {
-	(!border && img.pixels().all(|px| px[3] == u8::MAX)).then(|| Blocks {
-		packing,
-		bytes: Arc::new(packing.encode(img)),
-	})
+	(!border && img.pixels().all(|px| px[3] == u8::MAX)).then(|| Blocks { packing, bytes: Arc::new(packing.encode(img)) })
 }
 
 // The texture's size for a picture held at `held`: one texel more on every
@@ -881,24 +720,13 @@ fn bordered_size((w, h): (u32, u32), border: bool) -> (u32, u32) {
 }
 
 #[cfg(test)]
-fn prepare(
-	settings: &Settings,
-	path: Option<&Path>,
-	folder_active: bool,
-	hold: Hold,
-	stale: &dyn Fn() -> bool,
-) -> Option<Prepared> {
+fn prepare(settings: &Settings, path: Option<&Path>, folder_active: bool, hold: Hold, stale: &dyn Fn() -> bool) -> Option<Prepared> {
 	prepare_keeping(settings, path, folder_active, hold, stale, None).map(|(image, _)| image)
 }
 
 // Write a copy `prepare` made, after its result went out. A box whose cache
 // can't be written goes without, so only the debug line says so.
-fn keep_copy(
-	dir: &Path,
-	key: &wpcache::Key,
-	stored: &wpcache::Stored,
-	summary: &crate::autotheme::Summary,
-) {
+fn keep_copy(dir: &Path, key: &wpcache::Key, stored: &wpcache::Stored, summary: &crate::autotheme::Summary) {
 	match wpcache::store(dir, key, stored, summary, wpcache::LIMIT) {
 		Ok(true) => {
 			let ((w, h), kind) = stored.describe();
@@ -933,9 +761,7 @@ fn shrink(src: &Linear, (w, h): (u32, u32), margin: u32) -> Linear {
 				let center = (f64::from(i) - f64::from(margin) + 0.5) * step - 0.5;
 				let first = (center - reach).floor() as i64 + 1;
 				let last = (center + reach).ceil() as i64 - 1;
-				let mut weights: Vec<f32> = (first..=last)
-					.map(|at| (1.0 - (at as f64 - center).abs() / reach).max(0.0) as f32)
-					.collect();
+				let mut weights: Vec<f32> = (first..=last).map(|at| (1.0 - (at as f64 - center).abs() / reach).max(0.0) as f32).collect();
 				let sum: f32 = weights.iter().sum();
 				for weight in &mut weights {
 					*weight /= sum;
@@ -979,10 +805,7 @@ fn shrink(src: &Linear, (w, h): (u32, u32), margin: u32) -> Linear {
 }
 
 fn builtin(settings: &Settings) -> Option<image::DynamicImage> {
-	settings
-		.wallpaper_fallback_builtin
-		.then(|| image::load_from_memory(DEFAULT_BACKGROUND).ok())
-		.flatten()
+	settings.wallpaper_fallback_builtin.then(|| image::load_from_memory(DEFAULT_BACKGROUND).ok()).flatten()
 }
 
 // A wallpaper is only drawn at window size, and the linear copy in `prepare` is
@@ -1002,11 +825,7 @@ fn list_folder_images(dir: &Path) -> Vec<PathBuf> {
 	let Ok(entries) = std::fs::read_dir(dir) else {
 		return Vec::new();
 	};
-	let mut images: Vec<PathBuf> = entries
-		.flatten()
-		.map(|e| e.path())
-		.filter(|p| p.is_file() && config::is_image_file(p))
-		.collect();
+	let mut images: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.is_file() && config::is_image_file(p)).collect();
 	images.sort();
 	images
 }
@@ -1020,12 +839,7 @@ fn load_history() -> Vec<String> {
 	let Ok(text) = std::fs::read_to_string(path) else {
 		return Vec::new();
 	};
-	text.lines()
-		.map(str::trim)
-		.filter(|line| !line.is_empty())
-		.map(String::from)
-		.take(WP_AVOID_MAX)
-		.collect()
+	text.lines().map(str::trim).filter(|line| !line.is_empty()).map(String::from).take(WP_AVOID_MAX).collect()
 }
 
 fn write_history(recent: &[String]) {
@@ -1040,9 +854,7 @@ fn write_history(recent: &[String]) {
 // Cheap non-crypto entropy for random rotation, from the wall clock. Not used
 // for anything security-sensitive, only to vary which image comes up next.
 fn time_entropy() -> u64 {
-	std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.map_or(0, |d| d.as_nanos() as u64)
+	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64)
 }
 
 // Next image index in filename order, wrapping.
@@ -1070,10 +882,7 @@ fn shuffle_pick(len: usize, recent: &[usize], entropy: u64) -> usize {
 
 #[cfg(test)]
 mod tests {
-	use super::{
-		Hold, Pacing, Packing, Prepared, Request, WP_AVOID_MAX, list_folder_images,
-		next_wallpaper_index, prepare, run, shuffle_pick,
-	};
+	use super::{Hold, Pacing, Packing, Prepared, Request, WP_AVOID_MAX, list_folder_images, next_wallpaper_index, prepare, run, shuffle_pick};
 	use crate::config::{Fit, Settings};
 	use std::sync::Arc;
 	use std::sync::atomic::AtomicU64;
@@ -1082,33 +891,18 @@ mod tests {
 	fn picked(profile: crate::profile::Profile, remote: bool, s: Settings) -> Settings {
 		use crate::ui_spec::Key;
 		use knobs::Value;
-		let mut s = crate::fields::owning(
-			s,
-			&[
-				(Key::PerfAuto, Value::Bool(false)),
-				(Key::PerfProfile, Value::Text(profile.key().into())),
-			],
-		);
+		let mut s = crate::fields::owning(s, &[(Key::PerfAuto, Value::Bool(false)), (Key::PerfProfile, Value::Text(profile.key().into()))]);
 		crate::profile::set_remote(&mut s, remote);
 		s
 	}
 
 	// Held whole, as before the window's size was known or the blur set it.
-	const WHOLE: Hold = Hold {
-		window: (0, 0),
-		summary: None,
-		per_sigma: f32::INFINITY,
-		packing: Packing::Bc1,
-	};
+	const WHOLE: Hold = Hold { window: (0, 0), summary: None, per_sigma: f32::INFINITY, packing: Packing::Bc1 };
 
 	// The blur and the contrast mask are the slow half and neither is under test
 	// here; skipping them keeps these fast.
 	fn flat_settings() -> Settings {
-		Settings {
-			wallpaper_blur: 0.0,
-			wallpaper_contrast_mask: false,
-			..Settings::default()
-		}
+		Settings { wallpaper_blur: 0.0, wallpaper_contrast_mask: false, ..Settings::default() }
 	}
 
 	// Nothing sat between the file and a linear f32 buffer at 16 bytes a
@@ -1121,10 +915,7 @@ mod tests {
 		// a 60 megapixel camera file, and what it used to cost as f32 rgba
 		let (w, h) = (9504, 6336);
 		// and the blur needs a second copy of it
-		assert!(
-			u64::from(w) * u64::from(h) * 16 > 900 << 20,
-			"most of a gigabyte, twice"
-		);
+		assert!(u64::from(w) * u64::from(h) * 16 > 900 << 20, "most of a gigabyte, twice");
 		let (nw, nh) = fit_within(w, h, MAX_EDGE).expect("cut down");
 		assert_eq!(nw, MAX_EDGE);
 		assert!(u64::from(nw) * u64::from(nh) * 16 < 200 << 20, "{nw}x{nh}");
@@ -1163,12 +954,7 @@ mod tests {
 
 		// and the worker hands over that size
 		let s = flat_settings();
-		let hold = Hold {
-			window: (960, 540),
-			summary: None,
-			per_sigma: 4.0,
-			packing: Packing::Bc1,
-		};
+		let hold = Hold { window: (960, 540), summary: None, per_sigma: 4.0, packing: Packing::Bc1 };
 		let prepared = prepare(&s, None, false, hold, &|| false).expect("prepared");
 		assert_eq!(prepared.sizing.full, (1920, 993), "the built-in");
 		assert_eq!(prepared.rgba.dimensions(), prepared.sizing.held((960, 540)));
@@ -1183,18 +969,9 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_held_wallpaper_looks_like_the_whole_one_drawn_at_its_size() {
 		use crate::config::{from_linear_u8, to_linear};
-		let s = Settings {
-			wallpaper_blur: 10.0,
-			wallpaper_contrast_mask: true,
-			..flat_settings()
-		};
+		let s = Settings { wallpaper_blur: 10.0, wallpaper_contrast_mask: true, ..flat_settings() };
 		let whole = prepare(&s, None, false, WHOLE, &|| false).expect("whole");
-		let hold = Hold {
-			window: (640, 360),
-			summary: None,
-			per_sigma: 4.0,
-			packing: Packing::Bc1,
-		};
+		let hold = Hold { window: (640, 360), summary: None, per_sigma: 4.0, packing: Packing::Bc1 };
 		let held = prepare(&s, None, false, hold, &|| false).expect("held");
 		let (fw, fh) = whole.rgba.dimensions();
 		let (hw, hh) = held.rgba.dimensions();
@@ -1256,39 +1033,14 @@ mod tests {
 		}
 
 		let with = |profile: Profile, remote: bool| picked(profile, remote, Settings::default());
-		for (profile, want) in [
-			(Profile::Low, 2.0),
-			(Profile::Standard, 2.0),
-			(Profile::High, 4.0),
-			(Profile::Max, 4.0),
-			(Profile::Custom, 4.0),
-		] {
-			assert!(
-				(per_sigma(&with(profile, false)) - want).abs() < f32::EPSILON,
-				"{profile:?}"
-			);
+		for (profile, want) in [(Profile::Low, 2.0), (Profile::Standard, 2.0), (Profile::High, 4.0), (Profile::Max, 4.0), (Profile::Custom, 4.0)] {
+			assert!((per_sigma(&with(profile, false)) - want).abs() < f32::EPSILON, "{profile:?}");
 		}
-		assert!(
-			(per_sigma(&with(Profile::Max, true)) - 2.0).abs() < f32::EPSILON,
-			"Remote"
-		);
+		assert!((per_sigma(&with(Profile::Max, true)) - 2.0).abs() < f32::EPSILON, "Remote");
 
 		// and the worker hands over that size, with the border
-		let request = |s: Settings| Request {
-			seq: 1,
-			newest: Arc::new(AtomicU64::new(1)),
-			settings: Arc::new(s),
-			scan: false,
-			current: None,
-			cleared: false,
-			window: (1920, 993),
-			summary: None,
-			kept: None,
-		};
-		let blurred = Settings {
-			wallpaper_blur: 10.0,
-			..flat_settings()
-		};
+		let request = |s: Settings| Request { seq: 1, newest: Arc::new(AtomicU64::new(1)), settings: Arc::new(s), scan: false, current: None, cleared: false, window: (1920, 993), summary: None, kept: None };
+		let blurred = Settings { wallpaper_blur: 10.0, ..flat_settings() };
 		let prepared = run(&request(blurred.clone())).image.expect("prepared");
 		assert_eq!(prepared.sizing.full, (1920, 993), "the built-in");
 		assert_eq!(prepared.held, (768, 397));
@@ -1299,11 +1051,7 @@ mod tests {
 		assert!(!small.border);
 		assert_eq!(small.rgba.dimensions(), (160, 83));
 		// Low holds it at 2 pixels a sigma
-		let low = Settings {
-			wallpaper_blur: 10.0,
-			wallpaper_contrast_mask: false,
-			..picked(Profile::Low, false, blurred)
-		};
+		let low = Settings { wallpaper_blur: 10.0, wallpaper_contrast_mask: false, ..picked(Profile::Low, false, blurred) };
 		let prepared = run(&request(low)).image.expect("prepared");
 		assert_eq!(prepared.held, (384, 199));
 		assert_eq!(prepared.rgba.dimensions(), (386, 201));
@@ -1318,20 +1066,10 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bordered_wallpaper_looks_like_the_window_size_one() {
 		use crate::config::{from_linear_u8, to_linear};
-		let s = Settings {
-			wallpaper_blur: 10.0,
-			wallpaper_contrast_mask: true,
-			..flat_settings()
-		};
+		let s = Settings { wallpaper_blur: 10.0, wallpaper_contrast_mask: true, ..flat_settings() };
 		let window = (1044, 540);
-		let by_window = |per_sigma| Hold {
-			window,
-			summary: None,
-			per_sigma,
-			packing: Packing::Bc1,
-		};
-		let reference =
-			prepare(&s, None, false, by_window(f32::INFINITY), &|| false).expect("window size");
+		let by_window = |per_sigma| Hold { window, summary: None, per_sigma, packing: Packing::Bc1 };
+		let reference = prepare(&s, None, false, by_window(f32::INFINITY), &|| false).expect("window size");
 		assert_eq!(reference.rgba.dimensions(), window);
 		// the GPU's bilinear sample, filtered in linear light as an sRGB
 		// texture is, of `tex` at window pixel (x, y), with the border mapping
@@ -1377,27 +1115,15 @@ mod tests {
 			assert!(small.border, "at {per_sigma}");
 			let (w, h) = small.rgba.dimensions();
 			let found = compare(&small.rgba, true);
-			eprintln!(
-				"{per_sigma} a sigma, {w}x{h}: inside {} max {:.3} mean, edge {} max {:.3} mean",
-				found.0, found.1, found.2, found.3
-			);
+			eprintln!("{per_sigma} a sigma, {w}x{h}: inside {} max {:.3} mean, edge {} max {:.3} mean", found.0, found.1, found.2, found.3);
 			assert!(found.0 <= most, "inside, at {per_sigma}: {found:?}");
 			assert!(found.2 <= most, "edge, at {per_sigma}: {found:?}");
-			assert!(
-				found.1 < 0.5 && found.3 < 0.5,
-				"on average, at {per_sigma}: {found:?}"
-			);
+			assert!(found.1 < 0.5 && found.3 < 0.5, "on average, at {per_sigma}: {found:?}");
 			// the inner part alone, clamped, is what the border is for
 			let inner = image::imageops::crop_imm(&small.rgba, 1, 1, w - 2, h - 2).to_image();
 			let clamped = compare(&inner, false);
-			eprintln!(
-				"  without the border: edge {} max {:.3} mean",
-				clamped.2, clamped.3
-			);
-			assert!(
-				clamped.2 > found.2 && clamped.3 > found.3,
-				"{clamped:?} against {found:?}"
-			);
+			eprintln!("  without the border: edge {} max {:.3} mean", clamped.2, clamped.3);
+			assert!(clamped.2 > found.2 && clamped.3 > found.3, "{clamped:?} against {found:?}");
 		}
 	}
 
@@ -1407,23 +1133,11 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_resize_keeps_the_pictures_summary() {
-		let request = |window, summary| Request {
-			seq: 1,
-			newest: Arc::new(AtomicU64::new(1)),
-			settings: Arc::new(flat_settings()),
-			scan: false,
-			current: None,
-			cleared: false,
-			window,
-			summary,
-			kept: None,
-		};
+		let request = |window, summary| Request { seq: 1, newest: Arc::new(AtomicU64::new(1)), settings: Arc::new(flat_settings()), scan: false, current: None, cleared: false, window, summary, kept: None };
 		let first = run(&request((1280, 800), None)).image.expect("first");
 		let again = run(&request((700, 400), None)).image.expect("again");
 		assert_ne!(again.rgba.dimensions(), first.rgba.dimensions());
-		let kept = run(&request((700, 400), Some(first.summary)))
-			.image
-			.expect("kept");
+		let kept = run(&request((700, 400), Some(first.summary))).image.expect("kept");
 		assert_eq!(kept.rgba.dimensions(), again.rgba.dimensions());
 		assert_eq!(kept.summary, first.summary);
 	}
@@ -1488,8 +1202,7 @@ mod tests {
 	// Test ID: d9vv2
 	#[test]
 	fn folder_scan_filters_and_sorts() {
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_wp_scan_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wp_scan_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		for name in ["b.png", "a.JPG", "c.jpeg", "notes.txt", "c.gif", ".hidden"] {
@@ -1497,10 +1210,7 @@ mod tests {
 		}
 		std::fs::create_dir_all(dir.join("d.png")).unwrap(); // a dir named like an image
 		let imgs = list_folder_images(&dir);
-		let names: Vec<String> = imgs
-			.iter()
-			.map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
-			.collect();
+		let names: Vec<String> = imgs.iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
 		// only decodable image files, case-insensitive ext, sorted; the .txt, the dir
 		// and the .gif (no decoder for it) all kept out
 		assert_eq!(names, vec!["a.JPG", "b.png", "c.jpeg"]);
@@ -1539,18 +1249,13 @@ mod tests {
 		// the same value from an image's own tag
 		let packet = "<x:xmpmeta><rdf:RDF><rdf:Description rdf:about=''>\
 			<wallpaper:Blur>1e-40</wallpaper:Blur></rdf:Description></rdf:RDF></x:xmpmeta>";
-		let path =
-			crate::testdir::run_dir().join(format!("silkterm_wp_blur_{}.png", std::process::id()));
+		let path = crate::testdir::run_dir().join(format!("silkterm_wp_blur_{}.png", std::process::id()));
 		std::fs::write(&path, tagged_png(packet)).unwrap();
 		s.wallpaper_blur = 0.0;
 		s.wallpaper_honor_xmp_look = true;
 		assert_eq!(crate::xmp::read(&path).blur, Some(0.0));
 		let prepared = prepare(&s, Some(&path), false, WHOLE, &|| false).expect("prepared");
-		assert_eq!(
-			prepared.rgba.dimensions(),
-			(8, 8),
-			"the file, not the built-in"
-		);
+		assert_eq!(prepared.rgba.dimensions(), (8, 8), "the file, not the built-in");
 		let _ = std::fs::remove_file(&path);
 	}
 
@@ -1562,28 +1267,16 @@ mod tests {
 			for b in bytes {
 				c ^= u32::from(*b);
 				for _ in 0..8 {
-					c = if c & 1 == 1 {
-						(c >> 1) ^ 0xedb8_8320
-					} else {
-						c >> 1
-					};
+					c = if c & 1 == 1 { (c >> 1) ^ 0xedb8_8320 } else { c >> 1 };
 				}
 			}
 			!c
 		}
 		let mut plain = Vec::new();
-		image::GrayImage::new(8, 8)
-			.write_to(
-				&mut std::io::Cursor::new(&mut plain),
-				image::ImageFormat::Png,
-			)
-			.unwrap();
+		image::GrayImage::new(8, 8).write_to(&mut std::io::Cursor::new(&mut plain), image::ImageFormat::Png).unwrap();
 		let mut body = b"iTXtXML:com.adobe.xmp\0\0\0\0\0".to_vec();
 		body.extend_from_slice(packet.as_bytes());
-		let mut chunk = u32::try_from(body.len() - 4)
-			.unwrap()
-			.to_be_bytes()
-			.to_vec();
+		let mut chunk = u32::try_from(body.len() - 4).unwrap().to_be_bytes().to_vec();
 		chunk.extend_from_slice(&body);
 		chunk.extend_from_slice(&crc(&body).to_be_bytes());
 		// signature (8) + IHDR (25)
@@ -1601,43 +1294,20 @@ mod tests {
 	#[cfg(target_os = "linux")]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
-	#[cfg_attr(
-		silk_asan,
-		ignore = "ASan's shadow memory and quarantine count in the peak this measures"
-	)]
-	#[cfg_attr(
-		silk_tsan,
-		ignore = "TSan's shadow memory counts in the peak this measures"
-	)]
+	#[cfg_attr(silk_asan, ignore = "ASan's shadow memory and quarantine count in the peak this measures")]
+	#[cfg_attr(silk_tsan, ignore = "TSan's shadow memory counts in the peak this measures")]
 	fn a_huge_image_costs_its_decode_and_no_more() {
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_wp_huge_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wp_huge_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("huge.png");
 		// The decode is 64 MiB. Before the fix this peaked near 900 MiB.
 		image::GrayImage::new(8000, 8000).save(&path).unwrap();
-		let out = std::process::Command::new(std::env::current_exe().unwrap())
-			.args([
-				"--exact",
-				"wallpaper::tests::huge_image_child",
-				"--nocapture",
-			])
-			.env("SILK_WP_HUGE", &path)
-			.output()
-			.unwrap();
+		let out = std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact", "wallpaper::tests::huge_image_child", "--nocapture"]).env("SILK_WP_HUGE", &path).output().unwrap();
 		let _ = std::fs::remove_dir_all(&dir);
 		let text = String::from_utf8_lossy(&out.stdout);
-		assert!(
-			out.status.success(),
-			"{text}{}",
-			String::from_utf8_lossy(&out.stderr)
-		);
-		let grew: u64 = text
-			.lines()
-			.find_map(|l| l.strip_prefix("grew_kb "))
-			.and_then(|v| v.trim().parse().ok())
-			.expect("child reports its growth");
+		assert!(out.status.success(), "{text}{}", String::from_utf8_lossy(&out.stderr));
+		let grew: u64 = text.lines().find_map(|l| l.strip_prefix("grew_kb ")).and_then(|v| v.trim().parse().ok()).expect("child reports its growth");
 		assert!(grew < 200 << 10, "peak grew {} MiB", grew >> 10);
 	}
 
@@ -1646,24 +1316,13 @@ mod tests {
 	#[test]
 	fn huge_image_child() {
 		fn peak_kb() -> u64 {
-			std::fs::read_to_string("/proc/self/status")
-				.unwrap()
-				.lines()
-				.find_map(|l| l.strip_prefix("VmHWM:"))
-				.and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok())
-				.unwrap()
+			std::fs::read_to_string("/proc/self/status").unwrap().lines().find_map(|l| l.strip_prefix("VmHWM:")).and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok()).unwrap()
 		}
 		let Some(path) = std::env::var_os("SILK_WP_HUGE") else {
 			return; // only does anything when the test above starts it
 		};
 		let before = peak_kb();
-		let prepared = prepare(
-			&flat_settings(),
-			Some(std::path::Path::new(&path)),
-			false,
-			WHOLE,
-			&|| false,
-		);
+		let prepared = prepare(&flat_settings(), Some(std::path::Path::new(&path)), false, WHOLE, &|| false);
 		assert_eq!(prepared.expect("prepared").rgba.dimensions(), (4096, 4096));
 		println!("grew_kb {}", peak_kb() - before);
 	}
@@ -1677,11 +1336,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_superseded_request_stops_before_its_next_stage() {
 		use std::cell::Cell;
-		let s = Settings {
-			wallpaper_blur: 1.0,
-			wallpaper_contrast_mask: true,
-			..flat_settings()
-		};
+		let s = Settings { wallpaper_blur: 1.0, wallpaper_contrast_mask: true, ..flat_settings() };
 		let asked = Cell::new(0);
 		let live = prepare(&s, None, false, WHOLE, &|| {
 			asked.set(asked.get() + 1);
@@ -1689,10 +1344,7 @@ mod tests {
 		});
 		assert!(live.is_some());
 		let stages = asked.get();
-		assert_eq!(
-			stages, 4,
-			"before the decode, the float copy, the mask and the layout"
-		);
+		assert_eq!(stages, 4, "before the decode, the float copy, the mask and the layout");
 		for stale_from in 0..stages {
 			asked.set(0);
 			let gone = prepare(&s, None, false, WHOLE, &|| {
@@ -1701,25 +1353,11 @@ mod tests {
 				n >= stale_from
 			});
 			assert!(gone.is_none(), "stale at check {stale_from}");
-			assert_eq!(
-				asked.get(),
-				stale_from + 1,
-				"stopped at the check that said so"
-			);
+			assert_eq!(asked.get(), stale_from + 1, "stopped at the check that said so");
 		}
 		// the stamp is what says so in the real thing
 		let newest = Arc::new(AtomicU64::new(2));
-		let request = Request {
-			seq: 1,
-			newest,
-			settings: Arc::new(s),
-			scan: false,
-			current: None,
-			cleared: false,
-			window: (0, 0),
-			summary: None,
-			kept: None,
-		};
+		let request = Request { seq: 1, newest, settings: Arc::new(s), scan: false, current: None, cleared: false, window: (0, 0), summary: None, kept: None };
 		assert!(run(&request).image.is_none());
 	}
 
@@ -1774,10 +1412,7 @@ mod tests {
 			}
 			let live = working.iter().filter(|w| w.0 == seq).count();
 			most_at_once = most_at_once.max(live);
-			assert!(
-				working.len() <= 2,
-				"retired workers pile up at {now}: {working:?}"
-			);
+			assert!(working.len() <= 2, "retired workers pile up at {now}: {working:?}");
 		}
 		assert_eq!(most_at_once, 1);
 		// one preparation, a rest of one interval, the next: every 8 seconds,
@@ -1795,8 +1430,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_empty_rotation_folder_falls_back_to_the_builtin() {
 		let mut s = flat_settings();
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_wp_empty_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wp_empty_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		s.wallpaper_folder = Some(dir.clone());
@@ -1813,10 +1447,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_builtin_keeps_the_configured_fit() {
-		let s = Settings {
-			wallpaper_default_fit: Fit::Zoom,
-			..flat_settings()
-		};
+		let s = Settings { wallpaper_default_fit: Fit::Zoom, ..flat_settings() };
 		let Some(Prepared { fit, anchor, .. }) = prepare(&s, None, false, WHOLE, &|| false) else {
 			panic!("built-in wallpaper failed to decode");
 		};
@@ -1828,20 +1459,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_master_switch_turns_the_wallpaper_off() {
-		let request = |enabled| Request {
-			seq: 1,
-			newest: Arc::new(AtomicU64::new(1)),
-			settings: Arc::new(Settings {
-				wallpaper_enabled: enabled,
-				..flat_settings()
-			}),
-			scan: false,
-			current: None,
-			cleared: false,
-			window: (0, 0),
-			summary: None,
-			kept: None,
-		};
+		let request = |enabled| Request { seq: 1, newest: Arc::new(AtomicU64::new(1)), settings: Arc::new(Settings { wallpaper_enabled: enabled, ..flat_settings() }), scan: false, current: None, cleared: false, window: (0, 0), summary: None, kept: None };
 		assert!(run(&request(false)).image.is_none());
 		// the control: switched on, the same request shows the built-in
 		assert!(run(&request(true)).image.is_some());
@@ -1855,20 +1473,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_picture_comes_with_a_small_standin() {
-		let request = |window, enabled| Request {
-			seq: 1,
-			newest: Arc::new(AtomicU64::new(1)),
-			settings: Arc::new(Settings {
-				wallpaper_enabled: enabled,
-				..flat_settings()
-			}),
-			scan: false,
-			current: None,
-			cleared: false,
-			window,
-			summary: None,
-			kept: None,
-		};
+		let request = |window, enabled| Request { seq: 1, newest: Arc::new(AtomicU64::new(1)), settings: Arc::new(Settings { wallpaper_enabled: enabled, ..flat_settings() }), scan: false, current: None, cleared: false, window, summary: None, kept: None };
 		for window in [(2560, 1440), (640, 360), (0, 0)] {
 			let loaded = run(&request(window, true));
 			let image = loaded.image.expect("the built-in");
@@ -1900,23 +1505,12 @@ mod tests {
 			image::Rgba([v, v, v, 255])
 		});
 		let small = super::box_shrink(&checker, (160, 90));
-		assert!(
-			small
-				.pixels()
-				.all(|px| px[0] == 188 && px[1] == 188 && px[3] == 255),
-			"{:?}",
-			small.get_pixel(0, 0)
-		);
+		assert!(small.pixels().all(|px| px[0] == 188 && px[1] == 188 && px[3] == 255), "{:?}", small.get_pixel(0, 0));
 		// and over a real picture, nothing drifts: each channel's mean in
 		// linear light is kept to within a level
 		let prepared = prepare(&flat_settings(), None, false, WHOLE, &|| false).expect("built-in");
 		let small = prepared.standin();
-		let mean = |img: &image::RgbaImage, c: usize| {
-			img.pixels()
-				.map(|px| f64::from(to_linear(px[c])))
-				.sum::<f64>()
-				/ img.pixels().len() as f64
-		};
+		let mean = |img: &image::RgbaImage, c: usize| img.pixels().map(|px| f64::from(to_linear(px[c]))).sum::<f64>() / img.pixels().len() as f64;
 		for c in 0..3 {
 			let (big, little) = (mean(&prepared.rgba, c), mean(&small.rgba, c));
 			let off = from_linear_u8(big as f32).abs_diff(from_linear_u8(little as f32));
@@ -1930,29 +1524,18 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn rotation_off_stops_rotating_and_keeps_the_folder() {
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_wp_rot_off_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wp_rot_off_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		image::GrayImage::new(2, 2).save(dir.join("a.png")).unwrap();
-		let on = Settings {
-			wallpaper_folder: Some(dir.clone()),
-			wallpaper_rotate_enabled: true,
-			..flat_settings()
-		};
+		let on = Settings { wallpaper_folder: Some(dir.clone()), wallpaper_rotate_enabled: true, ..flat_settings() };
 		assert_eq!(on.rotation_folder(), Some(&dir));
-		let off = Settings {
-			wallpaper_rotate_enabled: false,
-			..on.clone()
-		};
+		let off = Settings { wallpaper_rotate_enabled: false, ..on.clone() };
 		assert!(off.rotation_folder().is_none());
 		assert!(super::rotate(&off, None).is_none());
 		assert_eq!(off.wallpaper_folder, Some(dir.clone()));
 		// and the master switch takes rotation with it
-		let master_off = Settings {
-			wallpaper_enabled: false,
-			..on
-		};
+		let master_off = Settings { wallpaper_enabled: false, ..on };
 		assert!(master_off.rotation_folder().is_none());
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -1962,8 +1545,7 @@ mod tests {
 			"<x:xmpmeta><rdf:RDF><rdf:Description rdf:about=''>{tags}\
 			</rdf:Description></rdf:RDF></x:xmpmeta>"
 		);
-		let path = crate::testdir::run_dir()
-			.join(format!("silkterm_wp_{name}_{}.png", std::process::id()));
+		let path = crate::testdir::run_dir().join(format!("silkterm_wp_{name}_{}.png", std::process::id()));
 		std::fs::write(&path, tagged_png(&packet)).unwrap();
 		path
 	}
@@ -1972,15 +1554,8 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_images_layout_tags_win_until_honor_tags_is_off() {
-		let path = tagged_file(
-			"layout",
-			"<wallpaper:Fit>zoom</wallpaper:Fit><wallpaper:Anchor>25%, 80%</wallpaper:Anchor>",
-		);
-		let mut s = Settings {
-			wallpaper_default_fit: Fit::Stretch,
-			wallpaper_honor_xmp: true,
-			..flat_settings()
-		};
+		let path = tagged_file("layout", "<wallpaper:Fit>zoom</wallpaper:Fit><wallpaper:Anchor>25%, 80%</wallpaper:Anchor>");
+		let mut s = Settings { wallpaper_default_fit: Fit::Stretch, wallpaper_honor_xmp: true, ..flat_settings() };
 		let honored = prepare(&s, Some(&path), false, WHOLE, &|| false).expect("prepared");
 		assert_eq!(honored.fit, Fit::Zoom);
 		assert_eq!(honored.anchor, [0.25, 0.8]);
@@ -1996,11 +1571,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_images_look_tags_win_until_honor_look_tags_is_off() {
 		let path = tagged_file("look", "<wallpaper:Opacity>40%</wallpaper:Opacity>");
-		let mut s = Settings {
-			wallpaper_opacity: 0.1,
-			wallpaper_honor_xmp_look: true,
-			..flat_settings()
-		};
+		let mut s = Settings { wallpaper_opacity: 0.1, wallpaper_honor_xmp_look: true, ..flat_settings() };
 		let honored = prepare(&s, Some(&path), false, WHOLE, &|| false).expect("prepared");
 		assert!((honored.opacity - 0.4).abs() < 1e-6, "{}", honored.opacity);
 		s.wallpaper_honor_xmp_look = false;
@@ -2015,18 +1586,14 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_blur_mixes_in_linear_light() {
-		let path =
-			crate::testdir::run_dir().join(format!("silkterm_wp_edge_{}.png", std::process::id()));
+		let path = crate::testdir::run_dir().join(format!("silkterm_wp_edge_{}.png", std::process::id()));
 		let mut edge = image::RgbaImage::new(16, 1);
 		for (x, _, px) in edge.enumerate_pixels_mut() {
 			let v = if x < 8 { 0 } else { 255 };
 			*px = image::Rgba([v, v, v, 255]);
 		}
 		edge.save(&path).unwrap();
-		let s = Settings {
-			wallpaper_blur: 2.0,
-			..flat_settings()
-		};
+		let s = Settings { wallpaper_blur: 2.0, ..flat_settings() };
 		let out = prepare(&s, Some(&path), false, WHOLE, &|| false).expect("prepared");
 		let _ = std::fs::remove_file(&path);
 		// the 2 pixels either side of the edge straddle half the light
@@ -2041,29 +1608,12 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_cleared_wallpaper_shows_nothing_with_or_without_a_folder() {
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_wp_cleared_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wp_cleared_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		for folder in [None, Some(dir.clone())] {
-			let settings = Settings {
-				wallpaper_enabled: true,
-				wallpaper: None,
-				wallpaper_folder: folder.clone(),
-				wallpaper_rotate_enabled: true,
-				..flat_settings()
-			};
-			let request = |cleared| Request {
-				seq: 1,
-				newest: Arc::new(AtomicU64::new(1)),
-				settings: Arc::new(settings.clone()),
-				scan: false,
-				current: None,
-				cleared,
-				window: (0, 0),
-				summary: None,
-				kept: None,
-			};
+			let settings = Settings { wallpaper_enabled: true, wallpaper: None, wallpaper_folder: folder.clone(), wallpaper_rotate_enabled: true, ..flat_settings() };
+			let request = |cleared| Request { seq: 1, newest: Arc::new(AtomicU64::new(1)), settings: Arc::new(settings.clone()), scan: false, current: None, cleared, window: (0, 0), summary: None, kept: None };
 			assert!(run(&request(true)).image.is_none(), "folder {folder:?}");
 			if folder.is_none() {
 				// the control: the same request, not cleared, shows the built-in
@@ -2081,134 +1631,34 @@ mod tests {
 	fn a_kept_copy_is_keyed_on_everything_that_changes_its_pixels() {
 		use super::{Origin, kept_key};
 		let path = tagged_file("key", "");
-		let base = Settings {
-			wallpaper_blur: 10.0,
-			wallpaper_contrast_mask: true,
-			..Settings::default()
-		};
+		let base = Settings { wallpaper_blur: 10.0, wallpaper_contrast_mask: true, ..Settings::default() };
 		let key = |s: &Settings, path: &std::path::Path| {
 			let tags = crate::xmp::read(path);
-			kept_key(s, Origin::File(path), &tags, 4.0)
-				.expect("keyed")
-				.0
+			kept_key(s, Origin::File(path), &tags, 4.0).expect("keyed").0
 		};
 		let first = key(&base, &path);
 		assert_eq!(key(&base, &path), first, "the same file and settings");
-		let moved: [(&str, Settings); 6] = [
-			(
-				"blur",
-				Settings {
-					wallpaper_blur: 11.0,
-					..base.clone()
-				},
-			),
-			(
-				"mask off",
-				Settings {
-					wallpaper_contrast_mask: false,
-					..base.clone()
-				},
-			),
-			(
-				"mask size",
-				Settings {
-					wallpaper_contrast_mask_size: 0.7,
-					..base.clone()
-				},
-			),
-			(
-				"mask strength",
-				Settings {
-					wallpaper_contrast_mask_strength: 0.1,
-					..base.clone()
-				},
-			),
-			(
-				"mask auto",
-				Settings {
-					wallpaper_contrast_mask_auto: 0.2,
-					..base.clone()
-				},
-			),
-			(
-				"look tags off, with a blur tag",
-				Settings {
-					wallpaper_honor_xmp_look: false,
-					..base.clone()
-				},
-			),
-		];
+		let moved: [(&str, Settings); 6] = [("blur", Settings { wallpaper_blur: 11.0, ..base.clone() }), ("mask off", Settings { wallpaper_contrast_mask: false, ..base.clone() }), ("mask size", Settings { wallpaper_contrast_mask_size: 0.7, ..base.clone() }), ("mask strength", Settings { wallpaper_contrast_mask_strength: 0.1, ..base.clone() }), ("mask auto", Settings { wallpaper_contrast_mask_auto: 0.2, ..base.clone() }), ("look tags off, with a blur tag", Settings { wallpaper_honor_xmp_look: false, ..base.clone() })];
 		let tagged = tagged_file("keyblur", "<wallpaper:Blur>3</wallpaper:Blur>");
 		for (what, settings) in &moved {
-			let probe = if what.starts_with("look") {
-				&tagged
-			} else {
-				&path
-			};
+			let probe = if what.starts_with("look") { &tagged } else { &path };
 			assert_ne!(key(settings, probe), key(&base, probe), "{what}");
 		}
 		// a tagged blur replaces the slider, so the slider no longer matters
-		assert_eq!(
-			key(
-				&Settings {
-					wallpaper_blur: 30.0,
-					..base.clone()
-				},
-				&tagged
-			),
-			key(&base, &tagged)
-		);
-		let kept: [(&str, Settings); 4] = [
-			(
-				"opacity",
-				Settings {
-					wallpaper_opacity: 0.4,
-					..base.clone()
-				},
-			),
-			(
-				"fit",
-				Settings {
-					wallpaper_default_fit: Fit::Zoom,
-					..base.clone()
-				},
-			),
-			(
-				"light mode",
-				Settings {
-					theme_mode: crate::theme::Mode::Light,
-					..base.clone()
-				},
-			),
-			(
-				"dark mode",
-				Settings {
-					theme_mode: crate::theme::Mode::Dark,
-					..base.clone()
-				},
-			),
-		];
+		assert_eq!(key(&Settings { wallpaper_blur: 30.0, ..base.clone() }, &tagged), key(&base, &tagged));
+		let kept: [(&str, Settings); 4] = [("opacity", Settings { wallpaper_opacity: 0.4, ..base.clone() }), ("fit", Settings { wallpaper_default_fit: Fit::Zoom, ..base.clone() }), ("light mode", Settings { theme_mode: crate::theme::Mode::Light, ..base.clone() }), ("dark mode", Settings { theme_mode: crate::theme::Mode::Dark, ..base.clone() })];
 		for (what, settings) in &kept {
 			assert_eq!(key(settings, &path), first, "{what}");
 		}
 		// the file itself: written again, and swapped for another picture
 		let bytes = std::fs::read(&path).unwrap();
 		let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
-		std::fs::File::options()
-			.append(true)
-			.open(&path)
-			.unwrap()
-			.set_modified(later)
-			.unwrap();
+		std::fs::File::options().append(true).open(&path).unwrap().set_modified(later).unwrap();
 		assert_ne!(key(&base, &path), first, "a new time");
 		std::fs::write(&path, [bytes.as_slice(), b"\0"].concat()).unwrap();
 		assert_ne!(key(&base, &path), first, "another length");
 		// the built-in has a key of its own, and keeps it
-		let builtin = |s: &Settings| {
-			kept_key(s, Origin::Builtin, &crate::xmp::Tags::default(), 4.0)
-				.expect("built-in")
-				.0
-		};
+		let builtin = |s: &Settings| kept_key(s, Origin::Builtin, &crate::xmp::Tags::default(), 4.0).expect("built-in").0;
 		assert_eq!(builtin(&base), builtin(&base));
 		assert_ne!(builtin(&base), first);
 		let _ = std::fs::remove_file(&path);
@@ -2222,32 +1672,11 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_prepared_wallpaper_is_kept_and_read_back() {
 		use super::answer;
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_wp_kept_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wp_kept_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
-		let settings = Arc::new(Settings {
-			wallpaper_blur: 4.0,
-			wallpaper_compression: crate::config::Compression::Bc1,
-			..flat_settings()
-		});
-		let request = |window, kept: Option<&std::path::Path>| Request {
-			seq: 1,
-			newest: Arc::new(AtomicU64::new(1)),
-			settings: settings.clone(),
-			scan: false,
-			current: None,
-			cleared: false,
-			window,
-			summary: None,
-			kept: kept.map(std::path::Path::to_path_buf),
-		};
-		let copies = || {
-			std::fs::read_dir(&dir).map_or(0, |list| {
-				list.flatten()
-					.filter(|entry| entry.path().extension().is_some_and(|ext| ext == "wpc"))
-					.count()
-			})
-		};
+		let settings = Arc::new(Settings { wallpaper_blur: 4.0, wallpaper_compression: crate::config::Compression::Bc1, ..flat_settings() });
+		let request = |window, kept: Option<&std::path::Path>| Request { seq: 1, newest: Arc::new(AtomicU64::new(1)), settings: settings.clone(), scan: false, current: None, cleared: false, window, summary: None, kept: kept.map(std::path::Path::to_path_buf) };
+		let copies = || std::fs::read_dir(&dir).map_or(0, |list| list.flatten().filter(|entry| entry.path().extension().is_some_and(|ext| ext == "wpc")).count());
 		let ask = |window, kept| {
 			let mut got = None;
 			answer(&request(window, kept), |loaded| {
@@ -2264,10 +1693,7 @@ mod tests {
 		assert_eq!(before, 0, "written before the result went out");
 		assert_eq!(copies(), 1);
 		assert_eq!(first.rgba.dimensions(), plain.rgba.dimensions());
-		assert_eq!(
-			first.rgba, plain.rgba,
-			"the first one is prepared as before"
-		);
+		assert_eq!(first.rgba, plain.rgba, "the first one is prepared as before");
 
 		let (again, _) = ask((640, 360), Some(&dir));
 		assert_eq!(copies(), 1, "read, not made again");
@@ -2276,17 +1702,11 @@ mod tests {
 		assert_eq!(again.rgba.dimensions(), first.rgba.dimensions());
 		// held by the window, so the GPU was given BC1, and the copy is those
 		// same blocks: what it shows is what the first one showed
-		let blocks = first
-			.blocks
-			.as_ref()
-			.expect("BC1 for a picture held by the window");
+		let blocks = first.blocks.as_ref().expect("BC1 for a picture held by the window");
 		assert_eq!(blocks.packing, Packing::Bc1);
 		let back = again.blocks.as_ref().expect("the same blocks");
 		assert_eq!((back.packing, &back.bytes), (Packing::Bc1, &blocks.bytes));
-		assert_eq!(
-			Some(&again.rgba),
-			crate::bc1::decode(&blocks.bytes, first.held).as_ref()
-		);
+		assert_eq!(Some(&again.rgba), crate::bc1::decode(&blocks.bytes, first.held).as_ref());
 
 		// 2% more pixels: the copy stands in, and records what was asked for, so
 		// the window doesn't ask again
@@ -2301,10 +1721,7 @@ mod tests {
 		assert_eq!(copies(), 2);
 
 		// held whole with no blur and no mask is only a decode, so nothing is kept
-		let whole = Request {
-			settings: Arc::new(flat_settings()),
-			..request((0, 0), Some(&dir))
-		};
+		let whole = Request { settings: Arc::new(flat_settings()), ..request((0, 0), Some(&dir)) };
 		let mut loaded = None;
 		answer(&whole, |got| loaded = Some(got));
 		assert!(loaded.and_then(|l| l.image).is_some());
@@ -2321,56 +1738,20 @@ mod tests {
 		use super::packing;
 		use crate::config::Compression;
 		use crate::profile::Profile;
-		let with = |profile: Profile, remote: bool, compression| {
-			picked(
-				profile,
-				remote,
-				Settings {
-					wallpaper_compression: compression,
-					..Settings::default()
-				},
-			)
-		};
+		let with = |profile: Profile, remote: bool, compression| picked(profile, remote, Settings { wallpaper_compression: compression, ..Settings::default() });
 		assert_eq!(Settings::default().wallpaper_compression, Compression::Auto);
-		for (profile, want) in [
-			(Profile::Low, Packing::Bc1),
-			(Profile::Standard, Packing::Bc1),
-			(Profile::High, Packing::Bc7),
-			(Profile::Max, Packing::Bc7),
-			(Profile::Custom, Packing::Bc7),
-		] {
-			assert_eq!(
-				packing(&with(profile, false, Compression::Auto)),
-				want,
-				"{profile:?}"
-			);
-			for (word, pinned) in [
-				(Compression::Bc1, Packing::Bc1),
-				(Compression::Bc7, Packing::Bc7),
-			] {
-				assert_eq!(
-					packing(&with(profile, false, word)),
-					pinned,
-					"{profile:?} {word:?}"
-				);
+		for (profile, want) in [(Profile::Low, Packing::Bc1), (Profile::Standard, Packing::Bc1), (Profile::High, Packing::Bc7), (Profile::Max, Packing::Bc7), (Profile::Custom, Packing::Bc7)] {
+			assert_eq!(packing(&with(profile, false, Compression::Auto)), want, "{profile:?}");
+			for (word, pinned) in [(Compression::Bc1, Packing::Bc1), (Compression::Bc7, Packing::Bc7)] {
+				assert_eq!(packing(&with(profile, false, word)), pinned, "{profile:?} {word:?}");
 			}
 		}
-		assert_eq!(
-			packing(&with(Profile::Max, true, Compression::Auto)),
-			Packing::Bc1,
-			"Remote"
-		);
-		assert_eq!(
-			packing(&with(Profile::Max, true, Compression::Bc7)),
-			Packing::Bc7
-		);
+		assert_eq!(packing(&with(Profile::Max, true, Compression::Auto)), Packing::Bc1, "Remote");
+		assert_eq!(packing(&with(Profile::Max, true, Compression::Bc7)), Packing::Bc7);
 		// High and Max hold a blur alike, so only the packing moves here
 		let changed = crate::settings_ui::wallpaper_changed;
 		let max = with(Profile::Max, false, Compression::Auto);
-		assert!(!changed(
-			&max,
-			&with(Profile::High, false, Compression::Auto)
-		));
+		assert!(!changed(&max, &with(Profile::High, false, Compression::Auto)));
 		assert!(changed(&max, &with(Profile::Max, false, Compression::Bc1)));
 		assert!(!changed(&max, &with(Profile::Max, false, Compression::Bc7)));
 	}
@@ -2385,28 +1766,8 @@ mod tests {
 		use crate::config::Compression;
 		let dir = crate::testdir::run_dir().join(format!("silkterm_wp_bc7_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
-		let request = |compression| Request {
-			seq: 1,
-			newest: Arc::new(AtomicU64::new(1)),
-			settings: Arc::new(Settings {
-				wallpaper_blur: 2.0,
-				wallpaper_compression: compression,
-				..flat_settings()
-			}),
-			scan: false,
-			current: None,
-			cleared: false,
-			window: (640, 360),
-			summary: None,
-			kept: Some(dir.clone()),
-		};
-		let copies = || {
-			std::fs::read_dir(&dir).map_or(0, |list| {
-				list.flatten()
-					.filter(|entry| entry.path().extension().is_some_and(|ext| ext == "wpc"))
-					.count()
-			})
-		};
+		let request = |compression| Request { seq: 1, newest: Arc::new(AtomicU64::new(1)), settings: Arc::new(Settings { wallpaper_blur: 2.0, wallpaper_compression: compression, ..flat_settings() }), scan: false, current: None, cleared: false, window: (640, 360), summary: None, kept: Some(dir.clone()) };
+		let copies = || std::fs::read_dir(&dir).map_or(0, |list| list.flatten().filter(|entry| entry.path().extension().is_some_and(|ext| ext == "wpc")).count());
 		let ask = |compression| {
 			let mut got = None;
 			answer(&request(compression), |loaded| got = loaded.image);
@@ -2425,18 +1786,11 @@ mod tests {
 		assert_eq!(bc7.rgba, bc1.rgba);
 		let off = |packing: Packing, blocks: &[u8]| {
 			let back = packing.decode(blocks, bc1.held).expect("unpacks");
-			bc1.rgba
-				.pixels()
-				.zip(back.pixels())
-				.flat_map(|(a, b)| (0..3).map(move |c| u64::from(a[c].abs_diff(b[c]))))
-				.sum::<u64>()
+			bc1.rgba.pixels().zip(back.pixels()).flat_map(|(a, b)| (0..3).map(move |c| u64::from(a[c].abs_diff(b[c])))).sum::<u64>()
 		};
 		assert!(off(Packing::Bc7, &bc7_blocks.bytes) * 2 < off(Packing::Bc1, &bc1_blocks.bytes));
 		// and each reads back its own
-		for (compression, want) in [
-			(Compression::Bc1, &bc1_blocks),
-			(Compression::Bc7, &bc7_blocks),
-		] {
+		for (compression, want) in [(Compression::Bc1, &bc1_blocks), (Compression::Bc7, &bc7_blocks)] {
 			let (_, again) = ask(compression);
 			assert_eq!((again.packing, &again.bytes), (want.packing, &want.bytes));
 			assert_eq!(copies(), 2, "read, not made again");
@@ -2452,30 +1806,10 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bordered_copy_is_kept_apart() {
 		use super::answer;
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_wp_ring_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wp_ring_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
-		let request = |window| Request {
-			seq: 1,
-			newest: Arc::new(AtomicU64::new(1)),
-			settings: Arc::new(Settings {
-				wallpaper_blur: 10.0,
-				..flat_settings()
-			}),
-			scan: false,
-			current: None,
-			cleared: false,
-			window,
-			summary: None,
-			kept: Some(dir.clone()),
-		};
-		let copies = || {
-			std::fs::read_dir(&dir).map_or(0, |list| {
-				list.flatten()
-					.filter(|entry| entry.path().extension().is_some_and(|ext| ext == "wpc"))
-					.count()
-			})
-		};
+		let request = |window| Request { seq: 1, newest: Arc::new(AtomicU64::new(1)), settings: Arc::new(Settings { wallpaper_blur: 10.0, ..flat_settings() }), scan: false, current: None, cleared: false, window, summary: None, kept: Some(dir.clone()) };
+		let copies = || std::fs::read_dir(&dir).map_or(0, |list| list.flatten().filter(|entry| entry.path().extension().is_some_and(|ext| ext == "wpc")).count());
 		let ask = |window| {
 			let mut got = None;
 			answer(&request(window), |loaded| got = loaded.image);
@@ -2495,18 +1829,10 @@ mod tests {
 		assert_eq!(again.rgba.dimensions(), first.rgba.dimensions());
 		assert_eq!(again.summary, first.summary);
 		// kept as high quality JPEG: under a level on average, a few at most
-		let off: Vec<u8> = first
-			.rgba
-			.pixels()
-			.zip(again.rgba.pixels())
-			.flat_map(|(a, b)| (0..3).map(move |c| a[c].abs_diff(b[c])))
-			.collect();
+		let off: Vec<u8> = first.rgba.pixels().zip(again.rgba.pixels()).flat_map(|(a, b)| (0..3).map(move |c| a[c].abs_diff(b[c]))).collect();
 		let mean = off.iter().map(|&d| f64::from(d)).sum::<f64>() / off.len() as f64;
 		let worst = off.iter().max().copied().unwrap_or(0);
-		assert!(
-			mean < 1.0 && worst <= 16,
-			"off by {mean:.3} on average, {worst} at most"
-		);
+		assert!(mean < 1.0 && worst <= 16, "off by {mean:.3} on average, {worst} at most");
 		// 2% fewer pixels, held by the window: prepared and kept on its own
 		let near = ask((760, 393));
 		assert_eq!(near.held, (760, 393));

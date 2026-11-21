@@ -63,11 +63,7 @@ pub fn word_at(s: &str, i: usize) -> (usize, usize) {
 	if s.is_empty() {
 		return (0, 0);
 	}
-	let i = if i >= s.len() {
-		prev_boundary(s, s.len())
-	} else {
-		i
-	};
+	let i = if i >= s.len() { prev_boundary(s, s.len()) } else { i };
 	let wordy = s[i..].chars().next().is_some_and(is_word_char);
 	let mut a = i;
 	while a > 0 {

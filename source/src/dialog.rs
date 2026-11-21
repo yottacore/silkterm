@@ -100,10 +100,7 @@ impl AboutSource {
 /// What closing a pane in tmux asks (app/closing.rs): its paragraphs, the
 /// "Don't ask me next time" box, and which part the keyboard is on.
 #[derive(Debug)]
-#[cfg_attr(
-	target_os = "windows",
-	allow(dead_code, reason = "Windows has no tmux to ask about")
-)]
+#[cfg_attr(target_os = "windows", allow(dead_code, reason = "Windows has no tmux to ask about"))]
 struct Ask {
 	paras: Vec<String>,
 	remember: bool,
@@ -119,12 +116,7 @@ enum AskPart {
 	Detach,
 }
 
-const ASK_WALK: [AskPart; 4] = [
-	AskPart::Remember,
-	AskPart::Cancel,
-	AskPart::End,
-	AskPart::Detach,
-];
+const ASK_WALK: [AskPart; 4] = [AskPart::Remember, AskPart::Cancel, AskPart::End, AskPart::Detach];
 
 impl Ask {
 	// Tab and Shift+Tab, round the end
@@ -145,14 +137,8 @@ impl Ask {
 				None
 			}
 			AskPart::Cancel => Some(DialogAction::Close),
-			AskPart::End => Some(DialogAction::Tmux {
-				end: true,
-				remember,
-			}),
-			AskPart::Detach => Some(DialogAction::Tmux {
-				end: false,
-				remember,
-			}),
+			AskPart::End => Some(DialogAction::Tmux { end: true, remember }),
+			AskPart::Detach => Some(DialogAction::Tmux { end: false, remember }),
 		}
 	}
 
@@ -218,9 +204,7 @@ pub struct DialogWin {
 
 impl std::fmt::Debug for DialogWin {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("DialogWin")
-			.field("window", &self.window.id())
-			.finish_non_exhaustive()
+		f.debug_struct("DialogWin").field("window", &self.window.id()).finish_non_exhaustive()
 	}
 }
 
@@ -282,25 +266,10 @@ impl DialogWin {
 		}
 	}
 
-	fn make(
-		el: &ActiveEventLoop,
-		title: String,
-		w: f32,
-		h: f32,
-		resizable: bool,
-		parent: Option<Parent>,
-		warm: Option<&crate::gfx::DialogGpu>,
-	) -> anyhow::Result<(ModalHint, Arc<Window>, Gfx, TextCtx, RectRenderer)> {
+	fn make(el: &ActiveEventLoop, title: String, w: f32, h: f32, resizable: bool, parent: Option<Parent>, warm: Option<&crate::gfx::DialogGpu>) -> anyhow::Result<(ModalHint, Arc<Window>, Gfx, TextCtx, RectRenderer)> {
 		let handle = parent.map(Parent::handle);
 		#[allow(unused_mut, reason = "reassigned on linux, windows, and macos below")]
-		let mut attrs = Window::default_attributes()
-			.with_title(title)
-			.with_window_icon(crate::app::load_icon())
-			.with_resizable(resizable)
-			.with_inner_size(winit::dpi::PhysicalSize::new(
-				w.ceil().max(1.0) as u32,
-				h.ceil().max(1.0) as u32,
-			));
+		let mut attrs = Window::default_attributes().with_title(title).with_window_icon(crate::app::load_icon()).with_resizable(resizable).with_inner_size(winit::dpi::PhysicalSize::new(w.ceil().max(1.0) as u32, h.ceil().max(1.0) as u32));
 		// Tie the dialog to the terminal window so the WM keeps it above its
 		// parent and groups them. Windows needs an owned popup rather than winit's
 		// parent_window, which makes a WS_CHILD window there: embedded in the
@@ -346,11 +315,7 @@ impl DialogWin {
 		let warmed = warm.and_then(|gpu| Gfx::with_dialog_gpu(window.clone(), gpu));
 		let mut gfx = match warmed {
 			Some(gfx) => gfx,
-			None => Gfx::with_backends(
-				window.clone(),
-				wgpu::Backends::PRIMARY,
-				crate::gfx::wanted(),
-			)?,
+			None => Gfx::with_backends(window.clone(), wgpu::Backends::PRIMARY, crate::gfx::wanted())?,
 		};
 		// adopt the size winit gave us
 		let size = window.inner_size();
@@ -361,119 +326,53 @@ impl DialogWin {
 		Ok((modal, window, gfx, text, rects))
 	}
 
-	pub fn new_about(
-		el: &ActiveEventLoop,
-		adapter: &wgpu::AdapterInfo,
-		parent: Option<Parent>,
-		warm: Option<&crate::gfx::DialogGpu>,
-	) -> anyhow::Result<Self> {
+	pub fn new_about(el: &ActiveEventLoop, adapter: &wgpu::AdapterInfo, parent: Option<Parent>, warm: Option<&crate::gfx::DialogGpu>) -> anyhow::Result<Self> {
 		// provisional window so we have a TextCtx to measure with
-		let (modal, window, mut gfx, mut text, rects) = Self::make(
-			el,
-			format!("About {}", config::APP_NAME),
-			560.0,
-			360.0,
-			false,
-			parent,
-			warm,
-		)?;
+		let (modal, window, mut gfx, mut text, rects) = Self::make(el, format!("About {}", config::APP_NAME), 560.0, 360.0, false, parent, warm)?;
 		let (lines, links, size) = layout_about(&mut text, adapter);
 		fit_window(&window, &mut gfx, size);
 		// mapped last, at the final size, with the transient hints already in place
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
-		let content = Content::About {
-			lines,
-			links,
-			source: AboutSource::About(Box::new(adapter.clone())),
-		};
-		Ok(Self::assemble(
-			(modal, window, gfx, text, rects),
-			content,
-			parent,
-			(f32::MAX, f32::MAX),
-		))
+		let content = Content::About { lines, links, source: AboutSource::About(Box::new(adapter.clone())) };
+		Ok(Self::assemble((modal, window, gfx, text, rects), content, parent, (f32::MAX, f32::MAX)))
 	}
 
 	/// A message and an OK button, standing in for the system's message box on a
 	/// platform that has none SilkTerm can count on.
 	#[cfg(not(target_os = "windows"))]
-	pub fn new_notice(
-		el: &ActiveEventLoop,
-		title: String,
-		paras: &[String],
-		parent: Option<Parent>,
-		warm: Option<&crate::gfx::DialogGpu>,
-	) -> anyhow::Result<Self> {
-		let (modal, window, mut gfx, mut text, rects) =
-			Self::make(el, title, 480.0, 200.0, false, parent, warm)?;
+	pub fn new_notice(el: &ActiveEventLoop, title: String, paras: &[String], parent: Option<Parent>, warm: Option<&crate::gfx::DialogGpu>) -> anyhow::Result<Self> {
+		let (modal, window, mut gfx, mut text, rects) = Self::make(el, title, 480.0, 200.0, false, parent, warm)?;
 		let (lines, links, size) = layout_notice(&mut text, paras);
 		fit_window(&window, &mut gfx, size);
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
-		let content = Content::About {
-			lines,
-			links,
-			source: AboutSource::Notice(paras.to_vec()),
-		};
-		Ok(Self::assemble(
-			(modal, window, gfx, text, rects),
-			content,
-			parent,
-			(f32::MAX, f32::MAX),
-		))
+		let content = Content::About { lines, links, source: AboutSource::Notice(paras.to_vec()) };
+		Ok(Self::assemble((modal, window, gfx, text, rects), content, parent, (f32::MAX, f32::MAX)))
 	}
 
 	/// The question closing a tab, pane, or window with a pane in tmux asks:
 	/// detach from the sessions, end them, or don't close.
 	#[cfg(not(target_os = "windows"))]
-	pub fn new_ask(
-		el: &ActiveEventLoop,
-		title: String,
-		paras: &[String],
-		parent: Option<Parent>,
-		warm: Option<&crate::gfx::DialogGpu>,
-	) -> anyhow::Result<Self> {
-		let (modal, window, mut gfx, mut text, rects) =
-			Self::make(el, title, 480.0, 200.0, false, parent, warm)?;
-		let ask = Ask {
-			paras: paras.to_vec(),
-			remember: false,
-			focus: AskPart::Detach,
-		};
+	pub fn new_ask(el: &ActiveEventLoop, title: String, paras: &[String], parent: Option<Parent>, warm: Option<&crate::gfx::DialogGpu>) -> anyhow::Result<Self> {
+		let (modal, window, mut gfx, mut text, rects) = Self::make(el, title, 480.0, 200.0, false, parent, warm)?;
+		let ask = Ask { paras: paras.to_vec(), remember: false, focus: AskPart::Detach };
 		let (lines, links, size) = layout_ask(&mut text, &ask);
 		fit_window(&window, &mut gfx, size);
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
-		let content = Content::About {
-			lines,
-			links,
-			source: AboutSource::Ask(ask),
-		};
-		Ok(Self::assemble(
-			(modal, window, gfx, text, rects),
-			content,
-			parent,
-			(f32::MAX, f32::MAX),
-		))
+		let content = Content::About { lines, links, source: AboutSource::Ask(ask) };
+		Ok(Self::assemble((modal, window, gfx, text, rects), content, parent, (f32::MAX, f32::MAX)))
 	}
 
 	/// `resume` is the view a recently closed Settings window was left on (see
 	/// `App::settings_view`); None opens at the top of the first tab. `sized` is a
 	/// size the user dragged it to earlier this session, which outlives the view
 	/// and is never written anywhere.
-	pub fn new_settings(
-		el: &ActiveEventLoop,
-		parent: Option<Parent>,
-		resume: Option<View>,
-		sized: Option<(f32, f32)>,
-		warm: Option<&crate::gfx::DialogGpu>,
-		base: config::Settings,
-	) -> anyhow::Result<Self> {
+	pub fn new_settings(el: &ActiveEventLoop, parent: Option<Parent>, resume: Option<View>, sized: Option<(f32, f32)>, warm: Option<&crate::gfx::DialogGpu>, base: config::Settings) -> anyhow::Result<Self> {
 		// provisional window first: sizing needs a TextCtx to measure labels in
 		// the real UI font (same pattern as About)
-		let (modal, window, mut gfx, mut text, rects) =
-			Self::make(el, "Settings".into(), 560.0, 800.0, true, parent, warm)?;
+		let (modal, window, mut gfx, mut text, rects) = Self::make(el, "Settings".into(), 560.0, 800.0, true, parent, warm)?;
 		let scale = config::display_scale(window.scale_factor());
 		let chrome = crate::settings_ui::chrome_widths(&mut text, scale);
 		// Cap the window to the part of the screen it can occupy, which is the
@@ -481,13 +380,7 @@ impl DialogWin {
 		// about 1010 DIP tall. A tab that doesn't fit scrolls instead of pushing the
 		// footer buttons off the bottom. SettingsDialog divides these by the scale
 		// factor on the way in, so every figure here is physical.
-		let (max_w, max_h) = Self::settings_caps(
-			&window,
-			parent.map(Parent::handle),
-			parent.and_then(|p| p.monitor),
-			false,
-			scale,
-		);
+		let (max_w, max_h) = Self::settings_caps(&window, parent.map(Parent::handle), parent.and_then(|p| p.monitor), false, scale);
 		// laid out at the origin
 		let mut dialog = SettingsDialog::new(0.0, 0.0, text.ui_line_h, chrome, max_w, max_h, scale);
 		dialog.start_from(base);
@@ -497,18 +390,12 @@ impl DialogWin {
 			dialog.restore(view);
 		}
 		let (min_w, min_h) = dialog.min_size();
-		window.set_min_inner_size(Some(winit::dpi::PhysicalSize::new(
-			min_w.ceil() as u32,
-			min_h.ceil() as u32,
-		)));
+		window.set_min_inner_size(Some(winit::dpi::PhysicalSize::new(min_w.ceil() as u32, min_h.ceil() as u32)));
 		// The size the user last dragged it to wins over the natural one, but it
 		// still has to fit the screen this window came up on. It was kept in DIP,
 		// so a reopen at another scale is the same apparent size.
 		let (w, h) = match sized {
-			Some((sw, sh)) => (
-				(sw * scale).clamp(min_w, max_w.max(min_w)),
-				(sh * scale).clamp(min_h, max_h.max(min_h)),
-			),
+			Some((sw, sh)) => ((sw * scale).clamp(min_w, max_w.max(min_w)), (sh * scale).clamp(min_h, max_h.max(min_h))),
 			None => dialog.size(),
 		};
 		dialog.set_size(w, h);
@@ -520,56 +407,19 @@ impl DialogWin {
 		// mapped last, at the final size, with the transient hints already in place
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
-		Ok(Self::assemble(
-			(modal, window, gfx, text, rects),
-			Content::Settings(dialog),
-			parent,
-			(max_w, max_h),
-		))
+		Ok(Self::assemble((modal, window, gfx, text, rects), Content::Settings(dialog), parent, (max_w, max_h)))
 	}
 
 	// The state every dialog starts with, given its window and its content.
-	fn assemble(
-		(modal, window, gfx, text, rects): (ModalHint, Arc<Window>, Gfx, TextCtx, RectRenderer),
-		content: Content,
-		parent: Option<Parent>,
-		caps: (f32, f32),
-	) -> Self {
-		Self {
-			_modal: modal,
-			window,
-			gfx,
-			text,
-			rects,
-			content,
-			mouse: (0.0, 0.0),
-			last_frame: std::time::Instant::now(),
-			anim_wake: None,
-			refused: Retry::default(),
-			tip: crate::tip::Dwell::default(),
-			tip_drawn: None,
-			focus: crate::tip::Focus::default(),
-			shaped: ShapedText::default(),
-			kept: Scene::default(),
-			parent: parent.map(Parent::handle),
-			parent_monitor: parent.and_then(|p| p.monitor),
-			snapped: false,
-			caps,
-			mods: ModifiersState::empty(),
-		}
+	fn assemble((modal, window, gfx, text, rects): (ModalHint, Arc<Window>, Gfx, TextCtx, RectRenderer), content: Content, parent: Option<Parent>, caps: (f32, f32)) -> Self {
+		Self { _modal: modal, window, gfx, text, rects, content, mouse: (0.0, 0.0), last_frame: std::time::Instant::now(), anim_wake: None, refused: Retry::default(), tip: crate::tip::Dwell::default(), tip_drawn: None, focus: crate::tip::Focus::default(), shaped: ShapedText::default(), kept: Scene::default(), parent: parent.map(Parent::handle), parent_monitor: parent.and_then(|p| p.monitor), snapped: false, caps, mods: ModifiersState::empty() }
 	}
 
 	/// (orig, edited) for the app to apply, if this is Settings, and the baseline
 	/// the file still has when an earlier Apply couldn't write it.
-	pub fn settings_values(
-		&self,
-	) -> Option<(config::Settings, config::Settings, Option<config::Settings>)> {
+	pub fn settings_values(&self) -> Option<(config::Settings, config::Settings, Option<config::Settings>)> {
 		match &self.content {
-			Content::Settings(dialog) => Some((
-				dialog.orig().clone(),
-				dialog.edited().clone(),
-				dialog.unsaved().cloned(),
-			)),
+			Content::Settings(dialog) => Some((dialog.orig().clone(), dialog.edited().clone(), dialog.unsaved().cloned())),
 			Content::About { .. } => None,
 		}
 	}
@@ -623,9 +473,7 @@ impl DialogWin {
 		match &self.content {
 			Content::Settings(_) => {
 				let size = self.window.inner_size();
-				let scale = crate::settings_ui::sane_scale(config::display_scale(
-					self.window.scale_factor(),
-				));
+				let scale = crate::settings_ui::sane_scale(config::display_scale(self.window.scale_factor()));
 				Some((size.width as f32 / scale, size.height as f32 / scale))
 			}
 			Content::About { .. } => None,
@@ -656,14 +504,7 @@ impl DialogWin {
 		if from != (x, y) {
 			self.focus = self.focus.moved();
 		}
-		pointer_moved(
-			&mut self.content,
-			&mut self.text,
-			&mut self.tip,
-			self.focus.tips(),
-			from,
-			(x, y),
-		)
+		pointer_moved(&mut self.content, &mut self.text, &mut self.tip, self.focus.tips(), from, (x, y))
 	}
 
 	/// The window gained or lost the focus. True when a tip it had up has to go.
@@ -676,10 +517,7 @@ impl DialogWin {
 		self.tip_drawn.is_some()
 	}
 
-	pub fn mouse_down(
-		&mut self,
-		clip: Option<&mut crate::clipboard::Clipboard>,
-	) -> Option<DialogAction> {
+	pub fn mouse_down(&mut self, clip: Option<&mut crate::clipboard::Clipboard>) -> Option<DialogAction> {
 		let (mx, my) = self.mouse;
 		match &mut self.content {
 			Content::About { links, source, .. } => {
@@ -687,11 +525,7 @@ impl DialogWin {
 				if let Some(part) = link.pick {
 					return source.ask_mut().and_then(|ask| ask.press(part));
 				}
-				Some(
-					link.url
-						.clone()
-						.map_or(DialogAction::Close, DialogAction::OpenUrl),
-				)
+				Some(link.url.clone().map_or(DialogAction::Close, DialogAction::OpenUrl))
 			}
 			Content::Settings(dialog) => {
 				let (w, h) = dialog.size();
@@ -746,11 +580,7 @@ impl DialogWin {
 
 	pub fn mouse_up(&mut self) -> Option<DialogAction> {
 		let (mx, my) = self.mouse;
-		if let Content::Settings(dialog) = &mut self.content {
-			map_action(dialog.mouse_up(mx, my))
-		} else {
-			None
-		}
+		if let Content::Settings(dialog) = &mut self.content { map_action(dialog.mouse_up(mx, my)) } else { None }
 	}
 
 	/// wheel scroll for an overflowing settings tab (positive dy = scroll up)
@@ -848,11 +678,7 @@ impl DialogWin {
 	/// while the shortcut key (Ctrl, Command on a Mac) is held it's an edit
 	/// shortcut (select-all/copy/cut/paste); otherwise it types into the focused
 	/// field.
-	pub fn key_char(
-		&mut self,
-		ch: char,
-		clip: Option<&mut crate::clipboard::Clipboard>,
-	) -> Option<DialogAction> {
+	pub fn key_char(&mut self, ch: char, clip: Option<&mut crate::clipboard::Clipboard>) -> Option<DialogAction> {
 		match &mut self.content {
 			Content::Settings(dialog) if dialog.alt() => map_action(dialog.alt_key(ch)),
 			Content::Settings(dialog) if dialog.ctrl() => {
@@ -887,11 +713,7 @@ impl DialogWin {
 	/// Home / End / Delete / Insert inside a focused settings field (Left/Right go
 	/// through `key_horizontal` so they can double as slider/radio adjust when not
 	/// editing). Shift+Delete = cut, Ctrl+Insert = copy, Shift+Insert = paste.
-	pub fn edit_nav(
-		&mut self,
-		key: winit::keyboard::NamedKey,
-		clip: Option<&mut crate::clipboard::Clipboard>,
-	) {
+	pub fn edit_nav(&mut self, key: winit::keyboard::NamedKey, clip: Option<&mut crate::clipboard::Clipboard>) {
 		use winit::keyboard::NamedKey as N;
 		let Content::Settings(dialog) = &mut self.content else {
 			return;
@@ -929,10 +751,7 @@ impl DialogWin {
 		}
 	}
 
-	pub fn key_enter(
-		&mut self,
-		clip: Option<&mut crate::clipboard::Clipboard>,
-	) -> Option<DialogAction> {
+	pub fn key_enter(&mut self, clip: Option<&mut crate::clipboard::Clipboard>) -> Option<DialogAction> {
 		match &mut self.content {
 			Content::Settings(dialog) => {
 				let action = dialog.key_enter();
@@ -953,9 +772,7 @@ impl DialogWin {
 	/// of a field edit's animation (view scroll, caret ease, blink), or a resting
 	/// pointer's tip coming due.
 	pub fn wake_at(&self) -> Option<std::time::Instant> {
-		let anim = self
-			.anim_wake
-			.map(|ms| self.last_frame + std::time::Duration::from_millis(ms));
+		let anim = self.anim_wake.map(|ms| self.last_frame + std::time::Duration::from_millis(ms));
 		match (anim, self.tip.wake()) {
 			(Some(step), Some(tip)) => Some(step.min(tip)),
 			(step, tip) => step.or(tip),
@@ -985,13 +802,7 @@ impl DialogWin {
 		if (scale - was).abs() < 1e-4 {
 			return;
 		}
-		self.text = TextCtx::new(
-			&self.gfx.device,
-			&self.gfx.queue,
-			self.gfx.format,
-			&self.gfx.loss,
-			scale,
-		);
+		self.text = TextCtx::new(&self.gfx.device, &self.gfx.queue, self.gfx.format, &self.gfx.loss, scale);
 		match &mut self.content {
 			Content::About { .. } => self.rescale_about(),
 			Content::Settings(_) => self.rescale_settings(was, scale),
@@ -1008,12 +819,7 @@ impl DialogWin {
 			return;
 		};
 		let (lines, links, size) = layout_source(&mut self.text, source);
-		if let Content::About {
-			lines: old_lines,
-			links: old_links,
-			..
-		} = &mut self.content
-		{
+		if let Content::About { lines: old_lines, links: old_links, .. } = &mut self.content {
 			*old_lines = lines;
 			*old_links = links;
 		}
@@ -1022,8 +828,7 @@ impl DialogWin {
 
 	fn rescale_settings(&mut self, was: f32, scale: f32) {
 		let chrome = crate::settings_ui::chrome_widths(&mut self.text, scale);
-		let (max_w, max_h) =
-			Self::settings_caps(&self.window, self.parent, self.parent_monitor, true, scale);
+		let (max_w, max_h) = Self::settings_caps(&self.window, self.parent, self.parent_monitor, true, scale);
 		let old_caps = std::mem::replace(&mut self.caps, (max_w, max_h));
 		let line_h = self.text.ui_line_h;
 		let Content::Settings(dialog) = &mut self.content else {
@@ -1038,11 +843,7 @@ impl DialogWin {
 		dialog.rescale(line_h, chrome, max_w, max_h, scale);
 		// the floor is physical, so it was wrong the moment the factor moved
 		let (min_w, min_h) = dialog.min_size();
-		self.window
-			.set_min_inner_size(Some(winit::dpi::PhysicalSize::new(
-				min_w.ceil() as u32,
-				min_h.ceil() as u32,
-			)));
+		self.window.set_min_inner_size(Some(winit::dpi::PhysicalSize::new(min_w.ceil() as u32, min_h.ceil() as u32)));
 		// Nothing guarantees a Resized. winit keeps the logical size, so an
 		// ordinary window gets one with the new physical size, but a maximized or
 		// tiled window keeps its physical size and sends nothing, and the layout
@@ -1051,13 +852,7 @@ impl DialogWin {
 		// the screen, since it fits fewer DIP at a higher scale.
 		let now = self.window.inner_size();
 		dialog.set_size(now.width as f32, now.height as f32);
-		let (want_w, want_h) = size_after_rescale(
-			(now.width, now.height),
-			crate::settings_ui::sane_scale(scale),
-			(!self.window.is_maximized()).then_some(followed),
-			dialog.natural_size(),
-			(max_w, max_h),
-		);
+		let (want_w, want_h) = size_after_rescale((now.width, now.height), crate::settings_ui::sane_scale(scale), (!self.window.is_maximized()).then_some(followed), dialog.natural_size(), (max_w, max_h));
 		let want = winit::dpi::PhysicalSize::new(want_w, want_h);
 		// the natural size is a different number of pixels now, so let the snap
 		// have another go at whatever size we end up with
@@ -1086,16 +881,8 @@ impl DialogWin {
 		let (nat_w, nat_h) = dialog.natural_size();
 		// Only toward a size that fits the screen. Snapping back to one that doesn't is
 		// how the footer buttons end up behind the taskbar again.
-		let want_w = if nat_w <= self.caps.0 {
-			snap_to(w, nat_w, snap)
-		} else {
-			w
-		};
-		let want_h = if nat_h <= self.caps.1 {
-			snap_to(h, nat_h, snap)
-		} else {
-			h
-		};
+		let want_w = if nat_w <= self.caps.0 { snap_to(w, nat_w, snap) } else { w };
+		let want_h = if nat_h <= self.caps.1 { snap_to(h, nat_h, snap) } else { h };
 		if (want_w - w).abs() < 0.5 && (want_h - h).abs() < 0.5 {
 			self.snapped = false;
 			return;
@@ -1121,17 +908,8 @@ impl DialogWin {
 	// so asking which monitor it is on gives wherever the origin is, which is the
 	// primary rather than the screen the terminal is on. `placed` is false for
 	// that first measurement; see `pick_monitor` for what it changes.
-	fn settings_caps(
-		window: &Window,
-		parent: Option<RawWindowHandle>,
-		parent_monitor: Option<(f32, f32)>,
-		placed: bool,
-		scale: f32,
-	) -> (f32, f32) {
-		let work = parent
-			.and_then(work_area_of)
-			.or_else(|| work_area(window))
-			.map(|(_, _, w, h)| (w as f32, h as f32));
+	fn settings_caps(window: &Window, parent: Option<RawWindowHandle>, parent_monitor: Option<(f32, f32)>, placed: bool, scale: f32) -> (f32, f32) {
+		let work = parent.and_then(work_area_of).or_else(|| work_area(window)).map(|(_, _, w, h)| (w as f32, h as f32));
 		// The terminal's monitor is kept in logical pixels and goes into this
 		// window's. On Wayland those are at scale 1 until the first scale change,
 		// so the window doesn't open taller than the screen.
@@ -1153,17 +931,9 @@ impl DialogWin {
 		let size = self.window.inner_size();
 		self.gfx.resize(size.width, size.height);
 		self.text.detach_gpu();
-		self.text.attach_gpu(
-			&self.gfx.device,
-			&self.gfx.queue,
-			self.gfx.format,
-			&self.gfx.loss,
-		);
+		self.text.attach_gpu(&self.gfx.device, &self.gfx.queue, self.gfx.format, &self.gfx.loss);
 		self.rects = RectRenderer::new(&self.gfx.device, self.gfx.format);
-		eprintln!(
-			"{}: a dialog lost its GPU device and has a new one",
-			config::APP_NAME
-		);
+		eprintln!("{}: a dialog lost its GPU device and has a new one", config::APP_NAME);
 		true
 	}
 
@@ -1181,17 +951,7 @@ impl DialogWin {
 			None
 		};
 		let (w, h) = (self.gfx.config.width, self.gfx.config.height);
-		let (scene, tip_drawn) = compose_into(
-			std::mem::take(&mut self.kept),
-			&self.content,
-			&mut self.text,
-			&mut self.shaped,
-			&mut self.tip,
-			self.focus.tips(),
-			self.mouse,
-			now,
-			(w, h),
-		);
+		let (scene, tip_drawn) = compose_into(std::mem::take(&mut self.kept), &self.content, &mut self.text, &mut self.shaped, &mut self.tip, self.focus.tips(), self.mouse, now, (w, h));
 		self.tip_drawn = tip_drawn;
 		if self.gfx.lost() && !self.regain_gpu() {
 			self.refused.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
@@ -1208,85 +968,40 @@ impl DialogWin {
 		self.text.update_viewport(&self.gfx.queue, w, h);
 		// The panel's own colors decide it here, not the terminal's.
 		let cfg = config::settings();
-		self.text.set_text_blend(
-			&self.gfx.queue,
-			crate::text::text_blend(cfg.dialog_fg, cfg.dialog_bg, cfg.text_dark_on_light),
-		);
+		self.text.set_text_blend(&self.gfx.queue, crate::text::text_blend(cfg.dialog_fg, cfg.dialog_bg, cfg.text_dark_on_light));
 
 		let areas = text_areas(&scene.texts, &self.shaped.bufs, (w, h));
 		if let Err(err) = self.text.prepare(&self.gfx.device, &self.gfx.queue, areas) {
 			// same atlas-full recovery as the main window: trim so the next
 			// frame re-prepares with room, instead of dropping the dialog text
-			eprintln!(
-				"{}: dialog text prepare failed; trimming atlas: {err:?}",
-				config::APP_NAME
-			);
+			eprintln!("{}: dialog text prepare failed; trimming atlas: {err:?}", config::APP_NAME);
 			self.text.trim_atlas();
 		}
 		// open-dropdown popup text prepared into the overlay renderer (second pass)
 		if scene.overlay_range.is_some() {
 			let ov_areas = text_areas(&scene.overlay_texts, &self.shaped.bufs, (w, h));
-			if let Err(err) = self
-				.text
-				.prepare_overlay(&self.gfx.device, &self.gfx.queue, ov_areas)
-			{
-				eprintln!(
-					"{}: dialog overlay prepare failed; trimming atlas: {err:?}",
-					config::APP_NAME
-				);
+			if let Err(err) = self.text.prepare_overlay(&self.gfx.device, &self.gfx.queue, ov_areas) {
+				eprintln!("{}: dialog overlay prepare failed; trimming atlas: {err:?}", config::APP_NAME);
 				self.text.trim_atlas();
 			}
 		}
 		if scene.tip_range.is_some() {
 			let tip_areas = text_areas(&scene.tip_texts, &self.shaped.bufs, (w, h));
-			if let Err(err) = self
-				.text
-				.prepare_tip(&self.gfx.device, &self.gfx.queue, tip_areas)
-			{
-				eprintln!(
-					"{}: dialog tip prepare failed; trimming atlas: {err:?}",
-					config::APP_NAME
-				);
+			if let Err(err) = self.text.prepare_tip(&self.gfx.device, &self.gfx.queue, tip_areas) {
+				eprintln!("{}: dialog tip prepare failed; trimming atlas: {err:?}", config::APP_NAME);
 				self.text.trim_atlas();
 			}
 		}
 		let rect_inst = &scene.rects;
 		if !rect_inst.is_empty() {
-			self.rects
-				.set_resolution(&self.gfx.queue, w as f32, h as f32);
-			self.rects
-				.upload(&self.gfx.device, &self.gfx.queue, rect_inst);
+			self.rects.set_resolution(&self.gfx.queue, w as f32, h as f32);
+			self.rects.upload(&self.gfx.device, &self.gfx.queue, rect_inst);
 		}
 
 		let bg = config::srgb_f32(scene.clear);
-		let mut encoder = self
-			.gfx
-			.device
-			.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-				label: Some("dialog"),
-			});
+		let mut encoder = self.gfx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("dialog") });
 		{
-			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-				label: Some("dialog pass"),
-				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-					view: &view,
-					resolve_target: None,
-					depth_slice: None,
-					ops: wgpu::Operations {
-						load: wgpu::LoadOp::Clear(wgpu::Color {
-							r: bg[0] as f64,
-							g: bg[1] as f64,
-							b: bg[2] as f64,
-							a: 1.0,
-						}),
-						store: wgpu::StoreOp::Store,
-					},
-				})],
-				depth_stencil_attachment: None,
-				timestamp_writes: None,
-				occlusion_query_set: None,
-				multiview_mask: None,
-			});
+			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor { label: Some("dialog pass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &view, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color { r: bg[0] as f64, g: bg[1] as f64, b: bg[2] as f64, a: 1.0 }), store: wgpu::StoreOp::Store } })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None });
 			if !rect_inst.is_empty() {
 				let (rect_split, rows_end) = (scene.rect_split, scene.rows_end);
 				self.rects.draw(&mut pass, 0..rect_split as u32);
@@ -1300,8 +1015,7 @@ impl DialogWin {
 					let sh = vp.h.max(0.0).min(h as f32 - y as f32) as u32;
 					if sw > 0 && sh > 0 {
 						pass.set_scissor_rect(x, y, sw, sh);
-						self.rects
-							.draw(&mut pass, rect_split as u32..rows_end as u32);
+						self.rects.draw(&mut pass, rect_split as u32..rows_end as u32);
 						pass.set_scissor_rect(0, 0, w, h);
 					}
 				}
@@ -1312,22 +1026,7 @@ impl DialogWin {
 		// then the tip over that. Each layer's text draws before the next layer's
 		// rects, which is what keeps one layer's text off the next one's box.
 		if scene.overlay_range.is_some() || scene.tip_range.is_some() {
-			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-				label: Some("dialog overlay pass"),
-				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-					view: &view,
-					resolve_target: None,
-					depth_slice: None,
-					ops: wgpu::Operations {
-						load: wgpu::LoadOp::Load,
-						store: wgpu::StoreOp::Store,
-					},
-				})],
-				depth_stencil_attachment: None,
-				timestamp_writes: None,
-				occlusion_query_set: None,
-				multiview_mask: None,
-			});
+			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor { label: Some("dialog overlay pass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &view, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None });
 			if let Some((start, end)) = scene.overlay_range {
 				self.rects.draw(&mut pass, start..end);
 				let _ = self.text.render_overlay(&mut pass);
@@ -1442,19 +1141,11 @@ impl ShapeAsk<'_> {
 	}
 
 	fn is(&self, key: &ShapeKey) -> bool {
-		self.text == key.text
-			&& *self.attrs == key.attrs
-			&& self.height == key.height
-			&& self.marks == key.marks.as_ref().map(|(s, c, z)| (s.as_slice(), *c, *z))
+		self.text == key.text && *self.attrs == key.attrs && self.height == key.height && self.marks == key.marks.as_ref().map(|(s, c, z)| (s.as_slice(), *c, *z))
 	}
 
 	fn owned(&self) -> ShapeKey {
-		ShapeKey {
-			text: self.text.to_string(),
-			attrs: self.attrs.clone(),
-			height: self.height,
-			marks: self.marks.map(|(s, c, z)| (s.to_vec(), c, z)),
-		}
+		ShapeKey { text: self.text.to_string(), attrs: self.attrs.clone(), height: self.height, marks: self.marks.map(|(s, c, z)| (s.to_vec(), c, z)) }
 	}
 }
 
@@ -1477,33 +1168,13 @@ impl ShapedText {
 	// This frame's buffer for `line` in `attrs`, shaped only when the last frame
 	// had none like it. A width change lays a kept one out again, which costs
 	// far less than shaping it.
-	fn buffer(
-		&mut self,
-		text: &mut TextCtx,
-		line: &str,
-		attrs: &Attrs<'static>,
-		width: f32,
-		height: f32,
-	) -> usize {
+	fn buffer(&mut self, text: &mut TextCtx, line: &str, attrs: &Attrs<'static>, width: f32, height: f32) -> usize {
 		self.marked(text, line, attrs, None, width, height)
 	}
 
 	// The same, with some of the line drawn bold, larger, and in another color.
-	fn marked(
-		&mut self,
-		text: &mut TextCtx,
-		line: &str,
-		attrs: &Attrs<'static>,
-		marks: Option<&Marks>,
-		width: f32,
-		height: f32,
-	) -> usize {
-		let ask = ShapeAsk {
-			text: line,
-			attrs,
-			height: height.to_bits(),
-			marks: marks.map(|m| (m.spans.as_slice(), m.color, m.scale.to_bits())),
-		};
+	fn marked(&mut self, text: &mut TextCtx, line: &str, attrs: &Attrs<'static>, marks: Option<&Marks>, width: f32, height: f32) -> usize {
+		let ask = ShapeAsk { text: line, attrs, height: height.to_bits(), marks: marks.map(|m| (m.spans.as_slice(), m.color, m.scale.to_bits())) };
 		let hash = ask.hash_of();
 		if let Some(&slot) = self.index.get(&hash)
 			&& ask.is(&self.keys[slot].1)
@@ -1530,13 +1201,7 @@ impl ShapedText {
 	}
 }
 
-fn shape(
-	text: &mut TextCtx,
-	line: &str,
-	attrs: &Attrs,
-	width: f32,
-	height: f32,
-) -> glyphon::Buffer {
+fn shape(text: &mut TextCtx, line: &str, attrs: &Attrs, width: f32, height: f32) -> glyphon::Buffer {
 	#[cfg(test)]
 	SHAPED.with(|n| n.set(n.get() + 1));
 	let mut buf = text.new_ui_buffer(width, height);
@@ -1547,14 +1212,7 @@ fn shape(
 
 // The marked spans take a bigger size on the same line height, so the line box
 // and where the text sits in its row stay as an unmarked line's.
-fn shape_marked(
-	text: &mut TextCtx,
-	line: &str,
-	attrs: &Attrs,
-	marks: &Marks,
-	width: f32,
-	height: f32,
-) -> glyphon::Buffer {
+fn shape_marked(text: &mut TextCtx, line: &str, attrs: &Attrs, marks: &Marks, width: f32, height: f32) -> glyphon::Buffer {
 	#[cfg(test)]
 	SHAPED.with(|n| n.set(n.get() + 1));
 	let mut buf = text.new_ui_buffer(width, height);
@@ -1562,10 +1220,7 @@ fn shape_marked(
 	let mut strong = attrs.clone();
 	strong.weight = crate::text::ui_bold_weight();
 	strong.color_opt = Some(GColor::rgb(marks.color[0], marks.color[1], marks.color[2]));
-	let strong = strong.metrics(glyphon::Metrics::new(
-		base.font_size * marks.scale,
-		base.line_height,
-	));
+	let strong = strong.metrics(glyphon::Metrics::new(base.font_size * marks.scale, base.line_height));
 	let mut spans: Vec<(&str, Attrs)> = Vec::new();
 	let mut at = 0;
 	for &(a, b) in &marks.spans {
@@ -1600,35 +1255,13 @@ thread_local! {
 	static SHAPED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-fn text_areas<'a>(
-	placed: &[Placed],
-	bufs: &'a [glyphon::Buffer],
-	(w, h): (u32, u32),
-) -> impl Iterator<Item = TextArea<'a>> {
+fn text_areas<'a>(placed: &[Placed], bufs: &'a [glyphon::Buffer], (w, h): (u32, u32)) -> impl Iterator<Item = TextArea<'a>> {
 	placed.iter().map(move |p| {
 		let bounds = match p.clip {
-			Some(rect) => TextBounds {
-				left: rect.x as i32,
-				top: rect.y as i32,
-				right: (rect.x + rect.w) as i32,
-				bottom: (rect.y + rect.h) as i32,
-			},
-			None => TextBounds {
-				left: 0,
-				top: 0,
-				right: w as i32,
-				bottom: h as i32,
-			},
+			Some(rect) => TextBounds { left: rect.x as i32, top: rect.y as i32, right: (rect.x + rect.w) as i32, bottom: (rect.y + rect.h) as i32 },
+			None => TextBounds { left: 0, top: 0, right: w as i32, bottom: h as i32 },
 		};
-		TextArea {
-			buffer: &bufs[p.buf],
-			left: p.x,
-			top: p.y,
-			scale: p.scale,
-			bounds,
-			default_color: GColor::rgb(p.color[0], p.color[1], p.color[2]),
-			custom_glyphs: &[],
-		}
+		TextArea { buffer: &bufs[p.buf], left: p.x, top: p.y, scale: p.scale, bounds, default_color: GColor::rgb(p.color[0], p.color[1], p.color[2]), custom_glyphs: &[] }
 	})
 }
 
@@ -1644,17 +1277,8 @@ enum Tip<'a> {
 // isn't due yet only need the rect.
 fn tip_under(content: &Content, (mx, my): (f32, f32)) -> Option<(Tip<'_>, Rect)> {
 	match content {
-		Content::About { links, .. } => links
-			.iter()
-			.find(|link| link.tooltip.is_some() && link.rect.contains(mx, my))
-			.and_then(|link| {
-				link.tooltip
-					.as_deref()
-					.map(|tip| (Tip::Said(tip), link.rect))
-			}),
-		Content::Settings(dialog) => dialog
-			.hover_at(mx, my)
-			.map(|(at, anchor)| (Tip::Settings(at), anchor)),
+		Content::About { links, .. } => links.iter().find(|link| link.tooltip.is_some() && link.rect.contains(mx, my)).and_then(|link| link.tooltip.as_deref().map(|tip| (Tip::Said(tip), link.rect))),
+		Content::Settings(dialog) => dialog.hover_at(mx, my).map(|(at, anchor)| (Tip::Settings(at), anchor)),
 	}
 }
 
@@ -1671,21 +1295,10 @@ fn tip_words<'a>(content: &'a Content, tip: Tip<'a>) -> Cow<'a, str> {
 // nothing from the pointer itself, only from what a move changes (a drag, the
 // item lit in a dropdown or menu) and the tip. About lights a button under it.
 // `tips` is false while the window may not raise one (`tip::Focus`).
-fn pointer_moved(
-	content: &mut Content,
-	text: &mut TextCtx,
-	tip: &mut crate::tip::Dwell<Rect>,
-	tips: bool,
-	from: (f32, f32),
-	to: (f32, f32),
-) -> bool {
+fn pointer_moved(content: &mut Content, text: &mut TextCtx, tip: &mut crate::tip::Dwell<Rect>, tips: bool, from: (f32, f32), to: (f32, f32)) -> bool {
 	let changed = match content {
 		Content::About { links, .. } => {
-			let lit = |(x, y): (f32, f32)| {
-				links
-					.iter()
-					.position(|link| link.button && link.rect.contains(x, y))
-			};
+			let lit = |(x, y): (f32, f32)| links.iter().position(|link| link.button && link.rect.contains(x, y));
 			lit(from) != lit(to)
 		}
 		Content::Settings(dialog) => {
@@ -1693,11 +1306,7 @@ fn pointer_moved(
 			dialog.mouse_move(to.0, to.1, &mut |s| text.measure_ui_text(s, &attrs))
 		}
 	};
-	let over = if tips {
-		tip_under(content, to).map(|(_, anchor)| anchor)
-	} else {
-		None
-	};
+	let over = if tips { tip_under(content, to).map(|(_, anchor)| anchor) } else { None };
 	let tip_moved = tip.point_at(over);
 	changed || tip_moved
 }
@@ -1708,110 +1317,42 @@ fn pointer_moved(
 // would read as a different kind of tip. The wake the wait asks for is read
 // through `wake_at`, since a move can start it between frames.
 #[cfg(test)]
-fn compose(
-	content: &Content,
-	text: &mut TextCtx,
-	shaped: &mut ShapedText,
-	dwell: &mut crate::tip::Dwell<Rect>,
-	tips: bool,
-	mouse: (f32, f32),
-	now: std::time::Instant,
-	size: (u32, u32),
-) -> (Scene, Option<Rect>) {
-	compose_into(
-		Scene::default(),
-		content,
-		text,
-		shaped,
-		dwell,
-		tips,
-		mouse,
-		now,
-		size,
-	)
+fn compose(content: &Content, text: &mut TextCtx, shaped: &mut ShapedText, dwell: &mut crate::tip::Dwell<Rect>, tips: bool, mouse: (f32, f32), now: std::time::Instant, size: (u32, u32)) -> (Scene, Option<Rect>) {
+	compose_into(Scene::default(), content, text, shaped, dwell, tips, mouse, now, size)
 }
 
 // `compose`, filling `kept`'s lists, which come in empty.
-fn compose_into(
-	kept: Scene,
-	content: &Content,
-	text: &mut TextCtx,
-	shaped: &mut ShapedText,
-	dwell: &mut crate::tip::Dwell<Rect>,
-	tips: bool,
-	mouse: (f32, f32),
-	now: std::time::Instant,
-	size: (u32, u32),
-) -> (Scene, Option<Rect>) {
-	let found = if tips {
-		tip_under(content, mouse)
-	} else {
-		None
-	};
+fn compose_into(kept: Scene, content: &Content, text: &mut TextCtx, shaped: &mut ShapedText, dwell: &mut crate::tip::Dwell<Rect>, tips: bool, mouse: (f32, f32), now: std::time::Instant, size: (u32, u32)) -> (Scene, Option<Rect>) {
+	let found = if tips { tip_under(content, mouse) } else { None };
 	let (drawn, _) = tip_gate(dwell, found.map(|(_, anchor)| anchor), now);
-	let tip = found
-		.filter(|(_, anchor)| drawn == Some(*anchor))
-		.map(|(tip, anchor)| (tip_words(content, tip), anchor));
+	let tip = found.filter(|(_, anchor)| drawn == Some(*anchor)).map(|(tip, anchor)| (tip_words(content, tip), anchor));
 	let tip = tip.as_ref().map(|(tip, anchor)| (tip.as_ref(), *anchor));
-	(
-		scene_into(kept, content, text, shaped, mouse, tip, size),
-		drawn,
-	)
+	(scene_into(kept, content, text, shaped, mouse, tip, size), drawn)
 }
 
 // Whether a dialog is due a frame with no input. A tip that ripened since the
 // last frame counts even once its wake has passed, since `Dwell::wake` returns
 // nothing once the time is up.
-fn frame_due(
-	wake: Option<std::time::Instant>,
-	dwell: &crate::tip::Dwell<Rect>,
-	drawn: Option<Rect>,
-	now: std::time::Instant,
-) -> bool {
+fn frame_due(wake: Option<std::time::Instant>, dwell: &crate::tip::Dwell<Rect>, drawn: Option<Rect>, now: std::time::Instant) -> bool {
 	wake.is_some_and(|at| at <= now) || dwell.ripe() != drawn
 }
 
 // Everything one frame draws, with `tip` the flyover to draw, if one is up.
 #[cfg(test)]
-fn scene(
-	content: &Content,
-	text: &mut TextCtx,
-	shaped: &mut ShapedText,
-	mouse: (f32, f32),
-	tip: Option<(&str, Rect)>,
-	size: (u32, u32),
-) -> Scene {
+fn scene(content: &Content, text: &mut TextCtx, shaped: &mut ShapedText, mouse: (f32, f32), tip: Option<(&str, Rect)>, size: (u32, u32)) -> Scene {
 	scene_into(Scene::default(), content, text, shaped, mouse, tip, size)
 }
 
 // `scene`, filling `kept`'s lists, which come in empty.
-fn scene_into(
-	kept: Scene,
-	content: &Content,
-	text: &mut TextCtx,
-	shaped: &mut ShapedText,
-	(mx, my): (f32, f32),
-	tip: Option<(&str, Rect)>,
-	(w, h): (u32, u32),
-) -> Scene {
+fn scene_into(kept: Scene, content: &Content, text: &mut TextCtx, shaped: &mut ShapedText, (mx, my): (f32, f32), tip: Option<(&str, Rect)>, (w, h): (u32, u32)) -> Scene {
 	shaped.start_frame(text);
-	let Scene {
-		mut rects,
-		mut texts,
-		mut overlay_texts,
-		mut tip_texts,
-		..
-	} = kept;
+	let Scene { mut rects, mut texts, mut overlay_texts, mut tip_texts, .. } = kept;
 	let mut overlay_range: Option<(u32, u32)> = None;
 	let mut tip_range: Option<(u32, u32)> = None;
 	let line_h = text.ui_line_h;
 	let border_col = crate::settings_ui::dialog_border();
 	match content {
-		Content::About {
-			lines,
-			links,
-			source,
-		} => {
+		Content::About { lines, links, source } => {
 			let ask = source.ask();
 			// a notice's OK is the default button, outlined the way Settings
 			// outlines its own, and so is the question's Detach
@@ -1822,25 +1363,11 @@ fn scene_into(
 			// filled boxes behind button-style links (the Support button),
 			// brightened while hovered
 			for link in links.iter().filter(|link| link.button) {
-				let fill = if link.rect.contains(mx, my) {
-					crate::settings_ui::dialog_btn_hl()
-				} else {
-					crate::settings_ui::dialog_btn()
-				};
-				let btn_border = if default_button(link) {
-					crate::settings_ui::dialog_btn_hl()
-				} else {
-					border_col
-				};
+				let fill = if link.rect.contains(mx, my) { crate::settings_ui::dialog_btn_hl() } else { crate::settings_ui::dialog_btn() };
+				let btn_border = if default_button(link) { crate::settings_ui::dialog_btn_hl() } else { border_col };
 				let r = link.rect;
 				let b = text.dip(ABOUT_BORDER);
-				rects.push(quad(
-					r.x - b,
-					r.y - b,
-					r.w + 2.0 * b,
-					r.h + 2.0 * b,
-					btn_border,
-				));
+				rects.push(quad(r.x - b, r.y - b, r.w + 2.0 * b, r.h + 2.0 * b, btn_border));
 				rects.push(quad(r.x, r.y, r.w, r.h, fill));
 			}
 			if let Some(ask) = ask {
@@ -1853,14 +1380,7 @@ fn scene_into(
 					attrs.weight = crate::text::ui_bold_weight();
 				}
 				let buf = shaped.buffer(text, &line.text, &attrs, w as f32, line_h);
-				texts.push(Placed {
-					x: line.x,
-					y: line.band.map_or(line.y, |b| text.ui_cap_top(b.y, b.h)),
-					scale: line.scale,
-					color: line.color,
-					clip: None,
-					buf,
-				});
+				texts.push(Placed { x: line.x, y: line.band.map_or(line.y, |b| text.ui_cap_top(b.y, b.h)), scale: line.scale, color: line.color, clip: None, buf });
 			}
 			let rect_split = rects.len();
 			// flyover: show the destination URL of the hovered link in a small
@@ -1869,8 +1389,7 @@ fn scene_into(
 			if let Some((tip, anchor)) = tip {
 				let attrs = ui_attrs();
 				let tip_w = text.measure_ui_text(tip, &attrs);
-				let at =
-					crate::tip::lay_out(anchor, 1, tip_w, line_h, (w as f32, h as f32), text.scale);
+				let at = crate::tip::lay_out(anchor, 1, tip_w, line_h, (w as f32, h as f32), text.scale);
 				let (b, f) = (at.border, at.fill);
 				let start = rects.len() as u32;
 				rects.push(quad(b.x, b.y, b.w, b.h, border_col));
@@ -1880,27 +1399,9 @@ fn scene_into(
 				let mut a = ui_attrs();
 				a.color_opt = Some(GColor::rgb(dim[0], dim[1], dim[2]));
 				let buf = shaped.buffer(text, tip, &a, w as f32, line_h);
-				tip_texts.push(Placed {
-					x: at.text_x,
-					y: at.text_y,
-					scale: 1.0,
-					color: dim,
-					clip: None,
-					buf,
-				});
+				tip_texts.push(Placed { x: at.text_x, y: at.text_y, scale: 1.0, color: dim, clip: None, buf });
 			}
-			Scene {
-				clear: crate::settings_ui::dialog_bg(),
-				rects,
-				rect_split,
-				rows_end: 0,
-				scissor_vp: None,
-				overlay_range,
-				tip_range,
-				texts,
-				overlay_texts,
-				tip_texts,
-			}
+			Scene { clear: crate::settings_ui::dialog_bg(), rects, rect_split, rows_end: 0, scissor_vp: None, overlay_range, tip_range, texts, overlay_texts, tip_texts }
 		}
 		Content::Settings(dialog) => {
 			let attrs = ui_attrs();
@@ -1922,27 +1423,13 @@ fn scene_into(
 					attrs.style = glyphon::Style::Italic;
 				}
 				let tall = item.scale.max(1.0);
-				let buf = shaped.marked(
-					text,
-					&item.text,
-					&attrs,
-					item.marks.as_ref(),
-					w as f32,
-					line_h * tall,
-				);
+				let buf = shaped.marked(text, &item.text, &attrs, item.marks.as_ref(), w as f32, line_h * tall);
 				// the offset is the glyphs', so it scales with them either way
 				let y = match item.band {
 					Some(band) => text.ui_cap_top(band.y, band.h),
 					None => item.y + ink_dy * item.scale,
 				};
-				Placed {
-					x: item.x,
-					y,
-					scale: item.scale,
-					color: item.color,
-					clip: item.clip,
-					buf,
-				}
+				Placed { x: item.x, y, scale: item.scale, color: item.color, clip: item.clip, buf }
 			};
 			texts.extend(items.iter().map(|item| place(text, item)));
 			let rows_end = rects.len();
@@ -1967,16 +1454,8 @@ fn scene_into(
 				// out for the frame, since shaping each line takes `shaped` whole
 				let mut wrapped = std::mem::take(&mut shaped.tip);
 				let generation = text.generation;
-				let (lines, tip_w) =
-					wrapped.lay(tip, avail, generation, |s| text.measure_ui_text(s, &attrs));
-				let at = crate::tip::lay_out(
-					anchor,
-					lines.len(),
-					tip_w,
-					line_h,
-					(w as f32, h as f32),
-					scale,
-				);
+				let (lines, tip_w) = wrapped.lay(tip, avail, generation, |s| text.measure_ui_text(s, &attrs));
+				let at = crate::tip::lay_out(anchor, lines.len(), tip_w, line_h, (w as f32, h as f32), scale);
 				let (b, f) = (at.border, at.fill);
 				let start = rects.len() as u32;
 				rects.push(quad(b.x, b.y, b.w, b.h, border_col));
@@ -1987,39 +1466,18 @@ fn scene_into(
 				a.color_opt = Some(GColor::rgb(dim[0], dim[1], dim[2]));
 				for (n, line) in lines.iter().enumerate() {
 					let buf = shaped.buffer(text, line, &a, w as f32, line_h);
-					tip_texts.push(Placed {
-						x: at.text_x,
-						y: at.text_y + line_h * n as f32,
-						scale: 1.0,
-						color: dim,
-						clip: None,
-						buf,
-					});
+					tip_texts.push(Placed { x: at.text_x, y: at.text_y + line_h * n as f32, scale: 1.0, color: dim, clip: None, buf });
 				}
 				shaped.tip = wrapped;
 			}
-			Scene {
-				clear: crate::settings_ui::dialog_bg(),
-				rects,
-				rect_split,
-				rows_end,
-				scissor_vp: Some(dialog.viewport_px()),
-				overlay_range,
-				tip_range,
-				texts,
-				overlay_texts,
-				tip_texts,
-			}
+			Scene { clear: crate::settings_ui::dialog_bg(), rects, rect_split, rows_end, scissor_vp: Some(dialog.viewport_px()), overlay_range, tip_range, texts, overlay_texts, tip_texts }
 		}
 	}
 }
 
 // The question's check box, and the ring round whatever the keyboard is on. A
 // ring hugs a button's own outline and stands a little off the box and label.
-#[cfg_attr(
-	target_os = "windows",
-	allow(dead_code, reason = "Windows has no tmux to ask about")
-)]
+#[cfg_attr(target_os = "windows", allow(dead_code, reason = "Windows has no tmux to ask about"))]
 fn ask_quads(ask: &Ask, links: &[AboutLink], text: &TextCtx, rects: &mut Vec<RectInstance>) {
 	let b = text.dip(ABOUT_BORDER);
 	for link in links {
@@ -2028,46 +1486,21 @@ fn ask_quads(ask: &Ask, links: &[AboutLink], text: &TextCtx, rects: &mut Vec<Rec
 			let size = ask_box(r.h);
 			let (x, y) = (r.x, r.y + (r.h - size) / 2.0);
 			rects.push(quad(x, y, size, size, crate::settings_ui::dialog_border()));
-			rects.push(quad(
-				x + b,
-				y + b,
-				size - 2.0 * b,
-				size - 2.0 * b,
-				crate::settings_ui::dialog_field(),
-			));
+			rects.push(quad(x + b, y + b, size - 2.0 * b, size - 2.0 * b, crate::settings_ui::dialog_field()));
 			if ask.remember {
 				let inset = (size * 0.22).round();
-				rects.push(quad(
-					x + inset,
-					y + inset,
-					size - 2.0 * inset,
-					size - 2.0 * inset,
-					crate::settings_ui::dialog_handle(),
-				));
+				rects.push(quad(x + inset, y + inset, size - 2.0 * inset, size - 2.0 * inset, crate::settings_ui::dialog_handle()));
 			}
 		}
 		if link.pick == Some(ask.focus) {
 			let off = if link.button { b } else { text.dip(4.0) };
-			ring(
-				rects,
-				Rect {
-					x: r.x - off,
-					y: r.y - off,
-					w: r.w + 2.0 * off,
-					h: r.h + 2.0 * off,
-				},
-				text.dip(2.0),
-				crate::settings_ui::dialog_focus(),
-			);
+			ring(rects, Rect { x: r.x - off, y: r.y - off, w: r.w + 2.0 * off, h: r.h + 2.0 * off }, text.dip(2.0), crate::settings_ui::dialog_focus());
 		}
 	}
 }
 
 // The 4 quads round `r`, `t` thick, drawn inside it.
-#[cfg_attr(
-	target_os = "windows",
-	allow(dead_code, reason = "only the tmux question draws one")
-)]
+#[cfg_attr(target_os = "windows", allow(dead_code, reason = "only the tmux question draws one"))]
 fn ring(rects: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
 	rects.push(quad(r.x, r.y, r.w, t, color));
 	rects.push(quad(r.x, r.y + r.h - t, r.w, t, color));
@@ -2085,9 +1518,7 @@ fn ring(rects: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
 fn set_transient_for(window: &Window, parent: Option<&RawWindowHandle>) {
 	use winit::raw_window_handle::HasWindowHandle;
 	use x11rb::connection::Connection;
-	use x11rb::protocol::xproto::{
-		AtomEnum, ClientMessageEvent, ConnectionExt as _, EventMask, PropMode,
-	};
+	use x11rb::protocol::xproto::{AtomEnum, ClientMessageEvent, ConnectionExt as _, EventMask, PropMode};
 	use x11rb::wrapper::ConnectionExt as _;
 
 	let Ok(handle) = window.window_handle() else {
@@ -2103,17 +1534,8 @@ fn set_transient_for(window: &Window, parent: Option<&RawWindowHandle>) {
 	};
 	let root = conn.setup().roots[screen].root;
 
-	let atom = |name: &[u8]| -> Option<u32> {
-		Some(conn.intern_atom(false, name).ok()?.reply().ok()?.atom)
-	};
-	let (Some(wt), Some(wt_dialog), Some(state), Some(modal), Some(skip), Some(skip_pager)) = (
-		atom(b"_NET_WM_WINDOW_TYPE"),
-		atom(b"_NET_WM_WINDOW_TYPE_DIALOG"),
-		atom(b"_NET_WM_STATE"),
-		atom(b"_NET_WM_STATE_MODAL"),
-		atom(b"_NET_WM_STATE_SKIP_TASKBAR"),
-		atom(b"_NET_WM_STATE_SKIP_PAGER"),
-	) else {
+	let atom = |name: &[u8]| -> Option<u32> { Some(conn.intern_atom(false, name).ok()?.reply().ok()?.atom) };
+	let (Some(wt), Some(wt_dialog), Some(state), Some(modal), Some(skip), Some(skip_pager)) = (atom(b"_NET_WM_WINDOW_TYPE"), atom(b"_NET_WM_WINDOW_TYPE_DIALOG"), atom(b"_NET_WM_STATE"), atom(b"_NET_WM_STATE_MODAL"), atom(b"_NET_WM_STATE_SKIP_TASKBAR"), atom(b"_NET_WM_STATE_SKIP_PAGER")) else {
 		return;
 	};
 
@@ -2122,34 +1544,17 @@ fn set_transient_for(window: &Window, parent: Option<&RawWindowHandle>) {
 		RawWindowHandle::Xcb(h) => Some(h.window.get()),
 		_ => None,
 	}) {
-		let _ = conn.change_property32(
-			PropMode::REPLACE,
-			xid,
-			AtomEnum::WM_TRANSIENT_FOR,
-			AtomEnum::WINDOW,
-			&[parent_xid],
-		);
+		let _ = conn.change_property32(PropMode::REPLACE, xid, AtomEnum::WM_TRANSIENT_FOR, AtomEnum::WINDOW, &[parent_xid]);
 	}
 	let _ = conn.change_property32(PropMode::REPLACE, xid, wt, AtomEnum::ATOM, &[wt_dialog]);
-	let _ = conn.change_property32(
-		PropMode::REPLACE,
-		xid,
-		state,
-		AtomEnum::ATOM,
-		&[modal, skip, skip_pager],
-	);
+	let _ = conn.change_property32(PropMode::REPLACE, xid, state, AtomEnum::ATOM, &[modal, skip, skip_pager]);
 
 	// also request the states via the EWMH client message (action ADD=1, source
 	// = application=1), for a WM that has already taken the window and only
 	// honors a state change that way rather than a bare property write.
 	let add_state = |st: u32| {
 		let ev = ClientMessageEvent::new(32, xid, state, [1, st, 0, 1, 0]);
-		let _ = conn.send_event(
-			false,
-			root,
-			EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
-			ev,
-		);
+		let _ = conn.send_event(false, root, EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY, ev);
 	};
 	add_state(modal);
 	add_state(skip);
@@ -2176,8 +1581,7 @@ fn set_toplevel_parent(window: &Window, parent: Option<Parent>) -> ModalHint {
 	use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 	use winit::platform::wayland::WindowExtWayland;
 
-	let (Some(ours), Some(theirs)) = (window.xdg_toplevel(), parent.and_then(|p| p.toplevel))
-	else {
+	let (Some(ours), Some(theirs)) = (window.xdg_toplevel(), parent.and_then(|p| p.toplevel)) else {
 		return ModalHint::default();
 	};
 	let Some(guest) = wl_guest::on(window) else {
@@ -2187,8 +1591,7 @@ fn set_toplevel_parent(window: &Window, parent: Option<Parent>) -> ModalHint {
 		// SAFETY: both are winit's toplevels, live while their windows are, and
 		// the interface is checked by name.
 		let id = unsafe { ObjectId::from_ptr(XdgToplevel::interface(), ptr.as_ptr().cast()) };
-		id.ok()
-			.and_then(|id| XdgToplevel::from_id(&guest.conn, id).ok())
+		id.ok().and_then(|id| XdgToplevel::from_id(&guest.conn, id).ok())
 	};
 	let (Some(ours), Some(theirs)) = (toplevel(ours), toplevel(theirs)) else {
 		return ModalHint::default();
@@ -2202,10 +1605,7 @@ fn set_toplevel_parent(window: &Window, parent: Option<Parent>) -> ModalHint {
 /// A dialog's xdg-dialog object, which asks the compositor for modal. Let go
 /// before the window, while winit's connection is sure to be live.
 #[derive(Debug, Default)]
-struct ModalHint(
-	#[cfg(target_os = "linux")]
-	Option<wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1>,
-);
+struct ModalHint(#[cfg(target_os = "linux")] Option<wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1>);
 
 #[cfg(target_os = "linux")]
 impl Drop for ModalHint {
@@ -2257,39 +1657,15 @@ mod wl_guest {
 	pub struct Deaf;
 
 	impl Dispatch<WlRegistry, GlobalListContents> for Deaf {
-		fn event(
-			_: &mut Self,
-			_: &WlRegistry,
-			_: <WlRegistry as wayland_client::Proxy>::Event,
-			_: &GlobalListContents,
-			_: &Connection,
-			_: &QueueHandle<Self>,
-		) {
-		}
+		fn event(_: &mut Self, _: &WlRegistry, _: <WlRegistry as wayland_client::Proxy>::Event, _: &GlobalListContents, _: &Connection, _: &QueueHandle<Self>) {}
 	}
 
 	impl Dispatch<XdgWmDialogV1, ()> for Deaf {
-		fn event(
-			_: &mut Self,
-			_: &XdgWmDialogV1,
-			_: <XdgWmDialogV1 as wayland_client::Proxy>::Event,
-			(): &(),
-			_: &Connection,
-			_: &QueueHandle<Self>,
-		) {
-		}
+		fn event(_: &mut Self, _: &XdgWmDialogV1, _: <XdgWmDialogV1 as wayland_client::Proxy>::Event, (): &(), _: &Connection, _: &QueueHandle<Self>) {}
 	}
 
 	impl Dispatch<XdgDialogV1, ()> for Deaf {
-		fn event(
-			_: &mut Self,
-			_: &XdgDialogV1,
-			_: <XdgDialogV1 as wayland_client::Proxy>::Event,
-			(): &(),
-			_: &Connection,
-			_: &QueueHandle<Self>,
-		) {
-		}
+		fn event(_: &mut Self, _: &XdgDialogV1, _: <XdgDialogV1 as wayland_client::Proxy>::Event, (): &(), _: &Connection, _: &QueueHandle<Self>) {}
 	}
 
 	pub fn on(window: &Window) -> Option<&'static Guest> {
@@ -2301,23 +1677,13 @@ mod wl_guest {
 		};
 		// SAFETY: winit's display, live while its windows are. Every dialog
 		// window is winit's, on that one display.
-		let conn = Connection::from_backend(unsafe {
-			Backend::from_foreign_display(display.display.as_ptr().cast())
-		});
+		let conn = Connection::from_backend(unsafe { Backend::from_foreign_display(display.display.as_ptr().cast()) });
 		Some(GUEST.get_or_init(|| {
-			let dialogs = registry_queue_init::<Deaf>(&conn)
-				.ok()
-				.and_then(|(globals, queue)| {
-					let handle = queue.handle();
-					let wm = globals
-						.bind::<XdgWmDialogV1, _, _>(&handle, 1..=1, ())
-						.ok()?;
-					Some(Dialogs {
-						wm,
-						handle,
-						queue: Mutex::new(queue),
-					})
-				});
+			let dialogs = registry_queue_init::<Deaf>(&conn).ok().and_then(|(globals, queue)| {
+				let handle = queue.handle();
+				let wm = globals.bind::<XdgWmDialogV1, _, _>(&handle, 1..=1, ()).ok()?;
+				Some(Dialogs { wm, handle, queue: Mutex::new(queue) })
+			});
 			Guest { conn, dialogs }
 		}))
 	}
@@ -2370,9 +1736,7 @@ fn restack_parent_below(dialog: &Window, parent: Option<&RawWindowHandle>, dbg: 
 		return;
 	};
 	let root = conn.setup().roots[screen].root;
-	let atom = |name: &[u8]| -> Option<u32> {
-		Some(conn.intern_atom(false, name).ok()?.reply().ok()?.atom)
-	};
+	let atom = |name: &[u8]| -> Option<u32> { Some(conn.intern_atom(false, name).ok()?.reply().ok()?.atom) };
 	let Some(restack) = atom(b"_NET_RESTACK_WINDOW") else {
 		return;
 	};
@@ -2386,16 +1750,7 @@ fn restack_parent_below(dialog: &Window, parent: Option<&RawWindowHandle>, dbg: 
 	if dbg {
 		// read back where the WM put things (parent should end up right
 		// below dialog). Prints "term below dialog" or the offending gap.
-		let order = atom(b"_NET_CLIENT_LIST_STACKING")
-			.and_then(|prop| {
-				conn.get_property(false, root, prop, AtomEnum::WINDOW, 0, 1024)
-					.ok()?
-					.reply()
-					.ok()
-			})
-			.map_or_else(Vec::new, |reply| {
-				reply.value32().map(Iterator::collect).unwrap_or_default()
-			});
+		let order = atom(b"_NET_CLIENT_LIST_STACKING").and_then(|prop| conn.get_property(false, root, prop, AtomEnum::WINDOW, 0, 1024).ok()?.reply().ok()).map_or_else(Vec::new, |reply| reply.value32().map(Iterator::collect).unwrap_or_default());
 		let pos = |w: u32| order.iter().position(|&x| x == w);
 		let (tp, dp) = (pos(parent_xid), pos(dlg_xid));
 		let ok = matches!((tp, dp), (Some(t), Some(d)) if t + 1 == d);
@@ -2411,19 +1766,13 @@ fn restack_parent_below(_d: &Window, _p: Option<&RawWindowHandle>, _dbg: bool, _
 // Wayland tells a window neither that it is minimized nor that it is covered.
 fn on_wayland(el: &ActiveEventLoop) -> bool {
 	use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
-	el.owned_display_handle()
-		.display_handle()
-		.is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)))
+	el.owned_display_handle().display_handle().is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)))
 }
 
 // Field context-menu command against the active edit; the clipboard glue is
 // here (settings_ui stays clipboard-free). The Ctrl+letter shortcuts, Command on
 // a Mac, come here too.
-fn edit_cmd(
-	dialog: &mut SettingsDialog,
-	cmd: EditCmd,
-	clip: Option<&mut crate::clipboard::Clipboard>,
-) {
+fn edit_cmd(dialog: &mut SettingsDialog, cmd: EditCmd, clip: Option<&mut crate::clipboard::Clipboard>) {
 	match cmd {
 		EditCmd::Cut => {
 			if let (Some(clip), Some(text)) = (clip, dialog.selected_text()) {
@@ -2489,11 +1838,7 @@ fn fit_window(window: &Window, gfx: &mut Gfx, size: (f32, f32)) {
 // the taskbar.
 fn size_within_caps(now: (u32, u32), caps: (f32, f32)) -> (u32, u32) {
 	let cap = |px: u32, cap: f32| {
-		if cap.is_finite() && cap >= 1.0 {
-			(px as f32).min(cap).round() as u32
-		} else {
-			px
-		}
+		if cap.is_finite() && cap >= 1.0 { (px as f32).min(cap).round() as u32 } else { px }
 	};
 	(cap(now.0, caps.0), cap(now.1, caps.1))
 }
@@ -2504,47 +1849,23 @@ fn size_within_caps(now: (u32, u32), caps: (f32, f32)) -> (u32, u32) {
 // at scale 1 and learns its real scale after, so this is the first open there.
 // A size the user dragged to is kept, within the new caps. `followed` is in
 // DIP and None for a maximized window; the other sizes are physical.
-fn size_after_rescale(
-	now: (u32, u32),
-	scale: f32,
-	followed: Option<(f32, f32)>,
-	natural: (f32, f32),
-	caps: (f32, f32),
-) -> (u32, u32) {
+fn size_after_rescale(now: (u32, u32), scale: f32, followed: Option<(f32, f32)>, natural: (f32, f32), caps: (f32, f32)) -> (u32, u32) {
 	let kept = size_within_caps(now, caps);
 	let Some(followed) = followed else {
 		return kept;
 	};
 	// a part pixel rounds up, as the snap does, unless the cap is what limits it
 	let fit = |nat: f32, cap: f32| {
-		if nat <= cap || !cap.is_finite() || cap < 1.0 {
-			nat.ceil() as u32
-		} else {
-			cap.round() as u32
-		}
+		if nat <= cap || !cap.is_finite() || cap < 1.0 { nat.ceil() as u32 } else { cap.round() as u32 }
 	};
 	// one DIP either way, for the rounding at both scales
 	let on = |px: u32, dip: f32| (px as f32 / scale - dip).abs() <= 1.0;
-	(
-		if on(now.0, followed.0) {
-			fit(natural.0, caps.0)
-		} else {
-			kept.0
-		},
-		if on(now.1, followed.1) {
-			fit(natural.1, caps.1)
-		} else {
-			kept.1
-		},
-	)
+	(if on(now.0, followed.0) { fit(natural.0, caps.0) } else { kept.0 }, if on(now.1, followed.1) { fit(natural.1, caps.1) } else { kept.1 })
 }
 
 // Build the About content laid out at the window origin; returns
 // (lines, clickable links, (width, height)) in physical px.
-fn layout_about(
-	text: &mut TextCtx,
-	info: &wgpu::AdapterInfo,
-) -> (Vec<Line>, Vec<AboutLink>, (f32, f32)) {
+fn layout_about(text: &mut TextCtx, info: &wgpu::AdapterInfo) -> (Vec<Line>, Vec<AboutLink>, (f32, f32)) {
 	let menu_fg = crate::settings_ui::dialog_text();
 	let menu_dim = crate::settings_ui::dialog_dim();
 	let menu_link = config::MENU_LINK;
@@ -2605,65 +1926,21 @@ fn layout_about(
 	let mut lines = Vec::with_capacity(content.len() + 1);
 	let mut links = Vec::with_capacity(2);
 	let mut y = pad;
-	for (i, (line_text, color, indent, gap_before, bold, scale)) in content.into_iter().enumerate()
-	{
+	for (i, (line_text, color, indent, gap_before, bold, scale)) in content.into_iter().enumerate() {
 		y += gap_before;
 		let x = pad + indent;
 		if color == menu_link {
-			links.push(AboutLink {
-				rect: Rect {
-					x,
-					y,
-					w: widths[i],
-					h: line_h,
-				},
-				url: Some(repo_url.clone()),
-				tooltip: None,
-				button: false,
-				pick: None,
-			});
+			links.push(AboutLink { rect: Rect { x, y, w: widths[i], h: line_h }, url: Some(repo_url.clone()), tooltip: None, button: false, pick: None });
 		}
-		lines.push(Line {
-			text: line_text,
-			x,
-			y,
-			color,
-			bold,
-			scale,
-			band: None,
-		});
+		lines.push(Line { text: line_text, x, y, color, bold, scale, band: None });
 		y += line_h * scale;
 	}
 
 	// Support button below the text, centered in the content column
 	y += gap * 1.5;
 	let btn_x = pad + (content_w - btn_w) * 0.5;
-	links.push(AboutLink {
-		rect: Rect {
-			x: btn_x,
-			y,
-			w: btn_w,
-			h: btn_h,
-		},
-		url: Some(config::DONATE_URL.to_string()),
-		tooltip: Some(config::DONATE_URL.to_string()),
-		button: true,
-		pick: None,
-	});
-	lines.push(Line {
-		text: btn_label.into(),
-		x: btn_x + (btn_w - label_w) * 0.5,
-		y: y + btn_pad_y,
-		color: menu_fg,
-		bold: true,
-		scale: 1.0,
-		band: Some(Rect {
-			x: btn_x,
-			y,
-			w: btn_w,
-			h: btn_h,
-		}),
-	});
+	links.push(AboutLink { rect: Rect { x: btn_x, y, w: btn_w, h: btn_h }, url: Some(config::DONATE_URL.to_string()), tooltip: Some(config::DONATE_URL.to_string()), button: true, pick: None });
+	lines.push(Line { text: btn_label.into(), x: btn_x + (btn_w - label_w) * 0.5, y: y + btn_pad_y, color: menu_fg, bold: true, scale: 1.0, band: Some(Rect { x: btn_x, y, w: btn_w, h: btn_h }) });
 	y += btn_h;
 
 	// leave room below the button for the URL flyover to appear on hover
@@ -2671,10 +1948,7 @@ fn layout_about(
 	(lines, links, (box_w, box_h))
 }
 
-fn layout_source(
-	text: &mut TextCtx,
-	source: &AboutSource,
-) -> (Vec<Line>, Vec<AboutLink>, (f32, f32)) {
+fn layout_source(text: &mut TextCtx, source: &AboutSource) -> (Vec<Line>, Vec<AboutLink>, (f32, f32)) {
 	match source {
 		AboutSource::About(info) => layout_about(text, info),
 		#[cfg(not(target_os = "windows"))]
@@ -2693,11 +1967,7 @@ fn line_names(lines: &[usize], lost: usize) -> String {
 		many => {
 			let shown: Vec<String> = many.iter().take(5).map(ToString::to_string).collect();
 			match many.len() - shown.len() {
-				0 => format!(
-					"Lines {} and {}",
-					shown[..shown.len() - 1].join(", "),
-					shown[shown.len() - 1]
-				),
+				0 => format!("Lines {} and {}", shown[..shown.len() - 1].join(", "), shown[shown.len() - 1]),
 				more => format!("Lines {} and {more} more", shown.join(", ")),
 			}
 		}
@@ -2710,15 +1980,7 @@ pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 	let which = line_names(&refusal.lines, refusal.lost);
 	let many = refusal.lines.len() > 1 || (refusal.lines.is_empty() && refusal.lost > 1);
 	let it = if many { "them" } else { "it" };
-	(
-		"Settings not saved".to_string(),
-		vec![
-			format!("{} can't save its settings file.", config::APP_NAME),
-			refusal.path.display().to_string(),
-			format!("{which} can't be read, and saving now would delete {it}."),
-			"Until that's fixed, changes such as the window size, new shells, and anything set in Settings are used but not saved.".to_string(),
-		],
-	)
+	("Settings not saved".to_string(), vec![format!("{} can't save its settings file.", config::APP_NAME), refusal.path.display().to_string(), format!("{which} can't be read, and saving now would delete {it}."), "Until that's fixed, changes such as the window size, new shells, and anything set in Settings are used but not saved.".to_string()])
 }
 
 /// What a launch says when converting the settings file left settings behind:
@@ -2726,73 +1988,40 @@ pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 pub fn conversion_notice(loss: &config::ConversionLoss) -> (String, Vec<String>) {
 	let (done, lost) = match (loss.how, loss.lost) {
 		(config::Converted::Dropped(rewrite), _) => return dropped_notice(loss, rewrite),
-		(config::Converted::InPlace, 1) => (
-			"converted its settings file to a new format.",
-			"One setting couldn't be converted and now does nothing.".to_string(),
-		),
-		(config::Converted::InPlace, n) => (
-			"converted its settings file to a new format.",
-			format!("{n} settings couldn't be converted and now do nothing."),
-		),
-		(config::Converted::Rewritten, 1) => (
-			"couldn't convert its settings file to the new format, so it wrote a new one.",
-			"One setting couldn't be copied to the new file.".to_string(),
-		),
-		(config::Converted::Rewritten, n) => (
-			"couldn't convert its settings file to the new format, so it wrote a new one.",
-			format!("{n} settings couldn't be copied to the new file."),
-		),
+		(config::Converted::InPlace, 1) => ("converted its settings file to a new format.", "One setting couldn't be converted and now does nothing.".to_string()),
+		(config::Converted::InPlace, n) => ("converted its settings file to a new format.", format!("{n} settings couldn't be converted and now do nothing.")),
+		(config::Converted::Rewritten, 1) => ("couldn't convert its settings file to the new format, so it wrote a new one.", "One setting couldn't be copied to the new file.".to_string()),
+		(config::Converted::Rewritten, n) => ("couldn't convert its settings file to the new format, so it wrote a new one.", format!("{n} settings couldn't be copied to the new file.")),
 	};
-	let mut paras = vec![
-		format!("{} {done}", config::APP_NAME),
-		loss.path.display().to_string(),
-		lost,
-	];
+	let mut paras = vec![format!("{} {done}", config::APP_NAME), loss.path.display().to_string(), lost];
 	paras.extend(backup_para(loss));
 	("Settings not converted".to_string(), paras)
 }
 
 fn backup_para(loss: &config::ConversionLoss) -> Option<String> {
 	let name = loss.backup.as_ref().and_then(|b| b.file_name())?;
-	Some(format!(
-		"The old file was saved in the same folder, as {}.",
-		name.to_string_lossy()
-	))
+	Some(format!("The old file was saved in the same folder, as {}.", name.to_string_lossy()))
 }
 
 // A current settings file with lines that aren't UTF-8 was written again
 // without them. Some editors show such a line as if nothing were wrong, so the
 // notice names each one, and the copy that still has them.
-fn dropped_notice(
-	loss: &config::ConversionLoss,
-	rewrite: config::Rewrite,
-) -> (String, Vec<String>) {
+fn dropped_notice(loss: &config::ConversionLoss, rewrite: config::Rewrite) -> (String, Vec<String>) {
 	let done = match rewrite {
 		config::Rewrite::Kept => "wrote the file again without it",
-		config::Rewrite::Template => {
-			"wrote a new one from the defaults, with every setting it could still read"
-		}
+		config::Rewrite::Template => "wrote a new one from the defaults, with every setting it could still read",
 	};
 	let which = line_names(&loss.lines, loss.lines.len());
 	let were = if loss.lines.len() == 1 { "was" } else { "were" };
 	let carried = match (rewrite, loss.lost) {
 		(config::Rewrite::Kept, _) | (config::Rewrite::Template, 0) => String::new(),
-		(config::Rewrite::Template, 1) => {
-			" One setting couldn't be copied to the new file.".to_string()
-		}
+		(config::Rewrite::Template, 1) => " One setting couldn't be copied to the new file.".to_string(),
 		(config::Rewrite::Template, n) => {
 			format!(" {n} settings couldn't be copied to the new file.")
 		}
 	};
 	let gone = format!("{which} {were} left out.{carried}");
-	let mut paras = vec![
-		format!(
-			"{} found text that isn't UTF-8 in its settings file, and {done}.",
-			config::APP_NAME
-		),
-		loss.path.display().to_string(),
-		gone,
-	];
+	let mut paras = vec![format!("{} found text that isn't UTF-8 in its settings file, and {done}.", config::APP_NAME), loss.path.display().to_string(), gone];
 	paras.extend(backup_para(loss));
 	("Settings file rewritten".to_string(), paras)
 }
@@ -2813,11 +2042,7 @@ const ASK_BTN_GAP: f32 = 10.0; // between the question's buttons
 // and the gap above it. The paragraph at `path` is a path, which sits right
 // under the sentence before it, breaks after a separator, and shows dimmed.
 #[cfg(not(target_os = "windows"))]
-fn wrap_paras(
-	text: &mut TextCtx,
-	paras: &[String],
-	path: Option<usize>,
-) -> Vec<(String, [u8; 3], f32)> {
+fn wrap_paras(text: &mut TextCtx, paras: &[String], path: Option<usize>) -> Vec<(String, [u8; 3], f32)> {
 	let fg = crate::settings_ui::dialog_text();
 	let dim = crate::settings_ui::dialog_dim();
 	let attrs = ui_attrs();
@@ -2832,25 +2057,13 @@ fn wrap_paras(
 			_ => para_gap,
 		};
 		let color = if is_path { dim } else { fg };
-		let (words, joiner): (Vec<&str>, &str) = if is_path {
-			(para.split_inclusive(['/', '\\']).collect(), "")
-		} else {
-			(para.split(' ').collect(), " ")
-		};
+		let (words, joiner): (Vec<&str>, &str) = if is_path { (para.split_inclusive(['/', '\\']).collect(), "") } else { (para.split(' ').collect(), " ") };
 		let mut row = String::new();
 		let mut first = true;
 		for word in words {
-			let tried = if row.is_empty() {
-				word.to_string()
-			} else {
-				format!("{row}{joiner}{word}")
-			};
+			let tried = if row.is_empty() { word.to_string() } else { format!("{row}{joiner}{word}") };
 			if !row.is_empty() && text.measure_ui_text(&tried, &attrs) > wrap {
-				rows.push((
-					std::mem::take(&mut row),
-					color,
-					if first { gap } else { 0.0 },
-				));
+				rows.push((std::mem::take(&mut row), color, if first { gap } else { 0.0 }));
 				first = false;
 				row = word.to_string();
 			} else {
@@ -2880,18 +2093,14 @@ fn layout_ask(text: &mut TextCtx, ask: &Ask) -> (Vec<Line>, Vec<AboutLink>, (f32
 	let (btn_pad_x, btn_pad_y) = (text.dip(ABOUT_BTN_PAD_X), text.dip(ABOUT_BTN_PAD_Y));
 	let btn_h = (line_h + btn_pad_y * 2.0).max(crate::text::ui_band_floor(line_h));
 	let btn_gap = text.dip(ASK_BTN_GAP);
-	let buttons: Vec<(&str, AskPart, f32, f32)> = [
-		("Cancel", AskPart::Cancel),
-		("End", AskPart::End),
-		("Detach", AskPart::Detach),
-	]
-	.into_iter()
-	.map(|(label, part)| {
-		let label_w = text.measure_ui_text(label, &attrs);
-		let w = (label_w + btn_pad_x * 2.0).max(text.dip(NOTICE_BTN_MIN_W));
-		(label, part, label_w, w)
-	})
-	.collect();
+	let buttons: Vec<(&str, AskPart, f32, f32)> = [("Cancel", AskPart::Cancel), ("End", AskPart::End), ("Detach", AskPart::Detach)]
+		.into_iter()
+		.map(|(label, part)| {
+			let label_w = text.measure_ui_text(label, &attrs);
+			let w = (label_w + btn_pad_x * 2.0).max(text.dip(NOTICE_BTN_MIN_W));
+			(label, part, label_w, w)
+		})
+		.collect();
 	let run_w = buttons.iter().map(|b| b.3).sum::<f32>() + btn_gap * 2.0;
 
 	let mut content_w = run_w.max(remember_w);
@@ -2903,60 +2112,19 @@ fn layout_ask(text: &mut TextCtx, ask: &Ask) -> (Vec<Line>, Vec<AboutLink>, (f32
 	let mut y = pad;
 	for (row, color, gap) in rows {
 		y += gap;
-		lines.push(Line {
-			text: row,
-			x: pad,
-			y,
-			color,
-			bold: false,
-			scale: 1.0,
-			band: None,
-		});
+		lines.push(Line { text: row, x: pad, y, color, bold: false, scale: 1.0, band: None });
 		y += line_h;
 	}
 	y += text.dip(NOTICE_PARA_GAP) * 1.5;
 	// the box and its label are one target, the way a toggle's are in Settings
-	links.push(AboutLink {
-		rect: Rect {
-			x: pad,
-			y,
-			w: remember_w,
-			h: line_h,
-		},
-		url: None,
-		tooltip: None,
-		button: false,
-		pick: Some(AskPart::Remember),
-	});
-	lines.push(Line {
-		text: remember_label.into(),
-		x: pad + box_sz + box_gap,
-		y,
-		color: fg,
-		bold: false,
-		scale: 1.0,
-		band: None,
-	});
+	links.push(AboutLink { rect: Rect { x: pad, y, w: remember_w, h: line_h }, url: None, tooltip: None, button: false, pick: Some(AskPart::Remember) });
+	lines.push(Line { text: remember_label.into(), x: pad + box_sz + box_gap, y, color: fg, bold: false, scale: 1.0, band: None });
 	y += line_h;
 	y += text.dip(config::MENU_SEP_H) * 2.0;
 	let mut x = pad + content_w - run_w;
 	for (label, part, label_w, w) in buttons {
-		links.push(AboutLink {
-			rect: Rect { x, y, w, h: btn_h },
-			url: None,
-			tooltip: None,
-			button: true,
-			pick: Some(part),
-		});
-		lines.push(Line {
-			text: label.into(),
-			x: x + (w - label_w) * 0.5,
-			y: y + btn_pad_y,
-			color: fg,
-			bold: false,
-			scale: 1.0,
-			band: Some(Rect { x, y, w, h: btn_h }),
-		});
+		links.push(AboutLink { rect: Rect { x, y, w, h: btn_h }, url: None, tooltip: None, button: true, pick: Some(part) });
+		lines.push(Line { text: label.into(), x: x + (w - label_w) * 0.5, y: y + btn_pad_y, color: fg, bold: false, scale: 1.0, band: Some(Rect { x, y, w, h: btn_h }) });
 		x += w + btn_gap;
 	}
 	y += btn_h;
@@ -2964,10 +2132,7 @@ fn layout_ask(text: &mut TextCtx, ask: &Ask) -> (Vec<Line>, Vec<AboutLink>, (f32
 }
 
 // Side of the question's check box, for a UI line `line_h` tall.
-#[cfg_attr(
-	target_os = "windows",
-	allow(dead_code, reason = "Windows has no tmux to ask about")
-)]
+#[cfg_attr(target_os = "windows", allow(dead_code, reason = "Windows has no tmux to ask about"))]
 fn ask_box(line_h: f32) -> f32 {
 	(line_h * 0.8).round()
 }
@@ -2996,46 +2161,14 @@ fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutL
 	let mut y = pad;
 	for (row, color, gap) in rows {
 		y += gap;
-		lines.push(Line {
-			text: row,
-			x: pad,
-			y,
-			color,
-			bold: false,
-			scale: 1.0,
-			band: None,
-		});
+		lines.push(Line { text: row, x: pad, y, color, bold: false, scale: 1.0, band: None });
 		y += line_h;
 	}
 	// clear of the text above it, the way the Settings footer is
 	y += text.dip(config::MENU_SEP_H) * 2.0;
 	let btn_x = pad + content_w - btn_w;
-	let links = vec![AboutLink {
-		rect: Rect {
-			x: btn_x,
-			y,
-			w: btn_w,
-			h: btn_h,
-		},
-		url: None,
-		tooltip: None,
-		button: true,
-		pick: None,
-	}];
-	lines.push(Line {
-		text: label.into(),
-		x: btn_x + (btn_w - label_w) * 0.5,
-		y: y + btn_pad_y,
-		color: fg,
-		bold: false,
-		scale: 1.0,
-		band: Some(Rect {
-			x: btn_x,
-			y,
-			w: btn_w,
-			h: btn_h,
-		}),
-	});
+	let links = vec![AboutLink { rect: Rect { x: btn_x, y, w: btn_w, h: btn_h }, url: None, tooltip: None, button: true, pick: None }];
+	lines.push(Line { text: label.into(), x: btn_x + (btn_w - label_w) * 0.5, y: y + btn_pad_y, color: fg, bold: false, scale: 1.0, band: Some(Rect { x: btn_x, y, w: btn_w, h: btn_h }) });
 	y += btn_h;
 	(lines, links, (content_w + pad * 2.0, y + pad))
 }
@@ -3047,9 +2180,7 @@ fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutL
 /// window that wants the answer often isn't the one to ask (see `settings_caps`).
 #[cfg(target_os = "windows")]
 pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
-	use windows_sys::Win32::Graphics::Gdi::{
-		GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
-	};
+	use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow};
 
 	let RawWindowHandle::Win32(h) = handle else {
 		return None;
@@ -3089,29 +2220,15 @@ pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	let root = conn.setup().roots.get(screen)?.root;
 	let read = |name: &[u8], len: u32| -> Option<Vec<u32>> {
 		let atom = conn.intern_atom(true, name).ok()?.reply().ok()?.atom;
-		let reply = conn
-			.get_property(false, root, atom, AtomEnum::CARDINAL, 0, len)
-			.ok()?
-			.reply()
-			.ok()?;
+		let reply = conn.get_property(false, root, atom, AtomEnum::CARDINAL, 0, len).ok()?.reply().ok()?;
 		Some(reply.value32()?.collect())
 	};
 	// A window manager that publishes the work area but not the current desktop
 	// still has a usable first entry; don't throw the answer away over it.
-	let desktop = read(b"_NET_CURRENT_DESKTOP", 1)
-		.and_then(|v| v.first().copied())
-		.unwrap_or(0) as usize;
+	let desktop = read(b"_NET_CURRENT_DESKTOP", 1).and_then(|v| v.first().copied()).unwrap_or(0) as usize;
 	let areas = read(b"_NET_WORKAREA", 256)?;
-	let quad = areas
-		.chunks_exact(4)
-		.nth(desktop)
-		.or_else(|| areas.chunks_exact(4).next())?;
-	Some((
-		quad[0] as i32,
-		quad[1] as i32,
-		quad[2] as i32,
-		quad[3] as i32,
-	))
+	let quad = areas.chunks_exact(4).nth(desktop).or_else(|| areas.chunks_exact(4).next())?;
+	Some((quad[0] as i32, quad[1] as i32, quad[2] as i32, quad[3] as i32))
 }
 
 /// macOS: the screen's visible frame, which leaves out the menu bar and the
@@ -3134,12 +2251,7 @@ pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	// menu bar, which is the same display winit measures from.
 	let primary = NSScreen::screens(mtm).firstObject()?;
 	let area = screen.visibleFrame();
-	Some(flip_cocoa_rect(
-		(area.origin.x, area.origin.y),
-		(area.size.width, area.size.height),
-		primary.frame().size.height,
-		screen.backingScaleFactor(),
-	))
+	Some(flip_cocoa_rect((area.origin.x, area.origin.y), (area.size.width, area.size.height), primary.frame().size.height, screen.backingScaleFactor()))
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
@@ -3149,50 +2261,23 @@ pub fn work_area_of(_handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 
 // Cocoa measures the screen in points from the bottom-left of the primary
 // display, y up. winit measures in physical pixels from its top-left, y down.
-#[cfg_attr(
-	not(target_os = "macos"),
-	allow(dead_code, reason = "Cocoa only, tested everywhere")
-)]
-fn flip_cocoa_rect(
-	origin: (f64, f64),
-	size: (f64, f64),
-	primary_h: f64,
-	scale: f64,
-) -> (i32, i32, i32, i32) {
+#[cfg_attr(not(target_os = "macos"), allow(dead_code, reason = "Cocoa only, tested everywhere"))]
+fn flip_cocoa_rect(origin: (f64, f64), size: (f64, f64), primary_h: f64, scale: f64) -> (i32, i32, i32, i32) {
 	let top = primary_h - (origin.1 + size.1);
-	(
-		(origin.0 * scale).round() as i32,
-		(top * scale).round() as i32,
-		(size.0 * scale).round() as i32,
-		(size.1 * scale).round() as i32,
-	)
+	((origin.0 * scale).round() as i32, (top * scale).round() as i32, (size.0 * scale).round() as i32, (size.1 * scale).round() as i32)
 }
 
 /// Where a dialog goes: centered over the terminal, then pulled back onto the
 /// work area, or a tall dialog centered on a tall terminal puts its own buttons
 /// under the taskbar or the Dock. With no work area to go by it only keeps off
 /// the negative side of the origin.
-#[cfg_attr(
-	not(any(target_os = "windows", target_os = "macos")),
-	allow(
-		dead_code,
-		reason = "Linux window managers place transients themselves"
-	)
-)]
-pub fn dialog_origin(
-	parent_pos: (i32, i32),
-	parent_size: (u32, u32),
-	dialog: (u32, u32),
-	work: Option<(i32, i32, i32, i32)>,
-) -> (i32, i32) {
+#[cfg_attr(not(any(target_os = "windows", target_os = "macos")), allow(dead_code, reason = "Linux window managers place transients themselves"))]
+pub fn dialog_origin(parent_pos: (i32, i32), parent_size: (u32, u32), dialog: (u32, u32), work: Option<(i32, i32, i32, i32)>) -> (i32, i32) {
 	let (dlg_w, dlg_h) = (dialog.0 as i32, dialog.1 as i32);
 	let x = parent_pos.0 + (parent_size.0 as i32 - dlg_w) / 2;
 	let y = parent_pos.1 + (parent_size.1 as i32 - dlg_h) / 2;
 	match work {
-		Some((ax, ay, aw, ah)) => (
-			x.clamp(ax, (ax + aw - dlg_w).max(ax)),
-			y.clamp(ay, (ay + ah - dlg_h).max(ay)),
-		),
+		Some((ax, ay, aw, ah)) => (x.clamp(ax, (ax + aw - dlg_w).max(ax)), y.clamp(ay, (ay + ah - dlg_h).max(ay))),
 		None => (x.max(0), y.max(0)),
 	}
 }
@@ -3223,15 +2308,8 @@ fn monitor_size(window: &Window) -> Option<(u32, u32)> {
 }
 
 fn logical_size(physical: (u32, u32), factor: f64) -> (f32, f32) {
-	let factor = if factor > 0.0 && factor.is_finite() {
-		factor
-	} else {
-		1.0
-	};
-	(
-		(f64::from(physical.0) / factor) as f32,
-		(f64::from(physical.1) / factor) as f32,
-	)
+	let factor = if factor > 0.0 && factor.is_finite() { factor } else { 1.0 };
+	((f64::from(physical.0) / factor) as f32, (f64::from(physical.1) / factor) as f32)
 }
 
 // Which monitor a dialog's caps go by. Before it is placed, its own answer is
@@ -3239,16 +2317,8 @@ fn logical_size(physical: (u32, u32), factor: f64) -> (f32, f32) {
 // opens over comes first. Once placed it may have been dragged to another
 // monitor, so its own answer wins and the terminal's is the fallback. On
 // Wayland it may still have none at the first scale change.
-fn pick_monitor(
-	own: Option<(f32, f32)>,
-	parent: Option<(f32, f32)>,
-	placed: bool,
-) -> Option<(f32, f32)> {
-	if placed {
-		own.or(parent)
-	} else {
-		parent.or(own)
-	}
+fn pick_monitor(own: Option<(f32, f32)>, parent: Option<(f32, f32)>, placed: bool) -> Option<(f32, f32)> {
+	if placed { own.or(parent) } else { parent.or(own) }
 }
 
 // The size caps, given what the screen leaves and what the frame costs. Split
@@ -3256,26 +2326,15 @@ fn pick_monitor(
 fn caps_from(screen: (f32, f32), decor: (f32, f32), scale: f32) -> (f32, f32) {
 	// The frame can only be measured once there is one, and X11 adds it at map
 	// time, after the first measurement. Hence the DIP allowance to fall back on.
-	let decor_h = if decor.1 > 0.0 {
-		decor.1
-	} else {
-		DLG_DECOR_HEADROOM * scale
-	};
-	(
-		(screen.0 - decor.0).max(1.0),
-		(screen.1 - decor_h).min(DLG_MAX_H * scale).max(1.0),
-	)
+	let decor_h = if decor.1 > 0.0 { decor.1 } else { DLG_DECOR_HEADROOM * scale };
+	((screen.0 - decor.0).max(1.0), (screen.1 - decor_h).min(DLG_MAX_H * scale).max(1.0))
 }
 
 // Magnetic snap: a size within `snap` of the one the content wants settles
 // exactly on it, and anything further away is left alone. A part pixel rounds
 // up, since a window a fraction short of the content scrolls sideways by it.
 fn snap_to(have: f32, want: f32, snap: f32) -> f32 {
-	if (have - want).abs() <= snap {
-		want.ceil()
-	} else {
-		have
-	}
+	if (have - want).abs() <= snap { want.ceil() } else { have }
 }
 
 // What the window manager's own frame adds around the client area. Zero before
@@ -3283,24 +2342,15 @@ fn snap_to(have: f32, want: f32, snap: f32) -> f32 {
 // beside every caller is for.
 fn decor_extra(window: &Window) -> (f32, f32) {
 	let (outer, inner) = (window.outer_size(), window.inner_size());
-	(
-		(outer.width as f32 - inner.width as f32).max(0.0),
-		(outer.height as f32 - inner.height as f32).max(0.0),
-	)
+	((outer.width as f32 - inner.width as f32).max(0.0), (outer.height as f32 - inner.height as f32).max(0.0))
 }
 
 // What a dialog draws a tip for this frame, and when the loop has to come back
 // to raise one. Split out of `render` because the drawing needs a surface and
 // the decision doesn't.
-fn tip_gate(
-	dwell: &mut crate::tip::Dwell<Rect>,
-	over: Option<Rect>,
-	now: std::time::Instant,
-) -> (Option<Rect>, Option<u64>) {
+fn tip_gate(dwell: &mut crate::tip::Dwell<Rect>, over: Option<Rect>, now: std::time::Instant) -> (Option<Rect>, Option<u64>) {
 	dwell.point_at(over);
-	let wake = dwell
-		.wake()
-		.map(|due| due.saturating_duration_since(now).as_millis() as u64);
+	let wake = dwell.wake().map(|due| due.saturating_duration_since(now).as_millis() as u64);
 	(dwell.ripe(), wake)
 }
 
@@ -3308,12 +2358,7 @@ fn tip_gate(
 mod tests {
 	use std::time::Instant;
 
-	use super::{
-		ABOUT_PAD, AboutSource, DLG_DECOR_HEADROOM, DLG_MAX_H, DLG_SNAP, Rect, caps_from,
-		conversion_notice, dialog_origin, flip_cocoa_rect, layout_about, layout_source,
-		logical_size, pick_monitor, refusal_notice, size_after_rescale, size_within_caps, snap_to,
-		tip_gate, usable_screen,
-	};
+	use super::{ABOUT_PAD, AboutSource, DLG_DECOR_HEADROOM, DLG_MAX_H, DLG_SNAP, Rect, caps_from, conversion_notice, dialog_origin, flip_cocoa_rect, layout_about, layout_source, logical_size, pick_monitor, refusal_notice, size_after_rescale, size_within_caps, snap_to, tip_gate, usable_screen};
 	use crate::config;
 	use crate::text::{TextCtx, ui_attrs};
 
@@ -3322,33 +2367,15 @@ mod tests {
 	// Test ID: ddex3
 	#[test]
 	fn a_conversion_notice_says_how_many_and_where_the_copy_is() {
-		let said = |lost: usize, backup: Option<&str>| {
-			conversion_notice(&config::ConversionLoss {
-				path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"),
-				backup: backup
-					.map(|name| std::path::Path::new("/home/me/.config/silkterm").join(name)),
-				lost,
-				how: config::Converted::InPlace,
-				lines: Vec::new(),
-			})
-		};
+		let said = |lost: usize, backup: Option<&str>| conversion_notice(&config::ConversionLoss { path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"), backup: backup.map(|name| std::path::Path::new("/home/me/.config/silkterm").join(name)), lost, how: config::Converted::InPlace, lines: Vec::new() });
 		let (title, paras) = said(2, Some("config_backup_20261003-142233_format-v2.shcl"));
 		assert_eq!(title, "Settings not converted");
 		assert_eq!(paras.len(), 4, "{paras:?}");
 		assert_eq!(paras[1], "/home/me/.config/silkterm/config.shcl");
-		assert_eq!(
-			paras[2],
-			"2 settings couldn't be converted and now do nothing."
-		);
-		assert_eq!(
-			paras[3],
-			"The old file was saved in the same folder, as config_backup_20261003-142233_format-v2.shcl."
-		);
+		assert_eq!(paras[2], "2 settings couldn't be converted and now do nothing.");
+		assert_eq!(paras[3], "The old file was saved in the same folder, as config_backup_20261003-142233_format-v2.shcl.");
 		let (_, one) = said(1, None);
-		assert_eq!(
-			one[2],
-			"One setting couldn't be converted and now does nothing."
-		);
+		assert_eq!(one[2], "One setting couldn't be converted and now does nothing.");
 		assert_eq!(one.len(), 3, "no copy, nothing said about one");
 	}
 
@@ -3357,32 +2384,13 @@ mod tests {
 	// Test ID: ddf6h
 	#[test]
 	fn a_rewritten_file_notice_says_it_was_written_new() {
-		let said = |lost: usize| {
-			conversion_notice(&config::ConversionLoss {
-				path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"),
-				backup: Some(std::path::PathBuf::from(
-					"/home/me/.config/silkterm/config_backup_20261003-142233_format-v2.shcl",
-				)),
-				lost,
-				how: config::Converted::Rewritten,
-				lines: Vec::new(),
-			})
-		};
+		let said = |lost: usize| conversion_notice(&config::ConversionLoss { path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"), backup: Some(std::path::PathBuf::from("/home/me/.config/silkterm/config_backup_20261003-142233_format-v2.shcl")), lost, how: config::Converted::Rewritten, lines: Vec::new() });
 		let (title, paras) = said(3);
 		assert_eq!(title, "Settings not converted");
-		assert_eq!(
-			paras[0],
-			format!(
-				"{} couldn't convert its settings file to the new format, so it wrote a new one.",
-				config::APP_NAME
-			)
-		);
+		assert_eq!(paras[0], format!("{} couldn't convert its settings file to the new format, so it wrote a new one.", config::APP_NAME));
 		assert_eq!(paras[2], "3 settings couldn't be copied to the new file.");
 		assert!(paras[3].ends_with("config_backup_20261003-142233_format-v2.shcl."));
-		assert_eq!(
-			said(1).1[2],
-			"One setting couldn't be copied to the new file."
-		);
+		assert_eq!(said(1).1[2], "One setting couldn't be copied to the new file.");
 	}
 
 	// What a refused save says: which file, which lines, and what that costs.
@@ -3390,37 +2398,18 @@ mod tests {
 	#[test]
 	fn a_refused_save_names_the_file_and_the_lines() {
 		let said = |lines: &[usize], lost: usize| {
-			let refusal = crate::config::Refusal {
-				path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"),
-				lines: lines.to_vec(),
-				lost,
-			};
+			let refusal = crate::config::Refusal { path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"), lines: lines.to_vec(), lost };
 			refusal_notice(&refusal)
 		};
 		let (title, paras) = said(&[12], 1);
 		assert_eq!(title, "Settings not saved");
 		assert_eq!(paras[1], "/home/me/.config/silkterm/config.shcl");
-		assert_eq!(
-			paras[2],
-			"Line 12 can't be read, and saving now would delete it."
-		);
+		assert_eq!(paras[2], "Line 12 can't be read, and saving now would delete it.");
 		assert!(paras[3].contains("not saved"));
-		assert_eq!(
-			said(&[3, 40], 2).1[2],
-			"Lines 3 and 40 can't be read, and saving now would delete them."
-		);
-		assert_eq!(
-			said(&[1, 2, 3, 4, 5, 6, 7], 7).1[2],
-			"Lines 1, 2, 3, 4, 5 and 2 more can't be read, and saving now would delete them."
-		);
-		assert_eq!(
-			said(&[], 1).1[2],
-			"A line can't be read, and saving now would delete it."
-		);
-		assert_eq!(
-			said(&[], 3).1[2],
-			"3 lines can't be read, and saving now would delete them."
-		);
+		assert_eq!(said(&[3, 40], 2).1[2], "Lines 3 and 40 can't be read, and saving now would delete them.");
+		assert_eq!(said(&[1, 2, 3, 4, 5, 6, 7], 7).1[2], "Lines 1, 2, 3, 4, 5 and 2 more can't be read, and saving now would delete them.");
+		assert_eq!(said(&[], 1).1[2], "A line can't be read, and saving now would delete it.");
+		assert_eq!(said(&[], 3).1[2], "3 lines can't be read, and saving now would delete them.");
 	}
 
 	// Off since a current file that isn't UTF-8 is written again without those
@@ -3458,47 +2447,14 @@ mod tests {
 	// Test ID: ddf92
 	#[test]
 	fn a_notice_for_dropped_lines_names_them_and_the_copy() {
-		let said = |lines: &[usize], lost: usize, rewrite: config::Rewrite| {
-			conversion_notice(&config::ConversionLoss {
-				path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"),
-				backup: Some(std::path::PathBuf::from(
-					"/home/me/.config/silkterm/config_backup_20261003-142233_format-v3.shcl",
-				)),
-				lost,
-				how: config::Converted::Dropped(rewrite),
-				lines: lines.to_vec(),
-			})
-		};
+		let said = |lines: &[usize], lost: usize, rewrite: config::Rewrite| conversion_notice(&config::ConversionLoss { path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"), backup: Some(std::path::PathBuf::from("/home/me/.config/silkterm/config_backup_20261003-142233_format-v3.shcl")), lost, how: config::Converted::Dropped(rewrite), lines: lines.to_vec() });
 		let (title, paras) = said(&[3], 1, config::Rewrite::Kept);
 		assert_eq!(title, "Settings file rewritten");
-		assert_eq!(
-			paras,
-			vec![
-				format!(
-					"{} found text that isn't UTF-8 in its settings file, and wrote the file again without it.",
-					config::APP_NAME
-				),
-				"/home/me/.config/silkterm/config.shcl".to_string(),
-				"Line 3 was left out.".to_string(),
-				"The old file was saved in the same folder, as config_backup_20261003-142233_format-v3.shcl.".to_string(),
-			]
-		);
+		assert_eq!(paras, vec![format!("{} found text that isn't UTF-8 in its settings file, and wrote the file again without it.", config::APP_NAME), "/home/me/.config/silkterm/config.shcl".to_string(), "Line 3 was left out.".to_string(), "The old file was saved in the same folder, as config_backup_20261003-142233_format-v3.shcl.".to_string(),]);
 		let (_, paras) = said(&[3, 40], 2, config::Rewrite::Template);
-		assert_eq!(
-			paras[0],
-			format!(
-				"{} found text that isn't UTF-8 in its settings file, and wrote a new one from the defaults, with every setting it could still read.",
-				config::APP_NAME
-			)
-		);
-		assert_eq!(
-			paras[2],
-			"Lines 3 and 40 were left out. 2 settings couldn't be copied to the new file."
-		);
-		assert_eq!(
-			said(&[3], 0, config::Rewrite::Template).1[2],
-			"Line 3 was left out."
-		);
+		assert_eq!(paras[0], format!("{} found text that isn't UTF-8 in its settings file, and wrote a new one from the defaults, with every setting it could still read.", config::APP_NAME));
+		assert_eq!(paras[2], "Lines 3 and 40 were left out. 2 settings couldn't be copied to the new file.");
+		assert_eq!(said(&[3], 0, config::Rewrite::Template).1[2], "Line 3 was left out.");
 	}
 
 	// A tip in a dialog waits for the pointer to rest, the way one in the tab
@@ -3509,12 +2465,7 @@ mod tests {
 	#[test]
 	fn a_dialog_tip_waits_for_the_pointer_to_rest() {
 		let mut dwell = crate::tip::Dwell::default();
-		let ok = Rect {
-			x: 10.0,
-			y: 20.0,
-			w: 60.0,
-			h: 24.0,
-		};
+		let ok = Rect { x: 10.0, y: 20.0, w: 60.0, h: 24.0 };
 		let (drawn, wake) = tip_gate(&mut dwell, Some(ok), Instant::now());
 		assert_eq!(drawn, None, "the tip came up before the pointer had rested");
 		assert!(wake.is_some(), "nothing would wake the loop to raise it");
@@ -3523,12 +2474,7 @@ mod tests {
 		assert_eq!(drawn, Some(ok), "a rested pointer got no tip");
 		assert_eq!(wake, None, "a tip already up still asked for a wake-up");
 		// crossing to another control starts the wait again
-		let cancel = Rect {
-			x: 80.0,
-			y: 20.0,
-			w: 60.0,
-			h: 24.0,
-		};
+		let cancel = Rect { x: 80.0, y: 20.0, w: 60.0, h: 24.0 };
 		assert_eq!(tip_gate(&mut dwell, Some(cancel), Instant::now()).0, None);
 		// and leaving them all puts the tip away
 		assert_eq!(tip_gate(&mut dwell, None, Instant::now()).0, None);
@@ -3545,10 +2491,7 @@ mod tests {
 		let screen = usable_screen(Some((1920.0, 1008.0)), Some((1920.0, 1080.0)));
 		assert_eq!(screen, (1920.0, 1008.0), "the taskbar's share is not ours");
 		let (_, usable) = caps_from(screen, (6.0, frame), scale);
-		assert!(
-			usable + frame <= 1008.0,
-			"a window of {usable} plus its {frame} frame does not fit 1008"
-		);
+		assert!(usable + frame <= 1008.0, "a window of {usable} plus its {frame} frame does not fit 1008");
 		// and the whole monitor would have been too tall by more than the frame
 		let (_, whole) = caps_from((1920.0, 1080.0), (6.0, frame), scale);
 		assert!(whole > usable);
@@ -3561,10 +2504,7 @@ mod tests {
 	fn an_unmapped_window_falls_back_to_the_dip_allowance() {
 		for scale in [1.0, 1.5, 2.0] {
 			let (_, h) = caps_from((1920.0, 1000.0), (0.0, 0.0), scale);
-			assert_eq!(
-				h,
-				(1000.0 - DLG_DECOR_HEADROOM * scale).min(DLG_MAX_H * scale)
-			);
+			assert_eq!(h, (1000.0 - DLG_DECOR_HEADROOM * scale).min(DLG_MAX_H * scale));
 		}
 	}
 
@@ -3583,10 +2523,7 @@ mod tests {
 			assert_eq!(pick_monitor(None, terminal, false), terminal);
 			assert_eq!(pick_monitor(None, terminal, true), terminal);
 			let (_, cap) = caps_from(usable_screen(None, terminal), (0.0, 0.0), scale);
-			assert!(
-				cap < screen_h,
-				"at {scale} a cap of {cap} does not fit a screen {screen_h} tall"
-			);
+			assert!(cap < screen_h, "at {scale} a cap of {cap} does not fit a screen {screen_h} tall");
 		}
 		let terminal = Some((1600.0, 1200.0));
 		// Not yet placed, its own answer is for the origin's monitor.
@@ -3618,11 +2555,7 @@ mod tests {
 		let scale = 2.0;
 		let (menu_bar, dock) = (25.0, 70.0);
 		let work = flip_cocoa_rect((0.0, dock), (1440.0, 900.0 - menu_bar - dock), 900.0, scale);
-		assert_eq!(
-			work,
-			(0, 50, 2880, 1610),
-			"below the menu bar, above the Dock"
-		);
+		assert_eq!(work, (0, 50, 2880, 1610), "below the menu bar, above the Dock");
 		let (ax, ay, aw, ah) = work;
 		let title_bar = 28.0 * 2.0;
 		let screen = usable_screen(Some((aw as f32, ah as f32)), Some((2880.0, 1800.0)));
@@ -3644,14 +2577,8 @@ mod tests {
 		let (x, y) = dialog_origin((-1800, 100), (1600, 900), (800, 1000), Some(work));
 		assert_eq!((x, y), (-1400, 50));
 		// nothing known about the screen: only the negative side is refused
-		assert_eq!(
-			dialog_origin((-1800, -50), (1600, 900), (800, 1000), None),
-			(0, 0)
-		);
-		assert_eq!(
-			dialog_origin((100, 100), (1000, 800), (600, 400), None),
-			(300, 300)
-		);
+		assert_eq!(dialog_origin((-1800, -50), (1600, 900), (800, 1000), None), (0, 0));
+		assert_eq!(dialog_origin((100, 100), (1000, 800), (600, 400), None), (300, 300));
 	}
 
 	// Test ID: dcd37
@@ -3683,10 +2610,7 @@ mod tests {
 		// and both, dragged to a smaller monitor at a higher scale
 		assert_eq!(size_within_caps((2000, 1400), (1280.0, 700.0)), (1280, 700));
 		// About and the notice never measure a cap, so an unset one changes nothing
-		assert_eq!(
-			size_within_caps((800, 600), (f32::MAX, f32::MAX)),
-			(800, 600)
-		);
+		assert_eq!(size_within_caps((800, 600), (f32::MAX, f32::MAX)), (800, 600));
 		// a screen that measured as nothing isn't a reason to shrink to nothing
 		assert_eq!(size_within_caps((800, 600), (0.0, 0.0)), (800, 600));
 	}
@@ -3703,47 +2627,17 @@ mod tests {
 		// opened at 1x on 837 x 914, now 1046 x 1143 at 1.25, and the content
 		// wants 1082 x 1170 there
 		let natural = (1081.998, 1170.0);
-		assert_eq!(
-			size_after_rescale((1046, 1143), 1.25, Some((836.88, 914.0)), natural, caps),
-			(1082, 1170)
-		);
+		assert_eq!(size_after_rescale((1046, 1143), 1.25, Some((836.88, 914.0)), natural, caps), (1082, 1170));
 		// dragged away from it on both sides: kept
-		assert_eq!(
-			size_after_rescale((1250, 1000), 1.25, Some((836.88, 914.0)), natural, caps),
-			(1250, 1000)
-		);
+		assert_eq!(size_after_rescale((1250, 1000), 1.25, Some((836.88, 914.0)), natural, caps), (1250, 1000));
 		// each side on its own: the width was dragged, the height wasn't
-		assert_eq!(
-			size_after_rescale((1250, 1143), 1.25, Some((836.88, 914.0)), natural, caps),
-			(1250, 1170)
-		);
+		assert_eq!(size_after_rescale((1250, 1143), 1.25, Some((836.88, 914.0)), natural, caps), (1250, 1170));
 		// held under its content by the cap, it follows the new cap
-		assert_eq!(
-			size_after_rescale(
-				(1046, 1263),
-				1.25,
-				Some((836.88, 1010.0)),
-				(1082.0, 1400.0),
-				(1920.0, 1200.0)
-			),
-			(1082, 1200)
-		);
+		assert_eq!(size_after_rescale((1046, 1263), 1.25, Some((836.88, 1010.0)), (1082.0, 1400.0), (1920.0, 1200.0)), (1082, 1200));
 		// a maximized window is the window manager's, so only the caps apply
-		assert_eq!(
-			size_after_rescale((1046, 1143), 1.25, None, natural, caps),
-			(1046, 1143)
-		);
+		assert_eq!(size_after_rescale((1046, 1143), 1.25, None, natural, caps), (1046, 1143));
 		// what the screen leaves still wins over the content
-		assert_eq!(
-			size_after_rescale(
-				(1046, 1143),
-				1.25,
-				Some((836.88, 914.0)),
-				natural,
-				(1000.0, 1100.0)
-			),
-			(1000, 1100)
-		);
+		assert_eq!(size_after_rescale((1046, 1143), 1.25, Some((836.88, 914.0)), natural, (1000.0, 1100.0)), (1000, 1100));
 	}
 
 	// A notice is whatever was laid out from a notice's paragraphs. Nothing else
@@ -3772,11 +2666,7 @@ mod tests {
 			#[cfg(not(target_os = "windows"))]
 			AboutSource::Notice(vec!["Something to say.".into()]),
 			#[cfg(not(target_os = "windows"))]
-			AboutSource::Ask(super::Ask {
-				paras: vec!["A question.".into()],
-				remember: false,
-				focus: super::AskPart::Detach,
-			}),
+			AboutSource::Ask(super::Ask { paras: vec!["A question.".into()], remember: false, focus: super::AskPart::Detach }),
 		];
 		for scale in [1.0, 1.5] {
 			let mut text = TextCtx::new_cpu(scale);
@@ -3786,10 +2676,7 @@ mod tests {
 				let buttons: Vec<_> = links.iter().filter(|l| l.button).collect();
 				assert!(!buttons.is_empty());
 				for b in buttons {
-					assert!(
-						b.rect.h + 0.01 >= floor,
-						"a button shorter than its text needs"
-					);
+					assert!(b.rect.h + 0.01 >= floor, "a button shorter than its text needs");
 					let captions = lines.iter().filter(|l| l.band == Some(b.rect)).count();
 					assert_eq!(captions, 1, "one caption centered in each button");
 				}
@@ -3824,16 +2711,9 @@ mod tests {
 		let (lines, _, _) = layout_about(&mut TextCtx::new_cpu(1.0), &adapter());
 		let said: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
 		let version = format!("Version {}", env!("CARGO_PKG_VERSION"));
-		let build = format!(
-			"Build:  {}  {}",
-			config::build_label(),
-			config::build_target()
-		);
+		let build = format!("Build:  {}  {}", config::build_label(), config::build_target());
 		assert!(said.contains(&version.as_str()), "{said:?}");
-		assert!(
-			said.iter().any(|l| l.starts_with("Copyright © ")),
-			"{said:?}"
-		);
+		assert!(said.iter().any(|l| l.starts_with("Copyright © ")), "{said:?}");
 		assert!(said.contains(&"License: GPL-2.0-or-later"), "{said:?}");
 		assert!(said.contains(&build.as_str()), "{said:?}");
 		assert!(said.contains(&"Acceleration:  Software (CPU)"), "{said:?}");
@@ -3848,27 +2728,13 @@ mod tests {
 		assert!(lines[0].bold);
 		assert!((lines[0].scale - 1.5).abs() < f32::EPSILON);
 		let repo = env!("CARGO_PKG_REPOSITORY");
-		let line = lines
-			.iter()
-			.find(|l| l.text == repo)
-			.expect("a repository line");
-		let link = links
-			.iter()
-			.find(|l| l.url.as_deref() == Some(repo))
-			.expect("a repository link");
+		let line = lines.iter().find(|l| l.text == repo).expect("a repository line");
+		let link = links.iter().find(|l| l.url.as_deref() == Some(repo)).expect("a repository link");
 		assert!(!link.button);
 		let r = &link.rect;
 		assert!(r.w > 0.0 && r.h > 0.0);
-		assert!(
-			r.x <= line.x && line.x < r.x + r.w,
-			"link {r:?}, line x {}",
-			line.x
-		);
-		assert!(
-			r.y <= line.y && line.y < r.y + r.h,
-			"link {r:?}, line y {}",
-			line.y
-		);
+		assert!(r.x <= line.x && line.x < r.x + r.w, "link {r:?}, line x {}", line.x);
+		assert!(r.y <= line.y && line.y < r.y + r.h, "link {r:?}, line y {}", line.y);
 	}
 
 	// Both boxes are laid out again from their source when the display scale
@@ -3880,28 +2746,9 @@ mod tests {
 		let sources = [
 			AboutSource::About(Box::new(adapter())),
 			#[cfg(not(target_os = "windows"))]
-			AboutSource::Notice(
-				refusal_notice(&config::Refusal {
-					path: "/home/me/.config/silkterm/config.shcl".into(),
-					lines: vec![12],
-					lost: 1,
-				})
-				.1,
-			),
+			AboutSource::Notice(refusal_notice(&config::Refusal { path: "/home/me/.config/silkterm/config.shcl".into(), lines: vec![12], lost: 1 }).1),
 			#[cfg(not(target_os = "windows"))]
-			AboutSource::Notice(
-				conversion_notice(&config::ConversionLoss {
-					path: "/home/me/.config/silkterm/config.shcl".into(),
-					backup: Some(
-						"/home/me/.config/silkterm/config_backup_20261003-142233_format-v2.shcl"
-							.into(),
-					),
-					lost: 2,
-					how: config::Converted::InPlace,
-					lines: Vec::new(),
-				})
-				.1,
-			),
+			AboutSource::Notice(conversion_notice(&config::ConversionLoss { path: "/home/me/.config/silkterm/config.shcl".into(), backup: Some("/home/me/.config/silkterm/config_backup_20261003-142233_format-v2.shcl".into()), lost: 2, how: config::Converted::InPlace, lines: Vec::new() }).1),
 		];
 		let (mut one, mut two) = (TextCtx::new_cpu(1.0), TextCtx::new_cpu(2.0));
 		for source in &sources {
@@ -3923,15 +2770,8 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_notice_wraps_at_the_same_words_at_any_scale() {
 		let sentence = "Until that is fixed, changes such as the window size, new shells, and anything set in Settings are used now but not kept.";
-		let paras: Vec<String> = (0..24)
-			.map(|n| format!("{} {sentence}", "x".repeat(n + 1)))
-			.collect();
-		let rows = |text: &mut TextCtx| -> Vec<String> {
-			super::wrap_paras(text, &paras, None)
-				.into_iter()
-				.map(|(row, _, _)| row)
-				.collect()
-		};
+		let paras: Vec<String> = (0..24).map(|n| format!("{} {sentence}", "x".repeat(n + 1))).collect();
+		let rows = |text: &mut TextCtx| -> Vec<String> { super::wrap_paras(text, &paras, None).into_iter().map(|(row, _, _)| row).collect() };
 		let at_1x = rows(&mut TextCtx::new_cpu(1.0));
 		for scale in [1.25, 1.5, 2.0, 3.0] {
 			assert_eq!(rows(&mut TextCtx::new_cpu(scale)), at_1x, "at {scale}x");
@@ -3948,14 +2788,8 @@ mod tests {
 			.chain(&scene.overlay_texts)
 			.chain(&scene.tip_texts)
 			.map(|p| {
-				let said: String = shaped.bufs[p.buf]
-					.lines
-					.iter()
-					.map(glyphon::BufferLine::text)
-					.collect();
-				let clip = p
-					.clip
-					.map(|r| (r.x.to_bits(), r.y.to_bits(), r.w.to_bits(), r.h.to_bits()));
+				let said: String = shaped.bufs[p.buf].lines.iter().map(glyphon::BufferLine::text).collect();
+				let clip = p.clip.map(|r| (r.x.to_bits(), r.y.to_bits(), r.w.to_bits(), r.h.to_bits()));
 				(said, p.x.to_bits(), p.y.to_bits(), p.color, clip)
 			})
 			.collect()
@@ -3963,15 +2797,7 @@ mod tests {
 
 	fn settings_content(text: &mut TextCtx) -> super::Content {
 		let chrome = crate::settings_ui::chrome_widths(text, 1.0);
-		let mut dialog = crate::settings_ui::SettingsDialog::new(
-			0.0,
-			0.0,
-			text.ui_line_h,
-			chrome,
-			f32::MAX,
-			700.0,
-			1.0,
-		);
+		let mut dialog = crate::settings_ui::SettingsDialog::new(0.0, 0.0, text.ui_line_h, chrome, f32::MAX, 700.0, 1.0);
 		let (w, h) = dialog.size();
 		dialog.set_size(w, h);
 		super::Content::Settings(dialog)
@@ -3982,24 +2808,9 @@ mod tests {
 	}
 
 	// One frame as render works it out, the pointer off the window.
-	fn frame(
-		content: &super::Content,
-		text: &mut TextCtx,
-		shaped: &mut super::ShapedText,
-		size: (u32, u32),
-	) -> super::Scene {
+	fn frame(content: &super::Content, text: &mut TextCtx, shaped: &mut super::ShapedText, size: (u32, u32)) -> super::Scene {
 		let mut dwell = crate::tip::Dwell::default();
-		super::compose(
-			content,
-			text,
-			shaped,
-			&mut dwell,
-			true,
-			(-1.0, -1.0),
-			Instant::now(),
-			size,
-		)
-		.0
+		super::compose(content, text, shaped, &mut dwell, true, (-1.0, -1.0), Instant::now(), size).0
 	}
 
 	fn switch_tab(content: &mut super::Content) {
@@ -4025,15 +2836,8 @@ mod tests {
 			let before = shaped_so_far();
 			let second = frame(&content, &mut text, &mut shaped, (800, 700));
 			let shapes = shaped_so_far() - before;
-			assert_eq!(
-				shapes, 0,
-				"tab {tab}: a frame with nothing changed shaped {shapes}"
-			);
-			assert_eq!(
-				drawn(&second, &shaped),
-				first,
-				"tab {tab} drew something else"
-			);
+			assert_eq!(shapes, 0, "tab {tab}: a frame with nothing changed shaped {shapes}");
+			assert_eq!(drawn(&second, &shaped), first, "tab {tab} drew something else");
 			switch_tab(&mut content);
 		}
 	}
@@ -4048,13 +2852,7 @@ mod tests {
 		let mut text = TextCtx::new_cpu(1.0);
 		let mut content = settings_content(&mut text);
 		let mut shaped = super::ShapedText::default();
-		let keys = |shaped: &super::ShapedText| {
-			shaped
-				.keys
-				.iter()
-				.map(|(_, key)| key.clone())
-				.collect::<std::collections::HashSet<_>>()
-		};
+		let keys = |shaped: &super::ShapedText| shaped.keys.iter().map(|(_, key)| key.clone()).collect::<std::collections::HashSet<_>>();
 		let _ = frame(&content, &mut text, &mut shaped, (800, 700));
 		let mut seen = keys(&shaped);
 		let (mut reshaped, mut kept) = (0, 0);
@@ -4067,14 +2865,7 @@ mod tests {
 					use knobs::Value;
 					let s = (*config::settings()).clone();
 					let (margin, size) = (s.margin + 3.0, s.font_size + 1.0);
-					let s = crate::fields::owning(
-						s,
-						&[
-							(Key::Margin, Value::Float(f64::from(margin))),
-							(Key::SystemFontSize, Value::Bool(false)),
-							(Key::FontSize, Value::Float(f64::from(size))),
-						],
-					);
+					let s = crate::fields::owning(s, &[(Key::Margin, Value::Float(f64::from(margin))), (Key::SystemFontSize, Value::Bool(false)), (Key::FontSize, Value::Float(f64::from(size)))]);
 					if let super::Content::Settings(dialog) = &mut content {
 						dialog.start_from(s);
 					}
@@ -4091,21 +2882,9 @@ mod tests {
 			let shapes = shaped_so_far() - before;
 			let now = keys(&shaped);
 			let new = now.difference(&seen).count();
-			assert_eq!(
-				shapes, new,
-				"step {step} shaped {shapes} for {new} new pieces of text"
-			);
-			for p in scene
-				.texts
-				.iter()
-				.chain(&scene.overlay_texts)
-				.chain(&scene.tip_texts)
-			{
-				assert_eq!(
-					shaped.bufs[p.buf].size().0,
-					Some(width as f32),
-					"step {step}"
-				);
+			assert_eq!(shapes, new, "step {step} shaped {shapes} for {new} new pieces of text");
+			for p in scene.texts.iter().chain(&scene.overlay_texts).chain(&scene.tip_texts) {
+				assert_eq!(shaped.bufs[p.buf].size().0, Some(width as f32), "step {step}");
 			}
 			if shapes > 0 {
 				reshaped += 1;
@@ -4114,10 +2893,7 @@ mod tests {
 			}
 			seen = now;
 		}
-		assert!(
-			reshaped > 0 && kept > 0,
-			"{reshaped} steps shaped and {kept} did not"
-		);
+		assert!(reshaped > 0 && kept > 0, "{reshaped} steps shaped and {kept} did not");
 	}
 
 	// A frame that asks for what the last one shaped finds it by a borrowed
@@ -4131,11 +2907,7 @@ mod tests {
 		let mut shaped = super::ShapedText::default();
 		let line_h = text.ui_line_h;
 		let attrs = ui_attrs();
-		let marks = crate::settings_ui::Marks {
-			spans: vec![(5, 9)],
-			color: [200, 120, 10],
-			scale: 1.2,
-		};
+		let marks = crate::settings_ui::Marks { spans: vec![(5, 9)], color: [200, 120, 10], scale: 1.2 };
 		let lines = ["General", "Font size", "Scrollback lines"];
 		let ask = |shaped: &mut super::ShapedText, text: &mut TextCtx, slots: &mut Vec<usize>| {
 			shaped.start_frame(text);
@@ -4181,17 +2953,7 @@ mod tests {
 		let mut dwell = crate::tip::Dwell::default();
 		let mut run = |kept: super::Scene, text: &mut TextCtx| {
 			let before = crate::perf::thread_allocs();
-			let (scene, _) = super::compose_into(
-				kept,
-				&content,
-				text,
-				&mut shaped,
-				&mut dwell,
-				true,
-				(-1.0, -1.0),
-				Instant::now(),
-				(800, 700),
-			);
+			let (scene, _) = super::compose_into(kept, &content, text, &mut shaped, &mut dwell, true, (-1.0, -1.0), Instant::now(), (800, 700));
 			(scene, crate::perf::thread_allocs() - before)
 		};
 		// a few frames first, so the shaped text's own maps are grown
@@ -4199,8 +2961,7 @@ mod tests {
 		for _ in 0..3 {
 			kept = run(kept, &mut text).0.emptied();
 		}
-		let at =
-			|scene: &super::Scene| (scene.rects.as_ptr() as usize, scene.texts.as_ptr() as usize);
+		let at = |scene: &super::Scene| (scene.rects.as_ptr() as usize, scene.texts.as_ptr() as usize);
 		let was = at(&kept);
 		let (fresh, fresh_cost) = run(super::Scene::default(), &mut text);
 		let (again, kept_cost) = run(kept, &mut text);
@@ -4208,10 +2969,7 @@ mod tests {
 		assert_eq!(again.texts.len(), fresh.texts.len());
 		assert_eq!(again.rects.len(), fresh.rects.len());
 		if cfg!(debug_assertions) {
-			assert!(
-				kept_cost < fresh_cost,
-				"{kept_cost} kept, {fresh_cost} fresh"
-			);
+			assert!(kept_cost < fresh_cost, "{kept_cost} kept, {fresh_cost} fresh");
 		}
 	}
 
@@ -4228,28 +2986,17 @@ mod tests {
 		let attrs = ui_attrs();
 		let line = "Window \u{23f5} Columns";
 		let at = line.find("Col").unwrap();
-		let marks = crate::settings_ui::Marks {
-			spans: vec![(at, at + 3)],
-			color: [200, 120, 10],
-			scale: 1.15,
-		};
+		let marks = crate::settings_ui::Marks { spans: vec![(at, at + 3)], color: [200, 120, 10], scale: 1.15 };
 		shaped.start_frame(&text);
 		let plain = shaped.buffer(&mut text, line, &attrs, 800.0, line_h);
 		let marked = shaped.marked(&mut text, line, &attrs, Some(&marks), 800.0, line_h);
 		assert_ne!(plain, marked);
-		let fewer = crate::settings_ui::Marks {
-			spans: vec![(at, at + 2)],
-			..marks.clone()
-		};
+		let fewer = crate::settings_ui::Marks { spans: vec![(at, at + 2)], ..marks.clone() };
 		let other = shaped.marked(&mut text, line, &attrs, Some(&fewer), 800.0, line_h);
 		assert_ne!(other, marked, "other marks, other buffer");
 		let run = |slot: usize| {
 			let run = shaped.bufs[slot].layout_runs().next().expect("one line");
-			let glyphs: Vec<(usize, f32, Option<glyphon::Color>)> = run
-				.glyphs
-				.iter()
-				.map(|g| (g.start, g.font_size, g.color_opt))
-				.collect();
+			let glyphs: Vec<(usize, f32, Option<glyphon::Color>)> = run.glyphs.iter().map(|g| (g.start, g.font_size, g.color_opt)).collect();
 			(run.line_top, run.line_height, run.line_y, glyphs)
 		};
 		let (p_top, p_h, p_y, p_glyphs) = run(plain);
@@ -4261,10 +3008,7 @@ mod tests {
 		for (start, font_size, color) in m_glyphs {
 			if (at..at + 3).contains(&start) {
 				seen += 1;
-				assert!(
-					(font_size - size * 1.15).abs() < 0.01,
-					"{start}: {font_size}"
-				);
+				assert!((font_size - size * 1.15).abs() < 0.01, "{start}: {font_size}");
 				assert_eq!(color, Some(glyphon::Color::rgb(200, 120, 10)));
 			} else {
 				assert!((font_size - size).abs() < 0.01, "{start}: {font_size}");
@@ -4291,56 +3035,31 @@ mod tests {
 		heavy.weight = glyphon::Weight(if base.weight.0 == 700 { 400 } else { 700 });
 		let mut serif = ui_attrs();
 		serif.family = glyphon::Family::Serif;
-		let asks = [
-			("Label", &base, line_h),
-			("Label", &red, line_h),
-			("Label", &heavy, line_h),
-			("Label", &serif, line_h),
-			("Label", &base, line_h * 2.0),
-			("Other", &base, line_h),
-		];
+		let asks = [("Label", &base, line_h), ("Label", &red, line_h), ("Label", &heavy, line_h), ("Label", &serif, line_h), ("Label", &base, line_h * 2.0), ("Other", &base, line_h)];
 		let ask_all = |shaped: &mut super::ShapedText, text: &mut TextCtx, width: f32| {
 			shaped.start_frame(text);
 			let before = shaped_so_far();
-			let slots: Vec<usize> = asks
-				.iter()
-				.map(|(line, attrs, h)| shaped.buffer(text, line, attrs, width, *h))
-				.collect();
+			let slots: Vec<usize> = asks.iter().map(|(line, attrs, h)| shaped.buffer(text, line, attrs, width, *h)).collect();
 			(slots, shaped_so_far() - before)
 		};
 		let (slots, shapes) = ask_all(&mut shaped, &mut text, 800.0);
-		assert_eq!(
-			shapes,
-			asks.len(),
-			"each ask differs in something shaping reads"
-		);
+		assert_eq!(shapes, asks.len(), "each ask differs in something shaping reads");
 		let unique: std::collections::HashSet<_> = slots.iter().collect();
 		assert_eq!(unique.len(), asks.len());
 		let (_, shapes) = ask_all(&mut shaped, &mut text, 800.0);
 		assert_eq!(shapes, 0, "the same asks a frame later shaped again");
 		// asked twice in one frame: one buffer is used for both
 		let again = shaped.buffer(&mut text, "Label", &base, 800.0, line_h);
-		assert_eq!(
-			again,
-			shaped.buffer(&mut text, "Label", &base, 800.0, line_h)
-		);
+		assert_eq!(again, shaped.buffer(&mut text, "Label", &base, 800.0, line_h));
 		// a narrower window keeps the shape and lays it out to the new width
 		let (slots, shapes) = ask_all(&mut shaped, &mut text, 300.0);
 		assert_eq!(shapes, 0, "a width change shaped again");
-		let glyphs = |buf: &glyphon::Buffer| {
-			buf.layout_runs()
-				.flat_map(|run| run.glyphs.iter().map(|g| (g.glyph_id, g.x.to_bits())))
-				.collect::<Vec<_>>()
-		};
+		let glyphs = |buf: &glyphon::Buffer| buf.layout_runs().flat_map(|run| run.glyphs.iter().map(|g| (g.glyph_id, g.x.to_bits()))).collect::<Vec<_>>();
 		for (slot, (line, attrs, h)) in slots.iter().zip(asks) {
 			let kept = &shaped.bufs[*slot];
 			assert_eq!(kept.size(), (Some(300.0), Some(h)));
 			let fresh = super::shape(&mut text, line, attrs, 300.0, h);
-			assert_eq!(
-				glyphs(kept),
-				glyphs(&fresh),
-				"{line} laid out unlike a fresh shape"
-			);
+			assert_eq!(glyphs(kept), glyphs(&fresh), "{line} laid out unlike a fresh shape");
 		}
 		// a new context shapes everything again, and what a frame never asked for
 		// is gone by the next
@@ -4351,11 +3070,7 @@ mod tests {
 		shaped.start_frame(&other);
 		let before = shaped_so_far();
 		let _ = shaped.buffer(&mut other, "Label", &base, 800.0, line_h);
-		assert_eq!(
-			shaped_so_far() - before,
-			1,
-			"a buffer outlived a frame that skipped it"
-		);
+		assert_eq!(shaped_so_far() - before, 1, "a buffer outlived a frame that skipped it");
 	}
 
 	// The layers render draws, in order: the rects each one draws and the text
@@ -4374,11 +3089,7 @@ mod tests {
 	}
 
 	fn said(shaped: &super::ShapedText, placed: &super::Placed) -> String {
-		shaped.bufs[placed.buf]
-			.lines
-			.iter()
-			.map(glyphon::BufferLine::text)
-			.collect()
+		shaped.bufs[placed.buf].lines.iter().map(glyphon::BufferLine::text).collect()
 	}
 
 	// Asserts a tip is the last thing a frame draws, alone in its pass, so no
@@ -4386,28 +3097,15 @@ mod tests {
 	fn assert_tip_on_top(scene: &super::Scene, shaped: &super::ShapedText, tip: &str, what: &str) {
 		let passes = passes(scene);
 		let (rects, texts) = passes.last().unwrap();
-		assert_eq!(
-			rects.end as usize,
-			scene.rects.len(),
-			"{what}: something draws after the tip's pass"
-		);
+		assert_eq!(rects.end as usize, scene.rects.len(), "{what}: something draws after the tip's pass");
 		assert_eq!(rects.len(), 2, "{what}: the tip's pass draws other rects");
-		assert!(
-			!texts.is_empty(),
-			"{what}: the tip's text is not in the last pass"
-		);
+		assert!(!texts.is_empty(), "{what}: the tip's text is not in the last pass");
 		for placed in texts {
 			let line = said(shaped, placed);
-			assert!(
-				tip.contains(line.trim()),
-				"{what}: {line:?} draws in the tip's pass, on top of the tip"
-			);
+			assert!(tip.contains(line.trim()), "{what}: {line:?} draws in the tip's pass, on top of the tip");
 		}
 		for (_, texts) in &passes[..passes.len() - 1] {
-			assert!(
-				texts.iter().all(|p| said(shaped, p) != tip),
-				"{what}: the tip's text draws under the last pass"
-			);
+			assert!(texts.iter().all(|p| said(shaped, p) != tip), "{what}: the tip's text draws under the last pass");
 		}
 	}
 
@@ -4432,51 +3130,21 @@ mod tests {
 			switch_tab(&mut content);
 		}
 		assert!(opened, "no tab has a dropdown");
-		let anchor = Rect {
-			x: 40.0,
-			y: 40.0,
-			w: 300.0,
-			h: 20.0,
-		};
+		let anchor = Rect { x: 40.0, y: 40.0, w: 300.0, h: 20.0 };
 		let mut shaped = super::ShapedText::default();
 		let size = (800, 700);
-		let open = super::scene(
-			&content,
-			&mut text,
-			&mut shaped,
-			(-1.0, -1.0),
-			Some((tip, anchor)),
-			size,
-		);
+		let open = super::scene(&content, &mut text, &mut shaped, (-1.0, -1.0), Some((tip, anchor)), size);
 		assert!(open.overlay_range.is_some());
 		assert_tip_on_top(&open, &shaped, tip, "an open dropdown");
 		let plain = settings_content(&mut text);
-		let rows = super::scene(
-			&plain,
-			&mut text,
-			&mut shaped,
-			(-1.0, -1.0),
-			Some((tip, anchor)),
-			size,
-		);
+		let rows = super::scene(&plain, &mut text, &mut shaped, (-1.0, -1.0), Some((tip, anchor)), size);
 		assert_tip_on_top(&rows, &shaped, tip, "the rows");
 		let (lines, links, _) = layout_about(&mut text, &adapter());
 		let link = links.iter().find(|l| l.tooltip.is_some()).unwrap();
 		let url = link.tooltip.clone().unwrap();
 		let anchor = link.rect;
-		let about = super::Content::About {
-			lines,
-			links,
-			source: AboutSource::About(Box::new(adapter())),
-		};
-		let drawn = super::scene(
-			&about,
-			&mut text,
-			&mut shaped,
-			(-1.0, -1.0),
-			Some((&url, anchor)),
-			size,
-		);
+		let about = super::Content::About { lines, links, source: AboutSource::About(Box::new(adapter())) };
+		let drawn = super::scene(&about, &mut text, &mut shaped, (-1.0, -1.0), Some((&url, anchor)), size);
 		assert_tip_on_top(&drawn, &shaped, &url, "About");
 	}
 
@@ -4494,48 +3162,17 @@ mod tests {
 			super::Content::Settings(dialog) => dialog.size(),
 			super::Content::About { .. } => unreachable!(),
 		};
-		let at = (0..400)
-			.map(|k| {
-				(
-					w * ((k % 20) as f32 + 0.5) / 20.0,
-					h * ((k / 20) as f32 + 0.5) / 20.0,
-				)
-			})
-			.find(|&to| super::tip_under(&content, to).is_some())
-			.expect("no point on the dialog has a tip");
-		let mut frame = |dwell: &mut crate::tip::Dwell<Rect>, tips: bool| {
-			super::compose(
-				&content,
-				&mut text,
-				&mut shaped,
-				dwell,
-				tips,
-				at,
-				Instant::now(),
-				(800, 700),
-			)
-			.1
-		};
+		let at = (0..400).map(|k| (w * ((k % 20) as f32 + 0.5) / 20.0, h * ((k / 20) as f32 + 0.5) / 20.0)).find(|&to| super::tip_under(&content, to).is_some()).expect("no point on the dialog has a tip");
+		let mut frame = |dwell: &mut crate::tip::Dwell<Rect>, tips: bool| super::compose(&content, &mut text, &mut shaped, dwell, tips, at, Instant::now(), (800, 700)).1;
 		let _ = frame(&mut dwell, true);
 		std::thread::sleep(crate::tip::DELAY);
-		assert!(
-			frame(&mut dwell, true).is_some(),
-			"a rested pointer got no tip"
-		);
-		assert_eq!(
-			frame(&mut dwell, false),
-			None,
-			"the tip stayed up in the background"
-		);
+		assert!(frame(&mut dwell, true).is_some(), "a rested pointer got no tip");
+		assert_eq!(frame(&mut dwell, false), None, "the tip stayed up in the background");
 		assert_eq!(dwell.ripe(), None);
 		let near = (at.0 + 1.0, at.1);
 		let mut text = TextCtx::new_cpu(1.0);
 		let _ = super::pointer_moved(&mut content, &mut text, &mut dwell, false, at, near);
-		assert_eq!(
-			dwell.wake(),
-			None,
-			"a move in the background started a tip's clock"
-		);
+		assert_eq!(dwell.wake(), None, "a move in the background started a tip's clock");
 	}
 
 	// A frame used to look up the tip under the pointer twice, once to time it
@@ -4548,9 +3185,7 @@ mod tests {
 		let content = settings_content(&mut text);
 		let mut shaped = super::ShapedText::default();
 		let mut dwell = crate::tip::Dwell::default();
-		let super::Content::Settings(dialog) = &content else {
-			unreachable!()
-		};
+		let super::Content::Settings(dialog) = &content else { unreachable!() };
 		let (w, h) = dialog.size();
 		let mut points = vec![(-1.0, -1.0)];
 		for k in 1..40 {
@@ -4558,21 +3193,9 @@ mod tests {
 		}
 		for at in points {
 			let before = crate::settings_ui::hover_tips();
-			let _ = super::compose(
-				&content,
-				&mut text,
-				&mut shaped,
-				&mut dwell,
-				true,
-				at,
-				Instant::now(),
-				(800, 700),
-			);
+			let _ = super::compose(&content, &mut text, &mut shaped, &mut dwell, true, at, Instant::now(), (800, 700));
 			let asks = crate::settings_ui::hover_tips() - before;
-			assert_eq!(
-				asks, 1,
-				"a frame with the pointer at {at:?} looked the tip up {asks} times"
-			);
+			assert_eq!(asks, 1, "a frame with the pointer at {at:?} looked the tip up {asks} times");
 		}
 	}
 
@@ -4596,42 +3219,23 @@ mod tests {
 			for col in 0..12 {
 				let to = (w * (col as f32 + 0.5) / 12.0, h * (row as f32 + 0.5) / 30.0);
 				let _ = super::pointer_moved(&mut content, &mut text, &mut dwell, true, from, to);
-				if let Some((super::Tip::Settings(crate::settings_ui::TipAt::Row(..)), _)) =
-					super::tip_under(&content, to)
-				{
+				if let Some((super::Tip::Settings(crate::settings_ui::TipAt::Row(..)), _)) = super::tip_under(&content, to) {
 					tipped = tipped.or(Some(to));
 				}
 				from = to;
 			}
 		}
-		assert_eq!(
-			crate::settings_ui::row_tips() - before,
-			0,
-			"pointer moves built tip words"
-		);
+		assert_eq!(crate::settings_ui::row_tips() - before, 0, "pointer moves built tip words");
 		let at = tipped.expect("no row on the dialog has a tip");
 		let mut shaped = super::ShapedText::default();
 		let mut dwell = crate::tip::Dwell::default();
 		let mut frame = |dwell: &mut crate::tip::Dwell<Rect>| {
 			let before = crate::settings_ui::row_tips();
-			let (_, drawn) = super::compose(
-				&content,
-				&mut text,
-				&mut shaped,
-				dwell,
-				true,
-				at,
-				Instant::now(),
-				(800, 700),
-			);
+			let (_, drawn) = super::compose(&content, &mut text, &mut shaped, dwell, true, at, Instant::now(), (800, 700));
 			(drawn, crate::settings_ui::row_tips() - before)
 		};
 		let (drawn, built) = frame(&mut dwell);
-		assert_eq!(
-			(drawn, built),
-			(None, 0),
-			"a tip not yet due built its words"
-		);
+		assert_eq!((drawn, built), (None, 0), "a tip not yet due built its words");
 		std::thread::sleep(crate::tip::DELAY);
 		let (drawn, built) = frame(&mut dwell);
 		assert!(drawn.is_some(), "a rested pointer got no tip");
@@ -4650,18 +3254,7 @@ mod tests {
 			super::Content::Settings(dialog) => dialog.size(),
 			super::Content::About { .. } => unreachable!(),
 		};
-		let at = (0..30)
-			.flat_map(|row| {
-				(0..12)
-					.map(move |col| (w * (col as f32 + 0.5) / 12.0, h * (row as f32 + 0.5) / 30.0))
-			})
-			.find(|&to| {
-				matches!(
-					super::tip_under(&content, to),
-					Some((super::Tip::Settings(crate::settings_ui::TipAt::Row(..)), _))
-				)
-			})
-			.expect("no row on the dialog has a tip");
+		let at = (0..30).flat_map(|row| (0..12).map(move |col| (w * (col as f32 + 0.5) / 12.0, h * (row as f32 + 0.5) / 30.0))).find(|&to| matches!(super::tip_under(&content, to), Some((super::Tip::Settings(crate::settings_ui::TipAt::Row(..)), _)))).expect("no row on the dialog has a tip");
 		let mut shaped = super::ShapedText::default();
 		let mut dwell = crate::tip::Dwell::default();
 		let mut drawn = None;
@@ -4669,22 +3262,10 @@ mod tests {
 			if frame == 1 {
 				std::thread::sleep(crate::tip::DELAY);
 			}
-			(_, drawn) = super::compose(
-				&content,
-				&mut text,
-				&mut shaped,
-				&mut dwell,
-				true,
-				at,
-				Instant::now(),
-				(800, 700),
-			);
+			(_, drawn) = super::compose(&content, &mut text, &mut shaped, &mut dwell, true, at, Instant::now(), (800, 700));
 		}
 		assert!(drawn.is_some(), "a rested pointer got no tip");
-		assert_eq!(
-			shaped.tip.wraps, 1,
-			"the tip was wrapped again with nothing changed"
-		);
+		assert_eq!(shaped.tip.wraps, 1, "the tip was wrapped again with nothing changed");
 	}
 
 	// A pointer move draws nothing unless something drawn moved with it: a
@@ -4707,10 +3288,7 @@ mod tests {
 		for row in 0..30 {
 			for col in 0..12 {
 				let to = (w * (col as f32 + 0.5) / 12.0, h * (row as f32 + 0.5) / 30.0);
-				assert!(
-					!super::pointer_moved(&mut content, &mut text, &mut dwell, true, from, to),
-					"a move to {to:?} asked for a frame"
-				);
+				assert!(!super::pointer_moved(&mut content, &mut text, &mut dwell, true, from, to), "a move to {to:?} asked for a frame");
 				match super::tip_under(&content, to) {
 					Some((_, anchor)) => tipped = tipped.or(Some((to, anchor))),
 					None => bare = bare.or(Some(to)),
@@ -4721,70 +3299,26 @@ mod tests {
 		let ((at, anchor), bare) = (tipped.unwrap(), bare.unwrap());
 		let _ = super::pointer_moved(&mut content, &mut text, &mut dwell, true, from, at);
 		let now = Instant::now();
-		assert!(
-			!super::frame_due(dwell.wake(), &dwell, None, now),
-			"a tip still waiting asked for a frame"
-		);
+		assert!(!super::frame_due(dwell.wake(), &dwell, None, now), "a tip still waiting asked for a frame");
 		std::thread::sleep(crate::tip::DELAY);
-		assert!(
-			super::frame_due(dwell.wake(), &dwell, None, Instant::now()),
-			"a tip that came due got no frame"
-		);
+		assert!(super::frame_due(dwell.wake(), &dwell, None, Instant::now()), "a tip that came due got no frame");
 		let mut shaped = super::ShapedText::default();
-		let (_, drawn) = super::compose(
-			&content,
-			&mut text,
-			&mut shaped,
-			&mut dwell,
-			true,
-			at,
-			Instant::now(),
-			(800, 700),
-		);
+		let (_, drawn) = super::compose(&content, &mut text, &mut shaped, &mut dwell, true, at, Instant::now(), (800, 700));
 		assert_eq!(drawn, Some(anchor));
-		assert!(!super::frame_due(
-			dwell.wake(),
-			&dwell,
-			drawn,
-			Instant::now()
-		));
+		assert!(!super::frame_due(dwell.wake(), &dwell, drawn, Instant::now()));
 		let inside = (at.0 + 1.0, at.1);
-		assert_eq!(
-			super::tip_under(&content, inside).map(|(_, r)| r),
-			Some(anchor)
-		);
-		assert!(
-			!super::pointer_moved(&mut content, &mut text, &mut dwell, true, at, inside),
-			"a move inside the tip's control asked for a frame"
-		);
-		assert!(
-			super::pointer_moved(&mut content, &mut text, &mut dwell, true, inside, bare),
-			"leaving a tip up drew nothing"
-		);
+		assert_eq!(super::tip_under(&content, inside).map(|(_, r)| r), Some(anchor));
+		assert!(!super::pointer_moved(&mut content, &mut text, &mut dwell, true, at, inside), "a move inside the tip's control asked for a frame");
+		assert!(super::pointer_moved(&mut content, &mut text, &mut dwell, true, inside, bare), "leaving a tip up drew nothing");
 		// About lights its button under the pointer
 		let (lines, links, _) = layout_about(&mut text, &adapter());
 		let button = links.iter().find(|l| l.button).unwrap().rect;
-		let mut about = super::Content::About {
-			lines,
-			links,
-			source: AboutSource::About(Box::new(adapter())),
-		};
+		let mut about = super::Content::About { lines, links, source: AboutSource::About(Box::new(adapter())) };
 		let mut dwell = crate::tip::Dwell::default();
 		let on = (button.x + 2.0, button.y + 2.0);
 		let off = (button.x - 5.0, button.y - 5.0);
-		assert!(super::pointer_moved(
-			&mut about, &mut text, &mut dwell, true, off, on
-		));
-		assert!(!super::pointer_moved(
-			&mut about,
-			&mut text,
-			&mut dwell,
-			true,
-			on,
-			(on.0 + 1.0, on.1)
-		));
-		assert!(super::pointer_moved(
-			&mut about, &mut text, &mut dwell, true, on, off
-		));
+		assert!(super::pointer_moved(&mut about, &mut text, &mut dwell, true, off, on));
+		assert!(!super::pointer_moved(&mut about, &mut text, &mut dwell, true, on, (on.0 + 1.0, on.1)));
+		assert!(super::pointer_moved(&mut about, &mut text, &mut dwell, true, on, off));
 	}
 }

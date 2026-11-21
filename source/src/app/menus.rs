@@ -6,10 +6,7 @@
 
 #[cfg(any(test, target_os = "macos"))]
 use super::MENU_BAR;
-use super::{
-	MENU_TIP_GAP, MENU_TIP_MAX_W, MENU_TIP_PAD, OverlayAt, OverlayLefts, State, open_link,
-	save_live, shell_argv,
-};
+use super::{MENU_TIP_GAP, MENU_TIP_MAX_W, MENU_TIP_PAD, OverlayAt, OverlayLefts, State, open_link, save_live, shell_argv};
 use crate::config;
 use crate::input::Hotkey;
 use crate::pane::{CopyKind, Dir, Rect};
@@ -17,6 +14,7 @@ use crate::settings_ui::EditCmd;
 use crate::shells::ShellEntry;
 use crate::term::{PaneId, UserEvent};
 use winit::event_loop::EventLoopProxy;
+use winit::keyboard::ModifiersState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MenuAction {
@@ -32,21 +30,12 @@ pub(crate) enum MenuAction {
 	ToggleCopyOutput,
 	NewTab,
 	// a row on the macOS menu bar only; elsewhere it is Ctrl+Shift+N alone
-	#[cfg_attr(
-		not(target_os = "macos"),
-		allow(dead_code, reason = "macOS menu bar only")
-	)]
+	#[cfg_attr(not(target_os = "macos"), allow(dead_code, reason = "macOS menu bar only"))]
 	NewWindow,
 	// the macOS Window menu's tab rows; elsewhere these are keys alone
-	#[cfg_attr(
-		not(target_os = "macos"),
-		allow(dead_code, reason = "macOS menu bar only")
-	)]
+	#[cfg_attr(not(target_os = "macos"), allow(dead_code, reason = "macOS menu bar only"))]
 	PrevTab,
-	#[cfg_attr(
-		not(target_os = "macos"),
-		allow(dead_code, reason = "macOS menu bar only")
-	)]
+	#[cfg_attr(not(target_os = "macos"), allow(dead_code, reason = "macOS menu bar only"))]
 	NextTab,
 	// New tab running the shell at this index in the stored list (config
 	// `shells.*`; see the Tabs menu's "New tab with shell").
@@ -82,63 +71,22 @@ impl MenuAction {
 	/// learn to ignore. Empty means no tip.
 	pub(crate) fn help(self) -> &'static str {
 		match self {
-			MenuAction::PasteSelection => {
-				"Paste the text last selected with the mouse, without copying it first."
-			}
-			MenuAction::ToggleCopySelect => {
-				"Copy text to the clipboard as soon as it's selected. This only applies to this pane."
-			}
-			MenuAction::ToggleCopyOutput => {
-				"Copy a command's output when it finishes and the prompt comes back. This only applies to this pane."
-			}
-			MenuAction::ToggleReadOnly => {
-				"Ignore typing in this pane, so a long job can't be stopped by accident."
-			}
-			MenuAction::ToggleFrame => {
-				"Show the title bar and border. Turning it off also hides the minimize, maximize, and close buttons."
-			}
-			MenuAction::ToggleMenuBar => {
-				"Show the menu bar. With it off, right-click a pane for the same menu."
-			}
-			MenuAction::ToggleSingleTab => {
-				"Show the tab strip. With it off, the strip stays hidden until there's a second tab."
-			}
-			MenuAction::ToggleMinimap => {
-				"Show a small view of the whole scrollback beside the text. It takes up columns the text would have used."
-			}
-			MenuAction::ToggleBare => {
-				"Hide the title bar, menu bar, and tab strip at once. Choose it again to bring back what was showing."
-			}
-			MenuAction::ToggleRemote => {
-				"Run as a plain terminal for a remote screen, where the effects are lost anyway. It turns on by itself when a remote session is found, and turns off at the next launch."
-			}
-			MenuAction::NextWallpaper => {
-				"Show the next image from the wallpaper folder now. The rotation timer restarts."
-			}
+			MenuAction::PasteSelection => "Paste the text last selected with the mouse, without copying it first.",
+			MenuAction::ToggleCopySelect => "Copy text to the clipboard as soon as it's selected. This only applies to this pane.",
+			MenuAction::ToggleCopyOutput => "Copy a command's output when it finishes and the prompt comes back. This only applies to this pane.",
+			MenuAction::ToggleReadOnly => "Ignore typing in this pane, so a long job can't be stopped by accident.",
+			MenuAction::ToggleFrame => "Show the title bar and border. Turning it off also hides the minimize, maximize, and close buttons.",
+			MenuAction::ToggleMenuBar => "Show the menu bar. With it off, right-click a pane for the same menu.",
+			MenuAction::ToggleSingleTab => "Show the tab strip. With it off, the strip stays hidden until there's a second tab.",
+			MenuAction::ToggleMinimap => "Show a small view of the whole scrollback beside the text. It takes up columns the text would have used.",
+			MenuAction::ToggleBare => "Hide the title bar, menu bar, and tab strip at once. Choose it again to bring back what was showing.",
+			MenuAction::ToggleRemote => "Run as a plain terminal for a remote screen, where the effects are lost anyway. It turns on by itself when a remote session is found, and turns off at the next launch.",
+			MenuAction::NextWallpaper => "Show the next image from the wallpaper folder now. The rotation timer restarts.",
 			MenuAction::ReloadConfig => "Read the config file again, so hand edits take effect.",
 			MenuAction::NewTabShell(_) => "Open a tab running this shell instead of the usual one.",
 			MenuAction::SplitShell(..) => "Split this pane and run this shell in the new half.",
 			MenuAction::CopyLink => "Copy the link's address instead of opening it.",
-			MenuAction::OpenLink
-			| MenuAction::Copy
-			| MenuAction::Paste
-			| MenuAction::Edit(_)
-			| MenuAction::NewTab
-			| MenuAction::NewWindow
-			| MenuAction::PrevTab
-			| MenuAction::NextTab
-			| MenuAction::NewTabTmux
-			| MenuAction::CloseTab
-			| MenuAction::SplitVertical
-			| MenuAction::SplitHorizontal
-			| MenuAction::Close
-			| MenuAction::FontBigger
-			| MenuAction::FontSmaller
-			| MenuAction::FontReset
-			| MenuAction::ToggleFullscreen
-			| MenuAction::Settings
-			| MenuAction::About
-			| MenuAction::Quit => "",
+			MenuAction::OpenLink | MenuAction::Copy | MenuAction::Paste | MenuAction::Edit(_) | MenuAction::NewTab | MenuAction::NewWindow | MenuAction::PrevTab | MenuAction::NextTab | MenuAction::NewTabTmux | MenuAction::CloseTab | MenuAction::SplitVertical | MenuAction::SplitHorizontal | MenuAction::Close | MenuAction::FontBigger | MenuAction::FontSmaller | MenuAction::FontReset | MenuAction::ToggleFullscreen | MenuAction::Settings | MenuAction::About | MenuAction::Quit => "",
 		}
 	}
 }
@@ -151,20 +99,11 @@ impl MenuAction {
 /// already have a hotkey go without.
 #[derive(Debug, Clone)]
 pub(crate) enum Entry {
-	Item {
-		label: String,
-		action: MenuAction,
-		check: Option<bool>,
-		accel: Option<usize>,
-	},
+	Item { label: String, action: MenuAction, check: Option<bool>, accel: Option<usize> },
 	// A row that opens a menu of its own to the right instead of doing
 	// something. It has its own items, so the popup can be built the moment
 	// the pointer gets to the row.
-	Sub {
-		label: String,
-		accel: Option<usize>,
-		items: Vec<Entry>,
-	},
+	Sub { label: String, accel: Option<usize>, items: Vec<Entry> },
 	Sep,
 }
 
@@ -203,18 +142,20 @@ pub(super) fn accel_clash(entries: &[Entry]) -> Option<char> {
 /// The label and the byte offset of its accelerator letter, for a row that has one.
 pub(super) fn entry_accel(entry: &Entry) -> Option<(&str, usize)> {
 	match entry {
-		Entry::Item {
-			label,
-			accel: Some(pos),
-			..
-		}
-		| Entry::Sub {
-			label,
-			accel: Some(pos),
-			..
-		} => Some((label, *pos)),
+		Entry::Item { label, accel: Some(pos), .. } | Entry::Sub { label, accel: Some(pos), .. } => Some((label, *pos)),
 		_ => None,
 	}
+}
+
+/// The row a key typed into an open menu picks, if any: the first one
+/// underlined with that letter, and only when the held keys make it a letter
+/// rather than a hotkey (`input::picks_menu_row`).
+pub(super) fn accel_row(entries: &[Entry], typed: &str, mods: ModifiersState) -> Option<usize> {
+	if !crate::input::picks_menu_row(mods) {
+		return None;
+	}
+	let ch = typed.chars().next()?.to_ascii_lowercase();
+	entries.iter().position(|entry| entry_accel(entry).is_some_and(|(label, pos)| label[pos..].chars().next().map(|c| c.to_ascii_lowercase()) == Some(ch)))
 }
 
 // Byte offset of the accelerator letter: exact case first, then the start of
@@ -235,45 +176,21 @@ fn accel_at(label: &str, ch: char) -> Option<usize> {
 }
 
 fn entry_item(label: &str, action: MenuAction) -> Entry {
-	Entry::Item {
-		label: label.into(),
-		action,
-		check: None,
-		accel: None,
-	}
+	Entry::Item { label: label.into(), action, check: None, accel: None }
 }
 pub(super) fn entry_item_accel(ch: char, label: &str, action: MenuAction) -> Entry {
-	Entry::Item {
-		label: label.into(),
-		action,
-		check: None,
-		accel: accel_at(label, ch),
-	}
+	Entry::Item { label: label.into(), action, check: None, accel: accel_at(label, ch) }
 }
 // `ch` is optional because accelerators have to be unique within a menu, and a
 // row that appears in 2 of them can't always use the same letter.
 fn entry_sub(ch: Option<char>, label: &str, items: Vec<Entry>) -> Entry {
-	Entry::Sub {
-		label: label.into(),
-		accel: ch.and_then(|ch| accel_at(label, ch)),
-		items,
-	}
+	Entry::Sub { label: label.into(), accel: ch.and_then(|ch| accel_at(label, ch)), items }
 }
 fn entry_check(on: bool, label: &str, action: MenuAction) -> Entry {
-	Entry::Item {
-		label: label.into(),
-		action,
-		check: Some(on),
-		accel: None,
-	}
+	Entry::Item { label: label.into(), action, check: Some(on), accel: None }
 }
 fn entry_check_accel(ch: char, on: bool, label: &str, action: MenuAction) -> Entry {
-	Entry::Item {
-		label: label.into(),
-		action,
-		check: Some(on),
-		accel: accel_at(label, ch),
-	}
+	Entry::Item { label: label.into(), action, check: Some(on), accel: accel_at(label, ch) }
 }
 
 // A "... with shell" row, or no row at all while there's no shell to put under
@@ -281,23 +198,9 @@ fn entry_check_accel(ch: char, on: bool, label: &str, action: MenuAction) -> Ent
 // order, and only the active entries are offered. The action has the index into
 // the whole list, so a disabled entry between 2 active ones can't shift what a
 // click runs.
-fn shell_submenu(
-	shells: &[ShellEntry],
-	accel: Option<char>,
-	label: &str,
-	action: fn(usize) -> MenuAction,
-) -> Vec<Entry> {
-	let items: Vec<Entry> = shells
-		.iter()
-		.enumerate()
-		.filter(|(_, shell)| shell.active)
-		.map(|(i, shell)| entry_item(&shell.title, action(i)))
-		.collect();
-	if items.is_empty() {
-		Vec::new()
-	} else {
-		vec![entry_sub(accel, label, items)]
-	}
+fn shell_submenu(shells: &[ShellEntry], accel: Option<char>, label: &str, action: fn(usize) -> MenuAction) -> Vec<Entry> {
+	let items: Vec<Entry> = shells.iter().enumerate().filter(|(_, shell)| shell.active).map(|(i, shell)| entry_item(&shell.title, action(i))).collect();
+	if items.is_empty() { Vec::new() } else { vec![entry_sub(accel, label, items)] }
 }
 
 // What the View menu needs to know to draw its checkmarks. Every field reads
@@ -327,20 +230,10 @@ fn view_menu_items(on: ViewState) -> Vec<Entry> {
 		Entry::Sep,
 		entry_check_accel('R', on.read_only, "Read-only", MenuAction::ToggleReadOnly),
 		Entry::Sep,
-		entry_check_accel(
-			'F',
-			on.fullscreen,
-			"Fullscreen",
-			MenuAction::ToggleFullscreen,
-		),
+		entry_check_accel('F', on.fullscreen, "Fullscreen", MenuAction::ToggleFullscreen),
 		// every toggle below names the thing itself and is checked while it is
 		// showing, so the checkmarks all read one way down the column
-		entry_check_accel(
-			'W',
-			on.window_frame,
-			"Window frame",
-			MenuAction::ToggleFrame,
-		),
+		entry_check_accel('W', on.window_frame, "Window frame", MenuAction::ToggleFrame),
 		entry_check_accel('M', on.menu_bar, "Menu bar", MenuAction::ToggleMenuBar),
 		entry_check_accel('T', on.tab_strip, "Tab strip", MenuAction::ToggleSingleTab),
 		// 'M' and 'i' are both spoken for on this menu (Menu bar, Increase font
@@ -348,12 +241,7 @@ fn view_menu_items(on: ViewState) -> Vec<Entry> {
 		entry_check_accel('n', on.minimap, "Minimap", MenuAction::ToggleMinimap),
 		entry_check_accel('B', on.bare, "Bare window", MenuAction::ToggleBare),
 		Entry::Sep,
-		entry_check_accel(
-			'p',
-			on.remote,
-			"Temporary remote display mode",
-			MenuAction::ToggleRemote,
-		),
+		entry_check_accel('p', on.remote, "Temporary remote display mode", MenuAction::ToggleRemote),
 	];
 	if on.next_wallpaper {
 		items.extend([Entry::Sep, next_wallpaper_row()]);
@@ -372,15 +260,8 @@ fn new_tab_shells(shells: &[ShellEntry], accel: Option<char>) -> Vec<Entry> {
 	shell_submenu(shells, accel, "New tab with shell", MenuAction::NewTabShell)
 }
 fn split_shells(shells: &[ShellEntry]) -> Vec<Entry> {
-	let mut rows = shell_submenu(shells, None, "Split vertical with shell", |i| {
-		MenuAction::SplitShell(Dir::Vertical, i)
-	});
-	rows.extend(shell_submenu(
-		shells,
-		None,
-		"Split horizontal with shell",
-		|i| MenuAction::SplitShell(Dir::Horizontal, i),
-	));
+	let mut rows = shell_submenu(shells, None, "Split vertical with shell", |i| MenuAction::SplitShell(Dir::Vertical, i));
+	rows.extend(shell_submenu(shells, None, "Split horizontal with shell", |i| MenuAction::SplitShell(Dir::Horizontal, i)));
 	rows
 }
 
@@ -390,53 +271,28 @@ fn split_shells(shells: &[ShellEntry]) -> Vec<Entry> {
 //
 // No tab or pane action goes on File; each has a menu of its own.
 fn file_menu_items() -> Vec<Entry> {
-	vec![
-		entry_item_accel('R', "Reload config", MenuAction::ReloadConfig),
-		entry_item_accel('S', "Settings\u{2026}", MenuAction::Settings),
-		Entry::Sep,
-		entry_item_accel('Q', "Quit", MenuAction::Quit),
-	]
+	vec![entry_item_accel('R', "Reload config", MenuAction::ReloadConfig), entry_item_accel('S', "Settings\u{2026}", MenuAction::Settings), Entry::Sep, entry_item_accel('Q', "Quit", MenuAction::Quit)]
 }
 
 fn edit_menu_items(copy_select: bool, copy_output: bool) -> Vec<Entry> {
-	vec![
-		entry_item_accel('C', "Copy", MenuAction::Copy),
-		entry_item_accel('P', "Paste", MenuAction::Paste),
-		entry_item_accel('S', "Paste selection", MenuAction::PasteSelection),
-		Entry::Sep,
-		entry_check(copy_select, "Copy on select", MenuAction::ToggleCopySelect),
-		entry_check(copy_output, "Copy on output", MenuAction::ToggleCopyOutput),
-	]
+	vec![entry_item_accel('C', "Copy", MenuAction::Copy), entry_item_accel('P', "Paste", MenuAction::Paste), entry_item_accel('S', "Paste selection", MenuAction::PasteSelection), Entry::Sep, entry_check(copy_select, "Copy on select", MenuAction::ToggleCopySelect), entry_check(copy_output, "Copy on output", MenuAction::ToggleCopyOutput)]
 }
 
 // "New tab in tmux" shows only where tmux can run, which is never on Windows.
 fn tabs_menu_items(shells: &[ShellEntry], tmux: bool) -> Vec<Entry> {
 	let mut items = vec![entry_item_accel('N', "New tab", MenuAction::NewTab)];
 	if tmux {
-		items.push(entry_item_accel(
-			'M',
-			"New tab in tmux",
-			MenuAction::NewTabTmux,
-		));
+		items.push(entry_item_accel('M', "New tab in tmux", MenuAction::NewTabTmux));
 	}
 	items.extend(new_tab_shells(shells, Some('S')));
-	items.extend([
-		Entry::Sep,
-		entry_item_accel('C', "Close tab", MenuAction::CloseTab),
-	]);
+	items.extend([Entry::Sep, entry_item_accel('C', "Close tab", MenuAction::CloseTab)]);
 	items
 }
 
 fn panes_menu_items(shells: &[ShellEntry]) -> Vec<Entry> {
-	let mut items = vec![
-		entry_item_accel('V', "Split vertical", MenuAction::SplitVertical),
-		entry_item_accel('H', "Split horizontal", MenuAction::SplitHorizontal),
-	];
+	let mut items = vec![entry_item_accel('V', "Split vertical", MenuAction::SplitVertical), entry_item_accel('H', "Split horizontal", MenuAction::SplitHorizontal)];
 	items.extend(split_shells(shells));
-	items.extend([
-		Entry::Sep,
-		entry_item_accel('C', "Close pane", MenuAction::Close),
-	]);
+	items.extend([Entry::Sep, entry_item_accel('C', "Close pane", MenuAction::Close)]);
 	items
 }
 
@@ -445,13 +301,7 @@ fn help_menu_items() -> Vec<Entry> {
 }
 
 // Menu-bar dropdown `idx`, in MENU_BAR order.
-fn bar_menu(
-	idx: usize,
-	view: ViewState,
-	copy_select: bool,
-	copy_output: bool,
-	shells: &[ShellEntry],
-) -> Vec<Entry> {
+fn bar_menu(idx: usize, view: ViewState, copy_select: bool, copy_output: bool, shells: &[ShellEntry]) -> Vec<Entry> {
 	match idx {
 		0 => file_menu_items(),
 		1 => edit_menu_items(copy_select, copy_output),
@@ -464,61 +314,25 @@ fn bar_menu(
 
 // Every dropdown with its title, which is what the macOS menu bar is built from.
 #[cfg(any(test, target_os = "macos"))]
-fn window_menus(
-	view: ViewState,
-	copy_select: bool,
-	copy_output: bool,
-	shells: &[ShellEntry],
-) -> Vec<(&'static str, Vec<Entry>)> {
-	MENU_BAR
-		.iter()
-		.enumerate()
-		.map(|(idx, title)| {
-			(
-				*title,
-				bar_menu(idx, view, copy_select, copy_output, shells),
-			)
-		})
-		.collect()
+fn window_menus(view: ViewState, copy_select: bool, copy_output: bool, shells: &[ShellEntry]) -> Vec<(&'static str, Vec<Entry>)> {
+	MENU_BAR.iter().enumerate().map(|(idx, title)| (*title, bar_menu(idx, view, copy_select, copy_output, shells))).collect()
 }
 
 /// Each row that does what a hotkey does shows the chord that hotkey answers to
 /// first, from the bindings in force, so a rebinding shows up here too. The
 /// menus are built without them, and every place one opens comes through here.
-pub(crate) fn with_shortcuts(
-	entries: Vec<Entry>,
-	keys: &crate::keys::Bindings,
-	mac: bool,
-) -> Vec<Entry> {
+pub(crate) fn with_shortcuts(entries: Vec<Entry>, keys: &crate::keys::Bindings, mac: bool) -> Vec<Entry> {
 	entries
 		.into_iter()
 		.map(|entry| match entry {
-			Entry::Item {
-				label,
-				action,
-				check,
-				accel,
-			} => {
+			Entry::Item { label, action, check, accel } => {
 				let label = match menu_hotkey(action).and_then(|hotkey| keys.shown(hotkey)) {
 					Some(chord) => format!("{label} ({})", chord.spoken(mac)),
 					None => label,
 				};
-				Entry::Item {
-					label,
-					action,
-					check,
-					accel,
-				}
+				Entry::Item { label, action, check, accel }
 			}
-			Entry::Sub {
-				label,
-				accel,
-				items,
-			} => Entry::Sub {
-				label,
-				accel,
-				items: with_shortcuts(items, keys, mac),
-			},
+			Entry::Sub { label, accel, items } => Entry::Sub { label, accel, items: with_shortcuts(items, keys, mac) },
 			Entry::Sep => Entry::Sep,
 		})
 		.collect()
@@ -543,25 +357,7 @@ pub(crate) fn menu_hotkey(action: MenuAction) -> Option<Hotkey> {
 		MenuAction::SplitVertical => Some(Hotkey::SplitRight),
 		MenuAction::SplitHorizontal => Some(Hotkey::SplitDown),
 		MenuAction::Close => Some(Hotkey::ClosePane),
-		MenuAction::OpenLink
-		| MenuAction::CopyLink
-		| MenuAction::PasteSelection
-		| MenuAction::Edit(_)
-		| MenuAction::ToggleReadOnly
-		| MenuAction::ToggleCopySelect
-		| MenuAction::ToggleCopyOutput
-		| MenuAction::NewTabShell(_)
-		| MenuAction::NewTabTmux
-		| MenuAction::SplitShell(..)
-		| MenuAction::ToggleFrame
-		| MenuAction::ToggleMenuBar
-		| MenuAction::ToggleSingleTab
-		| MenuAction::ToggleMinimap
-		| MenuAction::ToggleBare
-		| MenuAction::ToggleRemote
-		| MenuAction::NextWallpaper
-		| MenuAction::ReloadConfig
-		| MenuAction::About => None,
+		MenuAction::OpenLink | MenuAction::CopyLink | MenuAction::PasteSelection | MenuAction::Edit(_) | MenuAction::ToggleReadOnly | MenuAction::ToggleCopySelect | MenuAction::ToggleCopyOutput | MenuAction::NewTabShell(_) | MenuAction::NewTabTmux | MenuAction::SplitShell(..) | MenuAction::ToggleFrame | MenuAction::ToggleMenuBar | MenuAction::ToggleSingleTab | MenuAction::ToggleMinimap | MenuAction::ToggleBare | MenuAction::ToggleRemote | MenuAction::NextWallpaper | MenuAction::ReloadConfig | MenuAction::About => None,
 	}
 }
 
@@ -573,15 +369,7 @@ pub(crate) fn without_rows(entries: Vec<Entry>, drop: fn(MenuAction) -> bool) ->
 	for entry in entries {
 		match entry {
 			Entry::Item { action, .. } if drop(action) => {}
-			Entry::Sub {
-				label,
-				accel,
-				items,
-			} => out.push(Entry::Sub {
-				label,
-				accel,
-				items: without_rows(items, drop),
-			}),
+			Entry::Sub { label, accel, items } => out.push(Entry::Sub { label, accel, items: without_rows(items, drop) }),
 			Entry::Sep if out.last().is_none_or(|last| matches!(last, Entry::Sep)) => {}
 			entry => out.push(entry),
 		}
@@ -607,39 +395,15 @@ pub(crate) fn sample_window_menus() -> Vec<(&'static str, Vec<Entry>)> {
 
 // The same, with the focused pane's 2 copy modes as given.
 #[cfg(test)]
-pub(crate) fn sample_window_menus_copying(
-	copy_select: bool,
-	copy_output: bool,
-) -> Vec<(&'static str, Vec<Entry>)> {
+pub(crate) fn sample_window_menus_copying(copy_select: bool, copy_output: bool) -> Vec<(&'static str, Vec<Entry>)> {
 	sample_window_menus_with(copy_select, copy_output, &["bash", "zsh"])
 }
 
 // Every row turned on, with a shell for each title given.
 #[cfg(test)]
-pub(crate) fn sample_window_menus_with(
-	copy_select: bool,
-	copy_output: bool,
-	titles: &[&str],
-) -> Vec<(&'static str, Vec<Entry>)> {
-	let shell = |title: &str| ShellEntry {
-		slug: title.into(),
-		title: title.into(),
-		command: title.into(),
-		active: true,
-		comment: String::new(),
-		last_seen: String::new(),
-	};
-	let view = ViewState {
-		read_only: true,
-		fullscreen: true,
-		window_frame: true,
-		menu_bar: true,
-		tab_strip: true,
-		minimap: true,
-		bare: true,
-		remote: true,
-		next_wallpaper: true,
-	};
+pub(crate) fn sample_window_menus_with(copy_select: bool, copy_output: bool, titles: &[&str]) -> Vec<(&'static str, Vec<Entry>)> {
+	let shell = |title: &str| ShellEntry { slug: title.into(), title: title.into(), command: title.into(), active: true, comment: String::new(), last_seen: String::new() };
+	let view = ViewState { read_only: true, fullscreen: true, window_frame: true, menu_bar: true, tab_strip: true, minimap: true, bare: true, remote: true, next_wallpaper: true };
 	let shells: Vec<ShellEntry> = titles.iter().map(|title| shell(title)).collect();
 	window_menus(view, copy_select, copy_output, &shells)
 }
@@ -663,41 +427,15 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 	// A link under the click gets its 2 items at the top, and only then, since
 	// they'd be dead weight on every other right-click.
 	if on.link {
-		entries.extend([
-			entry_item_accel('O', "Open link", MenuAction::OpenLink),
-			entry_item_accel('L', "Copy link", MenuAction::CopyLink),
-			Entry::Sep,
-		]);
+		entries.extend([entry_item_accel('O', "Open link", MenuAction::OpenLink), entry_item_accel('L', "Copy link", MenuAction::CopyLink), Entry::Sep]);
 	}
 	// no accelerator on the shell rows, since this menu already uses every letter
 	// their labels offer, such as 'S' on "Paste selection", 'H' on "Split
 	// horizontal", and 'N' on "New tab". The first match wins, so a duplicate would
 	// make the older item unreachable
-	entries.extend([
-		entry_item_accel('C', "Copy", MenuAction::Copy),
-		entry_item_accel('P', "Paste", MenuAction::Paste),
-		entry_item_accel('S', "Paste selection", MenuAction::PasteSelection),
-		Entry::Sep,
-		entry_check(
-			on.copy_select,
-			"Copy on select",
-			MenuAction::ToggleCopySelect,
-		),
-		entry_check(
-			on.copy_output,
-			"Copy on output",
-			MenuAction::ToggleCopyOutput,
-		),
-		entry_check_accel('R', on.read_only, "Read-only", MenuAction::ToggleReadOnly),
-		Entry::Sep,
-		entry_item_accel('N', "New tab", MenuAction::NewTab),
-	]);
+	entries.extend([entry_item_accel('C', "Copy", MenuAction::Copy), entry_item_accel('P', "Paste", MenuAction::Paste), entry_item_accel('S', "Paste selection", MenuAction::PasteSelection), Entry::Sep, entry_check(on.copy_select, "Copy on select", MenuAction::ToggleCopySelect), entry_check(on.copy_output, "Copy on output", MenuAction::ToggleCopyOutput), entry_check_accel('R', on.read_only, "Read-only", MenuAction::ToggleReadOnly), Entry::Sep, entry_item_accel('N', "New tab", MenuAction::NewTab)]);
 	entries.extend(new_tab_shells(shells, None));
-	entries.extend([
-		Entry::Sep,
-		entry_item_accel('V', "Split vertical", MenuAction::SplitVertical),
-		entry_item_accel('H', "Split horizontal", MenuAction::SplitHorizontal),
-	]);
+	entries.extend([Entry::Sep, entry_item_accel('V', "Split vertical", MenuAction::SplitVertical), entry_item_accel('H', "Split horizontal", MenuAction::SplitHorizontal)]);
 	entries.extend(split_shells(shells));
 	entries.extend([
 		Entry::Sep,
@@ -712,11 +450,7 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 	if on.next_wallpaper {
 		entries.push(next_wallpaper_row());
 	}
-	entries.extend([
-		Entry::Sep,
-		entry_item("Reload config", MenuAction::ReloadConfig),
-		entry_item("Settings\u{2026}", MenuAction::Settings),
-	]);
+	entries.extend([Entry::Sep, entry_item("Reload config", MenuAction::ReloadConfig), entry_item("Settings\u{2026}", MenuAction::Settings)]);
 	entries
 }
 
@@ -725,10 +459,7 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 // once when the menu is built (see `popup`) so the draw and both hit tests read
 // the same numbers without passing a TextCtx into the geometry.
 fn menu_metrics(scale: f32) -> (f32, f32) {
-	(
-		config::dip(config::MENU_ITEM_PAD_Y, scale),
-		config::dip(config::MENU_SEP_H, scale),
-	)
+	(config::dip(config::MENU_ITEM_PAD_Y, scale), config::dip(config::MENU_SEP_H, scale))
 }
 
 /// right-click context menu / menu-bar dropdown over a pane
@@ -788,12 +519,7 @@ impl ContextMenu {
 		self.popups().any(|popup| popup.hit(mx, my))
 	}
 	pub(super) fn row_top(&self, i: usize) -> f32 {
-		self.y
-			+ self.pad_y
-			+ self.entries[..i]
-				.iter()
-				.map(|entry| self.entry_h(entry))
-				.sum::<f32>()
+		self.y + self.pad_y + self.entries[..i].iter().map(|entry| self.entry_h(entry)).sum::<f32>()
 	}
 	// Anywhere on the popup, separators and padding included. A click on the menu
 	// belongs to the menu, whatever chrome it covers.
@@ -842,11 +568,7 @@ impl State {
 			return None;
 		}
 		let root = self.menu.as_ref()?;
-		let (depth, menu, row) = root
-			.popups()
-			.enumerate()
-			.filter_map(|(depth, menu)| menu.hover.map(|row| (depth, menu, row)))
-			.last()?;
+		let (depth, menu, row) = root.popups().enumerate().filter_map(|(depth, menu)| menu.hover.map(|row| (depth, menu, row))).last()?;
 		menu.row_help(row).map(|_| (depth, row))
 	}
 
@@ -857,41 +579,23 @@ impl State {
 		let (depth, row) = self.menu_tip.ripe()?;
 		let (anchor, help) = {
 			let menu = self.menu.as_ref()?.popups().nth(depth)?;
-			let anchor = Rect {
-				x: menu.x,
-				y: menu.row_top(row),
-				w: menu.w,
-				h: menu.item_h,
-			};
+			let anchor = Rect { x: menu.x, y: menu.row_top(row), w: menu.w, h: menu.item_h };
 			(anchor, menu.row_help(row)?)
 		};
 		let attrs = crate::text::ui_attrs();
 		let pad = self.text.dip(MENU_TIP_PAD);
 		let line_h = self.text.ui_line_h;
 		let win = (self.surface_px.0 as f32, self.surface_px.1 as f32);
-		let budget = crate::tip::beside_budget(
-			self.text.ui_text_dip(MENU_TIP_MAX_W),
-			win.0,
-			pad,
-			pad,
-			self.text.scale,
-		);
+		let budget = crate::tip::beside_budget(self.text.ui_text_dip(MENU_TIP_MAX_W), win.0, pad, pad, self.text.scale);
 		let generation = self.text.generation;
 		let text = &mut self.text;
 		// wrapped and measured once while it stays up, and lent to the frame
-		let (lines, text_w) = self.menu_tip_text.lay(help, budget, generation, |line| {
-			text.measure_ui_text(line, &attrs)
-		});
+		let (lines, text_w) = self.menu_tip_text.lay(help, budget, generation, |line| text.measure_ui_text(line, &attrs));
 		let count = lines.len();
 		let w = text_w + 2.0 * pad;
 		let h = line_h * count as f32 + 2.0 * pad;
 		let (x, y) = crate::tip::beside(anchor, (w, h), win, self.text.dip(MENU_TIP_GAP), pad);
-		Some(OverlayAt {
-			rect: Rect { x, y, w, h },
-			top: y + pad,
-			line_h,
-			lefts: OverlayLefts::Even(x + pad),
-		})
+		Some(OverlayAt { rect: Rect { x, y, w, h }, top: y + pad, line_h, lefts: OverlayLefts::Even(x + pad) })
 	}
 
 	pub(super) fn open_menu(&mut self, target: PaneId, mx: f32, my: f32) {
@@ -900,21 +604,9 @@ impl State {
 		let copy_select = p.is_some_and(|p| p.copy_select);
 		let copy_output = p.is_some_and(|p| p.copy_output);
 		self.menu_link = self.link_at_pointer().map(|(_, link)| link.url);
-		let on = CtxState {
-			link: self.menu_link.is_some(),
-			read_only,
-			copy_select,
-			copy_output,
-			menu_bar: self.menu_bar,
-			bare: self.bare,
-			next_wallpaper: self.can_rotate(),
-		};
+		let on = CtxState { link: self.menu_link.is_some(), read_only, copy_select, copy_output, menu_bar: self.menu_bar, bare: self.bare, next_wallpaper: self.can_rotate() };
 		let settings = config::settings();
-		let entries = with_shortcuts(
-			context_menu_items(on, &settings.shells),
-			&settings.keys,
-			cfg!(target_os = "macos"),
-		);
+		let entries = with_shortcuts(context_menu_items(on, &settings.shells), &settings.keys, cfg!(target_os = "macos"));
 		#[cfg(target_os = "macos")]
 		let entries = mac_entries(entries);
 		self.bar_open = None;
@@ -930,18 +622,8 @@ impl State {
 	// plus the checkmark gutter, the padding, and the arrow column where a row opens
 	// a submenu. The menu bar, the right-click menu, and the submenus all use this,
 	// so they size and clamp alike.
-	fn build_popup(
-		&mut self,
-		target: PaneId,
-		entries: Vec<Entry>,
-		mx: f32,
-		my: f32,
-	) -> ContextMenu {
-		debug_assert!(
-			accel_clash(&entries).is_none(),
-			"two rows of one menu claim the accelerator {:?}",
-			accel_clash(&entries)
-		);
+	fn build_popup(&mut self, target: PaneId, entries: Vec<Entry>, mx: f32, my: f32) -> ContextMenu {
+		debug_assert!(accel_clash(&entries).is_none(), "two rows of one menu claim the accelerator {:?}", accel_clash(&entries));
 		let attrs = crate::text::ui_attrs();
 		let mut max_label_w: f32 = 0.0;
 		let mut any_sub = false;
@@ -951,29 +633,11 @@ impl State {
 			}
 			any_sub |= matches!(entry, Entry::Sub { .. });
 		}
-		let arrow_col = if any_sub {
-			self.text.dip(config::MENU_SUB_ARROW)
-		} else {
-			0.0
-		};
-		let w = self.text.dip(config::MENU_GUTTER)
-			+ max_label_w
-			+ arrow_col
-			+ self.text.dip(config::MENU_PAD_X) * 2.0;
+		let arrow_col = if any_sub { self.text.dip(config::MENU_SUB_ARROW) } else { 0.0 };
+		let w = self.text.dip(config::MENU_GUTTER) + max_label_w + arrow_col + self.text.dip(config::MENU_PAD_X) * 2.0;
 		let item_h = self.text.ui_line_h;
 		let (pad_y, sep_h) = menu_metrics(self.text.scale);
-		let menu = ContextMenu {
-			x: mx,
-			y: my,
-			w,
-			item_h,
-			pad_y,
-			sep_h,
-			target,
-			entries,
-			hover: None,
-			sub: None,
-		};
+		let menu = ContextMenu { x: mx, y: my, w, item_h, pad_y, sep_h, target, entries, hover: None, sub: None };
 		let sw = self.surface_px.0 as f32;
 		let sh = self.surface_px.1 as f32;
 		let x = mx.min((sw - w).max(0.0));
@@ -1005,12 +669,7 @@ impl State {
 		// which side it goes on
 		let mut popup = self.build_popup(menu.target, items, px + pw, top - pad_y);
 		if px + pw + popup.w > self.surface_px.0 as f32 {
-			popup = self.build_popup(
-				popup.target,
-				popup.entries,
-				(px - popup.w).max(0.0),
-				top - pad_y,
-			);
+			popup = self.build_popup(popup.target, popup.entries, (px - popup.w).max(0.0), top - pad_y);
 		}
 		if let Some(menu) = self.menu.as_mut() {
 			menu.sub = Some(Box::new(popup));
@@ -1061,11 +720,7 @@ impl State {
 		};
 		let target = menu.target;
 		// the innermost hit wins, since a submenu is drawn over whatever it covers
-		let found = menu
-			.popups()
-			.enumerate()
-			.filter_map(|(depth, popup)| popup.item_at(x, y).map(|row| (depth, popup, row)))
-			.last();
+		let found = menu.popups().enumerate().filter_map(|(depth, popup)| popup.item_at(x, y).map(|row| (depth, popup, row))).last();
 		let Some((depth, popup, row)) = found else {
 			self.menu = None;
 			self.bar_open = None;
@@ -1129,8 +784,7 @@ impl State {
 		if menu.sub.is_some() {
 			return None;
 		}
-		menu.hover
-			.filter(|&row| matches!(menu.entries[row], Entry::Sub { .. }))
+		menu.hover.filter(|&row| matches!(menu.entries[row], Entry::Sub { .. }))
 	}
 
 	/// Close the open submenu; returns false when there was none, so the caller
@@ -1151,33 +805,15 @@ impl State {
 	fn bar_state(&self) -> (ViewState, bool, bool) {
 		let p = self.tabs.cur().panes.get(&self.tabs.cur().focused);
 		let settings = config::settings();
-		let view = ViewState {
-			read_only: p.is_some_and(|p| p.read_only),
-			fullscreen: self.window.fullscreen().is_some(),
-			window_frame: self.decorated,
-			menu_bar: self.menu_bar,
-			tab_strip: !settings.hide_single_tab,
-			minimap: settings.minimap,
-			bare: self.bare,
-			remote: crate::profile::remote(&settings),
-			next_wallpaper: self.can_rotate(),
-		};
-		(
-			view,
-			p.is_some_and(|p| p.copy_select),
-			p.is_some_and(|p| p.copy_output),
-		)
+		let view = ViewState { read_only: p.is_some_and(|p| p.read_only), fullscreen: self.window.fullscreen().is_some(), window_frame: self.decorated, menu_bar: self.menu_bar, tab_strip: !settings.hide_single_tab, minimap: settings.minimap, bare: self.bare, remote: crate::profile::remote(&settings), next_wallpaper: self.can_rotate() };
+		(view, p.is_some_and(|p| p.copy_select), p.is_some_and(|p| p.copy_output))
 	}
 
 	// The dropdown entries for top-level menu-bar entry `idx` (File/Edit/...).
 	fn bar_menu_items(&self, idx: usize) -> Vec<Entry> {
 		let (view, copy_select, copy_output) = self.bar_state();
 		let settings = config::settings();
-		with_shortcuts(
-			bar_menu(idx, view, copy_select, copy_output, &settings.shells),
-			&settings.keys,
-			cfg!(target_os = "macos"),
-		)
+		with_shortcuts(bar_menu(idx, view, copy_select, copy_output, &settings.shells), &settings.keys, cfg!(target_os = "macos"))
 	}
 
 	#[cfg(target_os = "macos")]
@@ -1222,12 +858,7 @@ impl State {
 		self.bar_open = None;
 	}
 
-	pub(super) fn apply_menu(
-		&mut self,
-		action: MenuAction,
-		target: PaneId,
-		proxy: &EventLoopProxy<UserEvent>,
-	) {
+	pub(super) fn apply_menu(&mut self, action: MenuAction, target: PaneId, proxy: &EventLoopProxy<UserEvent>) {
 		if self.menu_reaches_tab_edit(action) {
 			return;
 		}
@@ -1246,13 +877,7 @@ impl State {
 				}
 			}
 			MenuAction::Copy => {
-				if let Some(text) = self
-					.tabs
-					.cur()
-					.panes
-					.get(&target)
-					.and_then(crate::pane::Pane::selection_text)
-				{
+				if let Some(text) = self.tabs.cur().panes.get(&target).and_then(crate::pane::Pane::selection_text) {
 					self.clipboard.set_clipboard(text);
 				}
 			}
@@ -1280,20 +905,14 @@ impl State {
 				}
 			}
 			MenuAction::SplitVertical => {
-				self.tabs
-					.cur_mut()
-					.split(&mut self.text, proxy, target, Dir::Vertical, area);
+				self.tabs.cur_mut().split(&mut self.text, proxy, target, Dir::Vertical, area);
 			}
 			MenuAction::SplitHorizontal => {
-				self.tabs
-					.cur_mut()
-					.split(&mut self.text, proxy, target, Dir::Horizontal, area);
+				self.tabs.cur_mut().split(&mut self.text, proxy, target, Dir::Horizontal, area);
 			}
 			MenuAction::SplitShell(dir, index) => {
 				if let Some(cmd) = shell_argv(index) {
-					self.tabs
-						.cur_mut()
-						.split_with(&mut self.text, proxy, target, dir, cmd, area);
+					self.tabs.cur_mut().split_with(&mut self.text, proxy, target, dir, cmd, area);
 				}
 			}
 			MenuAction::Close => {
@@ -1362,37 +981,16 @@ mod tests {
 	use super::super::MENU_BAR;
 	use super::super::rotation::rotation_live;
 	use super::super::tests::shell;
-	use super::{
-		ContextMenu, CtxState, Entry, MenuAction, ViewState, accel_at, accel_clash,
-		context_menu_items, edit_menu_items, entry_accel, entry_check_accel, entry_item_accel,
-		entry_label, entry_sub, file_menu_items, help_menu_items, menu_metrics, panes_menu_items,
-		split_shells, tabs_menu_items, view_menu_items, with_shortcuts,
-	};
+	use super::{ContextMenu, CtxState, Entry, MenuAction, ViewState, accel_at, accel_clash, accel_row, context_menu_items, edit_menu_items, entry_accel, entry_check_accel, entry_item_accel, entry_label, entry_sub, file_menu_items, help_menu_items, menu_metrics, panes_menu_items, split_shells, tabs_menu_items, view_menu_items, with_shortcuts};
 	use crate::config;
 	use crate::pane::Dir;
 	use crate::shells::ShellEntry;
 	fn test_menu(x: f32, w: f32, entries: Vec<Entry>) -> ContextMenu {
-		ContextMenu {
-			x,
-			y: 0.0,
-			w,
-			item_h: 20.0,
-			pad_y: 6.0,
-			sep_h: 9.0,
-			target: 0,
-			entries,
-			hover: None,
-			sub: None,
-		}
+		ContextMenu { x, y: 0.0, w, item_h: 20.0, pad_y: 6.0, sep_h: 9.0, target: 0, entries, hover: None, sub: None }
 	}
 
 	fn test_item(label: &str) -> Entry {
-		Entry::Item {
-			label: label.into(),
-			action: MenuAction::Copy,
-			check: None,
-			accel: None,
-		}
+		Entry::Item { label: label.into(), action: MenuAction::Copy, check: None, accel: None }
 	}
 
 	// A letter picks the first row with it, so a menu that uses one twice quietly
@@ -1401,11 +999,7 @@ mod tests {
 	// Test ID: dbeqq
 	#[test]
 	fn one_menu_never_spends_an_accelerator_twice() {
-		let rows = vec![
-			entry_item_accel('C', "Copy", MenuAction::Copy),
-			entry_sub(Some('S'), "New tab with shell", vec![]),
-			entry_check_accel('W', false, "Window frame", MenuAction::ToggleFrame),
-		];
+		let rows = vec![entry_item_accel('C', "Copy", MenuAction::Copy), entry_sub(Some('S'), "New tab with shell", vec![]), entry_check_accel('W', false, "Window frame", MenuAction::ToggleFrame)];
 		assert_eq!(accel_clash(&rows), None);
 		// 'w' again, which is what the View menu would have done had the submenu
 		// row picked its accelerator the way the Tabs menu's does
@@ -1420,24 +1014,11 @@ mod tests {
 	// Test ID: dbeq9
 	#[test]
 	fn a_submenu_row_hit_tests_and_steps_like_an_item() {
-		let menu = test_menu(
-			0.0,
-			200.0,
-			vec![
-				test_item("One"),
-				entry_sub(Some('w'), "With Shell", vec![test_item("Bash")]),
-				Entry::Sep,
-				test_item("Two"),
-			],
-		);
+		let menu = test_menu(0.0, 200.0, vec![test_item("One"), entry_sub(Some('w'), "With Shell", vec![test_item("Bash")]), Entry::Sep, test_item("Two")]);
 		let mid = |row: usize| menu.row_top(row) + menu.item_h / 2.0;
 		assert_eq!(menu.item_at(10.0, mid(1)), Some(1), "the row is hoverable");
 		let sep_mid = menu.row_top(2) + menu.sep_h / 2.0;
-		assert_eq!(
-			menu.item_at(10.0, sep_mid),
-			None,
-			"a separator still is not"
-		);
+		assert_eq!(menu.item_at(10.0, sep_mid), None, "a separator still is not");
 		// down from the first row gets to it, and goes on past it
 		assert_eq!(menu.step(Some(0), 1), Some(1));
 		assert_eq!(menu.step(Some(1), 1), Some(3), "the separator is skipped");
@@ -1457,10 +1038,7 @@ mod tests {
 			let y = sub.row_top(row) + sub.item_h / 2.0;
 			let x = sub.x + sub.w / 2.0;
 			assert!(sub.item_at(x, y).is_some(), "the submenu owns its own rows");
-			assert!(
-				parent.item_at(x, y).is_none(),
-				"and the parent claims none of them"
-			);
+			assert!(parent.item_at(x, y).is_none(), "and the parent claims none of them");
 		}
 	}
 
@@ -1490,43 +1068,12 @@ mod tests {
 	fn a_dropdown_scales_whole_and_its_rows_still_hit_test() {
 		let menu_at = |scale: f32| {
 			let (pad_y, sep_h) = menu_metrics(scale);
-			ContextMenu {
-				x: 0.0,
-				y: 0.0,
-				w: config::dip(200.0, scale),
-				item_h: config::dip(20.0, scale),
-				pad_y,
-				sep_h,
-				target: 0,
-				entries: vec![
-					Entry::Item {
-						label: "One".into(),
-						action: MenuAction::Copy,
-						check: None,
-						accel: None,
-					},
-					Entry::Sep,
-					Entry::Item {
-						label: "Two".into(),
-						action: MenuAction::Paste,
-						check: None,
-						accel: None,
-					},
-				],
-				hover: None,
-				sub: None,
-			}
+			ContextMenu { x: 0.0, y: 0.0, w: config::dip(200.0, scale), item_h: config::dip(20.0, scale), pad_y, sep_h, target: 0, entries: vec![Entry::Item { label: "One".into(), action: MenuAction::Copy, check: None, accel: None }, Entry::Sep, Entry::Item { label: "Two".into(), action: MenuAction::Paste, check: None, accel: None }], hover: None, sub: None }
 		};
 		// the padding and the separator row scale, which makes the whole popup scale,
 		// since height() and row_top() are built from them
-		assert_eq!(
-			menu_metrics(1.0),
-			(config::MENU_ITEM_PAD_Y, config::MENU_SEP_H)
-		);
-		assert_eq!(
-			menu_metrics(2.0),
-			(config::MENU_ITEM_PAD_Y * 2.0, config::MENU_SEP_H * 2.0)
-		);
+		assert_eq!(menu_metrics(1.0), (config::MENU_ITEM_PAD_Y, config::MENU_SEP_H));
+		assert_eq!(menu_metrics(2.0), (config::MENU_ITEM_PAD_Y * 2.0, config::MENU_SEP_H * 2.0));
 		let one = menu_at(1.0);
 		let two = menu_at(2.0);
 		assert_eq!(two.height(), one.height() * 2.0);
@@ -1551,61 +1098,20 @@ mod tests {
 	// Test ID: dc3q1
 	#[test]
 	fn every_view_toggle_is_checked_while_its_subject_is_on() {
-		let all_on = ViewState {
-			read_only: true,
-			fullscreen: true,
-			window_frame: true,
-			menu_bar: true,
-			tab_strip: true,
-			minimap: true,
-			bare: true,
-			remote: true,
-			next_wallpaper: true,
-		};
+		let all_on = ViewState { read_only: true, fullscreen: true, window_frame: true, menu_bar: true, tab_strip: true, minimap: true, bare: true, remote: true, next_wallpaper: true };
 		for entry in view_menu_items(all_on) {
-			if let Entry::Item {
-				label,
-				check: Some(on),
-				..
-			} = &entry
-			{
-				assert!(
-					on,
-					"{label} is a toggle that draws unchecked with everything on"
-				);
-				assert!(
-					!label.starts_with("Hide "),
-					"{label} names the absence of a thing rather than the thing"
-				);
+			if let Entry::Item { label, check: Some(on), .. } = &entry {
+				assert!(on, "{label} is a toggle that draws unchecked with everything on");
+				assert!(!label.starts_with("Hide "), "{label} names the absence of a thing rather than the thing");
 			}
 		}
 		// and each of these has a row at all, checked exactly while it is on
-		let all_off = ViewState {
-			read_only: false,
-			fullscreen: false,
-			window_frame: false,
-			menu_bar: false,
-			tab_strip: false,
-			minimap: false,
-			bare: false,
-			remote: false,
-			next_wallpaper: false,
-		};
-		let rows: [(&str, fn(&MenuAction) -> bool); 4] = [
-			("Menu bar", |a| matches!(a, MenuAction::ToggleMenuBar)),
-			("Window frame", |a| matches!(a, MenuAction::ToggleFrame)),
-			("Fullscreen", |a| matches!(a, MenuAction::ToggleFullscreen)),
-			("Read-only", |a| matches!(a, MenuAction::ToggleReadOnly)),
-		];
+		let all_off = ViewState { read_only: false, fullscreen: false, window_frame: false, menu_bar: false, tab_strip: false, minimap: false, bare: false, remote: false, next_wallpaper: false };
+		let rows: [(&str, fn(&MenuAction) -> bool); 4] = [("Menu bar", |a| matches!(a, MenuAction::ToggleMenuBar)), ("Window frame", |a| matches!(a, MenuAction::ToggleFrame)), ("Fullscreen", |a| matches!(a, MenuAction::ToggleFullscreen)), ("Read-only", |a| matches!(a, MenuAction::ToggleReadOnly))];
 		for (state, on) in [(all_on, true), (all_off, false)] {
 			let items = view_menu_items(state);
 			for (name, want) in rows {
-				assert_eq!(
-					check_of(&items, want),
-					Some(Some(on)),
-					"View's {name} row, everything {}",
-					if on { "on" } else { "off" }
-				);
+				assert_eq!(check_of(&items, want), Some(Some(on)), "View's {name} row, everything {}", if on { "on" } else { "off" });
 			}
 		}
 	}
@@ -1613,58 +1119,22 @@ mod tests {
 	// Test ID: dc3q2
 	#[test]
 	fn the_view_menu_spends_no_accelerator_twice() {
-		let off = ViewState {
-			read_only: false,
-			fullscreen: false,
-			window_frame: false,
-			menu_bar: false,
-			tab_strip: false,
-			minimap: false,
-			bare: false,
-			remote: false,
-			next_wallpaper: true,
-		};
+		let off = ViewState { read_only: false, fullscreen: false, window_frame: false, menu_bar: false, tab_strip: false, minimap: false, bare: false, remote: false, next_wallpaper: true };
 		assert_eq!(accel_clash(&view_menu_items(off)), None);
 	}
 
 	// Test ID: dd2hn
 	#[test]
 	fn next_wallpaper_shows_only_with_somewhere_to_go() {
-		let state = |next_wallpaper| ViewState {
-			read_only: false,
-			fullscreen: false,
-			window_frame: false,
-			menu_bar: false,
-			tab_strip: false,
-			minimap: false,
-			bare: false,
-			remote: false,
-			next_wallpaper,
-		};
-		let has_row = |items: Vec<Entry>| {
-			items.iter().any(|entry| {
-				matches!(
-					entry,
-					Entry::Item {
-						action: MenuAction::NextWallpaper,
-						..
-					}
-				)
-			})
-		};
+		let state = |next_wallpaper| ViewState { read_only: false, fullscreen: false, window_frame: false, menu_bar: false, tab_strip: false, minimap: false, bare: false, remote: false, next_wallpaper };
+		let has_row = |items: Vec<Entry>| items.iter().any(|entry| matches!(entry, Entry::Item { action: MenuAction::NextWallpaper, .. }));
 		assert!(has_row(view_menu_items(state(true))));
 		assert!(!has_row(view_menu_items(state(false))));
 
 		assert!(rotation_live(false, 2, true));
-		assert!(
-			!rotation_live(true, 2, true),
-			"a command-line wallpaper holds"
-		);
+		assert!(!rotation_live(true, 2, true), "a command-line wallpaper holds");
 		assert!(!rotation_live(false, 1, true), "one image has no next");
-		assert!(
-			!rotation_live(false, 5, false),
-			"no folder, nothing to rotate"
-		);
+		assert!(!rotation_live(false, 5, false), "no folder, nothing to rotate");
 	}
 
 	// Some(check) for the first top-level item doing what `want` picks.
@@ -1676,9 +1146,7 @@ mod tests {
 	}
 
 	fn position_of(items: &[Entry], want: fn(&MenuAction) -> bool) -> Option<usize> {
-		items
-			.iter()
-			.position(|entry| matches!(entry, Entry::Item { action, .. } if want(action)))
+		items.iter().position(|entry| matches!(entry, Entry::Item { action, .. } if want(action)))
 	}
 
 	// Every action a menu can reach, submenus included.
@@ -1697,49 +1165,16 @@ mod tests {
 	// A disabled entry sits between the 2 active ones, so an index that
 	// counted only the offered rows would show.
 	fn three_shells() -> Vec<ShellEntry> {
-		vec![
-			shell("PowerShell 7", true),
-			shell("fish", false),
-			shell("Nushell", true),
-		]
+		vec![shell("PowerShell 7", true), shell("fish", false), shell("Nushell", true)]
 	}
 
 	// Every menu with as many rows as it can have: each toggle on, a link under
 	// the pointer, a wallpaper to move on to, and shells to offer.
 	fn every_menu(shells: &[ShellEntry]) -> Vec<(&'static str, Vec<Entry>)> {
-		let view = ViewState {
-			read_only: true,
-			fullscreen: true,
-			window_frame: true,
-			menu_bar: true,
-			tab_strip: true,
-			minimap: true,
-			bare: true,
-			remote: true,
-			next_wallpaper: true,
-		};
-		let ctx = CtxState {
-			link: true,
-			read_only: true,
-			copy_select: true,
-			copy_output: true,
-			menu_bar: true,
-			bare: false,
-			next_wallpaper: true,
-		};
+		let view = ViewState { read_only: true, fullscreen: true, window_frame: true, menu_bar: true, tab_strip: true, minimap: true, bare: true, remote: true, next_wallpaper: true };
+		let ctx = CtxState { link: true, read_only: true, copy_select: true, copy_output: true, menu_bar: true, bare: false, next_wallpaper: true };
 		let keys = crate::keys::Bindings::defaults(false);
-		vec![
-			("File", file_menu_items()),
-			("Edit", edit_menu_items(true, true)),
-			("View", view_menu_items(view)),
-			("Tabs", tabs_menu_items(shells, true)),
-			("Panes", panes_menu_items(shells)),
-			("Help", help_menu_items()),
-			("right-click", context_menu_items(ctx, shells)),
-		]
-		.into_iter()
-		.map(|(name, items)| (name, with_shortcuts(items, &keys, false)))
-		.collect()
+		vec![("File", file_menu_items()), ("Edit", edit_menu_items(true, true)), ("View", view_menu_items(view)), ("Tabs", tabs_menu_items(shells, true)), ("Panes", panes_menu_items(shells)), ("Help", help_menu_items()), ("right-click", context_menu_items(ctx, shells))].into_iter().map(|(name, items)| (name, with_shortcuts(items, &keys, false))).collect()
 	}
 
 	// The shortcut in "Label (Ctrl+Shift+C)", if the row shows one.
@@ -1772,27 +1207,14 @@ mod tests {
 				};
 				assert!(!keys.contains(' '), "{name}: {label}");
 				for key in keys.split('+') {
-					assert!(
-						key == "," || (!key.is_empty() && key.chars().all(char::is_alphanumeric)),
-						"{name}: {label} spells a key as {key:?}"
-					);
+					assert!(key == "," || (!key.is_empty() && key.chars().all(char::is_alphanumeric)), "{name}: {label} spells a key as {key:?}");
 				}
 			}
 		}
 		let view = &every_menu(&[])[2].1;
-		let label_of = |want| {
-			position_of(view, want)
-				.and_then(|i| entry_label(&view[i]))
-				.unwrap_or_default()
-		};
-		assert_eq!(
-			shortcut_of(label_of(|a| matches!(a, MenuAction::FontBigger))),
-			Some("Ctrl+Plus")
-		);
-		assert_eq!(
-			shortcut_of(label_of(|a| matches!(a, MenuAction::FontSmaller))),
-			Some("Ctrl+Minus")
-		);
+		let label_of = |want| position_of(view, want).and_then(|i| entry_label(&view[i])).unwrap_or_default();
+		assert_eq!(shortcut_of(label_of(|a| matches!(a, MenuAction::FontBigger))), Some("Ctrl+Plus"));
+		assert_eq!(shortcut_of(label_of(|a| matches!(a, MenuAction::FontSmaller))), Some("Ctrl+Minus"));
 	}
 
 	// A row that opens a prompt or a dialog ends in the one ellipsis character,
@@ -1802,11 +1224,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_row_that_asks_for_more_ends_in_a_real_ellipsis() {
 		use crate::ui_spec::{Key, Kind};
-		let spec = crate::ui_spec::ui()
-			.specs
-			.iter()
-			.find(|spec| spec.key == Key::ThemeActions)
-			.expect("the theme buttons row");
+		let spec = crate::ui_spec::ui().specs.iter().find(|spec| spec.key == Key::ThemeActions).expect("the theme buttons row");
 		let Kind::Buttons(labels) = spec.kind else {
 			panic!("the theme actions are buttons");
 		};
@@ -1823,6 +1241,43 @@ mod tests {
 	// Sentence case: past the first letter, a capital is either the row's
 	// accelerator ("Paste selection") or part of the shortcut. Shell titles in a
 	// flyout are names and keep theirs.
+	// winit reports Ctrl+Shift+C as a plain "C", so a menu that went by the
+	// letter alone closed the tab from Tabs, the pane from Panes, and split the
+	// pane from the right-click menu on Ctrl+Shift+V. A chord picks no row in
+	// any menu, and the letter on its own still does.
+	// Test ID: dfjvn
+	#[test]
+	fn a_ctrl_or_command_chord_picks_no_menu_row() {
+		use winit::keyboard::ModifiersState as M;
+		let chords = [M::CONTROL, M::CONTROL | M::SHIFT, M::CONTROL | M::ALT, M::SUPER, M::SUPER | M::SHIFT, M::ALT | M::SHIFT];
+		let row = |items: &[Entry], ch: &str, mods| accel_row(items, ch, mods);
+		let mut picked = 0;
+		for (name, items) in every_menu(&three_shells()) {
+			for c in 'a'..='z' {
+				let ch = c.to_string();
+				let plain = row(&items, &ch, M::empty());
+				assert_eq!(row(&items, &ch.to_uppercase(), M::SHIFT), plain, "{name} Shift+{c}");
+				assert_eq!(row(&items, &ch, M::ALT), plain, "{name} Alt+{c}");
+				picked += usize::from(plain.is_some());
+				for mods in chords {
+					assert_eq!(row(&items, &ch.to_uppercase(), mods), None, "{name} {mods:?}+{c}");
+					assert_eq!(row(&items, &ch, mods), None, "{name} {mods:?}+{c}");
+				}
+			}
+		}
+		assert!(picked > 10, "the menus have accelerators to pick: {picked}");
+		let menus = every_menu(&three_shells());
+		let by = |name: &str| &menus.iter().find(|(n, _)| *n == name).unwrap().1;
+		let action = |items: &[Entry], at: Option<usize>| match at.map(|i| &items[i]) {
+			Some(Entry::Item { action, .. }) => Some(*action),
+			_ => None,
+		};
+		let tabs = by("Tabs");
+		assert_eq!(action(tabs, row(tabs, "c", M::empty())), Some(MenuAction::CloseTab));
+		let ctx = by("right-click");
+		assert_eq!(action(ctx, row(ctx, "v", M::empty())), Some(MenuAction::SplitVertical));
+	}
+
 	// Test ID: dd5pp
 	#[test]
 	fn every_menu_row_is_in_sentence_case() {
@@ -1834,10 +1289,7 @@ mod tests {
 				let accel = entry_accel(entry).map(|(_, pos)| pos);
 				let words = label.rfind(" (").map_or(label, |open| &label[..open]);
 				for (at, ch) in words.char_indices().skip(1) {
-					assert!(
-						!ch.is_uppercase() || accel == Some(at),
-						"{name}: {label} capitalizes {ch}"
-					);
+					assert!(!ch.is_uppercase() || accel == Some(at), "{name}: {label} capitalizes {ch}");
 				}
 			}
 		}
@@ -1846,34 +1298,13 @@ mod tests {
 	// Test ID: dd5pq
 	#[test]
 	fn the_right_click_menu_rules_off_the_tab_rows_from_the_pane_rows() {
-		let ctx = CtxState {
-			link: false,
-			read_only: false,
-			copy_select: false,
-			copy_output: false,
-			menu_bar: true,
-			bare: false,
-			next_wallpaper: false,
-		};
+		let ctx = CtxState { link: false, read_only: false, copy_select: false, copy_output: false, menu_bar: true, bare: false, next_wallpaper: false };
 		for shells in [three_shells(), Vec::new()] {
 			let items = context_menu_items(ctx, &shells);
-			let last_tab = items
-				.iter()
-				.rposition(|entry| {
-					actions_in(std::slice::from_ref(entry))
-						.iter()
-						.any(|a| matches!(a, MenuAction::NewTab | MenuAction::NewTabShell(_)))
-				})
-				.expect("a tab row");
-			let first_pane = position_of(&items, |a| matches!(a, MenuAction::SplitVertical))
-				.expect("a pane row");
+			let last_tab = items.iter().rposition(|entry| actions_in(std::slice::from_ref(entry)).iter().any(|a| matches!(a, MenuAction::NewTab | MenuAction::NewTabShell(_)))).expect("a tab row");
+			let first_pane = position_of(&items, |a| matches!(a, MenuAction::SplitVertical)).expect("a pane row");
 			assert!(last_tab < first_pane);
-			assert!(
-				items[last_tab..first_pane]
-					.iter()
-					.any(|entry| matches!(entry, Entry::Sep)),
-				"no rule between the tab rows and the pane rows"
-			);
+			assert!(items[last_tab..first_pane].iter().any(|entry| matches!(entry, Entry::Sep)), "no rule between the tab rows and the pane rows");
 		}
 	}
 
@@ -1912,25 +1343,14 @@ mod tests {
 		assert!(!menu_bar_at_launch(Some(true), true, false));
 		let shells = [shell("bash", true)];
 		for next_wallpaper in [false, true] {
-			let ctx = CtxState {
-				link: true,
-				read_only: false,
-				copy_select: false,
-				copy_output: false,
-				menu_bar: false,
-				bare: false,
-				next_wallpaper,
-			};
+			let ctx = CtxState { link: true, read_only: false, copy_select: false, copy_output: false, menu_bar: false, bare: false, next_wallpaper };
 			let window = context_menu_items(ctx, &shells);
 			assert!(actions_in(&window).contains(&MenuAction::ToggleMenuBar));
 			let mac = mac_entries(window);
 			assert!(!actions_in(&mac).contains(&MenuAction::ToggleMenuBar));
 			assert!(!matches!(mac.first(), Some(Entry::Sep)));
 			assert!(!matches!(mac.last(), Some(Entry::Sep)));
-			assert!(
-				!mac.windows(2)
-					.any(|pair| matches!(pair, [Entry::Sep, Entry::Sep]))
-			);
+			assert!(!mac.windows(2).any(|pair| matches!(pair, [Entry::Sep, Entry::Sep])));
 		}
 	}
 
@@ -1943,29 +1363,13 @@ mod tests {
 		use super::mac_entries;
 		let shells = [shell("bash", true)];
 		for bare in [false, true] {
-			let ctx = CtxState {
-				link: false,
-				read_only: false,
-				copy_select: false,
-				copy_output: false,
-				menu_bar: !bare,
-				bare,
-				next_wallpaper: false,
-			};
+			let ctx = CtxState { link: false, read_only: false, copy_select: false, copy_output: false, menu_bar: !bare, bare, next_wallpaper: false };
 			let items = context_menu_items(ctx, &shells);
 			let actions = actions_in(&items);
-			let menu_bar = actions
-				.iter()
-				.position(|a| *a == MenuAction::ToggleMenuBar)
-				.expect("Menu bar");
+			let menu_bar = actions.iter().position(|a| *a == MenuAction::ToggleMenuBar).expect("Menu bar");
 			assert_eq!(actions.get(menu_bar + 1), Some(&MenuAction::ToggleBare));
 			let row = items.iter().find_map(|entry| match entry {
-				Entry::Item {
-					label,
-					action: MenuAction::ToggleBare,
-					check,
-					..
-				} => Some((label.as_str(), *check)),
+				Entry::Item { label, action: MenuAction::ToggleBare, check, .. } => Some((label.as_str(), *check)),
 				_ => None,
 			});
 			assert_eq!(row, Some(("Bare window", Some(bare))));
@@ -1998,15 +1402,7 @@ mod tests {
 		use crate::input::Hotkey;
 		use crate::keys::{Bindings, Chord};
 		let shells = [shell("bash", true)];
-		let ctx = CtxState {
-			link: false,
-			read_only: false,
-			copy_select: false,
-			copy_output: false,
-			menu_bar: true,
-			bare: false,
-			next_wallpaper: false,
-		};
+		let ctx = CtxState { link: false, read_only: false, copy_select: false, copy_output: false, menu_bar: true, bare: false, next_wallpaper: false };
 		let label = |entries: &[Entry], want: MenuAction| {
 			entries.iter().find_map(|entry| match entry {
 				Entry::Item { label, action, .. } if *action == want => Some(label.clone()),
@@ -2014,61 +1410,27 @@ mod tests {
 			})
 		};
 		let pc = Bindings::defaults(false);
-		for items in [
-			with_shortcuts(panes_menu_items(&shells), &pc, false),
-			with_shortcuts(context_menu_items(ctx, &shells), &pc, false),
-		] {
-			for (action, shown) in [
-				(MenuAction::SplitVertical, "Split vertical (Alt+Shift+Plus)"),
-				(
-					MenuAction::SplitHorizontal,
-					"Split horizontal (Alt+Shift+Minus)",
-				),
-				(MenuAction::Close, "Close pane (Alt+Shift+W)"),
-			] {
+		for items in [with_shortcuts(panes_menu_items(&shells), &pc, false), with_shortcuts(context_menu_items(ctx, &shells), &pc, false)] {
+			for (action, shown) in [(MenuAction::SplitVertical, "Split vertical (Alt+Shift+Plus)"), (MenuAction::SplitHorizontal, "Split horizontal (Alt+Shift+Minus)"), (MenuAction::Close, "Close pane (Alt+Shift+W)")] {
 				assert_eq!(label(&items, action).as_deref(), Some(shown));
 			}
 		}
 		let mac = with_shortcuts(panes_menu_items(&shells), &Bindings::defaults(true), true);
-		assert_eq!(
-			label(&mac, MenuAction::SplitVertical).as_deref(),
-			Some("Split vertical (Command+D)")
-		);
-		assert_eq!(
-			label(&mac, MenuAction::SplitHorizontal).as_deref(),
-			Some("Split horizontal (Shift+Command+D)")
-		);
+		assert_eq!(label(&mac, MenuAction::SplitVertical).as_deref(), Some("Split vertical (Command+D)"));
+		assert_eq!(label(&mac, MenuAction::SplitHorizontal).as_deref(), Some("Split horizontal (Shift+Command+D)"));
 		// Close pane had no Mac chord until 20261003
 		// assert_eq!(
 		// 	label(&mac, MenuAction::Close).as_deref(),
 		// 	Some("Close pane")
 		// );
-		assert_eq!(
-			label(&mac, MenuAction::Close).as_deref(),
-			Some("Close pane (Option+Command+W)")
-		);
+		assert_eq!(label(&mac, MenuAction::Close).as_deref(), Some("Close pane (Option+Command+W)"));
 		let chord = |text| Chord::parse(text).expect(text);
-		let (moved, _) = Bindings::with(
-			false,
-			&[
-				(Hotkey::ClosePane, vec![chord("Ctrl+Shift+W")]),
-				(Hotkey::SplitRight, Vec::new()),
-			],
-		);
+		let (moved, _) = Bindings::with(false, &[(Hotkey::ClosePane, vec![chord("Ctrl+Shift+W")]), (Hotkey::SplitRight, Vec::new())]);
 		let tabs = with_shortcuts(tabs_menu_items(&shells, true), &moved, false);
-		assert_eq!(
-			label(&tabs, MenuAction::CloseTab).as_deref(),
-			Some("Close tab (Ctrl+F4)")
-		);
+		assert_eq!(label(&tabs, MenuAction::CloseTab).as_deref(), Some("Close tab (Ctrl+F4)"));
 		let panes = with_shortcuts(panes_menu_items(&shells), &moved, false);
-		assert_eq!(
-			label(&panes, MenuAction::Close).as_deref(),
-			Some("Close pane (Ctrl+Shift+W)")
-		);
-		assert_eq!(
-			label(&panes, MenuAction::SplitVertical).as_deref(),
-			Some("Split vertical")
-		);
+		assert_eq!(label(&panes, MenuAction::Close).as_deref(), Some("Close pane (Ctrl+Shift+W)"));
+		assert_eq!(label(&panes, MenuAction::SplitVertical).as_deref(), Some("Split vertical"));
 	}
 
 	// The right-click menu on a Mac names the Command chord for each row that has
@@ -2078,34 +1440,16 @@ mod tests {
 	fn the_mac_right_click_menu_shows_command_chords() {
 		use super::mac_entries;
 		let shells = [shell("bash", true)];
-		let ctx = CtxState {
-			link: true,
-			read_only: false,
-			copy_select: false,
-			copy_output: false,
-			menu_bar: false,
-			bare: false,
-			next_wallpaper: true,
-		};
+		let ctx = CtxState { link: true, read_only: false, copy_select: false, copy_output: false, menu_bar: false, bare: false, next_wallpaper: true };
 		let window = context_menu_items(ctx, &shells);
-		let mac = mac_entries(with_shortcuts(
-			window.clone(),
-			&crate::keys::Bindings::defaults(true),
-			true,
-		));
+		let mac = mac_entries(with_shortcuts(window.clone(), &crate::keys::Bindings::defaults(true), true));
 		let label = |entries: &[Entry], want: MenuAction| {
 			entries.iter().find_map(|entry| match entry {
 				Entry::Item { label, action, .. } if *action == want => Some(label.clone()),
 				_ => None,
 			})
 		};
-		for (action, shown) in [
-			(MenuAction::Copy, "Copy (Command+C)"),
-			(MenuAction::Paste, "Paste (Command+V)"),
-			(MenuAction::NewTab, "New tab (Command+T)"),
-			(MenuAction::Settings, "Settings\u{2026} (Command+,)"),
-			(MenuAction::PasteSelection, "Paste selection"),
-		] {
+		for (action, shown) in [(MenuAction::Copy, "Copy (Command+C)"), (MenuAction::Paste, "Paste (Command+V)"), (MenuAction::NewTab, "New tab (Command+T)"), (MenuAction::Settings, "Settings\u{2026} (Command+,)"), (MenuAction::PasteSelection, "Paste selection")] {
 			assert_eq!(label(&mac, action).as_deref(), Some(shown));
 		}
 		let mut rows = 0;
@@ -2116,10 +1460,7 @@ mod tests {
 			rows += 1;
 			assert!(!text.contains("Ctrl"), "{text}");
 			if let Some((label, pos)) = entry_accel(entry) {
-				let before = window
-					.iter()
-					.filter_map(entry_accel)
-					.find(|(old, _)| old.split(" (").next() == label.split(" (").next());
+				let before = window.iter().filter_map(entry_accel).find(|(old, _)| old.split(" (").next() == label.split(" (").next());
 				let (old, old_pos) = before.expect("row came across");
 				assert_eq!(label[pos..].chars().next(), old[old_pos..].chars().next());
 			}
@@ -2133,16 +1474,7 @@ mod tests {
 	fn the_bar_reads_file_to_help_and_file_has_no_tab_or_pane_action() {
 		assert_eq!(MENU_BAR, ["File", "Edit", "View", "Tabs", "Panes", "Help"]);
 		for action in actions_in(&file_menu_items()) {
-			assert!(!matches!(
-				action,
-				MenuAction::NewTab
-					| MenuAction::NewTabShell(_)
-					| MenuAction::CloseTab
-					| MenuAction::SplitVertical
-					| MenuAction::SplitHorizontal
-					| MenuAction::SplitShell(..)
-					| MenuAction::Close
-			));
+			assert!(!matches!(action, MenuAction::NewTab | MenuAction::NewTabShell(_) | MenuAction::CloseTab | MenuAction::SplitVertical | MenuAction::SplitHorizontal | MenuAction::SplitShell(..) | MenuAction::Close));
 		}
 	}
 
@@ -2150,47 +1482,14 @@ mod tests {
 	#[test]
 	fn the_right_click_menu_has_the_pane_actions_and_their_checkmarks() {
 		for on in [false, true] {
-			let items = context_menu_items(
-				CtxState {
-					link: false,
-					read_only: on,
-					copy_select: false,
-					copy_output: false,
-					menu_bar: on,
-					bare: on,
-					next_wallpaper: false,
-				},
-				&[],
-			);
-			let plain: [(&str, fn(&MenuAction) -> bool); 8] = [
-				("Copy", |a| matches!(a, MenuAction::Copy)),
-				("Paste", |a| matches!(a, MenuAction::Paste)),
-				("Paste selection", |a| {
-					matches!(a, MenuAction::PasteSelection)
-				}),
-				("New tab", |a| matches!(a, MenuAction::NewTab)),
-				("Split vertical", |a| matches!(a, MenuAction::SplitVertical)),
-				("Split horizontal", |a| {
-					matches!(a, MenuAction::SplitHorizontal)
-				}),
-				("Reload config", |a| matches!(a, MenuAction::ReloadConfig)),
-				("Settings", |a| matches!(a, MenuAction::Settings)),
-			];
+			let items = context_menu_items(CtxState { link: false, read_only: on, copy_select: false, copy_output: false, menu_bar: on, bare: on, next_wallpaper: false }, &[]);
+			let plain: [(&str, fn(&MenuAction) -> bool); 8] = [("Copy", |a| matches!(a, MenuAction::Copy)), ("Paste", |a| matches!(a, MenuAction::Paste)), ("Paste selection", |a| matches!(a, MenuAction::PasteSelection)), ("New tab", |a| matches!(a, MenuAction::NewTab)), ("Split vertical", |a| matches!(a, MenuAction::SplitVertical)), ("Split horizontal", |a| matches!(a, MenuAction::SplitHorizontal)), ("Reload config", |a| matches!(a, MenuAction::ReloadConfig)), ("Settings", |a| matches!(a, MenuAction::Settings))];
 			for (name, want) in plain {
 				assert_eq!(check_of(&items, want), Some(None), "{name}");
 			}
-			assert_eq!(
-				check_of(&items, |a| matches!(a, MenuAction::ToggleReadOnly)),
-				Some(Some(on))
-			);
-			assert_eq!(
-				check_of(&items, |a| matches!(a, MenuAction::ToggleMenuBar)),
-				Some(Some(on))
-			);
-			assert_eq!(
-				check_of(&items, |a| matches!(a, MenuAction::ToggleBare)),
-				Some(Some(on))
-			);
+			assert_eq!(check_of(&items, |a| matches!(a, MenuAction::ToggleReadOnly)), Some(Some(on)));
+			assert_eq!(check_of(&items, |a| matches!(a, MenuAction::ToggleMenuBar)), Some(Some(on)));
+			assert_eq!(check_of(&items, |a| matches!(a, MenuAction::ToggleBare)), Some(Some(on)));
 			assert_eq!(accel_clash(&items), None);
 		}
 	}
@@ -2198,20 +1497,9 @@ mod tests {
 	// Test ID: dd5pt
 	#[test]
 	fn a_new_tab_shell_row_lists_the_active_shells_or_is_not_there() {
-		let ctx = CtxState {
-			link: false,
-			read_only: false,
-			copy_select: false,
-			copy_output: false,
-			menu_bar: true,
-			bare: false,
-			next_wallpaper: false,
-		};
+		let ctx = CtxState { link: false, read_only: false, copy_select: false, copy_output: false, menu_bar: true, bare: false, next_wallpaper: false };
 		let shells = three_shells();
-		for (name, items) in [
-			("Tabs", tabs_menu_items(&shells, false)),
-			("right-click", context_menu_items(ctx, &shells)),
-		] {
+		for (name, items) in [("Tabs", tabs_menu_items(&shells, false)), ("right-click", context_menu_items(ctx, &shells))] {
 			let below = position_of(&items, |a| matches!(a, MenuAction::NewTab)).unwrap() + 1;
 			let Entry::Sub { label, items, .. } = &items[below] else {
 				panic!("{name}: no shell row under New tab");
@@ -2220,16 +1508,10 @@ mod tests {
 			let offered: Vec<_> = items.iter().filter_map(entry_label).collect();
 			assert_eq!(offered, ["PowerShell 7", "Nushell"], "{name}");
 			let picks = actions_in(items);
-			assert!(matches!(
-				picks[..],
-				[MenuAction::NewTabShell(0), MenuAction::NewTabShell(2)]
-			));
+			assert!(matches!(picks[..], [MenuAction::NewTabShell(0), MenuAction::NewTabShell(2)]));
 		}
 		for shells in [Vec::new(), vec![shell("fish", false)]] {
-			for items in [
-				tabs_menu_items(&shells, false),
-				context_menu_items(ctx, &shells),
-			] {
+			for items in [tabs_menu_items(&shells, false), context_menu_items(ctx, &shells)] {
 				assert!(!items.iter().any(|entry| matches!(entry, Entry::Sub { .. })));
 			}
 		}
@@ -2241,20 +1523,9 @@ mod tests {
 		let shells = three_shells();
 		let items = tabs_menu_items(&shells, true);
 		let new_tab = position_of(&items, |a| matches!(a, MenuAction::NewTab)).unwrap();
-		assert_eq!(
-			items.get(new_tab + 1).and_then(entry_label),
-			Some("New tab in tmux")
-		);
-		assert!(matches!(
-			items[new_tab + 1],
-			Entry::Item {
-				action: MenuAction::NewTabTmux,
-				..
-			}
-		));
-		assert!(
-			matches!(&items[new_tab + 2], Entry::Sub { label, .. } if label == "New tab with shell")
-		);
+		assert_eq!(items.get(new_tab + 1).and_then(entry_label), Some("New tab in tmux"));
+		assert!(matches!(items[new_tab + 1], Entry::Item { action: MenuAction::NewTabTmux, .. }));
+		assert!(matches!(&items[new_tab + 2], Entry::Sub { label, .. } if label == "New tab with shell"));
 		let without = tabs_menu_items(&shells, false);
 		assert!(position_of(&without, |a| matches!(a, MenuAction::NewTabTmux)).is_none());
 	}
@@ -2265,16 +1536,8 @@ mod tests {
 		let shells = three_shells();
 		let rows = split_shells(&shells);
 		assert_eq!(rows.len(), 2);
-		for (row, (label, dir)) in rows.iter().zip([
-			("Split vertical with shell", Dir::Vertical),
-			("Split horizontal with shell", Dir::Horizontal),
-		]) {
-			let Entry::Sub {
-				label: shown,
-				items,
-				..
-			} = row
-			else {
+		for (row, (label, dir)) in rows.iter().zip([("Split vertical with shell", Dir::Vertical), ("Split horizontal with shell", Dir::Horizontal)]) {
+			let Entry::Sub { label: shown, items, .. } = row else {
 				panic!("{label} is not a submenu");
 			};
 			assert_eq!(shown, label);
@@ -2291,10 +1554,7 @@ mod tests {
 		}
 		// both rows sit under the 2 plain splits on the Panes menu
 		let panes = panes_menu_items(&shells);
-		assert!(matches!(
-			panes[2..4],
-			[Entry::Sub { .. }, Entry::Sub { .. }]
-		));
+		assert!(matches!(panes[2..4], [Entry::Sub { .. }, Entry::Sub { .. }]));
 		assert!(split_shells(&[shell("fish", false)]).is_empty());
 		assert!(split_shells(&[]).is_empty());
 	}

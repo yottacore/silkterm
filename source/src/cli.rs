@@ -34,7 +34,10 @@ pub enum Size {
 #[derive(Debug, Default, Clone)]
 pub struct Style {
 	pub shell: Option<Vec<String>>, // argv (already shell-word-split)
-	pub directory: Option<String>,  // where that shell starts (unexpanded)
+	/// `shell` is the file `--open` runs, which only the pane it was given to
+	/// runs. A pane made from that one starts the default shell.
+	pub opened_file: bool,
+	pub directory: Option<String>, // where that shell starts (unexpanded)
 	pub keep_open: Option<bool>,
 	pub font_name: Option<String>,
 	pub font_size: Option<f32>,
@@ -78,15 +81,7 @@ pub struct PaneSpec {
 
 impl PaneSpec {
 	fn new(id: Option<String>, first: bool) -> Self {
-		Self {
-			id,
-			splits: None,
-			dir: None,
-			size: None,
-			title: None,
-			style: Style::default(),
-			first,
-		}
+		Self { id, splits: None, dir: None, size: None, title: None, style: Style::default(), first }
 	}
 }
 
@@ -104,13 +99,7 @@ pub struct TabSpec {
 impl TabSpec {
 	fn new(id: Option<String>) -> Self {
 		// every tab starts with an implicit first pane (id "main")
-		Self {
-			id,
-			title: None,
-			style: Style::default(),
-			panes: vec![PaneSpec::new(None, true)],
-			opened_from: 0,
-		}
+		Self { id, title: None, style: Style::default(), panes: vec![PaneSpec::new(None, true)], opened_from: 0 }
 	}
 }
 
@@ -244,8 +233,7 @@ impl Args {
 		if let Some(v) = inline {
 			return Ok(v);
 		}
-		self.next_token()
-			.ok_or_else(|| anyhow::anyhow!("{flag} needs a value"))
+		self.next_token().ok_or_else(|| anyhow::anyhow!("{flag} needs a value"))
 	}
 	// a flag whose value is optional: inline `=value`, else the next token only
 	// when it isn't another option, so a bare flag reads as no value rather than
@@ -310,41 +298,17 @@ const OPACITY: (f32, f32) = (0.0, 1.0);
 const SPLIT_PCT: (f32, f32) = (5.0, 95.0);
 
 fn parse_size(v: &str) -> anyhow::Result<Size> {
-	if let Some(percent) = v.strip_suffix('%') {
-		Ok(Size::Percent(parse_f32_in(
-			"--size",
-			percent.trim(),
-			SPLIT_PCT,
-		)?))
-	} else {
-		Ok(Size::Cells(
-			v.trim()
-				.parse::<u32>()
-				.map_err(|_| anyhow::anyhow!("--size: bad cell count: {v}"))?
-				.max(1),
-		))
-	}
+	if let Some(percent) = v.strip_suffix('%') { Ok(Size::Percent(parse_f32_in("--size", percent.trim(), SPLIT_PCT)?)) } else { Ok(Size::Cells(v.trim().parse::<u32>().map_err(|_| anyhow::anyhow!("--size: bad cell count: {v}"))?.max(1))) }
 }
 
 /// The launch arguments as text. An argument that isn't Unicode is a parse error
 /// rather than a panic.
-pub fn utf8_args<I: IntoIterator<Item = std::ffi::OsString>>(
-	args: I,
-) -> anyhow::Result<Vec<String>> {
-	args.into_iter()
-		.map(|a| {
-			a.into_string().map_err(|a| {
-				anyhow::anyhow!("argument isn't valid Unicode: {}", a.to_string_lossy())
-			})
-		})
-		.collect()
+pub fn utf8_args<I: IntoIterator<Item = std::ffi::OsString>>(args: I) -> anyhow::Result<Vec<String>> {
+	args.into_iter().map(|a| a.into_string().map_err(|a| anyhow::anyhow!("argument isn't valid Unicode: {}", a.to_string_lossy()))).collect()
 }
 
 pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
-	let mut tokens = Args {
-		items: args.into_iter().collect(),
-		pos: 0,
-	};
+	let mut tokens = Args { items: args.into_iter().collect(), pos: 0 };
 	let mut cli = Cli::default();
 	// current scope: the tab that later options go to. None is the window.
 	let mut cur_tab: Option<usize> = None;
@@ -399,8 +363,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 			"tab" => {
 				ensure_first_tab(&mut cli);
 				let id = tokens.value("--tab", inline)?;
-				let idx = find_tab(&cli, &id)
-					.ok_or_else(|| anyhow::anyhow!("--tab: no such tab: {id}"))?;
+				let idx = find_tab(&cli, &id).ok_or_else(|| anyhow::anyhow!("--tab: no such tab: {id}"))?;
 				cur_tab = Some(idx);
 				cur_pane = 0;
 				continue;
@@ -419,8 +382,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 				ensure_first_tab(&mut cli);
 				let tab_idx = cur_tab.unwrap_or(0);
 				let id = tokens.value("--pane", inline)?;
-				let pane_idx = find_pane(&cli.tabs[tab_idx], &id)
-					.ok_or_else(|| anyhow::anyhow!("--pane: no such pane: {id}"))?;
+				let pane_idx = find_pane(&cli.tabs[tab_idx], &id).ok_or_else(|| anyhow::anyhow!("--pane: no such pane: {id}"))?;
 				cur_pane = pane_idx;
 				cur_tab = Some(tab_idx);
 				continue;
@@ -444,61 +406,26 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 		}
 
 		// window options, refused once a tab or pane flag was seen
-		let window_only = matches!(
-			name,
-			"columns"
-				| "rows" | "pixel-width"
-				| "pixel-height"
-				| "background-opacity"
-				| "hide-windowframe"
-				| "hide-menu"
-				| "fullscreen"
-				| "persist" | "config"
-				| "reset-config"
-				| "software-rendering"
-		);
+		let window_only = matches!(name, "columns" | "rows" | "pixel-width" | "pixel-height" | "background-opacity" | "hide-windowframe" | "hide-menu" | "fullscreen" | "persist" | "config" | "reset-config" | "software-rendering");
 		if window_only {
 			if cur_tab.is_some() {
-				anyhow::bail!(
-					"--{name} is a window option; put it before --new-tab/--tab/--new-pane/--pane"
-				);
+				anyhow::bail!("--{name} is a window option; put it before --new-tab/--tab/--new-pane/--pane");
 			}
 			match name {
 				"columns" => {
-					cli.win.columns = Some(grid_cells(
-						tokens
-							.value(name, inline)?
-							.parse()
-							.map_err(|_| anyhow::anyhow!("bad --columns"))?,
-					));
+					cli.win.columns = Some(grid_cells(tokens.value(name, inline)?.parse().map_err(|_| anyhow::anyhow!("bad --columns"))?));
 				}
 				"rows" => {
-					cli.win.rows = Some(grid_cells(
-						tokens
-							.value(name, inline)?
-							.parse()
-							.map_err(|_| anyhow::anyhow!("bad --rows"))?,
-					));
+					cli.win.rows = Some(grid_cells(tokens.value(name, inline)?.parse().map_err(|_| anyhow::anyhow!("bad --rows"))?));
 				}
 				"pixel-width" => {
-					cli.win.pixel_width = Some(
-						tokens
-							.value(name, inline)?
-							.parse()
-							.map_err(|_| anyhow::anyhow!("bad --pixel-width"))?,
-					);
+					cli.win.pixel_width = Some(tokens.value(name, inline)?.parse().map_err(|_| anyhow::anyhow!("bad --pixel-width"))?);
 				}
 				"pixel-height" => {
-					cli.win.pixel_height = Some(
-						tokens
-							.value(name, inline)?
-							.parse()
-							.map_err(|_| anyhow::anyhow!("bad --pixel-height"))?,
-					);
+					cli.win.pixel_height = Some(tokens.value(name, inline)?.parse().map_err(|_| anyhow::anyhow!("bad --pixel-height"))?);
 				}
 				"background-opacity" => {
-					cli.win.opacity =
-						Some(parse_f32_in(name, &tokens.value(name, inline)?, OPACITY)?);
+					cli.win.opacity = Some(parse_f32_in(name, &tokens.value(name, inline)?, OPACITY)?);
 				}
 				"hide-windowframe" => cli.win.hide_frame = Some(tokens.bool_value(name, inline)?),
 				"hide-menu" => cli.win.hide_menu = Some(tokens.bool_value(name, inline)?),
@@ -515,12 +442,8 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 		}
 
 		// structural pane options
-		if matches!(
-			name,
-			"splits" | "splits-pane" | "down" | "up" | "left" | "right" | "size"
-		) {
-			let tab_idx =
-				cur_tab.ok_or_else(|| anyhow::anyhow!("--{name} only applies to a --new-pane"))?;
+		if matches!(name, "splits" | "splits-pane" | "down" | "up" | "left" | "right" | "size") {
+			let tab_idx = cur_tab.ok_or_else(|| anyhow::anyhow!("--{name} only applies to a --new-pane"))?;
 			let pane = &mut cli.tabs[tab_idx].panes[cur_pane];
 			if pane.first {
 				anyhow::bail!("--{name} can't apply to the first pane (main); use --new-pane");
@@ -565,7 +488,10 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 			}
 		};
 		match name {
-			"shell" => style.shell = Some(shell_split(&tokens.value(name, inline)?)?),
+			"shell" => {
+				style.shell = Some(shell_split(&tokens.value(name, inline)?)?);
+				style.opened_file = false;
+			}
 			// Kept unexpanded: `~` and the env-var spellings are resolved at spawn
 			// time by config::cli_dir, the same way the config setting is.
 			"directory" | "dir" => style.directory = Some(tokens.value(name, inline)?),
@@ -575,26 +501,15 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 			"open" => {
 				let file = tokens.value(name, inline)?;
 				let args: Vec<String> = tokens.items.drain(tokens.pos..).collect();
-				style.shell = Some(crate::fileassoc::open_argv(
-					&file,
-					&args,
-					cfg!(windows),
-					&|| crate::shells::which("pwsh").is_some(),
-				));
+				style.shell = Some(crate::fileassoc::open_argv(&file, &args, cfg!(windows), &|| crate::shells::which("pwsh").is_some()));
+				style.opened_file = true;
 				if style.directory.is_none() {
-					style.directory = std::path::Path::new(&file)
-						.parent()
-						.filter(|dir| !dir.as_os_str().is_empty())
-						.map(|dir| dir.display().to_string());
+					style.directory = std::path::Path::new(&file).parent().filter(|dir| !dir.as_os_str().is_empty()).map(|dir| dir.display().to_string());
 				}
 			}
 			"font-name" => style.font_name = Some(tokens.value(name, inline)?),
 			"font-size" => {
-				style.font_size = Some(parse_f32_in(
-					name,
-					&tokens.value(name, inline)?,
-					config::limits::FONT_SIZE,
-				)?);
+				style.font_size = Some(parse_f32_in(name, &tokens.value(name, inline)?, config::limits::FONT_SIZE)?);
 			}
 			"background-color" => {
 				style.bg_color = Some(parse_hex(name, &tokens.value(name, inline)?)?);
@@ -619,8 +534,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 				}
 			}
 			"wallpaper-opacity" | "background-image-opacity" => {
-				style.wallpaper_opacity =
-					Some(parse_f32_in(name, &tokens.value(name, inline)?, OPACITY)?);
+				style.wallpaper_opacity = Some(parse_f32_in(name, &tokens.value(name, inline)?, OPACITY)?);
 			}
 			_ => anyhow::bail!("unknown option: --{name}"),
 		}
@@ -685,14 +599,7 @@ impl WindowOpts {
 	/// overwrite the colors.
 	pub fn apply_style(&self) {
 		let style = &self.style;
-		let any = style.font_name.is_some()
-			|| style.font_size.is_some()
-			|| style.bg_color.is_some()
-			|| style.fg_color.is_some()
-			|| style.wallpaper_img.is_some()
-			|| style.wallpaper_default_fit.is_some()
-			|| style.wallpaper_opacity.is_some()
-			|| style.software_rendering.is_some();
+		let any = style.font_name.is_some() || style.font_size.is_some() || style.bg_color.is_some() || style.fg_color.is_some() || style.wallpaper_img.is_some() || style.wallpaper_default_fit.is_some() || style.wallpaper_opacity.is_some() || style.software_rendering.is_some();
 		if !any {
 			return;
 		}
@@ -708,16 +615,10 @@ impl WindowOpts {
 			return;
 		};
 		if on && !crate::gfx::SOFTWARE_POSSIBLE {
-			eprintln!(
-				"{}: --software-rendering: macOS has no software renderer; using the graphics card",
-				config::APP_NAME
-			);
+			eprintln!("{}: --software-rendering: macOS has no software renderer; using the graphics card", config::APP_NAME);
 			return;
 		}
-		let only = Style {
-			software_rendering: Some(on),
-			..Style::default()
-		};
+		let only = Style { software_rendering: Some(on), ..Style::default() };
 		let mut settings = config::settings().as_ref().clone();
 		fold_window_style(&mut settings, &only);
 		config::update(settings);
@@ -756,11 +657,7 @@ impl Cli {
 	pub fn tab_order(&self, beside: bool) -> Vec<usize> {
 		let mut order: Vec<usize> = Vec::with_capacity(self.tabs.len());
 		for (index, tab) in self.tabs.iter().enumerate() {
-			let at = order
-				.iter()
-				.position(|&made| made == tab.opened_from)
-				.filter(|_| beside && index > 0)
-				.map_or(order.len(), |from| from + 1);
+			let at = order.iter().position(|&made| made == tab.opened_from).filter(|_| beside && index > 0).map_or(order.len(), |from| from + 1);
 			order.insert(at, index);
 		}
 		order
@@ -777,30 +674,21 @@ fn find_tab(cli: &Cli, id: &str) -> Option<usize> {
 	if is_first_id(id) {
 		return (!cli.tabs.is_empty()).then_some(0);
 	}
-	cli.tabs
-		.iter()
-		.position(|tab| tab.id.as_deref() == Some(id))
+	cli.tabs.iter().position(|tab| tab.id.as_deref() == Some(id))
 }
 
 fn find_pane(tab: &TabSpec, id: &str) -> Option<usize> {
 	if is_first_id(id) {
 		return Some(0);
 	}
-	tab.panes
-		.iter()
-		.position(|pane| pane.id.as_deref() == Some(id))
+	tab.panes.iter().position(|pane| pane.id.as_deref() == Some(id))
 }
 
 /// Program name, version, and build, as --version prints it, and nothing else.
 /// The build number is last so a script reading the second field still gets the
 /// version.
 pub fn version_line() -> String {
-	format!(
-		"{} v{} build {}",
-		config::APP_NAME,
-		env!("CARGO_PKG_VERSION"),
-		config::build_label()
-	)
+	format!("{} v{} build {}", config::APP_NAME, env!("CARGO_PKG_VERSION"), config::build_label())
 }
 
 /// The line under the version line in --version and --about.
@@ -824,26 +712,11 @@ pub fn padded(body: &str) -> String {
 /// None when no GPU adapter could be probed. The version and build are still
 /// useful, so that leaves out 3 lines rather than failing.
 pub fn about(info: Option<&wgpu::AdapterInfo>) -> String {
-	let mut lines = vec![
-		format!("About {}", config::APP_NAME),
-		version_line(),
-		COPYRIGHT.to_string(),
-		format!("License: {}", env!("CARGO_PKG_LICENSE")),
-		String::new(),
-		"Info".to_string(),
-		format!(
-			"  Build:  {}  {}",
-			config::build_label(),
-			config::build_target()
-		),
-	];
+	let mut lines = vec![format!("About {}", config::APP_NAME), version_line(), COPYRIGHT.to_string(), format!("License: {}", env!("CARGO_PKG_LICENSE")), String::new(), "Info".to_string(), format!("  Build:  {}  {}", config::build_label(), config::build_target())];
 	if let Some(info) = info {
 		lines.push(format!("  Renderer:  {}", info.name));
 		lines.push(format!("  Backend:  {:?}", info.backend));
-		lines.push(format!(
-			"  Acceleration:  {}",
-			crate::gfx::acceleration(info)
-		));
+		lines.push(format!("  Acceleration:  {}", crate::gfx::acceleration(info)));
 	}
 	lines.push(String::new());
 	lines.push(env!("CARGO_PKG_REPOSITORY").to_string());
@@ -995,16 +868,7 @@ mod tests {
 	// Test ID: ddj85
 	#[test]
 	fn a_launch_is_hierarchical_exactly_when_a_flag_made_a_tab() {
-		for (line, want) in [
-			("", false),
-			("--columns 80 --title T --shell sh", false),
-			("--help", false),
-			("--new-tab", true),
-			("--tab=main", true),
-			("--new-pane", true),
-			("--pane=main", true),
-			("--new-tab --about", true),
-		] {
+		for (line, want) in [("", false), ("--columns 80 --title T --shell sh", false), ("--help", false), ("--new-tab", true), ("--tab=main", true), ("--new-pane", true), ("--pane=main", true), ("--new-tab --about", true)] {
 			let c = p(line);
 			assert_eq!(c.hierarchical(), want, "{line:?}");
 			assert_eq!(c.tabs.is_empty(), !want, "{line:?}");
@@ -1052,10 +916,7 @@ mod tests {
 		let info = crate::gfx::test_adapter("X", wgpu::DeviceType::Cpu);
 		let text = about(Some(&info));
 		let lines: Vec<&str> = text.lines().collect();
-		let at = lines
-			.iter()
-			.position(|l| *l == "Info")
-			.expect("an Info heading");
+		let at = lines.iter().position(|l| *l == "Info").expect("an Info heading");
 		let under = &lines[at + 1..];
 		assert!(under.contains(&"  Renderer:  X"), "{text}");
 		assert!(under.contains(&"  Backend:  Vulkan"), "{text}");
@@ -1079,15 +940,7 @@ mod tests {
 		// Retired 2026-09-24: the version now has a leading "v", as release
 		// tags do, so the second field is "v<version>". The assertion below replaces it.
 		// assert_eq!(line.split(' ').nth(1), Some(env!("CARGO_PKG_VERSION")));
-		assert_eq!(
-			line,
-			format!(
-				"{} v{} build {}",
-				config::APP_NAME,
-				env!("CARGO_PKG_VERSION"),
-				config::build_label()
-			)
-		);
+		assert_eq!(line, format!("{} v{} build {}", config::APP_NAME, env!("CARGO_PKG_VERSION"), config::build_label()));
 	}
 
 	// --version opens with the version line and the copyright line under it,
@@ -1099,16 +952,10 @@ mod tests {
 		let lines: Vec<&str> = text.lines().collect();
 		assert_eq!(lines, [version_line().as_str(), COPYRIGHT]);
 		assert!(COPYRIGHT.starts_with("Copyright © "));
-		for info in [
-			None,
-			Some(crate::gfx::test_adapter("X", wgpu::DeviceType::Cpu)),
-		] {
+		for info in [None, Some(crate::gfx::test_adapter("X", wgpu::DeviceType::Cpu))] {
 			let about = about(info.as_ref());
 			let heading = format!("About {}", config::APP_NAME);
-			assert!(
-				about.starts_with(&format!("{heading}\n{text}\n")),
-				"{about}"
-			);
+			assert!(about.starts_with(&format!("{heading}\n{text}\n")), "{about}");
 		}
 	}
 
@@ -1119,10 +966,7 @@ mod tests {
 		// gets checked rather than the generator that made it.
 		assert!(!config::BUILD_ID.is_empty());
 		for ch in config::BUILD_ID.chars() {
-			assert!(
-				"0123456789abcdefghjkmnpqrstvwxyz".contains(ch),
-				"{ch} is not a lowercase Crockford digit"
-			);
+			assert!("0123456789abcdefghjkmnpqrstvwxyz".contains(ch), "{ch} is not a lowercase Crockford digit");
 		}
 	}
 
@@ -1141,16 +985,7 @@ mod tests {
 		// The flags exist to be found; one added without its line is a flag
 		// nobody can discover.
 		let text = usage();
-		for flag in [
-			"--help",
-			"--syntax",
-			"--about",
-			"--donate",
-			"--version",
-			"--ver",
-			"-v",
-			"-h",
-		] {
+		for flag in ["--help", "--syntax", "--about", "--donate", "--version", "--ver", "-v", "-h"] {
 			assert!(text.contains(flag), "usage() never mentions {flag}");
 		}
 	}
@@ -1158,9 +993,7 @@ mod tests {
 	/// usage.md's "Command line" section, up to the next section.
 	fn usage_md_section() -> String {
 		let doc = include_str!("../../usage.md").replace("\r\n", "\n");
-		let from = doc
-			.find("\n## Command line\n")
-			.expect("usage.md has no Command line section");
+		let from = doc.find("\n## Command line\n").expect("usage.md has no Command line section");
 		let rest = &doc[from + 1..];
 		let to = rest[1..].find("\n## ").map_or(rest.len(), |i| i + 1);
 		rest[..to].to_string()
@@ -1173,10 +1006,7 @@ mod tests {
 		for line in usage().lines().filter(|l| l.starts_with("  -")) {
 			let line = line.trim_start();
 			let (opts, said) = line.split_once("  ").unwrap_or((line, ""));
-			let aliases = said
-				.split("alias ")
-				.skip(1)
-				.filter_map(|s| s.split(|c: char| !is_flag_char(c)).next());
+			let aliases = said.split("alias ").skip(1).filter_map(|s| s.split(|c: char| !is_flag_char(c)).next());
 			for word in opts.split(|c: char| !is_flag_char(c)).chain(aliases) {
 				if word.len() > 1 && word.starts_with('-') && !flags.iter().any(|f| f == word) {
 					flags.push(word.to_string());
@@ -1195,51 +1025,26 @@ mod tests {
 		let flags = usage_flags();
 		assert!(flags.len() > 40, "only found {flags:?} in usage()");
 		let edge = |c: Option<char>| c.is_none_or(|c| !(c.is_ascii_alphanumeric() || c == '-'));
-		let missing: Vec<&String> = flags
-			.iter()
-			.filter(|flag| {
-				!section.match_indices(flag.as_str()).any(|(at, _)| {
-					edge(section[..at].chars().next_back())
-						&& edge(section[at + flag.len()..].chars().next())
-				})
-			})
-			.collect();
-		assert!(
-			missing.is_empty(),
-			"usage.md's Command line section never names {missing:?}"
-		);
+		let missing: Vec<&String> = flags.iter().filter(|flag| !section.match_indices(flag.as_str()).any(|(at, _)| edge(section[..at].chars().next_back()) && edge(section[at + flag.len()..].chars().next()))).collect();
+		assert!(missing.is_empty(), "usage.md's Command line section never names {missing:?}");
 	}
 
 	// Test ID: ddzx4
 	#[test]
 	fn usage_md_examples_parse() {
 		let section = usage_md_section();
-		let examples: Vec<&str> = section
-			.lines()
-			.filter_map(|l| l.trim_start().strip_prefix("silkterm "))
-			.collect();
+		let examples: Vec<&str> = section.lines().filter_map(|l| l.trim_start().strip_prefix("silkterm ")).collect();
 		assert!(!examples.is_empty(), "no examples found in usage.md");
 		for line in examples {
 			let got = parse(line.split_whitespace().map(String::from));
-			assert!(
-				got.is_ok(),
-				"usage.md example `silkterm {line}`: {:#}",
-				got.unwrap_err()
-			);
+			assert!(got.is_ok(), "usage.md example `silkterm {line}`: {:#}", got.unwrap_err());
 		}
 	}
 
 	// Test ID: d913z
 	#[test]
 	fn window_opt_after_tab_errors() {
-		assert!(
-			parse(
-				"--new-tab --columns 80"
-					.split_whitespace()
-					.map(String::from)
-			)
-			.is_err()
-		);
+		assert!(parse("--new-tab --columns 80".split_whitespace().map(String::from)).is_err());
 	}
 
 	// Test ID: d9140
@@ -1270,12 +1075,7 @@ mod tests {
 	// Test ID: d9143
 	#[test]
 	fn shell_splitting() {
-		let c = parse(
-			["--new-pane", "--shell=git log --oneline"]
-				.into_iter()
-				.map(String::from),
-		)
-		.unwrap();
+		let c = parse(["--new-pane", "--shell=git log --oneline"].into_iter().map(String::from)).unwrap();
 		let sh = c.tabs[0].panes[1].style.shell.as_ref().unwrap();
 		assert_eq!(sh, &["git", "log", "--oneline"]);
 	}
@@ -1283,10 +1083,7 @@ mod tests {
 	// Test ID: d9144
 	#[test]
 	fn shell_quotes() {
-		assert_eq!(
-			shell_split(r#"bash -c "a | b""#).unwrap(),
-			["bash", "-c", "a | b"]
-		);
+		assert_eq!(shell_split(r#"bash -c "a | b""#).unwrap(), ["bash", "-c", "a | b"]);
 		assert_eq!(shell_split("'a b' c").unwrap(), ["a b", "c"]);
 	}
 
@@ -1294,18 +1091,9 @@ mod tests {
 	#[test]
 	fn shell_keeps_unquoted_backslashes() {
 		// A Windows path written plainly must arrive intact, quoted or not.
-		assert_eq!(
-			shell_split(r"C:\windows\system32\cmd.exe").unwrap(),
-			[r"C:\windows\system32\cmd.exe"]
-		);
-		assert_eq!(
-			shell_split(r"\\host\share\app.exe -x").unwrap(),
-			[r"\\host\share\app.exe", "-x"]
-		);
-		assert_eq!(
-			shell_split(r#""C:\windows\system32\cmd.exe""#).unwrap(),
-			[r"C:\windows\system32\cmd.exe"]
-		);
+		assert_eq!(shell_split(r"C:\windows\system32\cmd.exe").unwrap(), [r"C:\windows\system32\cmd.exe"]);
+		assert_eq!(shell_split(r"\\host\share\app.exe -x").unwrap(), [r"\\host\share\app.exe", "-x"]);
+		assert_eq!(shell_split(r#""C:\windows\system32\cmd.exe""#).unwrap(), [r"C:\windows\system32\cmd.exe"]);
 	}
 
 	// Test ID: dact7
@@ -1319,18 +1107,9 @@ mod tests {
 	#[test]
 	fn style_cascade_scope() {
 		let c = p("--shell=fish --new-tab --shell=zsh --new-pane --shell=htop");
-		assert_eq!(
-			c.win.style.shell.as_deref(),
-			Some(&["fish".to_string()][..])
-		);
-		assert_eq!(
-			c.tabs[1].style.shell.as_deref(),
-			Some(&["zsh".to_string()][..])
-		);
-		assert_eq!(
-			c.tabs[1].panes[1].style.shell.as_deref(),
-			Some(&["htop".to_string()][..])
-		);
+		assert_eq!(c.win.style.shell.as_deref(), Some(&["fish".to_string()][..]));
+		assert_eq!(c.tabs[1].style.shell.as_deref(), Some(&["zsh".to_string()][..]));
+		assert_eq!(c.tabs[1].panes[1].style.shell.as_deref(), Some(&["htop".to_string()][..]));
 	}
 
 	// What a double-click in Explorer runs: the file's own arguments are passed
@@ -1340,14 +1119,7 @@ mod tests {
 	#[test]
 	fn open_takes_the_rest_of_the_line() {
 		let argv = |s: &[&str]| s.iter().map(ToString::to_string).collect::<Vec<_>>();
-		let c = parse(argv(&[
-			"--keep-open",
-			"--open",
-			"/s/go.bat",
-			"--new-tab",
-			"x y",
-		]))
-		.unwrap();
+		let c = parse(argv(&["--keep-open", "--open", "/s/go.bat", "--new-tab", "x y"])).unwrap();
 		let shell = c.win.style.shell.unwrap();
 		assert_eq!(shell.last().map(String::as_str), Some("x y"));
 		assert!(shell.iter().any(|a| a == "--new-tab"));
@@ -1432,20 +1204,15 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn window_style_folds_into_settings() {
-		let c = p(
-			"--font-name=Iosevka --font-size=20 --background-color=#102030 \
+		let c = p("--font-name=Iosevka --font-size=20 --background-color=#102030 \
 			--foreground-color=#abcdef --background-image=/x.png --background-image-zoom \
-			--background-image-opacity=0.5",
-		);
+			--background-image-opacity=0.5");
 		let mut s = config::Settings::default();
 		fold_window_style(&mut s, &c.win.style);
 		assert_eq!(s.font_family, "Iosevka");
 		assert_eq!(s.font_size, 20.0);
 		assert_eq!(s.bg, [0x10, 0x20, 0x30]);
-		assert!(
-			crate::fields::lines_of(&s).is_empty(),
-			"held for the run, so nothing to save"
-		);
+		assert!(crate::fields::lines_of(&s).is_empty(), "held for the run, so nothing to save");
 		assert_eq!(s.fg, [0xab, 0xcd, 0xef]);
 		assert_eq!(s.wallpaper, Some(PathBuf::from("/x.png")));
 		assert_eq!(s.wallpaper_default_fit, config::Fit::Zoom);
@@ -1470,14 +1237,8 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn software_rendering_flag_holds_the_setting_for_the_run() {
-		assert_eq!(
-			p("--software-rendering").win.style.software_rendering,
-			Some(true)
-		);
-		assert_eq!(
-			p("--software-rendering=no").win.style.software_rendering,
-			Some(false)
-		);
+		assert_eq!(p("--software-rendering").win.style.software_rendering, Some(true));
+		assert_eq!(p("--software-rendering=no").win.style.software_rendering, Some(false));
 		assert_eq!(p("--columns 80").win.style.software_rendering, None);
 		let under_tab = parse(["--new-tab", "--software-rendering"].map(String::from));
 		assert!(under_tab.is_err(), "a window option");
@@ -1489,18 +1250,9 @@ mod tests {
 		let mut s = config::Settings::default();
 		fold_window_style(&mut s, &p("--software-rendering").win.style);
 		assert!(s.software_rendering);
-		assert!(
-			crate::fields::lines_of(&s).is_empty(),
-			"held for the run, so nothing to save"
-		);
+		assert!(crate::fields::lines_of(&s).is_empty(), "held for the run, so nothing to save");
 		// a setting that is on stays on without the flag, and =no turns it off
-		let mut on = crate::fields::owning(
-			config::Settings::default(),
-			&[(
-				crate::ui_spec::Key::SoftwareRendering,
-				knobs::Value::Bool(true),
-			)],
-		);
+		let mut on = crate::fields::owning(config::Settings::default(), &[(crate::ui_spec::Key::SoftwareRendering, knobs::Value::Bool(true))]);
 		fold_window_style(&mut on, &p("--columns 80").win.style);
 		assert!(on.software_rendering);
 		fold_window_style(&mut on, &p("--software-rendering=no").win.style);
@@ -1529,23 +1281,14 @@ mod tests {
 	fn a_number_is_held_to_its_settings_range() {
 		assert_eq!(p("--font-size 4000").win.style.font_size, Some(400.0));
 		assert_eq!(p("--font-size 0.5").win.style.font_size, Some(4.0));
-		assert_eq!(
-			p("--wallpaper-opacity 5").win.style.wallpaper_opacity,
-			Some(1.0)
-		);
+		assert_eq!(p("--wallpaper-opacity 5").win.style.wallpaper_opacity, Some(1.0));
 		assert_eq!(p("--background-opacity -1").win.opacity, Some(0.0));
 		// a grid no graphics card can draw ended the launch in create_texture
 		assert_eq!(p("--rows 100000 --columns 100000").win.rows, Some(1_000));
 		assert_eq!(p("--columns 0").win.columns, Some(1));
 		// both panes of a split stay usable
-		assert_eq!(
-			p("--new-pane --size=0%").tabs[0].panes[1].size,
-			Some(Size::Percent(5.0))
-		);
-		assert_eq!(
-			p("--new-pane --size=0").tabs[0].panes[1].size,
-			Some(Size::Cells(1))
-		);
+		assert_eq!(p("--new-pane --size=0%").tabs[0].panes[1].size, Some(Size::Percent(5.0)));
+		assert_eq!(p("--new-pane --size=0").tabs[0].panes[1].size, Some(Size::Cells(1)));
 	}
 
 	fn bad(s: &str) -> bool {
@@ -1555,14 +1298,8 @@ mod tests {
 	// Test ID: dd5n7
 	#[test]
 	fn config_names_the_file_in_either_form_and_only_for_the_window() {
-		assert_eq!(
-			p("--config /tmp/a.shcl").config,
-			Some(PathBuf::from("/tmp/a.shcl"))
-		);
-		assert_eq!(
-			p("--config=/tmp/a.shcl").config,
-			Some(PathBuf::from("/tmp/a.shcl"))
-		);
+		assert_eq!(p("--config /tmp/a.shcl").config, Some(PathBuf::from("/tmp/a.shcl")));
+		assert_eq!(p("--config=/tmp/a.shcl").config, Some(PathBuf::from("/tmp/a.shcl")));
 		assert_eq!(p("--columns 80").config, None);
 		assert!(bad("--new-tab --config x"));
 		assert!(bad("--config"));
@@ -1614,12 +1351,7 @@ mod tests {
 	#[test]
 	fn a_new_tab_after_a_tab_selection_goes_next_to_it() {
 		let c = p("--new-tab=a --new-tab=b --tab=main --new-tab=c --tab=a --new-tab=d");
-		let ids = |order: Vec<usize>| -> Vec<String> {
-			order
-				.into_iter()
-				.map(|i| c.tabs[i].id.clone().unwrap_or_else(|| "main".into()))
-				.collect()
-		};
+		let ids = |order: Vec<usize>| -> Vec<String> { order.into_iter().map(|i| c.tabs[i].id.clone().unwrap_or_else(|| "main".into())).collect() };
 		assert_eq!(ids(c.tab_order(true)), ["main", "c", "a", "d", "b"]);
 		assert_eq!(ids(c.tab_order(false)), ["main", "a", "b", "c", "d"]);
 		// one after another is the same order either way
@@ -1634,11 +1366,7 @@ mod tests {
 	// Test ID: dett5
 	#[test]
 	fn a_launch_opens_on_its_first_tab_and_the_help_says_so() {
-		for line in [
-			"--new-tab=logs --directory /var/log",
-			"--new-tab=a --new-tab=b --tab=b --new-tab=c",
-			"--new-tab=a --tab=a --new-pane",
-		] {
+		for line in ["--new-tab=logs --directory /var/log", "--new-tab=a --new-tab=b --tab=b --new-tab=c", "--new-tab=a --tab=a --new-pane"] {
 			for beside in [true, false] {
 				assert_eq!(p(line).tab_order(beside)[0], 0, "{line}, beside {beside}");
 			}
@@ -1686,19 +1414,9 @@ mod tests {
 	fn stretch_is_taken_in_both_spellings_and_reaches_the_settings() {
 		for flag in ["--background-image-stretch", "--wallpaper-stretch"] {
 			let c = p(flag);
-			assert_eq!(
-				c.win.style.wallpaper_default_fit,
-				Some(Fit::Stretch),
-				"{flag}"
-			);
-			assert_eq!(
-				p(&format!("{flag}=no")).win.style.wallpaper_default_fit,
-				None
-			);
-			let mut s = config::Settings {
-				wallpaper_default_fit: Fit::Zoom,
-				..config::Settings::default()
-			};
+			assert_eq!(c.win.style.wallpaper_default_fit, Some(Fit::Stretch), "{flag}");
+			assert_eq!(p(&format!("{flag}=no")).win.style.wallpaper_default_fit, None);
+			let mut s = config::Settings { wallpaper_default_fit: Fit::Zoom, ..config::Settings::default() };
 			fold_window_style(&mut s, &c.win.style);
 			assert_eq!(s.wallpaper_default_fit, Fit::Stretch, "{flag}");
 		}
@@ -1708,10 +1426,7 @@ mod tests {
 	#[test]
 	fn a_non_unicode_argument_is_an_error_not_a_panic() {
 		use std::ffi::OsString;
-		assert_eq!(
-			utf8_args([OsString::from("--rows"), OsString::from("5")]).unwrap(),
-			["--rows", "5"]
-		);
+		assert_eq!(utf8_args([OsString::from("--rows"), OsString::from("5")]).unwrap(), ["--rows", "5"]);
 		#[cfg(unix)]
 		{
 			use std::os::unix::ffi::OsStringExt;

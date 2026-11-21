@@ -56,8 +56,7 @@ pub struct Session {
 /// need a restart, and cheap enough for a menu to ask each time it opens.
 pub fn program() -> Option<PathBuf> {
 	const KEEP: Duration = Duration::from_secs(10);
-	static FOUND: std::sync::Mutex<Option<(Instant, Option<PathBuf>)>> =
-		std::sync::Mutex::new(None);
+	static FOUND: std::sync::Mutex<Option<(Instant, Option<PathBuf>)>> = std::sync::Mutex::new(None);
 	if cfg!(windows) {
 		return None;
 	}
@@ -81,9 +80,7 @@ fn look_for_tmux() -> Option<PathBuf> {
 
 // The first of these folders with a tmux that runs.
 fn tmux_in<'a>(dirs: impl IntoIterator<Item = &'a Path>) -> Option<PathBuf> {
-	dirs.into_iter()
-		.map(|dir| dir.join("tmux"))
-		.find(|path| runs(path))
+	dirs.into_iter().map(|dir| dir.join("tmux")).find(|path| runs(path))
 }
 
 #[cfg(unix)]
@@ -104,12 +101,7 @@ fn runs(_path: &Path) -> bool {
 pub fn session_name(template: &str, date: &str, time: &str, hundredths: u32) -> String {
 	let hhmmssnn = format!("{time}{:02}", hundredths.min(99));
 	let values = [date, time, hhmmssnn.as_str()];
-	let expand = |text: &str| {
-		crate::template::Template::parse(text, NAME_MACROS)
-			.ok()
-			.map(|t| clean_name(&t.expand(&values)))
-			.filter(|name| !name.is_empty())
-	};
+	let expand = |text: &str| crate::template::Template::parse(text, NAME_MACROS).ok().map(|t| clean_name(&t.expand(&values))).filter(|name| !name.is_empty());
 	let name = expand(template).or_else(|| expand(DEFAULT_SESSION_NAME));
 	name.unwrap_or(hhmmssnn)
 }
@@ -120,29 +112,14 @@ pub fn session_name(template: &str, date: &str, time: &str, hundredths: u32) -> 
 /// by name later finds nothing, so all 3 are swapped here. Control
 /// characters are dropped, since tmux would show them escaped.
 pub fn clean_name(name: &str) -> String {
-	name.chars()
-		.filter(|c| !c.is_control())
-		.map(|c| if matches!(c, '.' | ':' | '#') { '_' } else { c })
-		.collect::<String>()
-		.trim()
-		.to_string()
+	name.chars().filter(|c| !c.is_control()).map(|c| if matches!(c, '.' | ':' | '#') { '_' } else { c }).collect::<String>().trim().to_string()
 }
 
 /// The command line a pane runs to start `session`: tmux, told the name, the
 /// directory and the variables the pane would have set for the shell, then the
 /// shell itself. None for the shell leaves it to tmux's own default-shell.
-pub fn launch_argv(
-	session: &Session,
-	cwd: Option<&Path>,
-	env: &[(String, String)],
-	shell: Option<&[String]>,
-) -> Vec<String> {
-	let mut argv = vec![
-		session.tmux.to_string_lossy().into_owned(),
-		"new-session".to_string(),
-		"-s".to_string(),
-		session.name.clone(),
-	];
+pub fn launch_argv(session: &Session, cwd: Option<&Path>, env: &[(String, String)], shell: Option<&[String]>) -> Vec<String> {
+	let mut argv = vec![session.tmux.to_string_lossy().into_owned(), "new-session".to_string(), "-s".to_string(), session.name.clone()];
 	if let Some(dir) = cwd {
 		argv.extend(["-c".to_string(), dir.to_string_lossy().into_owned()]);
 	}
@@ -166,12 +143,7 @@ pub fn launch_argv(
 /// A session for a new pane and the command line that starts it, or None when
 /// tmux isn't installed. The name comes from `template`, made unique against
 /// the sessions tmux already has and the ones handed out here.
-pub fn start(
-	template: &str,
-	shell: Option<&[String]>,
-	cwd: Option<&Path>,
-	env: &[(String, String)],
-) -> Option<(Session, Vec<String>)> {
+pub fn start(template: &str, shell: Option<&[String]>, cwd: Option<&Path>, env: &[(String, String)]) -> Option<(Session, Vec<String>)> {
 	let tmux = program()?;
 	let (stamp, hundredths) = crate::config::local_stamp();
 	let (date, time) = stamp.split_once('-').unwrap_or((stamp.as_str(), ""));
@@ -237,13 +209,7 @@ pub fn end(session: &Session) {
 /// OS where it is only gives where the session started.
 pub fn current_path(session: &Session) -> Option<PathBuf> {
 	let mut cmd = command(&session.tmux);
-	cmd.args([
-		"display-message",
-		"-p",
-		"-t",
-		&format!("{}:", exact(&session.name)),
-		"#{pane_current_path}",
-	]);
+	cmd.args(["display-message", "-p", "-t", &format!("{}:", exact(&session.name)), "#{pane_current_path}"]);
 	let out = run(cmd).filter(|out| out.status.success())?;
 	let text = String::from_utf8_lossy(&out.stdout);
 	let dir = PathBuf::from(text.trim_end_matches(['\r', '\n']));
@@ -255,20 +221,13 @@ pub fn current_path(session: &Session) -> Option<PathBuf> {
 // the user's usual server, so the asks here go there too.
 fn command(tmux: &Path) -> Command {
 	let mut cmd = Command::new(tmux);
-	cmd.env_remove("TMUX")
-		.stdin(Stdio::null())
-		.stdout(Stdio::piped())
-		.stderr(Stdio::null());
+	cmd.env_remove("TMUX").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
 	// A test always goes by -S. With a socket path too long to fit, -S fails,
 	// where TMUX_TMPDIR falls back to the user's own server and a test's
 	// kill-server once took every session on it. A test that set no socket
 	// gets one that can't exist.
 	#[cfg(test)]
-	cmd.arg("-S").arg(
-		TEST_SOCKET
-			.with(|sock| sock.borrow().clone())
-			.unwrap_or_else(|| PathBuf::from(NO_SOCKET)),
-	);
+	cmd.arg("-S").arg(TEST_SOCKET.with(|sock| sock.borrow().clone()).unwrap_or_else(|| PathBuf::from(NO_SOCKET)));
 	cmd
 }
 
@@ -318,8 +277,7 @@ mod tests {
 	fn tmux_off_path_is_the_first_in_the_folders_that_runs() {
 		use std::os::unix::fs::PermissionsExt;
 		let base = crate::testdir::run_dir().join(format!("tmux_in_{}", std::process::id()));
-		let [empty, plain, first, second] =
-			["empty", "plain", "first", "second"].map(|name| base.join(name));
+		let [empty, plain, first, second] = ["empty", "plain", "first", "second"].map(|name| base.join(name));
 		for dir in [&empty, &plain, &first, &second] {
 			std::fs::create_dir_all(dir).unwrap();
 		}
@@ -328,12 +286,7 @@ mod tests {
 			std::fs::write(&path, "").unwrap();
 			std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
 		}
-		let found = tmux_in([
-			empty.as_path(),
-			plain.as_path(),
-			first.as_path(),
-			second.as_path(),
-		]);
+		let found = tmux_in([empty.as_path(), plain.as_path(), first.as_path(), second.as_path()]);
 		assert_eq!(found, Some(first.join("tmux")));
 		assert_eq!(tmux_in([empty.as_path(), plain.as_path()]), None);
 	}
@@ -341,19 +294,10 @@ mod tests {
 	// Test ID: de306
 	#[test]
 	fn the_default_name_is_the_date_and_the_time_to_a_hundredth() {
-		assert_eq!(
-			session_name(DEFAULT_SESSION_NAME, "20261017", "173327", 4),
-			"20261017-17332704"
-		);
+		assert_eq!(session_name(DEFAULT_SESSION_NAME, "20261017", "173327", 4), "20261017-17332704");
 		// macro names don't care about case
-		assert_eq!(
-			session_name("work %hhmmss%", "20261017", "173327", 4),
-			"work 173327"
-		);
-		assert_eq!(
-			session_name("%YYYYMMDD%", "20261017", "173327", 4),
-			"20261017"
-		);
+		assert_eq!(session_name("work %hhmmss%", "20261017", "173327", 4), "work 173327");
+		assert_eq!(session_name("%YYYYMMDD%", "20261017", "173327", 4), "20261017");
 	}
 
 	// tmux would turn these into something else, and the name kept for ending
@@ -363,10 +307,7 @@ mod tests {
 	fn a_name_tmux_would_change_is_changed_the_same_way_first() {
 		assert_eq!(clean_name("a.b:c#d"), "a_b_c_d");
 		assert_eq!(clean_name(" tab\there "), "tabhere");
-		assert_eq!(
-			session_name("v1.2 %HHMMSS%", "20261017", "173327", 0),
-			"v1_2 173327"
-		);
+		assert_eq!(session_name("v1.2 %HHMMSS%", "20261017", "173327", 0), "v1_2 173327");
 		assert_eq!(clean_name("naïve"), "naïve");
 	}
 
@@ -375,10 +316,7 @@ mod tests {
 	fn a_template_that_cant_be_read_or_comes_out_empty_gives_the_default_name() {
 		let default = session_name(DEFAULT_SESSION_NAME, "20261017", "173327", 50);
 		assert_eq!(session_name("%NOPE%", "20261017", "173327", 50), default);
-		assert_eq!(
-			session_name("{ %HHMMSS%", "20261017", "173327", 50),
-			default
-		);
+		assert_eq!(session_name("{ %HHMMSS%", "20261017", "173327", 50), default);
 		assert_eq!(session_name("   ", "20261017", "173327", 50), default);
 		assert_eq!(session_name("...", "20261017", "173327", 50), "___");
 	}
@@ -392,10 +330,7 @@ mod tests {
 	}
 
 	fn session() -> Session {
-		Session {
-			tmux: PathBuf::from("/usr/bin/tmux"),
-			name: "20261017-17332704".to_string(),
-		}
+		Session { tmux: PathBuf::from("/usr/bin/tmux"), name: "20261017-17332704".to_string() }
 	}
 
 	// Test ID: de30a
@@ -403,27 +338,9 @@ mod tests {
 	fn the_pane_runs_tmux_with_the_shell_after_its_own_options() {
 		let shell = ["/bin/bash".to_string(), "-l".to_string()];
 		let env = [("PROMPT_COMMAND".to_string(), "x=1".to_string())];
-		assert_eq!(
-			launch_argv(&session(), Some(Path::new("/srv/a b")), &env, Some(&shell)),
-			[
-				"/usr/bin/tmux",
-				"new-session",
-				"-s",
-				"20261017-17332704",
-				"-c",
-				"/srv/a b",
-				"-e",
-				"PROMPT_COMMAND=x=1",
-				"--",
-				"/bin/bash",
-				"-l"
-			]
-		);
+		assert_eq!(launch_argv(&session(), Some(Path::new("/srv/a b")), &env, Some(&shell)), ["/usr/bin/tmux", "new-session", "-s", "20261017-17332704", "-c", "/srv/a b", "-e", "PROMPT_COMMAND=x=1", "--", "/bin/bash", "-l"]);
 		// no directory, no variables, and tmux's own shell
-		assert_eq!(
-			launch_argv(&session(), None, &[], None),
-			["/usr/bin/tmux", "new-session", "-s", "20261017-17332704"]
-		);
+		assert_eq!(launch_argv(&session(), None, &[], None), ["/usr/bin/tmux", "new-session", "-s", "20261017-17332704"]);
 	}
 
 	// tmux hands a lone word to its default-shell as `-c` text, which splits a
@@ -433,10 +350,7 @@ mod tests {
 	fn a_shell_named_alone_is_run_as_it_is_not_as_shell_text() {
 		let shell = ["/opt/my shells/zsh".to_string()];
 		let argv = launch_argv(&session(), None, &[], Some(&shell));
-		assert_eq!(
-			argv[argv.len() - 3..],
-			["--", "/usr/bin/env", "/opt/my shells/zsh"]
-		);
+		assert_eq!(argv[argv.len() - 3..], ["--", "/usr/bin/env", "/opt/my shells/zsh"]);
 	}
 
 	// Test ID: de30c
@@ -446,10 +360,7 @@ mod tests {
 		assert_eq!(OnClose::parse(" end "), Some(OnClose::End));
 		assert_eq!(OnClose::parse("prompt"), Some(OnClose::Prompt));
 		assert_eq!(OnClose::parse("kill"), None);
-		assert_eq!(
-			OnClose::ALL.iter().map(|c| c.key()).collect::<Vec<_>>(),
-			["detach", "end", "prompt"]
-		);
+		assert_eq!(OnClose::ALL.iter().map(|c| c.key()).collect::<Vec<_>>(), ["detach", "end", "prompt"]);
 	}
 
 	// Without -S it would ask the user's own server, which has sessions.
@@ -497,9 +408,7 @@ mod tests {
 	impl Drop for Server<'_> {
 		fn drop(&mut self) {
 			let ours = TEST_SOCKET.with(|sock| sock.borrow().clone());
-			let said = (self.0)(&["display-message", "-p", "#{socket_path}"])
-				.filter(|out| out.status.success())
-				.map(|out| PathBuf::from(String::from_utf8_lossy(&out.stdout).trim_end()));
+			let said = (self.0)(&["display-message", "-p", "#{socket_path}"]).filter(|out| out.status.success()).map(|out| PathBuf::from(String::from_utf8_lossy(&out.stdout).trim_end()));
 			let real = |path: &Path| std::fs::canonicalize(path).ok();
 			if let (Some(ours), Some(said)) = (&ours, &said)
 				&& real(ours).is_some_and(|ours| real(said) == Some(ours))
@@ -538,32 +447,18 @@ mod tests {
 			if asked.elapsed() > ASK_FOR {
 				eprintln!("tmux {} took {:?}", args[0], asked.elapsed());
 			}
-			said.map_err(|why| eprintln!("tmux {}: {why}", args[0]))
-				.ok()
+			said.map_err(|why| eprintln!("tmux {}: {why}", args[0])).ok()
 		};
 		let _server = Server(&tmux_cmd);
-		let ours = Session {
-			tmux: tmux.clone(),
-			name: "silk-test.1".to_string(),
-		};
+		let ours = Session { tmux: tmux.clone(), name: "silk-test.1".to_string() };
 		let name = clean_name(&ours.name);
 		let ours = Session { name, ..ours };
 		for name in [ours.name.as_str(), "silk-test_1-more", "theirs"] {
 			let made = tmux_cmd(&["new-session", "-d", "-s", name, "-c", "/", "sleep 60"]);
-			assert!(
-				made.as_ref().is_some_and(|out| out.status.success()),
-				"{name}: {:?}",
-				made.map(|out| (
-					out.status,
-					String::from_utf8_lossy(&out.stderr).into_owned()
-				))
-			);
+			assert!(made.as_ref().is_some_and(|out| out.status.success()), "{name}: {:?}", made.map(|out| (out.status, String::from_utf8_lossy(&out.stderr).into_owned())));
 		}
 		assert!(has_session(&tmux, &ours.name));
-		assert!(
-			!has_session(&tmux, "silk-test"),
-			"a prefix isn't the session"
-		);
+		assert!(!has_session(&tmux, "silk-test"), "a prefix isn't the session");
 		// for a moment after it starts, a pane's directory reads empty or as the
 		// server's own
 		let until = Instant::now() + Duration::from_secs(5);

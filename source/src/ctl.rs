@@ -67,10 +67,7 @@ fn answer(stream: impl std::io::Read + Write, proxy: &EventLoopProxy<UserEvent>)
 }
 
 // A line in, the reply `handle` gives it out. False when it gives none.
-fn respond(
-	stream: impl std::io::Read + Write,
-	handle: impl FnOnce(&str) -> Option<String>,
-) -> bool {
+fn respond(stream: impl std::io::Read + Write, handle: impl FnOnce(&str) -> Option<String>) -> bool {
 	let mut reader = BufReader::new(stream);
 	let mut line = String::new();
 	if reader.read_line(&mut line).is_err() {
@@ -80,9 +77,7 @@ fn respond(
 		return false;
 	};
 	// a window telling of a save doesn't wait for this
-	let _ = reader
-		.into_inner()
-		.write_all(format!("{reply}\n").as_bytes());
+	let _ = reader.into_inner().write_all(format!("{reply}\n").as_bytes());
 	true
 }
 
@@ -112,10 +107,7 @@ pub fn serve(proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 			}
 		}
 	});
-	Some(CtlServer {
-		path,
-		_marker: join_peers(),
-	})
+	Some(CtlServer { path, _marker: join_peers() })
 }
 
 /// The same on a named pipe. An instance is always waiting: the next one is
@@ -127,29 +119,19 @@ pub fn serve(proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 	let name = endpoint(std::process::id());
 	let wide: Vec<u16> = name.as_os_str().encode_wide().chain(Some(0)).collect();
 	let Some(first) = pipe::make(&wide, true) else {
-		eprintln!(
-			"{}: control pipe: {}",
-			crate::config::APP_NAME,
-			std::io::Error::last_os_error()
-		);
+		eprintln!("{}: control pipe: {}", crate::config::APP_NAME, std::io::Error::last_os_error());
 		return None;
 	};
 	// SAFETY: no PTY or render thread exists yet. set_var is unsafe under
 	// edition 2024 because of concurrent readers.
 	unsafe { std::env::set_var(ENV_SOCK, &name) };
 	std::thread::spawn(move || serve_pipe(&wide, first, |served| answer(served, &proxy)));
-	Some(CtlServer {
-		_marker: join_peers(),
-	})
+	Some(CtlServer { _marker: join_peers() })
 }
 
 // Connections one at a time, until `answer` says to stop.
 #[cfg(windows)]
-fn serve_pipe(
-	wide: &[u16],
-	first: std::os::windows::io::OwnedHandle,
-	mut answer: impl FnMut(pipe::Served) -> bool,
-) {
+fn serve_pipe(wide: &[u16], first: std::os::windows::io::OwnedHandle, mut answer: impl FnMut(pipe::Served) -> bool) {
 	let mut waiting = first;
 	loop {
 		let connected = pipe::wait_for_client(&waiting);
@@ -166,40 +148,17 @@ fn serve_pipe(
 #[cfg(windows)]
 mod pipe {
 	use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
-	use windows_sys::Win32::Foundation::{
-		ERROR_PIPE_CONNECTED, GetLastError, INVALID_HANDLE_VALUE,
-	};
-	use windows_sys::Win32::Storage::FileSystem::{
-		FILE_FLAG_FIRST_PIPE_INSTANCE, FlushFileBuffers, PIPE_ACCESS_DUPLEX,
-	};
-	use windows_sys::Win32::System::Pipes::{
-		ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_BYTE,
-		PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
-	};
+	use windows_sys::Win32::Foundation::{ERROR_PIPE_CONNECTED, GetLastError, INVALID_HANDLE_VALUE};
+	use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_FIRST_PIPE_INSTANCE, FlushFileBuffers, PIPE_ACCESS_DUPLEX};
+	use windows_sys::Win32::System::Pipes::{ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT};
 
 	/// `first` refuses a name some other process already serves.
 	pub(super) fn make(wide: &[u16], first: bool) -> Option<OwnedHandle> {
-		let open = PIPE_ACCESS_DUPLEX
-			| if first {
-				FILE_FLAG_FIRST_PIPE_INSTANCE
-			} else {
-				0
-			};
+		let open = PIPE_ACCESS_DUPLEX | if first { FILE_FLAG_FIRST_PIPE_INSTANCE } else { 0 };
 		let mode = PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS;
 		// SAFETY: `wide` is NUL-terminated and outlives the call; no security
 		// attributes means the default ones, which is this user's.
-		let handle = unsafe {
-			CreateNamedPipeW(
-				wide.as_ptr(),
-				open,
-				mode,
-				PIPE_UNLIMITED_INSTANCES,
-				512,
-				512,
-				0,
-				std::ptr::null(),
-			)
-		};
+		let handle = unsafe { CreateNamedPipeW(wide.as_ptr(), open, mode, PIPE_UNLIMITED_INSTANCES, 512, 512, 0, std::ptr::null()) };
 		// SAFETY: a fresh handle owned by nothing else.
 		(handle != INVALID_HANDLE_VALUE).then(|| unsafe { OwnedHandle::from_raw_handle(handle) })
 	}
@@ -207,10 +166,7 @@ mod pipe {
 	/// A client that came and went before the wait is still a client.
 	pub(super) fn wait_for_client(pipe: &OwnedHandle) -> bool {
 		// SAFETY: a live pipe handle, and no overlapped I/O.
-		unsafe {
-			ConnectNamedPipe(pipe.as_raw_handle(), std::ptr::null_mut()) != 0
-				|| GetLastError() == ERROR_PIPE_CONNECTED
-		}
+		unsafe { ConnectNamedPipe(pipe.as_raw_handle(), std::ptr::null_mut()) != 0 || GetLastError() == ERROR_PIPE_CONNECTED }
 	}
 
 	/// One served connection. Its reply is flushed before the drop
@@ -248,8 +204,7 @@ mod pipe {
 // The path as C text, leaked, so a signal handler can read it with nothing but
 // an atomic load.
 #[cfg(unix)]
-static SOCK_C_PATH: std::sync::atomic::AtomicPtr<libc::c_char> =
-	std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+static SOCK_C_PATH: std::sync::atomic::AtomicPtr<libc::c_char> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
 #[cfg(unix)]
 extern "C" fn unlink_socket() {
@@ -337,9 +292,7 @@ fn poke_at(path: &std::path::Path, line: &str) -> Told {
 			let _ = stream.write_all(format!("{line}\n").as_bytes());
 			Told::Sent
 		}
-		Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::ConnectionRefused) => {
-			Told::Gone
-		}
+		Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::ConnectionRefused) => Told::Gone,
 		Err(_) => Told::Missed,
 	}
 }
@@ -368,11 +321,7 @@ fn open_pipe(path: &std::path::Path) -> std::io::Result<std::fs::File> {
 	use windows_sys::Win32::Foundation::ERROR_PIPE_BUSY;
 	let mut tries = 0;
 	loop {
-		match std::fs::OpenOptions::new()
-			.read(true)
-			.write(true)
-			.open(path)
-		{
+		match std::fs::OpenOptions::new().read(true).write(true).open(path) {
 			Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY as i32) && tries < 25 => {
 				tries += 1;
 				std::thread::sleep(std::time::Duration::from_millis(20));
@@ -385,8 +334,7 @@ fn open_pipe(path: &std::path::Path) -> std::io::Result<std::fs::File> {
 /// Client side: deliver one command to the window this shell runs inside.
 #[cfg(any(unix, windows))]
 pub fn send(cmd: &str) -> anyhow::Result<()> {
-	let sock = std::env::var(ENV_SOCK)
-		.map_err(|_| anyhow::anyhow!("not inside a running SilkTerm window"))?;
+	let sock = std::env::var(ENV_SOCK).map_err(|_| anyhow::anyhow!("not inside a running SilkTerm window"))?;
 	send_at(std::path::Path::new(&sock), cmd)
 }
 
@@ -395,13 +343,10 @@ fn send_at(path: &std::path::Path, cmd: &str) -> anyhow::Result<()> {
 	use anyhow::Context as _;
 
 	#[cfg(unix)]
-	let mut stream = std::os::unix::net::UnixStream::connect(path)
-		.with_context(|| path.display().to_string())?;
+	let mut stream = std::os::unix::net::UnixStream::connect(path).with_context(|| path.display().to_string())?;
 	#[cfg(windows)]
 	let mut stream = open_pipe(path).with_context(|| path.display().to_string())?;
-	stream
-		.write_all(cmd.as_bytes())
-		.and_then(|()| stream.write_all(b"\n"))?;
+	stream.write_all(cmd.as_bytes()).and_then(|()| stream.write_all(b"\n"))?;
 	#[cfg(unix)]
 	let _ = stream.shutdown(std::net::Shutdown::Write);
 	// The server reads one line, so the pipe needs no half close. The reply is
@@ -437,10 +382,7 @@ mod tests {
 			}
 			other => panic!("{other:?}"),
 		}
-		assert!(matches!(
-			parse("wallpaper"),
-			Ok(UserEvent::SetWallpaper(None))
-		));
+		assert!(matches!(parse("wallpaper"), Ok(UserEvent::SetWallpaper(None))));
 		assert!(parse("bogus").is_err());
 		assert!(parse("").is_err());
 	}
@@ -449,10 +391,7 @@ mod tests {
 	// Test ID: ddwnb
 	#[test]
 	fn a_save_on_another_file_is_not_heard() {
-		assert!(matches!(
-			parse("saved\tabc", Some("abc")),
-			Ok(UserEvent::PeerSaved)
-		));
+		assert!(matches!(parse("saved\tabc", Some("abc")), Ok(UserEvent::PeerSaved)));
 		assert!(parse("saved\tabd", Some("abc")).is_err());
 		assert!(parse("saved", Some("abc")).is_err());
 		assert!(parse("saved\tabc", None).is_err());
@@ -469,22 +408,11 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_poke_reaches_a_listener_and_finds_the_dead() {
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_ctl_poke_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_ctl_poke_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
-		let out = std::process::Command::new(std::env::current_exe().unwrap())
-			.args(["--exact", "ctl::tests::poke_child", "--nocapture"])
-			.current_dir(&dir)
-			.env("SILK_CTL_POKE", "1")
-			.output()
-			.unwrap();
-		assert!(
-			out.status.success(),
-			"{}{}",
-			String::from_utf8_lossy(&out.stdout),
-			String::from_utf8_lossy(&out.stderr)
-		);
+		let out = std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact", "ctl::tests::poke_child", "--nocapture"]).current_dir(&dir).env("SILK_CTL_POKE", "1").output().unwrap();
+		assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
 		// a filter that matched nothing passes too
 		assert!(dir.join("done").exists(), "the child never ran");
 		assert!(dir.join("b.sock").exists(), "a crash leaves the file");
@@ -512,10 +440,7 @@ mod tests {
 		let dead = std::path::Path::new("b.sock");
 		drop(std::os::unix::net::UnixListener::bind(dead).unwrap());
 		assert_eq!(poke_at(dead, "saved\tabc"), Told::Gone);
-		assert_eq!(
-			poke_at(std::path::Path::new("c.sock"), "saved\tabc"),
-			Told::Gone
-		);
+		assert_eq!(poke_at(std::path::Path::new("c.sock"), "saved\tabc"), Told::Gone);
 		let asked = std::path::Path::new("d.sock");
 		let listener = std::os::unix::net::UnixListener::bind(asked).unwrap();
 		let served = std::thread::spawn(move || {
@@ -541,10 +466,7 @@ mod tests {
 	#[test]
 	fn a_command_gets_its_reply_over_the_pipe() {
 		use std::os::windows::ffi::OsStrExt;
-		let name = PathBuf::from(format!(
-			r"\\.\pipe\silkterm-ctl-test-{}",
-			std::process::id()
-		));
+		let name = PathBuf::from(format!(r"\\.\pipe\silkterm-ctl-test-{}", std::process::id()));
 		let wide: Vec<u16> = name.as_os_str().encode_wide().chain(Some(0)).collect();
 		let first = pipe::make(&wide, true).unwrap();
 		let served = std::thread::spawn(move || {
@@ -571,8 +493,7 @@ mod tests {
 	fn the_socket_file_goes_away_however_the_process_ends() {
 		use std::os::unix::process::ExitStatusExt;
 		let exe = std::env::current_exe().unwrap();
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_ctl_exit_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_ctl_exit_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		for how in ["exit", "sigterm", "sighup", "abort"] {
@@ -580,15 +501,7 @@ mod tests {
 			// run folder can pass the 107-byte limit on a Unix socket path.
 			let name = format!("{how}.sock");
 			let path = dir.join(&name);
-			let status = std::process::Command::new(&exe)
-				.args(["--exact", "ctl::tests::socket_exit_child", "--nocapture"])
-				.current_dir(&dir)
-				.env("SILK_CTL_EXIT", how)
-				.env("SILK_CTL_PATH", &name)
-				.stdout(std::process::Stdio::null())
-				.stderr(std::process::Stdio::null())
-				.status()
-				.unwrap();
+			let status = std::process::Command::new(&exe).args(["--exact", "ctl::tests::socket_exit_child", "--nocapture"]).current_dir(&dir).env("SILK_CTL_EXIT", how).env("SILK_CTL_PATH", &name).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().unwrap();
 			match how {
 				"sigterm" => assert_eq!(status.signal(), Some(libc::SIGTERM)),
 				"sighup" => assert_eq!(status.signal(), Some(libc::SIGHUP)),
@@ -604,10 +517,7 @@ mod tests {
 	#[cfg(unix)]
 	#[test]
 	fn socket_exit_child() {
-		let (Some(how), Some(path)) = (
-			std::env::var_os("SILK_CTL_EXIT"),
-			std::env::var_os("SILK_CTL_PATH"),
-		) else {
+		let (Some(how), Some(path)) = (std::env::var_os("SILK_CTL_EXIT"), std::env::var_os("SILK_CTL_PATH")) else {
 			return; // only does anything when the test above starts it
 		};
 		let path = PathBuf::from(path);

@@ -47,9 +47,7 @@ unsafe extern "C" {
 pub fn run_dir() -> &'static Path {
 	static RUN_DIR: OnceLock<PathBuf> = OnceLock::new();
 	RUN_DIR.get_or_init(|| {
-		let given = std::env::var_os("SILKTERM_TEST_DIR")
-			.filter(|dir| !dir.is_empty())
-			.map(PathBuf::from);
+		let given = std::env::var_os("SILKTERM_TEST_DIR").filter(|dir| !dir.is_empty()).map(PathBuf::from);
 		let adopted = given.is_some();
 		let dir = make_run_dir(&run_base(), given, local_stamp).expect("test run folder");
 		if adopted {
@@ -58,10 +56,7 @@ pub fn run_dir() -> &'static Path {
 		let token = mark_owned(&dir).expect("test run folder");
 		// Cloned so the exit handler never reads the path back from anywhere a
 		// test could change.
-		let _ = OWNED.set(Owned {
-			dir: dir.clone(),
-			token,
-		});
+		let _ = OWNED.set(Owned { dir: dir.clone(), token });
 		// A failing test stops before its own cleanup, so its files are the
 		// record of what it wrote. Any panic keeps the folder, except one a test
 		// caught on purpose through catch_expected_panic.
@@ -84,9 +79,7 @@ pub fn run_dir() -> &'static Path {
 /// `catch_unwind` for a test that panics on purpose. The panic hook runs
 /// before anything catches, so it can't tell a caught panic from a failed
 /// test, and a bare `catch_unwind` in a test keeps a passing run's folder.
-pub fn catch_expected_panic<R>(
-	body: impl FnOnce() -> R + std::panic::UnwindSafe,
-) -> std::thread::Result<R> {
+pub fn catch_expected_panic<R>(body: impl FnOnce() -> R + std::panic::UnwindSafe) -> std::thread::Result<R> {
 	let outer = EXPECTING_PANIC.replace(true);
 	let caught = std::panic::catch_unwind(body);
 	EXPECTING_PANIC.set(outer);
@@ -95,19 +88,13 @@ pub fn catch_expected_panic<R>(
 
 // HOST_TEMP/silkterm, as cicd.bash puts its runs.
 fn run_base() -> PathBuf {
-	std::env::var_os("HOST_TEMP")
-		.filter(|dir| !dir.is_empty())
-		.map_or_else(std::env::temp_dir, PathBuf::from)
-		.join("silkterm")
+	std::env::var_os("HOST_TEMP").filter(|dir| !dir.is_empty()).map_or_else(std::env::temp_dir, PathBuf::from).join("silkterm")
 }
 
 // The token proves the folder is ours at the end. run.pid tells the
 // pipeline's stale sweep whether the run is still going.
 fn mark_owned(dir: &Path) -> io::Result<String> {
-	let nanos = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.unwrap_or_default()
-		.as_nanos();
+	let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
 	let pid = std::process::id();
 	let token = format!("{pid}-{nanos}");
 	let mut marker = std::fs::File::create_new(dir.join(OWNER_FILE))?;
@@ -155,12 +142,7 @@ fn remove_if_owned(dir: &Path, token: &str) -> Removal {
 // Nothing in the folder but the owner mark and run.pid, so a failed run has
 // nothing there to look at.
 fn only_marks(dir: &Path) -> bool {
-	std::fs::read_dir(dir).is_ok_and(|entries| {
-		entries.into_iter().all(|entry| {
-			entry
-				.is_ok_and(|entry| entry.file_name() == OWNER_FILE || entry.file_name() == PID_FILE)
-		})
-	})
+	std::fs::read_dir(dir).is_ok_and(|entries| entries.into_iter().all(|entry| entry.is_ok_and(|entry| entry.file_name() == OWNER_FILE || entry.file_name() == PID_FILE)))
 }
 
 // Never eprintln! or unwrap here: a panic in an extern "C" function aborts.
@@ -176,27 +158,15 @@ extern "C" fn remove_at_exit() {
 	match remove_if_owned(&owned.dir, &owned.token) {
 		Removal::Removed => {}
 		Removal::NotOurs(reason) => {
-			let _ = writeln!(
-				stderr,
-				"test run folder: left {} in place: {reason}",
-				owned.dir.display()
-			);
+			let _ = writeln!(stderr, "test run folder: left {} in place: {reason}", owned.dir.display());
 		}
 		Removal::Failed(e) => {
-			let _ = writeln!(
-				stderr,
-				"test run folder: could not remove {}: {e}",
-				owned.dir.display()
-			);
+			let _ = writeln!(stderr, "test run folder: could not remove {}: {e}", owned.dir.display());
 		}
 	}
 }
 
-fn make_run_dir(
-	base: &Path,
-	given: Option<PathBuf>,
-	clock: impl FnOnce() -> String,
-) -> io::Result<PathBuf> {
+fn make_run_dir(base: &Path, given: Option<PathBuf>, clock: impl FnOnce() -> String) -> io::Result<PathBuf> {
 	if let Some(given) = given {
 		std::fs::create_dir_all(&given)?;
 		return Ok(given);
@@ -252,10 +222,7 @@ mod tests {
 		#[cfg(unix)]
 		{
 			use std::os::unix::fs::PermissionsExt;
-			assert_eq!(
-				std::fs::metadata(&got).unwrap().permissions().mode() & 0o777,
-				0o700
-			);
+			assert_eq!(std::fs::metadata(&got).unwrap().permissions().mode() & 0o777, 0o700);
 		}
 		std::fs::remove_dir_all(&base).unwrap();
 	}
@@ -275,34 +242,15 @@ mod tests {
 		// A junction, since anyone can make one there and a symlink needs a privilege.
 		#[cfg(windows)]
 		{
-			let made = std::process::Command::new("cmd")
-				.args(["/C", "mklink", "/J"])
-				.arg(&linked)
-				.arg(&target)
-				.output()
-				.unwrap();
-			assert!(
-				made.status.success(),
-				"{}",
-				String::from_utf8_lossy(&made.stdout)
-			);
+			let made = std::process::Command::new("cmd").args(["/C", "mklink", "/J"]).arg(&linked).arg(&target).output().unwrap();
+			assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stdout));
 		}
-		assert!(
-			std::fs::symlink_metadata(&linked).is_ok(),
-			"nothing planted at {}",
-			linked.display()
-		);
+		assert!(std::fs::symlink_metadata(&linked).is_ok(), "nothing planted at {}", linked.display());
 		let got = make_run_dir(&base, None, || "20260101-000000".to_string()).unwrap();
 		assert_eq!(got, base.join("20260101-000000_003"));
-		let planted_entries: Vec<_> = std::fs::read_dir(&planted)
-			.unwrap()
-			.map(|entry| entry.unwrap().file_name())
-			.collect();
+		let planted_entries: Vec<_> = std::fs::read_dir(&planted).unwrap().map(|entry| entry.unwrap().file_name()).collect();
 		assert_eq!(planted_entries, ["marker"]);
-		assert_eq!(
-			std::fs::read_to_string(planted.join("marker")).unwrap(),
-			"planted"
-		);
+		assert_eq!(std::fs::read_to_string(planted.join("marker")).unwrap(), "planted");
 		assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
 		std::fs::remove_dir_all(&base).unwrap();
 	}
@@ -333,10 +281,7 @@ mod tests {
 	fn a_run_folder_the_runner_gives_is_used() {
 		let base = base_for("given");
 		let given = base.join("a").join("b");
-		let got = make_run_dir(&base, Some(given.clone()), || -> String {
-			unreachable!("no stamp when a folder is given")
-		})
-		.unwrap();
+		let got = make_run_dir(&base, Some(given.clone()), || -> String { unreachable!("no stamp when a folder is given") }).unwrap();
 		assert_eq!(got, given);
 		assert!(given.is_dir());
 		std::fs::remove_dir_all(&base).unwrap();
@@ -344,15 +289,9 @@ mod tests {
 
 	fn clock_minute() -> String {
 		#[cfg(unix)]
-		let out = std::process::Command::new("date")
-			.arg("+%Y%m%d-%H%M")
-			.output()
-			.unwrap();
+		let out = std::process::Command::new("date").arg("+%Y%m%d-%H%M").output().unwrap();
 		#[cfg(windows)]
-		let out = std::process::Command::new("powershell")
-			.args(["-NoProfile", "-Command", "Get-Date -Format yyyyMMdd-HHmm"])
-			.output()
-			.unwrap();
+		let out = std::process::Command::new("powershell").args(["-NoProfile", "-Command", "Get-Date -Format yyyyMMdd-HHmm"]).output().unwrap();
 		String::from_utf8(out.stdout).unwrap().trim().to_string()
 	}
 
@@ -395,17 +334,8 @@ mod tests {
 		std::os::unix::fs::symlink(target, at).unwrap();
 		#[cfg(windows)]
 		{
-			let made = std::process::Command::new("cmd")
-				.args(["/C", "mklink", "/J"])
-				.arg(at)
-				.arg(target)
-				.output()
-				.unwrap();
-			assert!(
-				made.status.success(),
-				"{}",
-				String::from_utf8_lossy(&made.stdout)
-			);
+			let made = std::process::Command::new("cmd").args(["/C", "mklink", "/J"]).arg(at).arg(target).output().unwrap();
+			assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stdout));
 		}
 	}
 
@@ -413,10 +343,7 @@ mod tests {
 	#[test]
 	fn a_marked_run_folder_names_this_process_in_its_run_pid() {
 		let (base, dir, _) = marked_folder("pid");
-		assert_eq!(
-			std::fs::read_to_string(dir.join(PID_FILE)).unwrap(),
-			format!("{}\n", std::process::id())
-		);
+		assert_eq!(std::fs::read_to_string(dir.join(PID_FILE)).unwrap(), format!("{}\n", std::process::id()));
 		std::fs::remove_dir_all(&base).unwrap();
 	}
 
@@ -522,10 +449,7 @@ mod tests {
 		}
 		let caught = catch_expected_panic(|| panic!("expected"));
 		assert!(caught.is_err());
-		assert!(
-			!PANICKED.load(Ordering::Relaxed),
-			"a caught panic marked the run as failed"
-		);
+		assert!(!PANICKED.load(Ordering::Relaxed), "a caught panic marked the run as failed");
 		assert!(!EXPECTING_PANIC.get());
 	}
 
@@ -547,10 +471,7 @@ mod tests {
 					continue;
 				}
 				let shown = path.strip_prefix(&src).unwrap().display().to_string();
-				if path.extension().is_none_or(|ext| ext != "rs")
-					|| shown == "testdir.rs"
-					|| shown == "fuzz.rs"
-				{
+				if path.extension().is_none_or(|ext| ext != "rs") || shown == "testdir.rs" || shown == "fuzz.rs" {
 					continue;
 				}
 				let text = std::fs::read_to_string(&path).unwrap();
@@ -563,15 +484,7 @@ mod tests {
 			}
 		}
 		// A walk that found nothing would pass.
-		assert!(
-			scanned > 10,
-			"only {scanned} source files under {}",
-			src.display()
-		);
-		assert!(
-			offenders.is_empty(),
-			"use testdir::catch_expected_panic:\n{}",
-			offenders.join("\n")
-		);
+		assert!(scanned > 10, "only {scanned} source files under {}", src.display());
+		assert!(offenders.is_empty(), "use testdir::catch_expected_panic:\n{}", offenders.join("\n"));
 	}
 }

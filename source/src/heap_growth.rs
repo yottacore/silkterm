@@ -52,10 +52,7 @@ struct Reading {
 
 fn reading() -> Reading {
 	let stats = dhat::HeapStats::get();
-	Reading {
-		bytes: stats.curr_bytes,
-		blocks: stats.curr_blocks,
-	}
+	Reading { bytes: stats.curr_bytes, blocks: stats.curr_blocks }
 }
 
 // What a shell session writes: prompts, colors, a wide and a combining char, a
@@ -65,13 +62,7 @@ fn session_bytes(round: usize) -> String {
 	let mut out = String::new();
 	let _ = write!(out, "\x1b]0;round {}\x07\x1b[22;0t", round % 5);
 	for line in 0..30 {
-		let _ = write!(
-			out,
-			"\x1b[1;3{}m~/src\x1b[0m $ ls -l\r\n\x1b[38;2;{};90;200mfile_{line}.txt\x1b[0m \u{4e2d}e\u{301} \x1b]8;;https://example.com/{}\x1b\\link\x1b]8;;\x1b\\\r\n",
-			line % 8,
-			(line * 9) % 256,
-			line % 3,
-		);
+		let _ = write!(out, "\x1b[1;3{}m~/src\x1b[0m $ ls -l\r\n\x1b[38;2;{};90;200mfile_{line}.txt\x1b[0m \u{4e2d}e\u{301} \x1b]8;;https://example.com/{}\x1b\\link\x1b]8;;\x1b\\\r\n", line % 8, (line * 9) % 256, line % 3);
 	}
 	out.push_str("\x1b[?1049h\x1b[2J\x1b[3;20r");
 	for line in 0..40 {
@@ -82,18 +73,12 @@ fn session_bytes(round: usize) -> String {
 }
 
 fn grid_dims(cols: usize, lines: usize) -> crate::term::TermDimensions {
-	crate::term::TermDimensions {
-		columns: cols,
-		screen_lines: lines,
-	}
+	crate::term::TermDimensions { columns: cols, screen_lines: lines }
 }
 
 // A new tab's engine: opened, fed, resized, and closed.
 fn engine_round(round: usize) {
-	let cfg = TermConfig {
-		scrolling_history: 2000,
-		..Default::default()
-	};
+	let cfg = TermConfig { scrolling_history: 2000, ..Default::default() };
 	let mut term = Term::new(cfg, &grid_dims(100, 30), Quiet);
 	let mut parser = Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::default();
 	parser.advance(&mut term, session_bytes(round).as_bytes());
@@ -109,11 +94,7 @@ fn output_action() -> Box<dyn FnMut(usize)> {
 		frame(&session_bytes(round));
 	}
 	Box::new(move |round| {
-		for chunk in session_bytes(round)
-			.split_inclusive("\r\n")
-			.collect::<Vec<_>>()
-			.chunks(8)
-		{
+		for chunk in session_bytes(round).split_inclusive("\r\n").collect::<Vec<_>>().chunks(8) {
 			frame(&chunk.concat());
 		}
 	})
@@ -124,10 +105,7 @@ fn output_action() -> Box<dyn FnMut(usize)> {
 // compose in flight.
 fn minimap_action() -> Box<dyn FnMut(usize)> {
 	let (cols, lines) = (100, 30);
-	let cfg = TermConfig {
-		scrolling_history: 1000,
-		..Default::default()
-	};
+	let cfg = TermConfig { scrolling_history: 1000, ..Default::default() };
 	let mut term = Term::new(cfg, &grid_dims(cols, lines), Quiet);
 	let mut parser = Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::default();
 	for round in 0..30 {
@@ -144,21 +122,7 @@ fn minimap_action() -> Box<dyn FnMut(usize)> {
 		// a minute a step, so the throttle never delays a compose
 		for _ in 0..200 {
 			step += 1;
-			map.update(
-				term.grid(),
-				term.colors(),
-				&settings,
-				60,
-				900,
-				1.0,
-				lines,
-				cols,
-				advanced,
-				0,
-				false,
-				false,
-				start + Duration::from_secs(60 * step),
-			);
+			map.update(term.grid(), term.colors(), &settings, 60, 900, 1.0, lines, cols, advanced, 0, false, false, start + Duration::from_secs(60 * step));
 			advanced = 0;
 			if map.wake().is_none() {
 				break;
@@ -172,12 +136,7 @@ fn minimap_action() -> Box<dyn FnMut(usize)> {
 // frame makes for what the font lacks.
 fn text_action() -> Box<dyn FnMut(usize)> {
 	let mut ctx = crate::text::TextCtx::new_cpu(1.0);
-	let lines = [
-		"drwxr-xr-x  2 user user 4096 Oct 19 10:00 src",
-		"\u{4e2d}\u{6587} mixed with ASCII and e\u{301}",
-		"emoji \u{1f600} \u{1f680} and box \u{2500}\u{2502}\u{250c}",
-		"\u{5d0}\u{5d1}\u{5d2} right to left, then \u{3b1}\u{3b2}\u{3b3}",
-	];
+	let lines = ["drwxr-xr-x  2 user user 4096 Oct 19 10:00 src", "\u{4e2d}\u{6587} mixed with ASCII and e\u{301}", "emoji \u{1f600} \u{1f680} and box \u{2500}\u{2502}\u{250c}", "\u{5d0}\u{5d1}\u{5d2} right to left, then \u{3b1}\u{3b2}\u{3b3}"];
 	Box::new(move |round| {
 		for line in &lines {
 			std::hint::black_box(ctx.measure_mono_text(line));
@@ -192,36 +151,11 @@ fn text_action() -> Box<dyn FnMut(usize)> {
 fn actions() -> Vec<Action> {
 	let mut planted: Vec<Vec<u8>> = Vec::new();
 	vec![
-		Action {
-			name: "a planted leak, 1 KiB a round",
-			known: None,
-			planted: true,
-			round: Box::new(move |round| planted.push(vec![round as u8; 1024])),
-		},
-		Action {
-			name: "a tab's engine opened, fed, resized, and closed",
-			known: None,
-			planted: false,
-			round: Box::new(engine_round),
-		},
-		Action {
-			name: "output into a full scrollback, a frame per read",
-			known: None,
-			planted: false,
-			round: output_action(),
-		},
-		Action {
-			name: "the minimap folding new output",
-			known: None,
-			planted: false,
-			round: minimap_action(),
-		},
-		Action {
-			name: "text shaped, with fallback and color glyphs",
-			known: None,
-			planted: false,
-			round: text_action(),
-		},
+		Action { name: "a planted leak, 1 KiB a round", known: None, planted: true, round: Box::new(move |round| planted.push(vec![round as u8; 1024])) },
+		Action { name: "a tab's engine opened, fed, resized, and closed", known: None, planted: false, round: Box::new(engine_round) },
+		Action { name: "output into a full scrollback, a frame per read", known: None, planted: false, round: output_action() },
+		Action { name: "the minimap folding new output", known: None, planted: false, round: minimap_action() },
+		Action { name: "text shaped, with fallback and color glyphs", known: None, planted: false, round: text_action() },
 		Action {
 			name: "the config read at launch and a value saved",
 			known: None,
@@ -242,40 +176,23 @@ fn actions() -> Vec<Action> {
 }
 
 fn report_path() -> PathBuf {
-	std::env::var_os("SILK_HEAP_REPORT")
-		.filter(|path| !path.is_empty())
-		.map_or_else(
-			|| crate::testdir::run_dir().join("heap_growth.txt"),
-			PathBuf::from,
-		)
+	std::env::var_os("SILK_HEAP_REPORT").filter(|path| !path.is_empty()).map_or_else(|| crate::testdir::run_dir().join("heap_growth.txt"), PathBuf::from)
 }
 
 // The growth past the warm-up, one action at a time, so a report names the
 // action that grew.
 // Test ID: de5j3
 #[test]
-#[cfg_attr(
-	not(feature = "dhat-heap"),
-	ignore = "needs the dhat-heap feature, as cicd.bash's leak checks run it"
-)]
+#[cfg_attr(not(feature = "dhat-heap"), ignore = "needs the dhat-heap feature, as cicd.bash's leak checks run it")]
 fn the_heap_stops_growing_after_a_warm_up() {
 	let report = report_path();
-	let _profiler = dhat::Profiler::builder()
-		.testing()
-		.file_name(report.with_extension("dhat.json"))
-		.build();
+	let _profiler = dhat::Profiler::builder().testing().file_name(report.with_extension("dhat.json")).build();
 	// dhat has to be the allocator, or every reading is 0 and nothing can fail
 	let probe = vec![0u8; 4096];
-	assert!(
-		reading().bytes >= probe.len(),
-		"dhat isn't counting; the test build needs --features dhat-heap and a debug build"
-	);
+	assert!(reading().bytes >= probe.len(), "dhat isn't counting; the test build needs --features dhat-heap and a debug build");
 	drop(probe);
 
-	let mut text = format!(
-		"Heap held by each action at round {ROUNDS} and round {}, margin {MARGIN_BYTES} bytes or {MARGIN_BLOCKS} blocks.\n\n",
-		ROUNDS * 2
-	);
+	let mut text = format!("Heap held by each action at round {ROUNDS} and round {}, margin {MARGIN_BYTES} bytes or {MARGIN_BLOCKS} blocks.\n\n", ROUNDS * 2);
 	let mut failed: Vec<String> = Vec::new();
 	for mut action in actions() {
 		let began = Instant::now();
@@ -303,26 +220,12 @@ fn the_heap_stops_growing_after_a_warm_up() {
 			}
 			(false, false, _) => "flat".to_string(),
 		};
-		let _ = writeln!(
-			text,
-			"{:<52} {:>10} -> {:>10} bytes ({bytes:+}), {:>6} -> {:>6} blocks ({blocks:+}), {:.1}s: {verdict}",
-			action.name,
-			at_n.bytes,
-			at_2n.bytes,
-			at_n.blocks,
-			at_2n.blocks,
-			began.elapsed().as_secs_f64(),
-		);
+		let _ = writeln!(text, "{:<52} {:>10} -> {:>10} bytes ({bytes:+}), {:>6} -> {:>6} blocks ({blocks:+}), {:.1}s: {verdict}", action.name, at_n.bytes, at_2n.bytes, at_n.blocks, at_2n.blocks, began.elapsed().as_secs_f64());
 	}
 	print!("{text}");
 	if let Some(dir) = report.parent() {
 		let _ = std::fs::create_dir_all(dir);
 	}
 	let _ = std::fs::write(&report, &text);
-	dhat::assert!(
-		failed.is_empty(),
-		"the heap grew past the warm-up: {}; report in {}",
-		failed.join("; "),
-		report.display()
-	);
+	dhat::assert!(failed.is_empty(), "the heap grew past the warm-up: {}; report in {}", failed.join("; "), report.display());
 }

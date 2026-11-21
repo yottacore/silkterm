@@ -17,12 +17,7 @@ use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::term::{Config as TermConfig, Term, TermMode};
 use alacritty_terminal::vte::ansi::Processor;
 
-use super::{
-	APP_SCROLL_MAX, DepthSampler, Output, SLIDE_DOWN_INTO_ROOM, StripCell, WIPE_MAX_SLIDE,
-	blank_went_up, ease_output, fingerprint_frame, fnv_row, ledger_makes_room, ledger_step,
-	region_wiped, repaint_shift, row_print, scroll_shift_signed, shift_makes_room, skel_rows,
-	slide_is_visible, snapshot_rows, strip_rows,
-};
+use super::{APP_SCROLL_MAX, DepthSampler, Output, SLIDE_DOWN_INTO_ROOM, StripCell, WIPE_MAX_SLIDE, blank_went_up, ease_output, fingerprint_frame, fnv_row, ledger_makes_room, ledger_step, region_wiped, repaint_shift, row_print, scroll_shift_signed, shift_makes_room, skel_rows, slide_is_visible, snapshot_rows, strip_rows};
 use crate::scroll::Scroll;
 use crate::{config, palette};
 
@@ -68,30 +63,11 @@ pub(crate) fn frames(cols: usize, lines: usize, scrollback: usize) -> impl FnMut
 
 impl Replay {
 	fn new(cols: usize, lines: usize, scrollback: usize) -> Self {
-		let dims = crate::term::TermDimensions {
-			columns: cols,
-			screen_lines: lines,
-		};
-		let cfg = TermConfig {
-			scrolling_history: scrollback,
-			..Default::default()
-		};
+		let dims = crate::term::TermDimensions { columns: cols, screen_lines: lines };
+		let cfg = TermConfig { scrolling_history: scrollback, ..Default::default() };
 		let mut term = Term::new(cfg, &dims, Quiet);
 		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
-		Self {
-			term,
-			parser: Processor::new(),
-			scroll: Scroll::new(),
-			depth: DepthSampler::default(),
-			last_rows: Vec::new(),
-			last_cells: Vec::new(),
-			last_skel: Vec::new(),
-			last_alt: false,
-			cols,
-			lines,
-			slides: Vec::new(),
-			frames: 0,
-		}
+		Self { term, parser: Processor::new(), scroll: Scroll::new(), depth: DepthSampler::default(), last_rows: Vec::new(), last_cells: Vec::new(), last_skel: Vec::new(), last_alt: false, cols, lines, slides: Vec::new(), frames: 0 }
 	}
 
 	// Bytes in with no frame drawn, as when a read comes in mid-build.
@@ -121,54 +97,20 @@ impl Replay {
 			let ledger = self.term.scroll_ledger();
 			let clamp = |line: Line| (line.0.max(0) as usize).min(lines);
 			let r = ledger.region();
-			(
-				clamp(r.start)..clamp(r.end),
-				ledger.lines(),
-				ledger.pushed(),
-				ledger.since_clear(),
-			)
+			(clamp(r.start)..clamp(r.end), ledger.lines(), ledger.pushed(), ledger.since_clear())
 		};
 		if cut {
 			self.scroll.cancel_app_scroll();
 		}
 		let blank = fnv_row(std::iter::repeat_n(' ', cols));
-		let output = Output {
-			grew,
-			pushed,
-			since_clear,
-			was_blank: self.last_rows.iter().all(|&row| row == blank),
-		};
+		let output = Output { grew, pushed, since_clear, was_blank: self.last_rows.iter().all(|&row| row == blank) };
 		let term = &self.term;
 		let (last_rows, last_skel) = (&self.last_rows, &self.last_skel);
-		let (follow, advanced, _) = ease_output(
-			&mut self.scroll,
-			alt,
-			cut,
-			output,
-			lines,
-			|k| {
-				repaint_shift(term.grid(), last_rows, last_skel, k, cols, blank)
-					.filter(|_| !cleared)
-			},
-			|k| blank_went_up(term.grid(), k, cols, blank),
-		);
+		let (follow, advanced, _) = ease_output(&mut self.scroll, alt, cut, output, lines, |k| repaint_shift(term.grid(), last_rows, last_skel, k, cols, blank).filter(|_| !cleared), |k| blank_went_up(term.grid(), k, cols, blank));
 		let whole = region == (0..lines);
 		let step = ledger_step(alt, follow, advanced, whole, scrolled);
-		let kept = step.map(|_| {
-			strip_rows(
-				self.term.scroll_ledger().rows(),
-				cols,
-				self.term.colors(),
-				&settings,
-				&mut palette::Readable::default(),
-			)
-		});
-		let wiped = self.scroll.app_offset().abs() < WIPE_MAX_SLIDE
-			&& step.is_some_and(|step| {
-				region_wiped(step, &region, |i| {
-					row_print(&self.term.grid()[Line(i as i32)], cols) != blank
-				})
-			});
+		let kept = step.map(|_| strip_rows(self.term.scroll_ledger().rows(), cols, self.term.colors(), &settings, &mut palette::Readable::default()));
+		let wiped = self.scroll.app_offset().abs() < WIPE_MAX_SLIDE && step.is_some_and(|step| region_wiped(step, &region, |i| row_print(&self.term.grid()[Line(i as i32)], cols) != blank));
 		if wiped {
 			self.scroll.cancel_app_scroll();
 		}
@@ -179,47 +121,23 @@ impl Replay {
 		}
 		let step = step.filter(|&step| {
 			let kept = kept.as_deref().unwrap_or_default();
-			let room = !SLIDE_DOWN_INTO_ROOM
-				&& ledger_makes_room(step, &region, lines, &self.last_cells, kept);
-			let arrived = |from: usize, to: usize| {
-				self.last_rows.len() == lines
-					&& row_print(&self.term.grid()[Line(to as i32)], cols) == self.last_rows[from]
-			};
+			let room = !SLIDE_DOWN_INTO_ROOM && ledger_makes_room(step, &region, lines, &self.last_cells, kept);
+			let arrived = |from: usize, to: usize| self.last_rows.len() == lines && row_print(&self.term.grid()[Line(to as i32)], cols) == self.last_rows[from];
 			let unknown = !alt && self.last_cells.len() != lines;
-			!unknown
-				&& !wiped && slide_is_visible(step, &region, &self.last_cells, kept, arrived)
-				&& !room
+			!unknown && !wiped && slide_is_visible(step, &region, &self.last_cells, kept, arrived) && !room
 		});
 		let mut cells = Vec::new();
-		let rows = snapshot_rows(
-			self.term.grid(),
-			lines,
-			cols,
-			Some((
-				self.term.colors(),
-				&settings,
-				&mut cells,
-				&mut palette::Readable::default(),
-			)),
-		);
+		let rows = snapshot_rows(self.term.grid(), lines, cols, Some((self.term.colors(), &settings, &mut cells, &mut palette::Readable::default())));
 		let mut slid = 0;
 		if !cut {
 			if let Some(step) = step {
 				slid = step;
-				self.scroll.app_scroll(
-					step as f32,
-					crate::scroll::SLIDE_ROWS as f32,
-					region.len() as f32,
-				);
+				self.scroll.app_scroll(step as f32, crate::scroll::SLIDE_ROWS as f32, region.len() as f32);
 			} else if fingerprint_frame(alt, follow, grew, scrolled) {
 				let shift = scroll_shift_signed(&rows, &self.last_rows, APP_SCROLL_MAX);
-				if shift != 0
-					&& (SLIDE_DOWN_INTO_ROOM
-						|| !shift_makes_room(&rows, &self.last_rows, shift, blank))
-				{
+				if shift != 0 && (SLIDE_DOWN_INTO_ROOM || !shift_makes_room(&rows, &self.last_rows, shift, blank)) {
 					slid = shift;
-					self.scroll
-						.app_scroll(shift as f32, super::OffStrip::CAP as f32, lines as f32);
+					self.scroll.app_scroll(shift as f32, super::OffStrip::CAP as f32, lines as f32);
 				}
 			}
 		}
@@ -231,20 +149,13 @@ impl Replay {
 		skel_rows(self.term.grid(), lines, cols, &mut self.last_skel);
 		self.scroll.advance(1.0 / 60.0);
 		self.frames += 1;
-		Frame {
-			slid,
-			advanced,
-			alt,
-		}
+		Frame { slid, advanced, alt }
 	}
 
 	// What `PaneManager::relayout` does to a pane: a new size, the depth
 	// re-baselined, and no snapshot until the next build takes one.
 	fn relayout(&mut self, cols: usize) {
-		let dims = crate::term::TermDimensions {
-			columns: cols,
-			screen_lines: self.lines,
-		};
+		let dims = crate::term::TermDimensions { columns: cols, screen_lines: self.lines };
 		self.term.resize(dims);
 		self.cols = cols;
 		self.depth.rebaseline(self.term.grid().history_size());
@@ -264,11 +175,7 @@ impl Replay {
 
 	fn row(&self, line: i32) -> String {
 		let grid = self.term.grid();
-		(0..grid.columns())
-			.map(|c| grid[Line(line)][Column(c)].c)
-			.collect::<String>()
-			.trim_end()
-			.to_string()
+		(0..grid.columns()).map(|c| grid[Line(line)][Column(c)].c).collect::<String>().trim_end().to_string()
 	}
 
 	fn cursor_line(&self) -> usize {
@@ -290,10 +197,7 @@ fn accept(cmd: &str) -> String {
 // and wiped, then room for the prompt made with insert- and delete-line on the
 // rows under the cursor, then the prompt.
 fn prompt_after(cols: usize) -> String {
-	format!(
-		"\x1b7[ble: EOF]\x1b8\x1b[{}C  \r\x1b[K\x1b[?2004h\r\n\x1b[1L\x1b[2K\x1b[1A\x1b[2K\x1b[2M\x1b[2L\x1b[2K{TOP}\r\r\r\n{BOTTOM}",
-		cols - 2
-	)
+	format!("\x1b7[ble: EOF]\x1b8\x1b[{}C  \r\x1b[K\x1b[?2004h\r\n\x1b[1L\x1b[2K\x1b[1A\x1b[2K\x1b[2M\x1b[2L\x1b[2K{TOP}\r\r\r\n{BOTTOM}", cols - 2)
 }
 
 // ble.sh's redraw of a prompt already on screen, after a resize or a program
@@ -345,16 +249,9 @@ fn a_prompt_coming_back_under_blesh_pops_in() {
 		run(&mut r, "seq 40", &lines_of(40, "row"));
 		r.settle();
 		for (cmd, n) in [("echo hi", 1), ("seq 3", 3), ("printf x", 0), ("ls", 5)] {
-			let out = if n == 0 {
-				"x".to_string()
-			} else {
-				lines_of(n, "out")
-			};
+			let out = if n == 0 { "x".to_string() } else { lines_of(n, "out") };
 			let (_, prompt) = run(&mut r, cmd, &out);
-			assert!(
-				prompt.advanced > 0 && r.scroll.chasing_output(),
-				"sb {scrollback}, {cmd}: the prompt eases up from the bottom"
-			);
+			assert!(prompt.advanced > 0 && r.scroll.chasing_output(), "sb {scrollback}, {cmd}: the prompt eases up from the bottom");
 			r.settle();
 		}
 		assert_eq!(r.row(lines as i32 - 1), BOTTOM.trim_end());
@@ -379,10 +276,7 @@ fn blesh_redrawing_its_prompt_pops_in() {
 		r.settle();
 		r.frame(&redraw());
 		r.settle();
-		r.frame(&format!(
-			"{}\x1b[?1049h\x1b[H\x1b[2J  GNU nano",
-			accept("nano")
-		));
+		r.frame(&format!("{}\x1b[?1049h\x1b[H\x1b[2J  GNU nano", accept("nano")));
 		r.frame("\x1b[?1049l\r");
 		r.frame(&prompt_after(cols));
 		r.settle();
@@ -394,11 +288,7 @@ fn blesh_redrawing_its_prompt_pops_in() {
 		r.frame("\r\r\n\x1b[1L\x1b[2K\x1b[1A\x1b[5Ca long command that wraps onto the next row of the screen ok\x1b[K");
 		r.frame("\x1b[1B\r\x1b[2K\x1b[1M\x1b[1A\x1b[5Cls\x1b[K");
 		r.settle();
-		assert!(
-			r.slides.is_empty(),
-			"{filled} rows, editing: slid {:?}",
-			r.slides
-		);
+		assert!(r.slides.is_empty(), "{filled} rows, editing: slid {:?}", r.slides);
 	}
 }
 
@@ -455,10 +345,7 @@ fn a_table_redraw_snaps_and_a_prompt_still_eases() {
 		r.frame("\r\n");
 		r.settle();
 		let f = r.frame("done\r\n$ ");
-		assert!(
-			f.advanced > 0 && r.scroll.chasing_output(),
-			"sb {scrollback}"
-		);
+		assert!(f.advanced > 0 && r.scroll.chasing_output(), "sb {scrollback}");
 		assert!(r.slides.is_empty(), "sb {scrollback}: slid {:?}", r.slides);
 	}
 }
@@ -473,19 +360,12 @@ fn a_burst_still_easing_is_at_rest_on_the_alt_screen() {
 	let mut r = Replay::new(cols, lines, 10_000);
 	r.frame(&lines_of(400, "burst"));
 	r.frame(&lines_of(50, "more"));
-	assert!(
-		r.scroll.animating(),
-		"nothing was easing, so nothing was tested"
-	);
+	assert!(r.scroll.animating(), "nothing was easing, so nothing was tested");
 	// git commit opening nano mid-ease
 	let f = r.frame("\x1b[?1049h\x1b[H\x1b[2J  GNU nano");
 	assert!(f.alt);
 	for _ in 0..5 {
-		assert_eq!(
-			(r.scroll.desired_offset(), r.scroll.frac()),
-			(0, 0.0),
-			"the view moved on the alt screen"
-		);
+		assert_eq!((r.scroll.desired_offset(), r.scroll.frac()), (0, 0.0), "the view moved on the alt screen");
 		r.frame("\x1b[2;1Htyping");
 	}
 }
@@ -513,12 +393,7 @@ fn a_prompt_drawn_across_two_reads_pops_in() {
 				r.build();
 				r.feed(&bytes.as_bytes()[cut..]);
 				r.build();
-				assert!(
-					r.slides.is_empty(),
-					"{what}, {filled} rows, split at {cut} {:?}: slid {:?}",
-					String::from_utf8_lossy(&bytes.as_bytes()[..cut]),
-					r.slides
-				);
+				assert!(r.slides.is_empty(), "{what}, {filled} rows, split at {cut} {:?}: slid {:?}", String::from_utf8_lossy(&bytes.as_bytes()[..cut]), r.slides);
 			}
 		}
 	}
@@ -551,18 +426,13 @@ fn a_prompt_redrawn_right_after_a_resize_pops_in() {
 // the scroll region. `pane` is the pane's height, a row less than the screen.
 fn tmux_open(lines: usize) -> String {
 	let pane = lines - 1;
-	format!(
-		"\x1b[?1049h\x1b[H\x1b[2J\x1b[1;{lines}r\x1b[{lines};1H\x1b[30m\x1b[42m[0] 0:bash*\x1b(B\x1b[m\x1b[1;{pane}r\x1b[1;{lines}r\x1b[1;1H"
-	)
+	format!("\x1b[?1049h\x1b[H\x1b[2J\x1b[1;{lines}r\x1b[{lines};1H\x1b[30m\x1b[42m[0] 0:bash*\x1b(B\x1b[m\x1b[1;{pane}r\x1b[1;{lines}r\x1b[1;1H")
 }
 
 // A burst the way tmux passes it on: the pane scrolled away whole, then drawn.
 fn tmux_burst(lines: usize, from: usize) -> String {
 	let pane = lines - 1;
-	let rows = (from..from + pane)
-		.map(|i| format!("{i}\x1b[K"))
-		.collect::<Vec<_>>()
-		.join("\r\n");
+	let rows = (from..from + pane).map(|i| format!("{i}\x1b[K")).collect::<Vec<_>>().join("\r\n");
 	format!("\x1b[1;{pane}r\x1b[1;1H\x1b[{pane}S{rows}\x1b[1;{lines}r\x1b[{pane};1H")
 }
 
@@ -570,10 +440,7 @@ fn tmux_burst(lines: usize, from: usize) -> String {
 // command line again on the row above.
 fn tmux_enter(lines: usize, cmd: &str) -> String {
 	let pane = lines - 1;
-	format!(
-		"\x1b[1;{pane}r\x1b[{pane};1H\n\x1b[{};3H{cmd}\r\n\x1b[K\x1b[1;{lines}r\x1b[{pane};1H",
-		pane - 1
-	)
+	format!("\x1b[1;{pane}r\x1b[{pane};1H\n\x1b[{};3H{cmd}\r\n\x1b[K\x1b[1;{lines}r\x1b[{pane};1H", pane - 1)
 }
 
 // What tmux sends for a clear inside the pane, by how the shell clears and
@@ -582,23 +449,15 @@ fn tmux_enter(lines: usize, cmd: &str) -> String {
 // erasing to the bottom, and erases that line.
 fn tmux_clear(lines: usize, how: &str) -> String {
 	let pane = lines - 1;
-	let wipe = format!(
-		"\x1b[1;{pane}r\x1b[1;1H\x1b[2;{pane}r\x1b[{}S\x1b[1;1H\x1b[K",
-		pane - 1
-	);
+	let wipe = format!("\x1b[1;{pane}r\x1b[1;1H\x1b[2;{pane}r\x1b[{}S\x1b[1;1H\x1b[K", pane - 1);
 	let ble = format!("\x1b[1;1H\x1b[2M\x1b[1;1H\x1b[2L\x1b[1;1H{TOP}\r\n{BOTTOM}");
 	match how {
 		"clear" => format!("{wipe}\x1b[1;{lines}r\x1b[1;1H$ "),
 		"ctrl-l" => format!("{wipe}$ \x1b[1;{lines}r\x1b[1;3H"),
-		"ble clear" => format!(
-			"{wipe}\x1b[1;{lines}r\x1b[1;1H\x1b[K\x1b[1;{pane}r\x1b[2;1H\x1b[1L{ble}\x1b[1;{lines}r\x1b[2;6H"
-		),
+		"ble clear" => format!("{wipe}\x1b[1;{lines}r\x1b[1;1H\x1b[K\x1b[1;{pane}r\x1b[2;1H\x1b[1L{ble}\x1b[1;{lines}r\x1b[2;6H"),
 		"ble ctrl-l" => format!("{wipe}\x1b[1;{pane}r{ble}\x1b[1;{lines}r\x1b[2;6H"),
 		// a reset makes tmux scroll the whole pane away and redraw every row
-		"reset" => format!(
-			"\x1b[1;{pane}r\x1b[{pane}S\x1b[1;1H\x1b[1;{lines}r\x1b[1;1H$ {}\x1b[K\x1b[1;3H",
-			"\x1b[K\r\n".repeat(pane - 1)
-		),
+		"reset" => format!("\x1b[1;{pane}r\x1b[{pane}S\x1b[1;1H\x1b[1;{lines}r\x1b[1;1H$ {}\x1b[K\x1b[1;3H", "\x1b[K\r\n".repeat(pane - 1)),
 		_ => unreachable!("{how}"),
 	}
 }
@@ -639,14 +498,7 @@ fn a_clear_inside_tmux_shows_at_once() {
 				r.feed(&bytes.as_bytes()[cut..]);
 				let second = r.build();
 				assert!(first.alt, "tmux keeps the alt screen");
-				assert!(
-					(first.slid, second.slid) == (0, 0)
-						&& moved <= left && r.scroll.app_offset() <= left,
-					"{how}, rested {rested}, split at {cut} {:?}: slid {} then {}",
-					String::from_utf8_lossy(&bytes.as_bytes()[..cut]),
-					first.slid,
-					second.slid
-				);
+				assert!((first.slid, second.slid) == (0, 0) && moved <= left && r.scroll.app_offset() <= left, "{how}, rested {rested}, split at {cut} {:?}: slid {} then {}", String::from_utf8_lossy(&bytes.as_bytes()[..cut]), first.slid, second.slid);
 			}
 		}
 	}
@@ -724,12 +576,7 @@ fn replay_a_recorded_session() {
 	let Ok(dir) = std::env::var("SILK_REPLAY") else {
 		return;
 	};
-	let env = |name: &str, default: usize| {
-		std::env::var(name)
-			.ok()
-			.and_then(|s| s.parse().ok())
-			.unwrap_or(default)
-	};
+	let env = |name: &str, default: usize| std::env::var(name).ok().and_then(|s| s.parse().ok()).unwrap_or(default);
 	let size = std::env::var("SILK_REPLAY_SIZE").unwrap_or_else(|_| "120x42".into());
 	let (cols, lines) = size.split_once('x').expect("WxH");
 	let (cols, lines): (usize, usize) = (cols.parse().unwrap(), lines.parse().unwrap());

@@ -4,11 +4,7 @@
 //! The window's size: the grid it opens at, what gets remembered, and the
 //! monitor checks after a move.
 
-use super::{
-	HERD_POLL, HERD_POLL_LATER, LATE_ANSWER_WAIT, MONITOR_RECHECK, MONITOR_SETTLE, NO_OUTPUT_YET,
-	OWN_RESIZE_GRACE, PUT_BACK_WAIT, SAFE_MAX_DIM, SIZE_SAVE_DEBOUNCE, State, TAKE_SCALE_WAIT,
-	save_live,
-};
+use super::{HERD_POLL, HERD_POLL_LATER, LATE_ANSWER_WAIT, MONITOR_RECHECK, MONITOR_SETTLE, NO_OUTPUT_YET, OWN_RESIZE_GRACE, PUT_BACK_WAIT, SAFE_MAX_DIM, SIZE_SAVE_DEBOUNCE, State, TAKE_SCALE_WAIT, save_live};
 use crate::config;
 pub(super) use crate::gfx::fit_px;
 use std::time::{Duration, Instant};
@@ -32,10 +28,7 @@ impl State {
 		if w == 0 || h == 0 || self.window.fullscreen().is_some() || self.window.is_maximized() {
 			self.watch.noted.full = true;
 		}
-		if !resize_counts(
-			Instant::now() < self.watch.ignore_resize_until,
-			self.watch.noted,
-		) {
+		if !resize_counts(Instant::now() < self.watch.ignore_resize_until, self.watch.noted) {
 			self.note_own_place();
 			return;
 		}
@@ -82,10 +75,7 @@ impl State {
 		let fullscreen = crate::monitor::fullscreen(&self.window, &self.x11);
 		let maximized = self.window.is_maximized();
 		let noted = std::mem::take(&mut self.watch.noted);
-		let keep = what_to_keep(
-			noted,
-			remember_resize(self.size_tracked, fullscreen, maximized),
-		);
+		let keep = what_to_keep(noted, remember_resize(self.size_tracked, fullscreen, maximized));
 		self.watch.noted = keep.carry;
 		if !force {
 			self.note_place(keep.grid);
@@ -96,12 +86,7 @@ impl State {
 		if saves_size(self.cli_size, &self.cli_style) {
 			self.save_size((cols, rows), &keep, fullscreen, maximized);
 		} else if keep.grid || keep.zoom {
-			mondbg(
-				"unsaved",
-				self.watch.key.as_deref(),
-				Some((cols, rows)),
-				None,
-			);
+			mondbg("unsaved", self.watch.key.as_deref(), Some((cols, rows)), None);
 		}
 		// Moved while fullscreen or maximized, and now back: a look takes the
 		// size. Taken at once, a slow frame at the size back from fullscreen
@@ -114,15 +99,7 @@ impl State {
 	fn save_size(&mut self, grid: (usize, usize), keep: &Keep, fullscreen: bool, maximized: bool) {
 		let zoom = (keep.zoom && !self.watch.font_pinned).then(config::font_zoom_px);
 		let grid = keep.grid.then(|| self.grid_to_open_at(grid, zoom));
-		let kept = |s: &config::Settings| {
-			(
-				s.remembered_columns,
-				s.remembered_rows,
-				s.remembered_maximized,
-				s.remembered_font_zoom,
-				s.monitor_sizes.clone(),
-			)
-		};
+		let kept = |s: &config::Settings| (s.remembered_columns, s.remembered_rows, s.remembered_maximized, s.remembered_font_zoom, s.monitor_sizes.clone());
 		// If the file's open elsewhere the write is skipped and tried again on the
 		// next resize or at exit. The live size updates in memory either way.
 		if grid.is_some() || zoom.is_some() {
@@ -144,9 +121,7 @@ impl State {
 	/// grid is kept if it fits the screen at the font a launch without them
 	/// has, and else the grid that font shows in the window's size now.
 	fn grid_to_open_at(&mut self, grid: (usize, usize), zoom: Option<i32>) -> (usize, usize) {
-		let zoom = zoom.unwrap_or_else(|| {
-			config::remembered_window(&config::settings(), self.watch.key.as_deref()).font_zoom
-		});
+		let zoom = zoom.unwrap_or_else(|| config::remembered_window(&config::settings(), self.watch.key.as_deref()).font_zoom);
 		let font = config::unheld_font(zoom);
 		if font.same(&config::font_now()) {
 			return grid;
@@ -169,17 +144,10 @@ impl State {
 			return;
 		}
 		let set_on = crate::monitor::outputs_under(&self.window);
-		let Some(now_on) =
-			crate::monitor::MonitorId::of_window(&self.window, &self.x11).map(|m| m.key())
-		else {
+		let Some(now_on) = crate::monitor::MonitorId::of_window(&self.window, &self.x11).map(|m| m.key()) else {
 			return;
 		};
-		if !self
-			.watch
-			.key
-			.as_deref()
-			.is_some_and(|kept| crate::monitor::same_monitor(kept, &now_on))
-		{
+		if !self.watch.key.as_deref().is_some_and(|kept| crate::monitor::same_monitor(kept, &now_on)) {
 			// a size set before the move is for the output it left
 			self.flush_window_size(true);
 			mondbg("found", Some(&now_on), None, None);
@@ -208,17 +176,10 @@ impl State {
 		if !only_left(&set_on, &now) {
 			return;
 		}
-		let Some(now_on) =
-			crate::monitor::MonitorId::of_window(&self.window, &self.x11).map(|m| m.key())
-		else {
+		let Some(now_on) = crate::monitor::MonitorId::of_window(&self.window, &self.x11).map(|m| m.key()) else {
 			return;
 		};
-		if self
-			.watch
-			.key
-			.as_deref()
-			.is_some_and(|kept| crate::monitor::same_monitor(kept, &now_on))
-		{
+		if self.watch.key.as_deref().is_some_and(|kept| crate::monitor::same_monitor(kept, &now_on)) {
 			return;
 		}
 		mondbg("found", Some(&now_on), None, None);
@@ -228,11 +189,7 @@ impl State {
 	/// A move starts the wait for the window to settle.
 	pub(super) fn note_moved(&mut self) {
 		let now = Instant::now();
-		if !move_counts(
-			now < self.watch.ignore_moves_until,
-			&self.watch.layout,
-			|| crate::monitor::layout(&self.window, &self.x11),
-		) {
+		if !move_counts(now < self.watch.ignore_moves_until, &self.watch.layout, || crate::monitor::layout(&self.window, &self.x11)) {
 			self.note_own_place();
 			return;
 		}
@@ -258,15 +215,8 @@ impl State {
 	// Whether a scale change now counts as a move (`note_rescaled`).
 	fn rescale_moves(&self, now: Instant) -> bool {
 		let took = self.watch.took;
-		let own = takes_scale(took.map(|t| t.at), self.watch.heard_at, now)
-			&& still_on(took.and_then(|t| t.on), || {
-				crate::monitor::outputs_under(&self.window)
-			});
-		move_counts(
-			own || now < self.watch.ignore_moves_until,
-			&self.watch.layout,
-			|| crate::monitor::layout(&self.window, &self.x11),
-		)
+		let own = takes_scale(took.map(|t| t.at), self.watch.heard_at, now) && still_on(took.and_then(|t| t.on), || crate::monitor::outputs_under(&self.window));
+		move_counts(own || now < self.watch.ignore_moves_until, &self.watch.layout, || crate::monitor::layout(&self.window, &self.x11))
 	}
 
 	/// Nothing before the window is shown: a resize then would hold up the
@@ -305,11 +255,7 @@ impl State {
 					return;
 				}
 			}
-			WindowEvent::KeyboardInput { .. }
-			| WindowEvent::ModifiersChanged(_)
-			| WindowEvent::Focused(true)
-			| WindowEvent::MouseInput { .. }
-			| WindowEvent::MouseWheel { .. } => {}
+			WindowEvent::KeyboardInput { .. } | WindowEvent::ModifiersChanged(_) | WindowEvent::Focused(true) | WindowEvent::MouseInput { .. } | WindowEvent::MouseWheel { .. } => {}
 			_ => return,
 		}
 		let now = Instant::now();
@@ -332,12 +278,7 @@ impl State {
 			(Some(heard), Some(stirred)) if heard > stirred
 		);
 		let layout = crate::monitor::layout(&self.window, &self.x11);
-		let drag = drag_state(
-			crate::monitor::button_held(&self.window, &self.x11),
-			self.watch.opening || layout != self.watch.layout_looked,
-			self.watch.pointer == Pointer::Over,
-			heard,
-		);
+		let drag = drag_state(crate::monitor::button_held(&self.window, &self.x11), self.watch.opening || layout != self.watch.layout_looked, self.watch.pointer == Pointer::Over, heard);
 		self.watch.check_at = None;
 		match drag {
 			Drag::Held => {
@@ -365,18 +306,8 @@ impl State {
 		self.watch.home = crate::monitor::home(&self.window, &layout);
 		self.watch.layout_looked = layout;
 		// the way back from fullscreen is no size the user set on arrival
-		let pending_at = self
-			.pending_size
-			.filter(|_| self.watch.noted.users())
-			.map(|_| self.pending_size_at);
-		let settled = settle(
-			self.watch.key.as_deref(),
-			now_on.as_deref(),
-			moved_at,
-			pending_at,
-			herded,
-			std::mem::take(&mut self.watch.drifted),
-		);
+		let pending_at = self.pending_size.filter(|_| self.watch.noted.users()).map(|_| self.pending_size_at);
+		let settled = settle(self.watch.key.as_deref(), now_on.as_deref(), moved_at, pending_at, herded, std::mem::take(&mut self.watch.drifted));
 		mondbg(
 			match settled {
 				Settle::Stay => "stay",
@@ -387,11 +318,7 @@ impl State {
 			None,
 			None,
 		);
-		let Settle::Arrive {
-			save_first,
-			take_size,
-		} = settled
-		else {
+		let Settle::Arrive { save_first, take_size } = settled else {
 			if self.watch.take_owed {
 				self.take_monitor_size();
 			}
@@ -410,10 +337,7 @@ impl State {
 	fn place_now(&self) -> Option<Place> {
 		let at = self.window.outer_position().ok()?;
 		let size = self.window.inner_size();
-		Some(Place {
-			at: (at.x, at.y),
-			size: (size.width, size.height),
-		})
+		Some(Place { at: (at.x, at.y), size: (size.width, size.height) })
 	}
 
 	// A look notes where the window is. One that finds it herded keeps where
@@ -433,20 +357,11 @@ impl State {
 		let (Some(from), Some(was)) = (self.watch.home, self.watch.place) else {
 			return;
 		};
-		if self.keeps_size()
-			|| crate::monitor::fullscreen(&self.window, &self.x11)
-			|| self.window.is_maximized()
-		{
+		if self.keeps_size() || crate::monitor::fullscreen(&self.window, &self.x11) || self.window.is_maximized() {
 			return;
 		}
 		mondbg("noted", self.watch.key.as_deref(), None, None);
-		self.watch.herd = Some(Herd {
-			from,
-			place: was,
-			since: now,
-			back_at: None,
-			poll_at: now + HERD_POLL,
-		});
+		self.watch.herd = Some(Herd { from, place: was, since: now, back_at: None, poll_at: now + HERD_POLL });
 	}
 
 	/// The window's own resize after a look, such as a take, and the move it
@@ -487,23 +402,12 @@ impl State {
 			return;
 		}
 		// a minimized window is put back once it's up again
-		if self.watch.check_at.is_some()
-			|| self.watch.put_off
-			|| self.window.is_minimized() == Some(true)
-			|| crate::monitor::button_held(&self.window, &self.x11) == Some(true)
-		{
-			self.watch.herd = Some(Herd {
-				poll_at: now + MONITOR_RECHECK,
-				..herd
-			});
+		if self.watch.check_at.is_some() || self.watch.put_off || self.window.is_minimized() == Some(true) || crate::monitor::button_held(&self.window, &self.x11) == Some(true) {
+			self.watch.herd = Some(Herd { poll_at: now + MONITOR_RECHECK, ..herd });
 			return;
 		}
 		let place = self.place_now();
-		if self.keeps_size()
-			|| crate::monitor::fullscreen(&self.window, &self.x11)
-			|| self.window.is_maximized()
-			|| place.is_none()
-		{
+		if self.keeps_size() || crate::monitor::fullscreen(&self.window, &self.x11) || self.window.is_maximized() || place.is_none() {
 			self.watch.herd = None;
 			return;
 		}
@@ -513,30 +417,19 @@ impl State {
 				self.watch.herd = None;
 			}
 			HerdStep::Dark => {
-				self.watch.herd = Some(Herd {
-					back_at: None,
-					poll_at: now + herd_poll_gap(herd.since, now),
-					..herd
-				});
+				self.watch.herd = Some(Herd { back_at: None, poll_at: now + herd_poll_gap(herd.since, now), ..herd });
 			}
 			HerdStep::Lit(at) => {
-				self.watch.herd = Some(Herd {
-					back_at: Some(at),
-					poll_at: at,
-					..herd
-				});
+				self.watch.herd = Some(Herd { back_at: Some(at), poll_at: at, ..herd });
 			}
 			HerdStep::PutBack(Place { at, size }) => {
 				mondbg("put back", self.watch.key.as_deref(), None, None);
 				self.watch.herd = None;
-				self.window
-					.set_outer_position(winit::dpi::PhysicalPosition::new(at.0, at.1));
+				self.window.set_outer_position(winit::dpi::PhysicalPosition::new(at.0, at.1));
 				let now_size = self.window.inner_size();
 				if (now_size.width, now_size.height) != size {
 					self.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
-					let _ = self
-						.window
-						.request_inner_size(winit::dpi::PhysicalSize::new(size.0, size.1));
+					let _ = self.window.request_inner_size(winit::dpi::PhysicalSize::new(size.0, size.1));
 				}
 			}
 		}
@@ -559,12 +452,7 @@ impl State {
 		// another window may have kept a size for this monitor since this one loaded
 		config::refresh_window_memory();
 		let kept = config::remembered_window(&config::settings(), self.watch.key.as_deref());
-		mondbg(
-			"take",
-			self.watch.key.as_deref(),
-			Some((kept.columns, kept.rows)),
-			(!self.watch.font_pinned).then_some(kept.font_zoom),
-		);
+		mondbg("take", self.watch.key.as_deref(), Some((kept.columns, kept.rows)), (!self.watch.font_pinned).then_some(kept.font_zoom));
 		// The zoom first, since the grid's size in pixels depends on it. Laid
 		// out in the new cells only at the new size, by `request_grid`: in the
 		// old size the shell was told a grid well off for a moment.
@@ -574,52 +462,30 @@ impl State {
 			self.dirty = true;
 		}
 		let chrome = self.chrome_h();
-		let (cols, rows) = kept_grid_here(
-			&mut self.text,
-			&self.window,
-			self.watch.key.as_deref(),
-			chrome,
-			(kept.columns, kept.rows),
-			kept.font_zoom,
-		);
+		let (cols, rows) = kept_grid_here(&mut self.text, &self.window, self.watch.key.as_deref(), chrome, (kept.columns, kept.rows), kept.font_zoom);
 		let now = Instant::now();
 		self.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
 		self.watch.ignore_moves_until = now + OWN_RESIZE_GRACE;
-		self.watch.took = Some(Took {
-			at: now,
-			on: crate::monitor::output_drawn_for(&self.window),
-		});
+		self.watch.took = Some(Took { at: now, on: crate::monitor::output_drawn_for(&self.window) });
 		self.watch.layout = crate::monitor::layout(&self.window, &self.x11);
 		self.request_grid(cols, rows);
 	}
 
 	// The grid a window this size shows, with the cells and chrome as they are.
 	fn grid_at(&self, w: u32, h: u32) -> (usize, usize) {
-		(
-			cells_in(w, self.text.cell_w, self.text.margin, 0.0),
-			cells_in(h, self.text.cell_h, self.text.margin, self.chrome_h()),
-		)
+		(cells_in(w, self.text.cell_w, self.text.margin, 0.0), cells_in(h, self.text.cell_h, self.text.margin, self.chrome_h()))
 	}
 
 	// The window size that shows this grid, with the cells and chrome as they are.
 	fn grid_px(&self, cols: usize, rows: usize) -> (u32, u32) {
-		let (w, h) = window_px(
-			cols,
-			rows,
-			self.text.cell_w,
-			self.text.cell_h,
-			self.text.margin,
-			self.chrome_h(),
-		);
+		let (w, h) = window_px(cols, rows, self.text.cell_w, self.text.cell_h, self.text.margin, self.chrome_h());
 		fit_px(w, h, self.max_window_dim())
 	}
 
 	// The largest window side the device can draw (`fit_px`), or a safe guess
 	// while the device is let go.
 	fn max_window_dim(&self) -> u32 {
-		self.gpu
-			.as_ref()
-			.map_or(SAFE_MAX_DIM, |gpu| gpu.gfx.max_side())
+		self.gpu.as_ref().map_or(SAFE_MAX_DIM, |gpu| gpu.gfx.max_side())
 	}
 
 	// No monitor's own size is taken: the switches are off, or the command
@@ -654,9 +520,7 @@ impl State {
 			_ => self.surface_px,
 		};
 		let ratio = scale / self.text.scale;
-		let free = !self.no_area
-			&& !crate::monitor::fullscreen(&self.window, &self.x11)
-			&& !self.window.is_maximized();
+		let free = !self.no_area && !crate::monitor::fullscreen(&self.window, &self.x11) && !self.window.is_maximized();
 		// not a move means a take just happened, since only a take sets that grace
 		let took = !self.rescale_moves(Instant::now());
 		let grid = (free && (took || self.keeps_size())).then(|| self.grid_at(w, h));
@@ -674,12 +538,7 @@ impl State {
 		}
 		let told = self.window.inner_size();
 		let px = asked.unwrap_or_else(|| coming_px((w, h), (told.width, told.height), ratio, free));
-		mondbg(
-			"rescale",
-			self.watch.key.as_deref(),
-			grid.filter(|_| asked.is_some()),
-			None,
-		);
+		mondbg("rescale", self.watch.key.as_deref(), grid.filter(|_| asked.is_some()), None);
 		self.relayout_all_in(px);
 	}
 
@@ -692,12 +551,7 @@ impl State {
 		// sent, so this is the only chance to move everything the window event
 		// moves, the scrim included, which was left at the old size.
 		if (w, h) != self.surface_px {
-			self.watch.asked = Some(Asked {
-				px: (w, h),
-				before: self.surface_px,
-				at: Instant::now(),
-				again: false,
-			});
+			self.watch.asked = Some(Asked { px: (w, h), before: self.surface_px, at: Instant::now(), again: false });
 			if let Some(applied) = request_size(&self.window, want) {
 				self.resize_surface(applied.width, applied.height);
 				self.invalidate_prepared();
@@ -727,16 +581,8 @@ impl State {
 			Late::Again => {}
 		}
 		let asked = asked.unwrap_or_else(|| unreachable!("a late answer has a request"));
-		mondbg(
-			"again",
-			self.watch.key.as_deref(),
-			Some(self.grid_at(asked.px.0, asked.px.1)),
-			None,
-		);
-		self.watch.asked = Some(Asked {
-			again: true,
-			..asked
-		});
+		mondbg("again", self.watch.key.as_deref(), Some(self.grid_at(asked.px.0, asked.px.1)), None);
+		self.watch.asked = Some(Asked { again: true, ..asked });
 		self.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
 		self.watch.ignore_moves_until = now + OWN_RESIZE_GRACE;
 		let want = winit::dpi::PhysicalSize::new(asked.px.0, asked.px.1);
@@ -755,28 +601,13 @@ impl State {
 	/// fullscreen, or snapped. A Wayland compositor refuses a tiled window's
 	/// request on its own.
 	pub(super) fn grids_to_keep(&mut self) -> Option<ZoomHold> {
-		if !config::settings().resize_on_zoom
-			|| !self.revealed
-			|| self.no_area
-			|| self.window.is_maximized()
-			|| crate::monitor::fullscreen(&self.window, &self.x11)
-			|| crate::monitor::snapped(&self.window)
-		{
+		if !config::settings().resize_on_zoom || !self.revealed || self.no_area || self.window.is_maximized() || crate::monitor::fullscreen(&self.window, &self.x11) || crate::monitor::snapped(&self.window) {
 			return None;
 		}
-		let now = self
-			.tabs
-			.cur()
-			.grids_in(&self.text, self.area_in(self.surface_px));
+		let now = self.tabs.cur().grids_in(&self.text, self.area_in(self.surface_px));
 		let cell = (self.text.cell_w, self.text.cell_h);
-		let kept = self
-			.zoom_kept
-			.take_if(|k| k.still_holds(self.surface_px, cell, now.len()))
-			.map(|k| k.hold);
-		Some(kept.unwrap_or(ZoomHold {
-			grids: now,
-			home: (config::font_zoom_px(), self.surface_px),
-		}))
+		let kept = self.zoom_kept.take_if(|k| k.still_holds(self.surface_px, cell, now.len())).map(|k| k.hold);
+		Some(kept.unwrap_or(ZoomHold { grids: now, home: (config::font_zoom_px(), self.surface_px) }))
 	}
 
 	/// Ask for the least size that shows every pane's grid in the zoomed
@@ -788,18 +619,10 @@ impl State {
 		let from = self.surface_px;
 		let frame = {
 			let (outer, inner) = (self.window.outer_size(), self.window.inner_size());
-			(
-				outer.width.saturating_sub(inner.width),
-				outer.height.saturating_sub(inner.height),
-			)
+			(outer.width.saturating_sub(inner.width), outer.height.saturating_sub(inner.height))
 		};
 		let max_dim = self.max_window_dim();
-		let room = zoom_room(
-			area_here(&self.window),
-			self.window.outer_position().ok().map(|p| (p.x, p.y)),
-			frame,
-			from,
-		);
+		let room = zoom_room(area_here(&self.window), self.window.outer_position().ok().map(|p| (p.x, p.y)), frame, from);
 		let pane_map = self.tabs.cur();
 		let shows = |px: (u32, u32)| pane_map.grids_in(&self.text, self.area_in(px));
 		let most = (room.0.min(max_dim), room.1.min(max_dim));
@@ -807,30 +630,16 @@ impl State {
 		let (home_zoom, home) = hold.home;
 		// Back at the zoom it started from: the size it had, slack and all,
 		// so a zoom in and back changes nothing to save.
-		let (w, h) = if home_zoom == config::font_zoom_px() && home.0 <= most.0 && home.1 <= most.1
-		{
+		let (w, h) = if home_zoom == config::font_zoom_px() && home.0 <= most.0 && home.1 <= most.1 {
 			home
 		} else {
 			let w = least_px(most.0, |w| fits(&shows((w, from.1)), grids, |g| g.0));
 			let h = least_px(most.1, |h| fits(&shows((from.0, h)), grids, |g| g.1));
 			let (margin, chrome) = (self.text.margin, self.chrome_h());
-			(
-				whole_cells(w, most.0, self.text.cell_w, margin, 0.0),
-				whole_cells(h, most.1, self.text.cell_h, margin, chrome),
-			)
+			(whole_cells(w, most.0, self.text.cell_w, margin, 0.0), whole_cells(h, most.1, self.text.cell_h, margin, chrome))
 		};
-		mondbg(
-			"zoomsize",
-			self.watch.key.as_deref(),
-			grids.first().copied(),
-			None,
-		);
-		self.zoom_kept = Some(ZoomKept {
-			hold,
-			from,
-			to: (w, h),
-			cell: (self.text.cell_w, self.text.cell_h),
-		});
+		mondbg("zoomsize", self.watch.key.as_deref(), grids.first().copied(), None);
+		self.zoom_kept = Some(ZoomKept { hold, from, to: (w, h), cell: (self.text.cell_w, self.text.cell_h) });
 		self.dirty = true;
 		if (w, h) == self.surface_px {
 			self.relayout_all();
@@ -898,12 +707,7 @@ fn overlap(a: (i32, i32, i32, i32), b: (i32, i32, i32, i32)) -> Option<(i32, i32
 // How big a zoom may make the window: out to the area's right and bottom
 // edges from where its frame is now, less the frame, and never smaller than
 // it already is. Wayland gives no position, so there it's the whole area.
-fn zoom_room(
-	area: Option<(i32, i32, i32, i32)>,
-	outer_at: Option<(i32, i32)>,
-	frame: (u32, u32),
-	now: (u32, u32),
-) -> (u32, u32) {
+fn zoom_room(area: Option<(i32, i32, i32, i32)>, outer_at: Option<(i32, i32)>, frame: (u32, u32), now: (u32, u32)) -> (u32, u32) {
 	let Some((x, y, w, h)) = area else {
 		return (u32::MAX, u32::MAX);
 	};
@@ -912,18 +716,11 @@ fn zoom_room(
 		let px = i64::from(edge) - i64::from(from) - i64::from(frame);
 		u32::try_from(px.max(0)).unwrap_or(u32::MAX).max(now)
 	};
-	(
-		room(x + w, left, frame.0, now.0),
-		room(y + h, top, frame.1, now.1),
-	)
+	(room(x + w, left, frame.0, now.0), room(y + h, top, frame.1, now.1))
 }
 
 // Does every pane show at least the cells it is to keep, one way?
-fn fits(
-	shown: &[(usize, usize)],
-	kept: &[(usize, usize)],
-	way: impl Fn(&(usize, usize)) -> usize,
-) -> bool {
+fn fits(shown: &[(usize, usize)], kept: &[(usize, usize)], way: impl Fn(&(usize, usize)) -> usize) -> bool {
 	shown.len() == kept.len() && shown.iter().zip(kept).all(|(s, k)| way(s) >= way(k))
 }
 
@@ -934,11 +731,7 @@ fn fits(
 fn whole_cells(px: u32, most: u32, cell: f32, margin: f32, chrome: f32) -> u32 {
 	let at = |cells: usize| window_px(1, cells, cell, cell, margin, chrome).1;
 	let cells = cells_in(px, cell, margin, chrome);
-	let whole = if at(cells) >= px {
-		at(cells)
-	} else {
-		at(cells + 1)
-	};
+	let whole = if at(cells) >= px { at(cells) } else { at(cells + 1) };
 	if whole <= most { whole.max(px) } else { px }
 }
 
@@ -963,12 +756,7 @@ fn least_px(most: u32, fits: impl Fn(u32) -> bool) -> u32 {
 
 /// `SILK_MONDBG=1`: the monitor the window counts itself on, and each size it
 /// takes or saves there, one line each on stderr.
-pub(super) fn mondbg(
-	event: &str,
-	key: Option<&str>,
-	grid: Option<(usize, usize)>,
-	zoom: Option<i32>,
-) {
+pub(super) fn mondbg(event: &str, key: Option<&str>, grid: Option<(usize, usize)>, zoom: Option<i32>) {
 	use std::sync::OnceLock;
 	static T0: OnceLock<Instant> = OnceLock::new();
 	if !super::env_flag(super::EnvFlag::MonDbg) {
@@ -977,10 +765,7 @@ pub(super) fn mondbg(
 	let t = T0.get_or_init(Instant::now).elapsed().as_secs_f32();
 	let grid = grid.map_or_else(|| "-".to_string(), |(c, r)| format!("{c}x{r}"));
 	let zoom = zoom.map_or_else(|| "-".to_string(), |z| z.to_string());
-	eprintln!(
-		"[mon {t:.2}s] {event} key={} grid={grid} zoom={zoom}",
-		key.unwrap_or("-")
-	);
+	eprintln!("[mon {t:.2}s] {event} key={} grid={grid} zoom={zoom}", key.unwrap_or("-"));
 }
 
 // The size a window left to the system has once a scale change is through.
@@ -1008,18 +793,8 @@ fn cells_in(px: u32, cell: f32, margin: f32, chrome: f32) -> usize {
 /// The window a grid asks for: the cells, the margins either side, and the chrome
 /// above them. `chrome` counts the menu bar and the tab strip where they show, or
 /// the shell gets fewer rows than were asked for.
-pub(super) fn window_px(
-	cols: usize,
-	rows: usize,
-	cell_w: f32,
-	cell_h: f32,
-	margin: f32,
-	chrome: f32,
-) -> (u32, u32) {
-	(
-		(cols as f32 * cell_w + 2.0 * margin).ceil() as u32,
-		(rows as f32 * cell_h + 2.0 * margin + chrome).ceil() as u32,
-	)
+pub(super) fn window_px(cols: usize, rows: usize, cell_w: f32, cell_h: f32, margin: f32, chrome: f32) -> (u32, u32) {
+	((cols as f32 * cell_w + 2.0 * margin).ceil() as u32, (rows as f32 * cell_h + 2.0 * margin + chrome).ceil() as u32)
 }
 
 /// A window manager that heeds the hint keeps the window within what the
@@ -1032,13 +807,7 @@ pub(super) fn cap_window(window: &Window, max_dim: u32) {
 /// Open maximized? Only when the last window was left that way and the
 /// setting is on. A size or fullscreen asked for on the command line wins.
 pub(super) fn launch_maximized(settings: &config::Settings, cli: &crate::cli::WindowOpts) -> bool {
-	settings.remember_maximized
-		&& settings.remembered_maximized
-		&& cli.columns.is_none()
-		&& cli.rows.is_none()
-		&& cli.pixel_width.is_none()
-		&& cli.pixel_height.is_none()
-		&& !cli.fullscreen.unwrap_or(false)
+	settings.remember_maximized && settings.remembered_maximized && cli.columns.is_none() && cli.rows.is_none() && cli.pixel_width.is_none() && cli.pixel_height.is_none() && !cli.fullscreen.unwrap_or(false)
 }
 
 /// What the command line gave that sets the window's size, but for the font
@@ -1054,18 +823,13 @@ pub(super) struct CliSize {
 
 impl CliSize {
 	pub(super) fn of(cli: &crate::cli::WindowOpts) -> Self {
-		Self {
-			columns: cli.columns.is_some() || cli.pixel_width.is_some(),
-			rows: cli.rows.is_some() || cli.pixel_height.is_some(),
-			remember: cli.persist.unwrap_or(false),
-		}
+		Self { columns: cli.columns.is_some() || cli.pixel_width.is_some(), rows: cli.rows.is_some() || cli.pixel_height.is_some(), remember: cli.persist.unwrap_or(false) }
 	}
 }
 
 /// Whether a size the user sets is saved.
 pub(super) fn saves_size(size: CliSize, style: &crate::cli::Style) -> bool {
-	size.remember
-		|| !(size.columns || size.rows || style.font_size.is_some() || style.font_name.is_some())
+	size.remember || !(size.columns || size.rows || style.font_size.is_some() || style.font_name.is_some())
 }
 
 /// A Settings change to a value the command line gave hands that value back,
@@ -1073,17 +837,9 @@ pub(super) fn saves_size(size: CliSize, style: &crate::cli::Style) -> bool {
 /// go back once Settings no longer has them, by a change or the reset
 /// arrow, and columns and rows once either is changed. True when the font
 /// size went back.
-pub(super) fn hand_back(
-	size: &mut CliSize,
-	style: &mut crate::cli::Style,
-	orig: &config::Settings,
-	edited: &config::Settings,
-) -> bool {
+pub(super) fn hand_back(size: &mut CliSize, style: &mut crate::cli::Style, orig: &config::Settings, edited: &config::Settings) -> bool {
 	use crate::ui_spec::Key;
-	let let_go = |key: Key| {
-		orig.model.values.held.contains_key(key.name())
-			&& !edited.model.values.held.contains_key(key.name())
-	};
+	let let_go = |key: Key| orig.model.values.held.contains_key(key.name()) && !edited.model.values.held.contains_key(key.name());
 	if style.font_name.is_some() && let_go(Key::FontFamily) {
 		style.font_name = None;
 	}
@@ -1108,12 +864,12 @@ pub(super) struct MonitorWatch {
 	pub(super) check_at: Option<Instant>,
 	pub(super) moved_at: Option<Instant>, // when the move being waited out began
 	pub(super) ignore_resize_until: Instant,
-	pub(super) ignore_moves_until: Instant, // the window's own resize can move it, too
-	pub(super) layout: Vec<(i64, i64, i64, i64)>, // the monitors when that resize was asked for
+	pub(super) ignore_moves_until: Instant,              // the window's own resize can move it, too
+	pub(super) layout: Vec<(i64, i64, i64, i64)>,        // the monitors when that resize was asked for
 	pub(super) layout_looked: Vec<(i64, i64, i64, i64)>, // the monitors at the last look
-	pub(super) home: Option<(i64, i64, i64, i64)>, // the one it was on then
-	pub(super) place: Option<Place>,        // and where, at what size
-	pub(super) herd: Option<Herd>,          // herded off a monitor, to be put back (`check_herd`)
+	pub(super) home: Option<(i64, i64, i64, i64)>,       // the one it was on then
+	pub(super) place: Option<Place>,                     // and where, at what size
+	pub(super) herd: Option<Herd>,                       // herded off a monitor, to be put back (`check_herd`)
 	// The command line set the size, or the font size, and it stays until
 	// the user resizes the window, or zooms the font.
 	pub(super) size_pinned: bool,
@@ -1124,12 +880,12 @@ pub(super) struct MonitorWatch {
 	// What tells a drag held still from one that's over, where the buttons
 	// can't be seen (`drag_state`).
 	pub(super) pointer: Pointer,
-	pub(super) heard_at: Option<Instant>, // the last key, focus, or pointer over the window
+	pub(super) heard_at: Option<Instant>,   // the last key, focus, or pointer over the window
 	pub(super) stirred_at: Option<Instant>, // the last move or scale change
-	pub(super) put_off: bool,             // a look waits for `note_presence`
-	pub(super) opening: bool,             // the first look, which no drag can be part of
-	pub(super) noted: Noted,              // why a size waits to be saved
-	pub(super) take_owed: bool,           // arrived while fullscreen or maximized
+	pub(super) put_off: bool,               // a look waits for `note_presence`
+	pub(super) opening: bool,               // the first look, which no drag can be part of
+	pub(super) noted: Noted,                // why a size waits to be saved
+	pub(super) take_owed: bool,             // arrived while fullscreen or maximized
 	// The outputs a Wayland window was on as the user set the size waiting
 	// to be saved (`look_unseen`).
 	pub(super) set_on: Option<Vec<(i64, i64, i64, i64)>>,
@@ -1197,12 +953,7 @@ enum HerdStep {
 }
 
 // What a look at a herded window does now.
-fn herd_step(
-	herd: &Herd,
-	layout: &[(i64, i64, i64, i64)],
-	now_at: Option<Place>,
-	now: Instant,
-) -> HerdStep {
+fn herd_step(herd: &Herd, layout: &[(i64, i64, i64, i64)], now_at: Option<Place>, now: Instant) -> HerdStep {
 	if now_at == Some(herd.place) {
 		return HerdStep::Home;
 	}
@@ -1218,11 +969,7 @@ fn herd_step(
 
 // A monitor dark for long, or gone for good, is looked for less often.
 fn herd_poll_gap(since: Instant, now: Instant) -> Duration {
-	if now.duration_since(since) < Duration::from_mins(1) {
-		HERD_POLL
-	} else {
-		HERD_POLL_LATER
-	}
+	if now.duration_since(since) < Duration::from_mins(1) { HERD_POLL } else { HERD_POLL_LATER }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1265,55 +1012,24 @@ struct Keep {
 fn what_to_keep(noted: Noted, free: bool) -> Keep {
 	let back = free && noted.full;
 	let grid = free && (noted.zoomed || (noted.resized && !back));
-	Keep {
-		grid,
-		zoom: noted.zoomed || grid,
-		unpin: grid && noted.resized && !back,
-		back,
-		carry: Noted {
-			resized: false,
-			zoomed: !free && noted.zoomed,
-			full: !free,
-		},
-	}
+	Keep { grid, zoom: noted.zoomed || grid, unpin: grid && noted.resized && !back, back, carry: Noted { resized: false, zoomed: !free && noted.zoomed, full: !free } }
 }
 
 /// A size kept at the font a launch without `--font-size` and `--font-name`
 /// has, for a window at another font: the same grid if it fits the screen at
 /// the font the window has, else the grid that keeps the kept window's size.
-pub(super) fn kept_grid_here(
-	text: &mut crate::text::TextCtx,
-	window: &Window,
-	key: Option<&str>,
-	chrome: f32,
-	grid: (usize, usize),
-	zoom: i32,
-) -> (usize, usize) {
+pub(super) fn kept_grid_here(text: &mut crate::text::TextCtx, window: &Window, key: Option<&str>, chrome: f32, grid: (usize, usize), zoom: i32) -> (usize, usize) {
 	let font = config::unheld_font(zoom);
 	if font.same(&config::font_now()) {
 		return grid;
 	}
-	let here = grid_from_font(
-		grid,
-		text.cell_in(&font),
-		(text.cell_w, text.cell_h),
-		text.margin,
-		chrome,
-		room_on(window, key),
-	);
+	let here = grid_from_font(grid, text.cell_in(&font), (text.cell_w, text.cell_h), text.margin, chrome, room_on(window, key));
 	mondbg("atfont", key, Some(here), Some(zoom));
 	here
 }
 
 // A grid kept at the cell `was`, for a window at the cell `cell`.
-fn grid_from_font(
-	grid: (usize, usize),
-	was: (f32, f32),
-	cell: (f32, f32),
-	margin: f32,
-	chrome: f32,
-	room: Option<(u32, u32)>,
-) -> (usize, usize) {
+fn grid_from_font(grid: (usize, usize), was: (f32, f32), cell: (f32, f32), margin: f32, chrome: f32, room: Option<(u32, u32)>) -> (usize, usize) {
 	let px = window_px(grid.0, grid.1, was.0, was.1, margin, chrome);
 	grid_in_font(grid, px, cell, margin, chrome, room)
 }
@@ -1321,41 +1037,25 @@ fn grid_from_font(
 // The screen of the monitor a size is kept for, which on Wayland
 // `current_monitor` may not be, less the window's frame.
 fn room_on(window: &Window, key: Option<&str>) -> Option<(u32, u32)> {
-	let (w, h) = key
-		.and_then(crate::monitor::MonitorId::from_key)
-		.map(|m| (m.width, m.height))
-		.or_else(|| {
-			let size = window.current_monitor()?.size();
-			Some((size.width, size.height))
-		})?;
+	let (w, h) = key.and_then(crate::monitor::MonitorId::from_key).map(|m| (m.width, m.height)).or_else(|| {
+		let size = window.current_monitor()?.size();
+		Some((size.width, size.height))
+	})?;
 	let frame = window.outer_size();
 	let inner = window.inner_size();
-	Some((
-		w.saturating_sub(frame.width.saturating_sub(inner.width)),
-		h.saturating_sub(frame.height.saturating_sub(inner.height)),
-	))
+	Some((w.saturating_sub(frame.width.saturating_sub(inner.width)), h.saturating_sub(frame.height.saturating_sub(inner.height))))
 }
 
 // A size set at one font and used at another is kept in columns and rows if
 // the window would fit the screen at the font it opens at, else in pixels.
 // The store has only columns and rows, so pixels are the grid that font
 // shows in this window, the way a zoom keeps the size.
-fn grid_in_font(
-	grid: (usize, usize),
-	px: (u32, u32),
-	cell: (f32, f32),
-	margin: f32,
-	chrome: f32,
-	room: Option<(u32, u32)>,
-) -> (usize, usize) {
+fn grid_in_font(grid: (usize, usize), px: (u32, u32), cell: (f32, f32), margin: f32, chrome: f32, room: Option<(u32, u32)>) -> (usize, usize) {
 	let (w, h) = window_px(grid.0, grid.1, cell.0, cell.1, margin, chrome);
 	if room.is_some_and(|(room_w, room_h)| w <= room_w && h <= room_h) {
 		return grid;
 	}
-	(
-		cells_in(px.0, cell.0, margin, 0.0),
-		cells_in(px.1, cell.1, margin, chrome),
-	)
+	(cells_in(px.0, cell.0, margin, 0.0), cells_in(px.1, cell.1, margin, chrome))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1420,14 +1120,7 @@ enum Settle {
 // A window found on the monitor it was on, after a scale change left its
 // size to the system, arrives there again: the system kept its size on the
 // desktop, which is a grid a cell or so off.
-fn settle(
-	kept_for: Option<&str>,
-	now_on: Option<&str>,
-	moved_at: Option<Instant>,
-	pending_at: Option<Instant>,
-	herded: bool,
-	drifted: bool,
-) -> Settle {
+fn settle(kept_for: Option<&str>, now_on: Option<&str>, moved_at: Option<Instant>, pending_at: Option<Instant>, herded: bool, drifted: bool) -> Settle {
 	let Some(now_on) = now_on else {
 		return Settle::Stay;
 	};
@@ -1435,10 +1128,7 @@ fn settle(
 		return Settle::Stay;
 	}
 	let save_first = matches!((pending_at, moved_at), (Some(set), Some(moved)) if set < moved);
-	Settle::Arrive {
-		save_first,
-		take_size: !herded && (pending_at.is_none() || save_first),
-	}
+	Settle::Arrive { save_first, take_size: !herded && (pending_at.is_none() || save_first) }
 }
 
 // Has the monitor the window was on at the last look gone dark? One still lit
@@ -1472,20 +1162,14 @@ fn look_again(on_some: bool, positionless: bool, moved_at: Option<Instant>, now:
 // monitors changed in the meantime: then the window manager is herding
 // windows as one goes dark or comes back after a power save, and the window
 // may be back where it started.
-fn move_counts(
-	in_grace: bool,
-	layout_then: &[(i64, i64, i64, i64)],
-	layout_now: impl FnOnce() -> Vec<(i64, i64, i64, i64)>,
-) -> bool {
+fn move_counts(in_grace: bool, layout_then: &[(i64, i64, i64, i64)], layout_now: impl FnOnce() -> Vec<(i64, i64, i64, i64)>) -> bool {
 	!in_grace || layout_now() != layout_then
 }
 
 // Is a scale change the one a take brought? The first after it, while nobody
 // has been at the window since, and not so long after that it can't be.
 fn takes_scale(took_at: Option<Instant>, heard_at: Option<Instant>, now: Instant) -> bool {
-	took_at.is_some_and(|took| {
-		now < took + TAKE_SCALE_WAIT && heard_at.is_none_or(|heard| heard <= took)
-	})
+	took_at.is_some_and(|took| now < took + TAKE_SCALE_WAIT && heard_at.is_none_or(|heard| heard <= took))
 }
 
 // Is a Wayland window still on the output a take was for? The take's resize
@@ -1494,10 +1178,7 @@ fn takes_scale(took_at: Option<Instant>, heard_at: Option<Instant>, now: Instant
 // for somewhere it isn't. A key move onto an output at another scale, 4 s
 // after a take, was taken for the take's scale and brought no look.
 // Where the outputs can't be read, it is.
-fn still_on(
-	took_on: Option<(i64, i64, i64, i64)>,
-	now_on: impl FnOnce() -> Option<Vec<(i64, i64, i64, i64)>>,
-) -> bool {
+fn still_on(took_on: Option<(i64, i64, i64, i64)>, now_on: impl FnOnce() -> Option<Vec<(i64, i64, i64, i64)>>) -> bool {
 	let Some(took_on) = took_on else {
 		return true;
 	};
@@ -1533,30 +1214,19 @@ fn resize_is_current(event: (u32, u32), now: (u32, u32)) -> bool {
 /// Asks for a size and returns the one the window took, if it took one now.
 /// winit on macOS returns nothing though the window resizes at once, and its
 /// `Resized` comes later, behind a stale one from creation (2026100517535929).
-pub(crate) fn request_size(
-	window: &Window,
-	want: winit::dpi::PhysicalSize<u32>,
-) -> Option<winit::dpi::PhysicalSize<u32>> {
+pub(crate) fn request_size(window: &Window, want: winit::dpi::PhysicalSize<u32>) -> Option<winit::dpi::PhysicalSize<u32>> {
 	let before = window.inner_size();
 	let answered = window.request_inner_size(want);
 	size_taken(answered, before, window.inner_size())
 }
 
-fn size_taken(
-	answered: Option<winit::dpi::PhysicalSize<u32>>,
-	before: winit::dpi::PhysicalSize<u32>,
-	after: winit::dpi::PhysicalSize<u32>,
-) -> Option<winit::dpi::PhysicalSize<u32>> {
+fn size_taken(answered: Option<winit::dpi::PhysicalSize<u32>>, before: winit::dpi::PhysicalSize<u32>, after: winit::dpi::PhysicalSize<u32>) -> Option<winit::dpi::PhysicalSize<u32>> {
 	answered.or_else(|| (after != before && after.width > 0 && after.height > 0).then_some(after))
 }
 
 #[cfg(test)]
 mod tests {
-	use super::{
-		Asked, Late, Settle, cells_in, coming_px, fit_px, late_answer, launch_maximized,
-		look_again, move_counts, only_left, remember_resize, resize_is_current, settle, size_taken,
-		still_on, takes_scale, window_px,
-	};
+	use super::{Asked, Late, Settle, cells_in, coming_px, fit_px, late_answer, launch_maximized, look_again, move_counts, only_left, remember_resize, resize_is_current, settle, size_taken, still_on, takes_scale, window_px};
 	use std::time::{Duration, Instant};
 
 	// sway answers the size a window set for itself once a frame at it is up,
@@ -1568,48 +1238,17 @@ mod tests {
 	#[test]
 	fn a_late_answer_to_the_size_before_a_take_is_asked_for_again_once() {
 		let t0 = Instant::now();
-		let asked = Asked {
-			px: (3743, 2500),
-			before: (3706, 2488),
-			at: t0,
-			again: false,
-		};
+		let asked = Asked { px: (3743, 2500), before: (3706, 2488), at: t0, again: false };
 		let soon = t0 + Duration::from_secs(9);
-		assert_eq!(
-			late_answer(Some(asked), (3706, 2488), soon, true),
-			Late::Again
-		);
-		assert_eq!(
-			late_answer(Some(asked), (3743, 2500), soon, true),
-			Late::Other,
-			"arrived"
-		);
-		assert_eq!(
-			late_answer(Some(asked), (1800, 900), soon, true),
-			Late::Other,
-			"the user's"
-		);
-		assert_eq!(
-			late_answer(Some(asked), (3706, 2488), soon, false),
-			Late::Other,
-			"X11"
-		);
+		assert_eq!(late_answer(Some(asked), (3706, 2488), soon, true), Late::Again);
+		assert_eq!(late_answer(Some(asked), (3743, 2500), soon, true), Late::Other, "arrived");
+		assert_eq!(late_answer(Some(asked), (1800, 900), soon, true), Late::Other, "the user's");
+		assert_eq!(late_answer(Some(asked), (3706, 2488), soon, false), Late::Other, "X11");
 		assert_eq!(late_answer(None, (3706, 2488), soon, true), Late::None);
 		let late = t0 + super::LATE_ANSWER_WAIT + Duration::from_secs(1);
-		assert_eq!(
-			late_answer(Some(asked), (3706, 2488), late, true),
-			Late::Other,
-			"too late"
-		);
-		let again = Asked {
-			again: true,
-			..asked
-		};
-		assert_eq!(
-			late_answer(Some(again), (3706, 2488), soon, true),
-			Late::Other,
-			"once"
-		);
+		assert_eq!(late_answer(Some(asked), (3706, 2488), late, true), Late::Other, "too late");
+		let again = Asked { again: true, ..asked };
+		assert_eq!(late_answer(Some(again), (3706, 2488), soon, true), Late::Other, "once");
 	}
 	// `window.rows: 1000` in the config, or --rows 1000, asked for a window taller
 	// than the device's largest texture. The GL path's offscreen is made at the
@@ -1643,23 +1282,10 @@ mod tests {
 	// Test ID: ddyqp
 	#[test]
 	fn a_grid_reads_back_from_the_window_it_asked_for() {
-		for (cell_w, cell_h, margin, chrome) in [
-			(10.0, 21.0, 4.0, 0.0),
-			(6.0, 13.0, 9.0, 20.0),
-			(12.578_125, 26.25, 5.0, 31.0),
-			(15.09375, 31.5, 6.0, 47.0),
-			(20.125, 42.0, 8.0, 62.5),
-		] {
+		for (cell_w, cell_h, margin, chrome) in [(10.0, 21.0, 4.0, 0.0), (6.0, 13.0, 9.0, 20.0), (12.578_125, 26.25, 5.0, 31.0), (15.09375, 31.5, 6.0, 47.0), (20.125, 42.0, 8.0, 62.5)] {
 			for (cols, rows) in [(1, 1), (80, 24), (111, 37), (300, 90)] {
 				let (w, h) = window_px(cols, rows, cell_w, cell_h, margin, chrome);
-				assert_eq!(
-					(
-						cells_in(w, cell_w, margin, 0.0),
-						cells_in(h, cell_h, margin, chrome)
-					),
-					(cols, rows),
-					"{cell_w}x{cell_h}"
-				);
+				assert_eq!((cells_in(w, cell_w, margin, 0.0), cells_in(h, cell_h, margin, chrome)), (cols, rows), "{cell_w}x{cell_h}");
 			}
 		}
 		assert_eq!(cells_in(0, 10.0, 4.0, 30.0), 1, "never no cells");
@@ -1675,14 +1301,7 @@ mod tests {
 			for (margin, chrome) in [(0.0, 0.0), (4.0, 0.0), (4.0, 30.0), (6.5, 31.5)] {
 				for n in 1..400 {
 					let (w, h) = window_px(n, n, cell, cell, margin, chrome);
-					assert_eq!(
-						(
-							cells_in(w, cell, margin, 0.0),
-							cells_in(h, cell, margin, chrome)
-						),
-						(n, n),
-						"{cell} {margin} {chrome}"
-					);
+					assert_eq!((cells_in(w, cell, margin, 0.0), cells_in(h, cell, margin, chrome)), (n, n), "{cell} {margin} {chrome}");
 				}
 			}
 		}
@@ -1717,19 +1336,10 @@ mod tests {
 		let took = heard + Duration::from_secs(1);
 		let later = took + Duration::from_millis(4600);
 		assert!(takes_scale(Some(took), None, later));
-		assert!(
-			takes_scale(Some(took), Some(heard), later),
-			"the sign before the take"
-		);
-		assert!(
-			!takes_scale(Some(took), Some(took + Duration::from_secs(1)), later),
-			"back at the window since"
-		);
+		assert!(takes_scale(Some(took), Some(heard), later), "the sign before the take");
+		assert!(!takes_scale(Some(took), Some(took + Duration::from_secs(1)), later), "back at the window since");
 		assert!(!takes_scale(None, None, later), "no take");
-		assert!(
-			!takes_scale(Some(took), None, took + Duration::from_secs(30)),
-			"long after"
-		);
+		assert!(!takes_scale(Some(took), None, took + Duration::from_secs(30)), "long after");
 	}
 
 	// A key move onto an output at another scale, 4 s after a take, counted
@@ -1760,15 +1370,8 @@ mod tests {
 		assert_eq!(coming_px((860, 578), (860, 578), 1.5, true), (1290, 867));
 		assert_eq!(coming_px((1720, 1156), (1720, 1156), 0.5, true), (860, 578));
 		// maximized keeps what it has
-		assert_eq!(
-			coming_px((1920, 1050), (1920, 1050), 2.0, false),
-			(1920, 1050)
-		);
-		assert_eq!(
-			coming_px((860, 578), (0, 0), 1.5, true),
-			(860, 578),
-			"minimized"
-		);
+		assert_eq!(coming_px((1920, 1050), (1920, 1050), 2.0, false), (1920, 1050));
+		assert_eq!(coming_px((860, 578), (0, 0), 1.5, true), (860, 578), "minimized");
 	}
 
 	// --fullscreen asks for fullscreen before the first frame, and the window
@@ -1805,20 +1408,9 @@ mod tests {
 	#[test]
 	fn a_size_the_window_took_without_saying_is_drawn_at() {
 		let px = winit::dpi::PhysicalSize::new;
-		assert_eq!(
-			size_taken(None, px(2000, 1280), px(1988, 1270)),
-			Some(px(1988, 1270)),
-			"macOS"
-		);
-		assert_eq!(
-			size_taken(None, px(2000, 1000), px(2000, 1000)),
-			None,
-			"still on its way"
-		);
-		assert_eq!(
-			size_taken(Some(px(900, 600)), px(2000, 1000), px(900, 600)),
-			Some(px(900, 600))
-		);
+		assert_eq!(size_taken(None, px(2000, 1280), px(1988, 1270)), Some(px(1988, 1270)), "macOS");
+		assert_eq!(size_taken(None, px(2000, 1000), px(2000, 1000)), None, "still on its way");
+		assert_eq!(size_taken(Some(px(900, 600)), px(2000, 1000), px(900, 600)), Some(px(900, 600)));
 		assert_eq!(size_taken(None, px(2000, 1000), px(0, 0)), None);
 	}
 
@@ -1829,52 +1421,19 @@ mod tests {
 	#[test]
 	fn a_move_takes_the_new_monitors_size_but_never_undoes_the_user() {
 		let t0 = Instant::now();
-		let (before, moved, after) = (
-			t0,
-			t0 + Duration::from_millis(10),
-			t0 + Duration::from_millis(20),
-		);
+		let (before, moved, after) = (t0, t0 + Duration::from_millis(10), t0 + Duration::from_millis(20));
 		let (a, b) = (Some("2560x1440_125pct"), Some("1920x1080_100pct"));
-		assert_eq!(
-			settle(a, a, Some(moved), None, false, false),
-			Settle::Stay,
-			"same monitor"
-		);
-		assert_eq!(
-			settle(a, None, Some(moved), None, false, false),
-			Settle::Stay,
-			"monitor unknown"
-		);
-		let arrive = |save_first, take_size| Settle::Arrive {
-			save_first,
-			take_size,
-		};
-		assert_eq!(
-			settle(a, b, Some(moved), None, false, false),
-			arrive(false, true)
-		);
-		assert_eq!(
-			settle(a, b, Some(moved), Some(before), false, false),
-			arrive(true, true)
-		);
-		assert_eq!(
-			settle(a, b, Some(moved), Some(after), false, false),
-			arrive(false, false)
-		);
+		assert_eq!(settle(a, a, Some(moved), None, false, false), Settle::Stay, "same monitor");
+		assert_eq!(settle(a, None, Some(moved), None, false, false), Settle::Stay, "monitor unknown");
+		let arrive = |save_first, take_size| Settle::Arrive { save_first, take_size };
+		assert_eq!(settle(a, b, Some(moved), None, false, false), arrive(false, true));
+		assert_eq!(settle(a, b, Some(moved), Some(before), false, false), arrive(true, true));
+		assert_eq!(settle(a, b, Some(moved), Some(after), false, false), arrive(false, false));
 		// the first look after launch on Wayland, where the monitor was unknown
-		assert_eq!(
-			settle(None, b, Some(moved), None, false, false),
-			arrive(false, true)
-		);
+		assert_eq!(settle(None, b, Some(moved), None, false, false), arrive(false, true));
 		// herded off a monitor that went dark
-		assert_eq!(
-			settle(a, b, Some(moved), None, true, false),
-			arrive(false, false)
-		);
-		assert_eq!(
-			settle(a, b, Some(moved), Some(before), true, false),
-			arrive(true, false)
-		);
+		assert_eq!(settle(a, b, Some(moved), None, true, false), arrive(false, false));
+		assert_eq!(settle(a, b, Some(moved), Some(before), true, false), arrive(true, false));
 	}
 
 	// A scale change that counts as a move leaves the size to the system, in
@@ -1886,39 +1445,14 @@ mod tests {
 	#[test]
 	fn a_scale_change_that_was_no_move_takes_the_monitors_size_again() {
 		let t0 = Instant::now();
-		let (before, moved, after) = (
-			t0,
-			t0 + Duration::from_millis(10),
-			t0 + Duration::from_millis(20),
-		);
+		let (before, moved, after) = (t0, t0 + Duration::from_millis(10), t0 + Duration::from_millis(20));
 		let a = Some("2400x1350_125pct");
-		let arrive = |save_first, take_size| Settle::Arrive {
-			save_first,
-			take_size,
-		};
-		assert_eq!(
-			settle(a, a, Some(moved), None, false, true),
-			arrive(false, true)
-		);
-		assert_eq!(
-			settle(a, a, Some(moved), Some(before), false, true),
-			arrive(true, true),
-			"a size set before the change is saved first"
-		);
-		assert_eq!(
-			settle(a, a, Some(moved), Some(after), false, true),
-			arrive(false, false),
-			"a size set since is the user's"
-		);
-		assert_eq!(
-			settle(a, a, Some(moved), None, true, true),
-			arrive(false, false),
-			"herded"
-		);
-		assert_eq!(
-			settle(a, None, Some(moved), None, false, true),
-			Settle::Stay
-		);
+		let arrive = |save_first, take_size| Settle::Arrive { save_first, take_size };
+		assert_eq!(settle(a, a, Some(moved), None, false, true), arrive(false, true));
+		assert_eq!(settle(a, a, Some(moved), Some(before), false, true), arrive(true, true), "a size set before the change is saved first");
+		assert_eq!(settle(a, a, Some(moved), Some(after), false, true), arrive(false, false), "a size set since is the user's");
+		assert_eq!(settle(a, a, Some(moved), None, true, true), arrive(false, false), "herded");
+		assert_eq!(settle(a, None, Some(moved), None, false, true), Settle::Stay);
 	}
 
 	// The order of a wake from power save, on b23's 2 monitors: the portrait
@@ -1939,61 +1473,23 @@ mod tests {
 		let (both, one) = (vec![portrait, landscape], vec![landscape]);
 		let (p_mm, p_cm) = ("1600x2560_100pct_401x641mm", "1600x2560_100pct_400x640mm");
 		let l = "3440x1440_100pct_819x346mm";
-		let s = Settings {
-			monitor_sizes: vec![
-				MonitorSize {
-					key: p_cm.to_string(),
-					columns: 152,
-					rows: 28,
-					font_zoom: -1,
-				},
-				MonitorSize {
-					key: l.to_string(),
-					columns: 172,
-					rows: 39,
-					font_zoom: 0,
-				},
-			],
-			..Settings::default()
-		};
-		let arrive = Settle::Arrive {
-			save_first: false,
-			take_size: true,
-		};
+		let s = Settings { monitor_sizes: vec![MonitorSize { key: p_cm.to_string(), columns: 152, rows: 28, font_zoom: -1 }, MonitorSize { key: l.to_string(), columns: 172, rows: 39, font_zoom: 0 }], ..Settings::default() };
+		let arrive = Settle::Arrive { save_first: false, take_size: true };
 
 		// herded onto the landscape monitor, outside any grace
 		assert!(move_counts(false, &[], || one.clone()));
 		assert!(super::herded(Some(portrait), &one));
-		assert_eq!(
-			settle(Some(p_cm), Some(l), at(0), None, true, false),
-			Settle::Arrive {
-				save_first: false,
-				take_size: false
-			}
-		);
+		assert_eq!(settle(Some(p_cm), Some(l), at(0), None, true, false), Settle::Arrive { save_first: false, take_size: false });
 		// its own resize there may move it too, and that isn't counted
 		let layout_then = one.clone();
 		assert!(!move_counts(true, &layout_then, || one.clone()));
 		// put back 1.2 s in, inside the grace, with the portrait monitor lit
 		assert!(move_counts(true, &layout_then, || both.clone()));
 		assert!(!super::herded(Some(landscape), &both));
-		assert_eq!(
-			settle(Some(l), Some(p_mm), at(1200), None, false, false),
-			arrive
-		);
-		assert_eq!(
-			remembered_window(&s, Some(p_mm)),
-			KeptWindow {
-				columns: 152,
-				rows: 28,
-				font_zoom: -1
-			}
-		);
+		assert_eq!(settle(Some(l), Some(p_mm), at(1200), None, false, false), arrive);
+		assert_eq!(remembered_window(&s, Some(p_mm)), KeptWindow { columns: 152, rows: 28, font_zoom: -1 });
 		// read to the cm again without a move: the same monitor, so no resize
-		assert_eq!(
-			settle(Some(p_mm), Some(p_cm), at(5000), None, false, false),
-			Settle::Stay
-		);
+		assert_eq!(settle(Some(p_mm), Some(p_cm), at(5000), None, false, false), Settle::Stay);
 	}
 
 	// Back from power save with 2 monitors, one at a time. xfwm4 herds every window
@@ -2012,32 +1508,14 @@ mod tests {
 		assert!(!herded(Some(left), &both), "dragged across");
 		assert!(herded(Some(right), &[left]), "right went dark");
 		assert!(herded(Some(right), &[]), "both dark");
-		assert!(
-			!herded(Some(right), &[left, (2560, 0, 1080, 1920)]),
-			"right turned"
-		);
-		assert!(
-			!herded(Some(right), &[left, (2560, 0, 1536, 864)]),
-			"right rescaled"
-		);
+		assert!(!herded(Some(right), &[left, (2560, 0, 1080, 1920)]), "right turned");
+		assert!(!herded(Some(right), &[left, (2560, 0, 1536, 864)]), "right rescaled");
 		// herded onto left, which it now calls home, then put back on right
 		assert!(!herded(Some(left), &both));
 		let (l, r) = (Some("2560x1440_100pct"), Some("1920x1080_100pct"));
 		let t0 = Instant::now();
-		assert_eq!(
-			settle(r, l, Some(t0), None, true, false),
-			Settle::Arrive {
-				save_first: false,
-				take_size: false
-			}
-		);
-		assert_eq!(
-			settle(l, r, Some(t0), None, false, false),
-			Settle::Arrive {
-				save_first: false,
-				take_size: true
-			}
-		);
+		assert_eq!(settle(r, l, Some(t0), None, true, false), Settle::Arrive { save_first: false, take_size: false });
+		assert_eq!(settle(l, r, Some(t0), None, false, false), Settle::Arrive { save_first: false, take_size: true });
 	}
 
 	// A window manager that herds a window off a dark monitor but never puts
@@ -2050,73 +1528,26 @@ mod tests {
 		use super::{Herd, HerdStep, Place, herd_poll_gap, herd_step};
 		use crate::app::{HERD_POLL, HERD_POLL_LATER, PUT_BACK_WAIT};
 		let (left, right) = ((0, 0, 1200, 1920), (1200, 400, 1920, 1080));
-		let was = Place {
-			at: (100, 100),
-			size: (600, 900),
-		};
-		let herded_to = Some(Place {
-			at: (1300, 500),
-			..was
-		});
+		let was = Place { at: (100, 100), size: (600, 900) };
+		let herded_to = Some(Place { at: (1300, 500), ..was });
 		let t0 = Instant::now();
-		let mut herd = Herd {
-			from: left,
-			place: was,
-			since: t0,
-			back_at: None,
-			poll_at: t0,
-		};
+		let mut herd = Herd { from: left, place: was, since: t0, back_at: None, poll_at: t0 };
 		assert_eq!(herd_step(&herd, &[right], herded_to, t0), HerdStep::Dark);
 		let lit = t0 + Duration::from_secs(30);
 		let wm_turn = lit + PUT_BACK_WAIT;
-		assert_eq!(
-			herd_step(&herd, &[left, right], herded_to, lit),
-			HerdStep::Lit(wm_turn)
-		);
+		assert_eq!(herd_step(&herd, &[left, right], herded_to, lit), HerdStep::Lit(wm_turn));
 		herd.back_at = Some(wm_turn);
-		assert_eq!(
-			herd_step(
-				&herd,
-				&[left, right],
-				herded_to,
-				lit + Duration::from_secs(1)
-			),
-			HerdStep::Lit(wm_turn),
-			"the window manager's turn"
-		);
-		assert_eq!(
-			herd_step(&herd, &[left, right], herded_to, wm_turn),
-			HerdStep::PutBack(was)
-		);
-		assert_eq!(
-			herd_step(&herd, &[left, right], Some(was), wm_turn),
-			HerdStep::Home,
-			"the window manager put it back"
-		);
-		let shrunk = Some(Place {
-			size: (500, 800),
-			..was
-		});
-		assert_eq!(
-			herd_step(&herd, &[left, right], shrunk, wm_turn),
-			HerdStep::PutBack(was),
-			"back in place, but not at its size"
-		);
+		assert_eq!(herd_step(&herd, &[left, right], herded_to, lit + Duration::from_secs(1)), HerdStep::Lit(wm_turn), "the window manager's turn");
+		assert_eq!(herd_step(&herd, &[left, right], herded_to, wm_turn), HerdStep::PutBack(was));
+		assert_eq!(herd_step(&herd, &[left, right], Some(was), wm_turn), HerdStep::Home, "the window manager put it back");
+		let shrunk = Some(Place { size: (500, 800), ..was });
+		assert_eq!(herd_step(&herd, &[left, right], shrunk, wm_turn), HerdStep::PutBack(was), "back in place, but not at its size");
 		// dark again before the window manager's turn was up
-		assert_eq!(
-			herd_step(&herd, &[right], herded_to, wm_turn),
-			HerdStep::Dark
-		);
+		assert_eq!(herd_step(&herd, &[right], herded_to, wm_turn), HerdStep::Dark);
 		// a monitor that changed isn't the one that went
-		assert_eq!(
-			herd_step(&herd, &[(0, 0, 1920, 1200), right], herded_to, wm_turn),
-			HerdStep::Dark
-		);
+		assert_eq!(herd_step(&herd, &[(0, 0, 1920, 1200), right], herded_to, wm_turn), HerdStep::Dark);
 		assert_eq!(herd_poll_gap(t0, t0 + Duration::from_secs(5)), HERD_POLL);
-		assert_eq!(
-			herd_poll_gap(t0, t0 + Duration::from_secs(90)),
-			HERD_POLL_LATER
-		);
+		assert_eq!(herd_poll_gap(t0, t0 + Duration::from_secs(90)), HERD_POLL_LATER);
 	}
 
 	// A Wayland window shown with its first frame still being drawn is on no
@@ -2143,17 +1574,9 @@ mod tests {
 	fn a_drag_held_still_is_not_taken_for_a_drop() {
 		use super::{Drag, drag_state};
 		assert_eq!(drag_state(None, false, false, false), Drag::MaybeHeld);
-		assert_eq!(
-			drag_state(None, false, true, false),
-			Drag::Over,
-			"pointer back"
-		);
+		assert_eq!(drag_state(None, false, true, false), Drag::Over, "pointer back");
 		assert_eq!(drag_state(None, false, false, true), Drag::Over, "key");
-		assert_eq!(
-			drag_state(None, true, false, false),
-			Drag::Over,
-			"opening or herded"
-		);
+		assert_eq!(drag_state(None, true, false, false), Drag::Over, "opening or herded");
 		assert_eq!(drag_state(Some(true), false, true, true), Drag::Held);
 		assert_eq!(drag_state(Some(false), false, false, false), Drag::Over);
 	}
@@ -2167,17 +1590,9 @@ mod tests {
 		use super::{Pointer, pointer_moved};
 		let entered = pointer_moved(Pointer::Entered(None), (1472.0, 463.0));
 		assert_eq!(entered, Pointer::Entered(Some((1472.0, 463.0))));
-		assert_eq!(
-			pointer_moved(entered, (1472.0, 463.0)),
-			entered,
-			"same spot"
-		);
+		assert_eq!(pointer_moved(entered, (1472.0, 463.0)), entered, "same spot");
 		assert_eq!(pointer_moved(entered, (1473.0, 463.0)), Pointer::Over);
-		assert_eq!(
-			pointer_moved(Pointer::Away, (5.0, 5.0)),
-			Pointer::Away,
-			"focus says where"
-		);
+		assert_eq!(pointer_moved(Pointer::Away, (5.0, 5.0)), Pointer::Away, "focus says where");
 		assert_eq!(pointer_moved(Pointer::Over, (5.0, 5.0)), Pointer::Over);
 	}
 
@@ -2189,60 +1604,28 @@ mod tests {
 	#[test]
 	fn fullscreen_and_back_saves_nothing() {
 		use super::{Noted, what_to_keep};
-		let resized = Noted {
-			resized: true,
-			..Noted::default()
-		};
+		let resized = Noted { resized: true, ..Noted::default() };
 		let by_hand = what_to_keep(resized, true);
 		assert!(by_hand.grid && by_hand.zoom && by_hand.unpin && !by_hand.back);
 		assert!(resized.users());
 
 		let full = what_to_keep(resized, false);
 		assert!(!full.grid && !full.zoom && !full.unpin, "{full:?}");
-		let way_back = Noted {
-			resized: true,
-			..full.carry
-		};
+		let way_back = Noted { resized: true, ..full.carry };
 		assert!(!way_back.users());
 		let back = what_to_keep(way_back, true);
-		assert!(
-			!back.grid && !back.zoom && !back.unpin && back.back,
-			"{back:?}"
-		);
-		assert_eq!(
-			back.carry,
-			Noted::default(),
-			"the next resize is the user's"
-		);
+		assert!(!back.grid && !back.zoom && !back.unpin && back.back, "{back:?}");
+		assert_eq!(back.carry, Noted::default(), "the next resize is the user's");
 
 		// F11 twice before a save
-		let twice = Noted {
-			resized: true,
-			full: true,
-			zoomed: false,
-		};
+		let twice = Noted { resized: true, full: true, zoomed: false };
 		assert!(!what_to_keep(twice, true).grid);
 
 		// a zoom while fullscreen keeps the zoom, and the grid once back
-		let zoomed = what_to_keep(
-			Noted {
-				zoomed: true,
-				..Noted::default()
-			},
-			false,
-		);
+		let zoomed = what_to_keep(Noted { zoomed: true, ..Noted::default() }, false);
 		assert!(!zoomed.grid && zoomed.zoom);
-		let back = what_to_keep(
-			Noted {
-				resized: true,
-				..zoomed.carry
-			},
-			true,
-		);
-		assert!(
-			back.grid && back.zoom && !back.unpin && back.back,
-			"{back:?}"
-		);
+		let back = what_to_keep(Noted { resized: true, ..zoomed.carry }, true);
+		assert!(back.grid && back.zoom && !back.unpin && back.back, "{back:?}");
 	}
 
 	// sway sends a scale as a window leaves fullscreen. The way back fell in
@@ -2252,16 +1635,10 @@ mod tests {
 	#[test]
 	fn the_way_back_from_fullscreen_counts_in_a_grace() {
 		use super::{Noted, resize_counts};
-		let full = Noted {
-			full: true,
-			..Noted::default()
-		};
+		let full = Noted { full: true, ..Noted::default() };
 		assert!(resize_counts(true, full), "the way back");
 		assert!(resize_counts(false, full));
-		assert!(
-			!resize_counts(true, Noted::default()),
-			"the system's resize"
-		);
+		assert!(!resize_counts(true, Noted::default()), "the system's resize");
 		assert!(resize_counts(false, Noted::default()));
 	}
 
@@ -2279,10 +1656,7 @@ mod tests {
 		let px = |grid: (usize, usize)| window_px(grid.0, grid.1, small.0, small.1, margin, chrome);
 
 		let fits = (100, 30);
-		assert_eq!(
-			grid_in_font(fits, px(fits), normal, margin, chrome, screen),
-			fits
-		);
+		assert_eq!(grid_in_font(fits, px(fits), normal, margin, chrome, screen), fits);
 		// 1508x1088 at the normal font: the window's 1208x888 instead
 		let too_big = (150, 50);
 		assert_eq!(px(too_big), (1208, 888));
@@ -2290,19 +1664,12 @@ mod tests {
 		assert_eq!(kept, (120, 40));
 		let (w, h) = window_px(kept.0, kept.1, normal.0, normal.1, margin, chrome);
 		assert!(w <= 1208 && h <= 888);
-		assert_eq!(
-			grid_in_font(fits, px(fits), normal, margin, chrome, None),
-			(80, 24),
-			"no screen to fit"
-		);
+		assert_eq!(grid_in_font(fits, px(fits), normal, margin, chrome, None), (80, 24), "no screen to fit");
 		// a bigger font on the command line comes back smaller, and fits
 		let big = |grid: (usize, usize)| window_px(grid.0, grid.1, 14.0, 29.0, margin, chrome);
 		let wide = (120, 40);
 		assert_eq!(big(wide), (1688, 1198), "past the screen's height");
-		assert_eq!(
-			grid_in_font(wide, big(wide), normal, margin, chrome, screen),
-			wide
-		);
+		assert_eq!(grid_in_font(wide, big(wide), normal, margin, chrome, screen), wide);
 	}
 
 	// A size kept at the normal font opened in the same columns and rows at a
@@ -2317,12 +1684,8 @@ mod tests {
 		let normal = (9.9, 22.0);
 		let screen = Some((1920, 1050));
 		let kept = (100, 30);
-		assert_eq!(
-			window_px(kept.0, kept.1, normal.0, normal.1, margin, chrome),
-			(998, 698)
-		);
-		let open =
-			|cell: (f32, f32), room| grid_from_font(kept, normal, cell, margin, chrome, room);
+		assert_eq!(window_px(kept.0, kept.1, normal.0, normal.1, margin, chrome), (998, 698));
+		let open = |cell: (f32, f32), room| grid_from_font(kept, normal, cell, margin, chrome, room);
 		// --font-size 14 fits as it is, and so does a wider --font-name
 		assert_eq!(open((11.5, 26.0), screen), kept);
 		assert_eq!(open((12.0, 22.0), screen), kept);
@@ -2351,23 +1714,12 @@ mod tests {
 		use crate::fields;
 		use crate::ui_spec::Key;
 		use knobs::Value;
-		let cli = |line: &str| {
-			crate::cli::parse(line.split_whitespace().map(String::from))
-				.unwrap()
-				.win
-		};
+		let cli = |line: &str| crate::cli::parse(line.split_whitespace().map(String::from)).unwrap().win;
 		let saves = |line: &str| {
 			let win = cli(line);
 			saves_size(CliSize::of(&win), &win.style)
 		};
-		for line in [
-			"--columns 90",
-			"--rows 30",
-			"--pixel-width 800",
-			"--pixel-height 600",
-			"--font-size 14",
-			"--font-name Mono",
-		] {
+		for line in ["--columns 90", "--rows 30", "--pixel-width 800", "--pixel-height 600", "--font-size 14", "--font-name Mono"] {
 			assert!(!saves(line), "{line}");
 			assert!(saves(&format!("{line} --persist")), "{line}");
 			assert!(!saves(&format!("{line} --persist=no")), "{line}");
@@ -2390,10 +1742,7 @@ mod tests {
 				hand_back(&mut size, &mut style, &opened, &$edited)
 			};
 		}
-		assert!(
-			!back!(set(Key::Margin, Value::Float(7.0))),
-			"another setting"
-		);
+		assert!(!back!(set(Key::Margin, Value::Float(7.0))), "another setting");
 		assert!(!back!(opened), "nothing changed");
 		assert!(back!(set(Key::FontSize, Value::Float(16.0))));
 		let mut reset = opened.clone();
@@ -2401,10 +1750,7 @@ mod tests {
 		assert!(!back!(reset), "the arrow, on the family");
 		assert_eq!((style.font_size, style.font_name.as_deref()), (None, None));
 		assert!(!back!(set(Key::RememberSize, Value::Bool(false))));
-		assert!(
-			!saves_size(size, &style),
-			"the switch over the size isn't it"
-		);
+		assert!(!saves_size(size, &style), "the switch over the size isn't it");
 		assert!(!back!(set(Key::Rows, Value::Int(40))));
 		assert!(saves_size(size, &style), "{size:?} {style:?}");
 		size = CliSize::of(&cli("--columns 90"));
@@ -2428,39 +1774,12 @@ mod tests {
 		use crate::cli::WindowOpts;
 		let mut s = crate::config::Settings::default();
 		let plain = WindowOpts::default();
-		assert!(
-			!launch_maximized(&s, &plain),
-			"a fresh config opens restored"
-		);
+		assert!(!launch_maximized(&s, &plain), "a fresh config opens restored");
 		s.remembered_maximized = true;
-		assert!(
-			!launch_maximized(&s, &plain),
-			"the setting is off by default"
-		);
+		assert!(!launch_maximized(&s, &plain), "the setting is off by default");
 		s.remember_maximized = true;
 		assert!(launch_maximized(&s, &plain));
-		for cli in [
-			WindowOpts {
-				columns: Some(80),
-				..Default::default()
-			},
-			WindowOpts {
-				rows: Some(24),
-				..Default::default()
-			},
-			WindowOpts {
-				pixel_width: Some(800),
-				..Default::default()
-			},
-			WindowOpts {
-				pixel_height: Some(600),
-				..Default::default()
-			},
-			WindowOpts {
-				fullscreen: Some(true),
-				..Default::default()
-			},
-		] {
+		for cli in [WindowOpts { columns: Some(80), ..Default::default() }, WindowOpts { rows: Some(24), ..Default::default() }, WindowOpts { pixel_width: Some(800), ..Default::default() }, WindowOpts { pixel_height: Some(600), ..Default::default() }, WindowOpts { fullscreen: Some(true), ..Default::default() }] {
 			assert!(!launch_maximized(&s, &cli), "{cli:?}");
 		}
 		s.remember_maximized = false;
@@ -2482,9 +1801,7 @@ mod tests {
 		assert_eq!(room, (1818, 960));
 		// one pane: margins of 4 and a 100 px minimap beside the text
 		let cols = |w: u32, cell: f32| (((w as f32 - 108.0) / cell).floor() as usize).max(1);
-		let width = |cell: f32, most: u32| {
-			least_px(most, |w| fits(&[(cols(w, cell), 24)], &[(70, 24)], |g| g.0))
-		};
+		let width = |cell: f32, most: u32| least_px(most, |w| fits(&[(cols(w, cell), 24)], &[(70, 24)], |g| g.0));
 		assert_eq!(width(10.0, room.0), 808);
 		assert_eq!(width(12.0, room.0), 948, "zoomed in");
 		assert_eq!(cols(948, 12.0), 70);
@@ -2500,23 +1817,14 @@ mod tests {
 		let w = least_px(room.0, |w| fits(&both(w), &[(40, 24), (40, 24)], |g| g.0));
 		assert_eq!(both(w), [(40, 24), (40, 24)]);
 		assert_ne!(both(w - 2), [(40, 24), (40, 24)]);
-		assert!(
-			!fits(&[(80, 24)], &[(40, 24), (40, 24)], |g| g.0),
-			"split since"
-		);
+		assert!(!fits(&[(80, 24)], &[(40, 24), (40, 24)], |g| g.0), "split since");
 		// already over the edge: it keeps the size it has
-		assert_eq!(
-			zoom_room(area, Some((1500, 900)), frame, (808, 488)),
-			(808, 488)
-		);
+		assert_eq!(zoom_room(area, Some((1500, 900)), frame, (808, 488)), (808, 488));
 		// off the left of the area, the right edge still holds
 		assert_eq!(zoom_room(area, Some((-100, 0)), frame, (808, 488)).0, 2018);
 		// Wayland: no position, so the whole area
 		assert_eq!(zoom_room(area, None, frame, (808, 488)), (1918, 1010));
-		assert_eq!(
-			zoom_room(None, None, frame, (808, 488)),
-			(u32::MAX, u32::MAX)
-		);
+		assert_eq!(zoom_room(None, None, frame, (808, 488)), (u32::MAX, u32::MAX));
 		assert_eq!(least_px(0, |_| true), 1);
 		// out to whole cells of the window's grid, which is what's saved: a
 		// zoom in and back kept the shell's 70 columns but saved 79 for 80,
@@ -2540,17 +1848,9 @@ mod tests {
 			for chrome in [0.0, 30.0, 31.5] {
 				for n in 1..200 {
 					let at = |n: usize| window_px(1, n, cell, cell, 4.0, chrome).1;
-					assert_eq!(
-						whole_cells(at(n), u32::MAX, cell, 4.0, chrome),
-						at(n),
-						"{cell} {chrome} {n}"
-					);
+					assert_eq!(whole_cells(at(n), u32::MAX, cell, 4.0, chrome), at(n), "{cell} {chrome} {n}");
 					for px in at(n) + 1..at(n + 1) {
-						assert_eq!(
-							whole_cells(px, u32::MAX, cell, 4.0, chrome),
-							at(n + 1),
-							"{cell} {chrome} {px}"
-						);
+						assert_eq!(whole_cells(px, u32::MAX, cell, 4.0, chrome), at(n + 1), "{cell} {chrome} {px}");
 					}
 				}
 			}
@@ -2563,39 +1863,16 @@ mod tests {
 	fn a_zoom_keeps_to_its_own_monitor_and_its_grid() {
 		use super::{ZoomKept, overlap};
 		let work = (0, 0, 5040, 2520);
-		assert_eq!(
-			overlap(work, (1600, 554, 3440, 1440)),
-			Some((1600, 554, 3440, 1440))
-		);
-		assert_eq!(
-			overlap((0, 30, 1920, 1050), (0, 0, 1920, 1080)),
-			Some((0, 30, 1920, 1050))
-		);
+		assert_eq!(overlap(work, (1600, 554, 3440, 1440)), Some((1600, 554, 3440, 1440)));
+		assert_eq!(overlap((0, 30, 1920, 1050), (0, 0, 1920, 1080)), Some((0, 30, 1920, 1050)));
 		assert_eq!(overlap((0, 0, 100, 100), (200, 0, 100, 100)), None);
 		// held to while nothing else sized the window, changed the font, or
 		// split a pane
-		let kept = ZoomKept {
-			hold: super::ZoomHold {
-				grids: vec![(70, 24)],
-				home: (0, (808, 488)),
-			},
-			from: (808, 488),
-			to: (1818, 960),
-			cell: (30.0, 60.0),
-		};
+		let kept = ZoomKept { hold: super::ZoomHold { grids: vec![(70, 24)], home: (0, (808, 488)) }, from: (808, 488), to: (1818, 960), cell: (30.0, 60.0) };
 		assert!(kept.still_holds((1818, 960), (30.0, 60.0), 1));
-		assert!(
-			kept.still_holds((808, 488), (30.0, 60.0), 1),
-			"size on its way"
-		);
-		assert!(
-			!kept.still_holds((1000, 700), (30.0, 60.0), 1),
-			"resized by hand"
-		);
-		assert!(
-			!kept.still_holds((1818, 960), (12.0, 24.0), 1),
-			"font changed"
-		);
+		assert!(kept.still_holds((808, 488), (30.0, 60.0), 1), "size on its way");
+		assert!(!kept.still_holds((1000, 700), (30.0, 60.0), 1), "resized by hand");
+		assert!(!kept.still_holds((1818, 960), (12.0, 24.0), 1), "font changed");
 		assert!(!kept.still_holds((1818, 960), (30.0, 60.0), 2), "split");
 	}
 }

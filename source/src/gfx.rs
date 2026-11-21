@@ -76,46 +76,14 @@ struct Blit {
 
 impl Blit {
 	fn new(device: &wgpu::Device, format: wgpu::TextureFormat, src: &wgpu::TextureView) -> Self {
-		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-			label: Some("blit shader"),
-			source: wgpu::ShaderSource::Wgsl(BLIT_WGSL.into()),
-		});
-		let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("blit bgl"),
-			entries: &[
-				wgpu::BindGroupLayoutEntry {
-					binding: 0,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Texture {
-						sample_type: wgpu::TextureSampleType::Float { filterable: true },
-						view_dimension: wgpu::TextureViewDimension::D2,
-						multisampled: false,
-					},
-					count: None,
-				},
-				wgpu::BindGroupLayoutEntry {
-					binding: 1,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-					count: None,
-				},
-			],
-		});
+		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("blit shader"), source: wgpu::ShaderSource::Wgsl(BLIT_WGSL.into()) });
+		let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("blit bgl"), entries: &[wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }, count: None }, wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None }] });
 		let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
-		let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("blit layout"),
-			bind_group_layouts: &[Some(&layout)],
-			immediate_size: 0,
-		});
+		let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("blit layout"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
 		let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 			label: Some("blit pipeline"),
 			layout: Some(&pl),
-			vertex: wgpu::VertexState {
-				module: &shader,
-				entry_point: Some("vs"),
-				compilation_options: Default::default(),
-				buffers: &[],
-			},
+			vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
 			fragment: Some(wgpu::FragmentState {
 				module: &shader,
 				entry_point: Some("fs"),
@@ -133,34 +101,11 @@ impl Blit {
 			cache: None,
 		});
 		let bind = Self::bind(device, &layout, &sampler, src);
-		Self {
-			pipeline,
-			sampler,
-			layout,
-			bind,
-		}
+		Self { pipeline, sampler, layout, bind }
 	}
 
-	fn bind(
-		device: &wgpu::Device,
-		layout: &wgpu::BindGroupLayout,
-		sampler: &wgpu::Sampler,
-		src: &wgpu::TextureView,
-	) -> wgpu::BindGroup {
-		device.create_bind_group(&wgpu::BindGroupDescriptor {
-			label: Some("blit bind"),
-			layout,
-			entries: &[
-				wgpu::BindGroupEntry {
-					binding: 0,
-					resource: wgpu::BindingResource::TextureView(src),
-				},
-				wgpu::BindGroupEntry {
-					binding: 1,
-					resource: wgpu::BindingResource::Sampler(sampler),
-				},
-			],
-		})
+	fn bind(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, sampler: &wgpu::Sampler, src: &wgpu::TextureView) -> wgpu::BindGroup {
+		device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("blit bind"), layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(src) }, wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) }] })
 	}
 
 	fn rebind(&mut self, device: &wgpu::Device, src: &wgpu::TextureView) {
@@ -289,11 +234,7 @@ fn sentinel_byte(i: usize) -> u8 {
 
 // Checked in place, since a probe runs every couple of seconds per window.
 fn holds_sentinel(block: &[u8]) -> bool {
-	block.len() == SENTINEL_BYTES
-		&& block
-			.iter()
-			.enumerate()
-			.all(|(i, &b)| b == sentinel_byte(i))
+	block.len() == SENTINEL_BYTES && block.iter().enumerate().all(|(i, &b)| b == sentinel_byte(i))
 }
 
 /// One probe's verdict (see `vram_check_poll`).
@@ -324,54 +265,20 @@ pub struct BlockReadback {
 impl BlockReadback {
 	/// Room for `blocks` blocks of `side` x `side`, back to back.
 	pub fn new(device: &wgpu::Device, label: &str, side: u32, blocks: u64) -> Self {
-		let buf = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some(label),
-			size: u64::from(side * side * 4) * blocks,
-			usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-			mapped_at_creation: false,
-		});
-		Self {
-			side,
-			buf,
-			inflight: None,
-		}
+		let buf = device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: u64::from(side * side * 4) * blocks, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+		Self { side, buf, inflight: None }
 	}
 
 	/// Copy one block per `(texture, origin)` into the buffer in order, and
 	/// map it. False when a read is already in flight.
-	pub fn start(
-		&mut self,
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		from: &[(&wgpu::Texture, wgpu::Origin3d)],
-	) -> bool {
+	pub fn start(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, from: &[(&wgpu::Texture, wgpu::Origin3d)]) -> bool {
 		if self.inflight.is_some() {
 			return false;
 		}
 		let block = u64::from(self.side * self.side * 4);
 		let mut enc = device.create_command_encoder(&Default::default());
 		for (n, (tex, origin)) in (0u64..).zip(from) {
-			enc.copy_texture_to_buffer(
-				wgpu::TexelCopyTextureInfo {
-					texture: tex,
-					mip_level: 0,
-					origin: *origin,
-					aspect: wgpu::TextureAspect::All,
-				},
-				wgpu::TexelCopyBufferInfo {
-					buffer: &self.buf,
-					layout: wgpu::TexelCopyBufferLayout {
-						offset: n * block,
-						bytes_per_row: Some(self.side * 4),
-						rows_per_image: Some(self.side),
-					},
-				},
-				wgpu::Extent3d {
-					width: self.side,
-					height: self.side,
-					depth_or_array_layers: 1,
-				},
-			);
+			enc.copy_texture_to_buffer(wgpu::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: *origin, aspect: wgpu::TextureAspect::All }, wgpu::TexelCopyBufferInfo { buffer: &self.buf, layout: wgpu::TexelCopyBufferLayout { offset: n * block, bytes_per_row: Some(self.side * 4), rows_per_image: Some(self.side) } }, wgpu::Extent3d { width: self.side, height: self.side, depth_or_array_layers: 1 });
 		}
 		queue.submit(Some(enc.finish()));
 		let flag = Arc::new(AtomicU8::new(0));
@@ -385,11 +292,7 @@ impl BlockReadback {
 
 	/// None while nothing is in flight or the map is still pending. Otherwise
 	/// `check` sees the whole buffer, and the buffer is unmapped after.
-	pub fn poll<T>(
-		&mut self,
-		device: &wgpu::Device,
-		check: impl FnOnce(&[u8]) -> T,
-	) -> Option<Result<T, MapFailed>> {
+	pub fn poll<T>(&mut self, device: &wgpu::Device, check: impl FnOnce(&[u8]) -> T) -> Option<Result<T, MapFailed>> {
 		let flag = self.inflight.as_ref()?.clone();
 		if flag.load(Ordering::Acquire) == 0 {
 			// non-blocking pump so the map callback can run
@@ -419,40 +322,10 @@ struct Sentinel {
 
 impl Sentinel {
 	fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
-		let mk_tex = |label: &str, usage: wgpu::TextureUsages| {
-			device.create_texture(&wgpu::TextureDescriptor {
-				label: Some(label),
-				size: wgpu::Extent3d {
-					width: SENTINEL_PX,
-					height: SENTINEL_PX,
-					depth_or_array_layers: 1,
-				},
-				mip_level_count: 1,
-				sample_count: 1,
-				dimension: wgpu::TextureDimension::D2,
-				format: wgpu::TextureFormat::Rgba8Unorm,
-				usage,
-				view_formats: &[],
-			})
-		};
-		let up_tex = mk_tex(
-			"vram sentinel uploaded",
-			wgpu::TextureUsages::TEXTURE_BINDING
-				| wgpu::TextureUsages::COPY_DST
-				| wgpu::TextureUsages::COPY_SRC,
-		);
-		let fbo_tex = mk_tex(
-			"vram sentinel rendered",
-			wgpu::TextureUsages::RENDER_ATTACHMENT
-				| wgpu::TextureUsages::TEXTURE_BINDING
-				| wgpu::TextureUsages::COPY_DST
-				| wgpu::TextureUsages::COPY_SRC,
-		);
-		let sentinel = Self {
-			up_tex,
-			fbo_tex,
-			read: BlockReadback::new(device, "vram sentinel read", SENTINEL_PX, 2),
-		};
+		let mk_tex = |label: &str, usage: wgpu::TextureUsages| device.create_texture(&wgpu::TextureDescriptor { label: Some(label), size: wgpu::Extent3d { width: SENTINEL_PX, height: SENTINEL_PX, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Rgba8Unorm, usage, view_formats: &[] });
+		let up_tex = mk_tex("vram sentinel uploaded", wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC);
+		let fbo_tex = mk_tex("vram sentinel rendered", wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC);
+		let sentinel = Self { up_tex, fbo_tex, read: BlockReadback::new(device, "vram sentinel read", SENTINEL_PX, 2) };
 		sentinel.seed(device, queue, &sentinel_pattern());
 		sentinel
 	}
@@ -460,45 +333,9 @@ impl Sentinel {
 	// Upload `data` into up_tex, then GPU-copy it into fbo_tex (write_texture is
 	// ordered before subsequently submitted command buffers, so the copy sees it).
 	fn seed(&self, device: &wgpu::Device, queue: &wgpu::Queue, data: &[u8]) {
-		queue.write_texture(
-			wgpu::TexelCopyTextureInfo {
-				texture: &self.up_tex,
-				mip_level: 0,
-				origin: wgpu::Origin3d::ZERO,
-				aspect: wgpu::TextureAspect::All,
-			},
-			data,
-			wgpu::TexelCopyBufferLayout {
-				offset: 0,
-				bytes_per_row: Some(SENTINEL_ROW),
-				rows_per_image: Some(SENTINEL_PX),
-			},
-			wgpu::Extent3d {
-				width: SENTINEL_PX,
-				height: SENTINEL_PX,
-				depth_or_array_layers: 1,
-			},
-		);
+		queue.write_texture(wgpu::TexelCopyTextureInfo { texture: &self.up_tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, data, wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(SENTINEL_ROW), rows_per_image: Some(SENTINEL_PX) }, wgpu::Extent3d { width: SENTINEL_PX, height: SENTINEL_PX, depth_or_array_layers: 1 });
 		let mut enc = device.create_command_encoder(&Default::default());
-		enc.copy_texture_to_texture(
-			wgpu::TexelCopyTextureInfo {
-				texture: &self.up_tex,
-				mip_level: 0,
-				origin: wgpu::Origin3d::ZERO,
-				aspect: wgpu::TextureAspect::All,
-			},
-			wgpu::TexelCopyTextureInfo {
-				texture: &self.fbo_tex,
-				mip_level: 0,
-				origin: wgpu::Origin3d::ZERO,
-				aspect: wgpu::TextureAspect::All,
-			},
-			wgpu::Extent3d {
-				width: SENTINEL_PX,
-				height: SENTINEL_PX,
-				depth_or_array_layers: 1,
-			},
-		);
+		enc.copy_texture_to_texture(wgpu::TexelCopyTextureInfo { texture: &self.up_tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, wgpu::TexelCopyTextureInfo { texture: &self.fbo_tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, wgpu::Extent3d { width: SENTINEL_PX, height: SENTINEL_PX, depth_or_array_layers: 1 });
 		queue.submit(Some(enc.finish()));
 	}
 }
@@ -530,11 +367,7 @@ pub struct Gfx {
 
 impl std::fmt::Debug for Gfx {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("Gfx")
-			.field("format", &self.format)
-			.field("transparent", &self.transparent)
-			.field("adapter", &self.adapter_info.name)
-			.finish_non_exhaustive()
+		f.debug_struct("Gfx").field("format", &self.format).field("transparent", &self.transparent).field("adapter", &self.adapter_info.name).finish_non_exhaustive()
 	}
 }
 
@@ -561,9 +394,7 @@ pub struct GlRoute {
 
 impl std::fmt::Debug for GlRoute {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("GlRoute")
-			.field("software", &self.software.is_some())
-			.finish_non_exhaustive()
+		f.debug_struct("GlRoute").field("software", &self.software.is_some()).finish_non_exhaustive()
 	}
 }
 
@@ -592,11 +423,7 @@ pub const SOFTWARE_POSSIBLE: bool = !cfg!(target_os = "macos");
 
 /// What the next device is asked for.
 pub fn wanted() -> Want {
-	if SOFTWARE_POSSIBLE && crate::config::settings().software_rendering {
-		Want::Software
-	} else {
-		Want::Card
-	}
+	if SOFTWARE_POSSIBLE && crate::config::settings().software_rendering { Want::Software } else { Want::Card }
 }
 
 /// How a device came to be on its adapter.
@@ -652,16 +479,7 @@ impl Gfx {
 	/// has to be current while it happens and glutin destroys one without
 	/// unbinding it first.
 	pub fn release(self) -> Rebirth {
-		let Self {
-			instance,
-			device,
-			queue,
-			backend,
-			sentinel,
-			gl_route,
-			loss,
-			..
-		} = self;
+		let Self { instance, device, queue, backend, sentinel, gl_route, loss, .. } = self;
 		drop(sentinel);
 		match backend {
 			Backend::Native(_) | Backend::Gone => {
@@ -673,15 +491,7 @@ impl Gfx {
 				drop(queue);
 				drop(device);
 			}
-			Backend::Gl {
-				ctx,
-				surface,
-				fb,
-				fb_view,
-				offscreen,
-				offscreen_view,
-				blit,
-			} => {
+			Backend::Gl { ctx, surface, fb, fb_view, offscreen, offscreen_view, blit } => {
 				drop((blit, offscreen_view, offscreen, fb_view, fb));
 				let _ = device.poll(wgpu::PollType::wait_indefinitely());
 				drop(queue);
@@ -703,10 +513,7 @@ impl Gfx {
 	/// falls back to a cold start.
 	pub fn rebuild(rebirth: &Rebirth, window: &Arc<Window>, want: Want) -> anyhow::Result<Self> {
 		match rebirth {
-			Rebirth::Native(instance) => {
-				Self::on(instance.clone(), window.clone(), false, &want.order(), None)
-					.or_else(|_| Self::new(window.clone(), want))
-			}
+			Rebirth::Native(instance) => Self::on(instance.clone(), window.clone(), false, &want.order(), None).or_else(|_| Self::new(window.clone(), want)),
 			Rebirth::Gl(route) => Self::on_route(route.clone(), window, want, false),
 		}
 	}
@@ -719,19 +526,10 @@ impl Gfx {
 	/// back to the ordinary path (opaque) when DX12 can't present to this window.
 	#[cfg(windows)]
 	pub fn new_composited(window: Arc<Window>, want: Want) -> anyhow::Result<Self> {
-		let dx12 = wgpu::Dx12BackendOptions {
-			presentation_system: wgpu::Dx12SwapchainKind::DxgiFromVisual,
-			..Default::default()
-		};
-		let options = wgpu::BackendOptions {
-			dx12,
-			..Default::default()
-		};
+		let dx12 = wgpu::Dx12BackendOptions { presentation_system: wgpu::Dx12SwapchainKind::DxgiFromVisual, ..Default::default() };
+		let options = wgpu::BackendOptions { dx12, ..Default::default() };
 		Self::build(window.clone(), wgpu::Backends::DX12, options, want).or_else(|e| {
-			eprintln!(
-				"{}: composited DX12 surface unavailable ({e}); using native surface (no transparency)",
-				crate::config::APP_NAME
-			);
+			eprintln!("{}: composited DX12 surface unavailable ({e}); using native surface (no transparency)", crate::config::APP_NAME);
 			Self::new(window, want)
 		})
 	}
@@ -741,28 +539,13 @@ impl Gfx {
 	/// backend while the main window holds a glutin GL/EGL context panics in
 	/// wgpu-hal's EGL teardown (`unmake_current().unwrap()`), so dialogs must avoid
 	/// touching EGL entirely.
-	pub fn with_backends(
-		window: Arc<Window>,
-		backends: wgpu::Backends,
-		want: Want,
-	) -> anyhow::Result<Self> {
+	pub fn with_backends(window: Arc<Window>, backends: wgpu::Backends, want: Want) -> anyhow::Result<Self> {
 		Self::build(window, backends, wgpu::BackendOptions::default(), want)
 	}
 
-	fn build(
-		window: Arc<Window>,
-		backends: wgpu::Backends,
-		backend_options: wgpu::BackendOptions,
-		want: Want,
-	) -> anyhow::Result<Self> {
+	fn build(window: Arc<Window>, backends: wgpu::Backends, backend_options: wgpu::BackendOptions, want: Want) -> anyhow::Result<Self> {
 		let _loader = hold_loader();
-		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-			backends,
-			flags: wgpu::InstanceFlags::default(),
-			memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-			backend_options,
-			display: None,
-		});
+		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor { backends, flags: wgpu::InstanceFlags::default(), memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(), backend_options, display: None });
 		Self::on(instance, window, true, &want.order(), None)
 	}
 
@@ -770,46 +553,17 @@ impl Gfx {
 	// start above and a rebuild after a release (`log` is the difference, since
 	// the adapter was reported the first time). `order` is as for
 	// `pick_device`, and `refused` says a card already refused a device.
-	fn on(
-		instance: wgpu::Instance,
-		window: Arc<Window>,
-		log: bool,
-		order: &[bool],
-		refused: Option<String>,
-	) -> anyhow::Result<Self> {
+	fn on(instance: wgpu::Instance, window: Arc<Window>, log: bool, order: &[bool], refused: Option<String>) -> anyhow::Result<Self> {
 		let _loader = hold_loader();
 		let surface = instance.create_surface(window.clone())?;
 		let picked = pick_device(&instance, Some(&surface), order, refused, "silkterm device")?;
-		let (config, format, transparent) = surface_config(&surface, &picked.adapter, &window)
-			.ok_or_else(|| anyhow::anyhow!("adapter can't present to this window"))?;
+		let (config, format, transparent) = surface_config(&surface, &picked.adapter, &window).ok_or_else(|| anyhow::anyhow!("adapter can't present to this window"))?;
 		if log || picked.drawn == Drawn::Fallback {
 			log_renderer(&picked.info, transparent);
 		}
 		surface.configure(&picked.device, &config);
 
-		Ok(Self {
-			_vulkan: OnVulkan::count(&picked.info),
-			instance,
-			device: picked.device,
-			queue: picked.queue,
-			config,
-			format,
-			transparent,
-			adapter_info: picked.info,
-			backend: Backend::Native(surface),
-			sentinel: None,
-			gl_route: None,
-			drawn: picked.drawn,
-			want: if order.first() == Some(&true) {
-				Want::Software
-			} else {
-				Want::Card
-			},
-			loss: picked.loss,
-			surface_lost: AtomicBool::new(false),
-			born: std::time::SystemTime::now(),
-			_window: window,
-		})
+		Ok(Self { _vulkan: OnVulkan::count(&picked.info), instance, device: picked.device, queue: picked.queue, config, format, transparent, adapter_info: picked.info, backend: Backend::Native(surface), sentinel: None, gl_route: None, drawn: picked.drawn, want: if order.first() == Some(&true) { Want::Software } else { Want::Card }, loss: picked.loss, surface_lost: AtomicBool::new(false), born: std::time::SystemTime::now(), _window: window })
 	}
 
 	// A device on a window glutin made: GL on the card, or software when the
@@ -817,17 +571,11 @@ impl Gfx {
 	// through a Vulkan instance of its own (lavapipe). libGL keeps the card's
 	// driver once loaded, and a second wgpu GL instance panics in EGL teardown
 	// (see `with_backends`).
-	fn on_route(
-		mut route: GlRoute,
-		window: &Arc<Window>,
-		want: Want,
-		log: bool,
-	) -> anyhow::Result<Self> {
+	fn on_route(mut route: GlRoute, window: &Arc<Window>, want: Want, log: bool) -> anyhow::Result<Self> {
 		let mut gfx = match want {
 			Want::Card => match Self::gl_on(&route, window.clone(), log) {
 				Ok(gfx) => gfx,
-				Err(e) => Self::software_on_route(&mut route, window, log, Some(e.to_string()))
-					.map_err(|_| e)?,
+				Err(e) => Self::software_on_route(&mut route, window, log, Some(e.to_string())).map_err(|_| e)?,
 			},
 			Want::Software => match Self::software_on_route(&mut route, window, log, None) {
 				Ok(gfx) => gfx,
@@ -841,17 +589,9 @@ impl Gfx {
 		Ok(gfx)
 	}
 
-	fn software_on_route(
-		route: &mut GlRoute,
-		window: &Arc<Window>,
-		log: bool,
-		refused: Option<String>,
-	) -> anyhow::Result<Self> {
+	fn software_on_route(route: &mut GlRoute, window: &Arc<Window>, log: bool, refused: Option<String>) -> anyhow::Result<Self> {
 		let _loader = hold_loader();
-		let instance = route
-			.software
-			.get_or_insert_with(|| plain_instance(wgpu::Backends::PRIMARY))
-			.clone();
+		let instance = route.software.get_or_insert_with(|| plain_instance(wgpu::Backends::PRIMARY)).clone();
 		let mut gfx = Self::on(instance, window.clone(), log, &[true], refused)?;
 		gfx.gl_route = Some(route.clone());
 		Ok(gfx)
@@ -875,45 +615,15 @@ impl Gfx {
 		let (config, format, transparent) = surface_config(&surface, &gpu.adapter, &window)?;
 		surface.configure(&gpu.device, &config);
 
-		Some(Self {
-			instance: gpu.instance.clone(),
-			device: gpu.device.clone(),
-			queue: gpu.queue.clone(),
-			config,
-			format,
-			transparent,
-			adapter_info: gpu.adapter_info.clone(),
-			backend: Backend::Native(surface),
-			sentinel: None,
-			gl_route: None,
-			drawn: gpu.drawn,
-			want: gpu.want,
-			loss: gpu.loss.clone(),
-			surface_lost: AtomicBool::new(false),
-			born: std::time::SystemTime::now(),
-			_window: window,
-			_vulkan: OnVulkan::count(&gpu.adapter_info),
-		})
+		Some(Self { instance: gpu.instance.clone(), device: gpu.device.clone(), queue: gpu.queue.clone(), config, format, transparent, adapter_info: gpu.adapter_info.clone(), backend: Backend::Native(surface), sentinel: None, gl_route: None, drawn: gpu.drawn, want: gpu.want, loss: gpu.loss.clone(), surface_lost: AtomicBool::new(false), born: std::time::SystemTime::now(), _window: window, _vulkan: OnVulkan::count(&gpu.adapter_info) })
 	}
 
 	// The GL config picker: transparent first, then the deepest alpha.
-	#[allow(
-		clippy::expect_used,
-		reason = "the template asks for nothing, so every config the display has is offered"
-	)]
-	fn most_transparent_config(
-		cfgs: Box<dyn Iterator<Item = glutin::config::Config> + '_>,
-	) -> glutin::config::Config {
+	#[allow(clippy::expect_used, reason = "the template asks for nothing, so every config the display has is offered")]
+	fn most_transparent_config(cfgs: Box<dyn Iterator<Item = glutin::config::Config> + '_>) -> glutin::config::Config {
 		cfgs.reduce(|best, cand| {
-			let (best_transparent, cand_transparent) = (
-				best.supports_transparency().unwrap_or(false),
-				cand.supports_transparency().unwrap_or(false),
-			);
-			if (cand_transparent, cand.alpha_size()) > (best_transparent, best.alpha_size()) {
-				cand
-			} else {
-				best
-			}
+			let (best_transparent, cand_transparent) = (best.supports_transparency().unwrap_or(false), cand.supports_transparency().unwrap_or(false));
+			if (cand_transparent, cand.alpha_size()) > (best_transparent, best.alpha_size()) { cand } else { best }
 		})
 		.expect("GL reported no framebuffer configs")
 	}
@@ -921,11 +631,7 @@ impl Gfx {
 	/// X11-only per-pixel transparency: glutin creates the window with a 32-bit
 	/// ARGB visual + transparent GL context, and wgpu runs on it via hal external
 	/// interop (PoCs on branch spike/x11-transparency). Returns the window it created.
-	pub fn new_gl_transparent(
-		el: &ActiveEventLoop,
-		attrs: WindowAttributes,
-		want: Want,
-	) -> anyhow::Result<(Self, Arc<Window>)> {
+	pub fn new_gl_transparent(el: &ActiveEventLoop, attrs: WindowAttributes, want: Want) -> anyhow::Result<(Self, Arc<Window>)> {
 		#[cfg(target_os = "linux")]
 		quiet_glx_errors();
 		// No transparency requirement in the template, since the picker closure must
@@ -933,30 +639,15 @@ impl Gfx {
 		// fallback. So match broadly, prefer transparent and deepest alpha, and check
 		// after.
 		let template = glutin::config::ConfigTemplateBuilder::new();
-		let (window, config) = DisplayBuilder::new()
-			.with_window_attributes(Some(attrs))
-			.build(el, template, Self::most_transparent_config)
-			.map_err(|e| anyhow::anyhow!("glutin display build: {e}"))?;
+		let (window, config) = DisplayBuilder::new().with_window_attributes(Some(attrs)).build(el, template, Self::most_transparent_config).map_err(|e| anyhow::anyhow!("glutin display build: {e}"))?;
 		if !config.supports_transparency().unwrap_or(false) || config.alpha_size() < 8 {
-			return Err(anyhow::anyhow!(
-				"no transparency-capable GL config (no ARGB visual?)"
-			));
+			return Err(anyhow::anyhow!("no transparency-capable GL config (no ARGB visual?)"));
 		}
 		let window = Arc::new(window.ok_or_else(|| anyhow::anyhow!("glutin made no window"))?);
 		// empty flags: no indirect validation, which needs compute the GL 3.3 context
 		// lacks, and indirect draws aren't used.
-		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-			backends: wgpu::Backends::GL,
-			flags: wgpu::InstanceFlags::empty(),
-			memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-			backend_options: wgpu::BackendOptions::default(),
-			display: None,
-		});
-		let route = GlRoute {
-			instance,
-			config,
-			software: None,
-		};
+		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor { backends: wgpu::Backends::GL, flags: wgpu::InstanceFlags::empty(), memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(), backend_options: wgpu::BackendOptions::default(), display: None });
+		let route = GlRoute { instance, config, software: None };
 		let gfx = Self::on_route(route, &window, want, true)?;
 		Ok((gfx, window))
 	}
@@ -978,9 +669,7 @@ impl Gfx {
 		let ctx = {
 			let mut picked = None;
 			for (maj, min) in [(4u8, 6u8), (4, 3), (4, 2), (4, 1), (3, 3)] {
-				let attrs = ContextAttributesBuilder::new()
-					.with_context_api(ContextApi::OpenGl(Some(Version::new(maj, min))))
-					.build(Some(raw));
+				let attrs = ContextAttributesBuilder::new().with_context_api(ContextApi::OpenGl(Some(Version::new(maj, min)))).build(Some(raw));
 				// SAFETY: `raw` is `window`'s handle, and `Gfx` keeps the window
 				// (`_window`, dropped last) for as long as the context.
 				if let Ok(ctx) = unsafe { gl_display.create_context(config, &attrs) } {
@@ -992,27 +681,14 @@ impl Gfx {
 		};
 		let size = window.inner_size();
 		// SAFETY: as for the context above, the window outlives the surface.
-		let surface = unsafe {
-			gl_display.create_window_surface(
-				config,
-				&SurfaceAttributesBuilder::<WindowSurface>::new().build(
-					raw,
-					NonZeroU32::new(size.width).unwrap_or(NonZeroU32::MIN),
-					NonZeroU32::new(size.height).unwrap_or(NonZeroU32::MIN),
-				),
-			)?
-		};
+		let surface = unsafe { gl_display.create_window_surface(config, &SurfaceAttributesBuilder::<WindowSurface>::new().build(raw, NonZeroU32::new(size.width).unwrap_or(NonZeroU32::MIN), NonZeroU32::new(size.height).unwrap_or(NonZeroU32::MIN)))? };
 		let ctx = ctx.make_current(&surface)?;
 		// Frame pacing on this path is swap_buffers blocking on vblank. The driver default
 		// isn't guaranteed (__GL_SYNC_TO_VBLANK=0, PRIME setups), and without it every
 		// scroll animation becomes a busy render loop. SILK_MAX_FPS (app.rs) paces the
 		// loop itself, and then vblank has to stay out of it, since a swap that blocks to
 		// the next refresh puts every frame back on the display's grid.
-		let interval = if std::env::var_os("SILK_MAX_FPS").is_some() {
-			glutin::surface::SwapInterval::DontWait
-		} else {
-			glutin::surface::SwapInterval::Wait(NonZeroU32::MIN)
-		};
+		let interval = if std::env::var_os("SILK_MAX_FPS").is_some() { glutin::surface::SwapInterval::DontWait } else { glutin::surface::SwapInterval::Wait(NonZeroU32::MIN) };
 		let _ = surface.set_swap_interval(&ctx, interval);
 
 		// A refusal from here on leaves the context current, and glutin destroys
@@ -1045,21 +721,8 @@ impl Gfx {
 		// all a blurred wallpaper. The blit then does the single linear-to-sRGB encode,
 		// with dither, into the 8-bit fbo 0.
 		let format = wgpu::TextureFormat::Rgba16Float;
-		let (width, height) = fit_px(
-			size.width,
-			size.height,
-			device.limits().max_texture_dimension_2d,
-		);
-		let surface_cfg = wgpu::SurfaceConfiguration {
-			usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-			format,
-			width,
-			height,
-			present_mode: wgpu::PresentMode::AutoVsync,
-			alpha_mode: wgpu::CompositeAlphaMode::PreMultiplied,
-			view_formats: vec![],
-			desired_maximum_frame_latency: 2,
-		};
+		let (width, height) = fit_px(size.width, size.height, device.limits().max_texture_dimension_2d);
+		let surface_cfg = wgpu::SurfaceConfiguration { usage: wgpu::TextureUsages::RENDER_ATTACHMENT, format, width, height, present_mode: wgpu::PresentMode::AutoVsync, alpha_mode: wgpu::CompositeAlphaMode::PreMultiplied, view_formats: vec![], desired_maximum_frame_latency: 2 };
 		let fb = default_fb(&device, FB_FORMAT, surface_cfg.width, surface_cfg.height);
 		let fb_view = fb.create_view(&Default::default());
 		let offscreen = offscreen_tex(&device, format, surface_cfg.width, surface_cfg.height);
@@ -1067,33 +730,7 @@ impl Gfx {
 		let blit = Blit::new(&device, FB_FORMAT, &offscreen_view);
 
 		let sentinel = Some(Sentinel::new(&device, &queue));
-		Ok(Self {
-			instance: route.instance.clone(),
-			device,
-			queue,
-			config: surface_cfg,
-			format,
-			transparent: true,
-			adapter_info,
-			backend: Backend::Gl {
-				ctx,
-				surface,
-				fb,
-				fb_view,
-				offscreen,
-				offscreen_view,
-				blit,
-			},
-			sentinel,
-			gl_route: Some(route.clone()),
-			drawn,
-			want: Want::Card,
-			loss,
-			surface_lost: AtomicBool::new(false),
-			born: std::time::SystemTime::now(),
-			_window: window,
-			_vulkan: None,
-		})
+		Ok(Self { instance: route.instance.clone(), device, queue, config: surface_cfg, format, transparent: true, adapter_info, backend: Backend::Gl { ctx, surface, fb, fb_view, offscreen, offscreen_view, blit }, sentinel, gl_route: Some(route.clone()), drawn, want: Want::Card, loss, surface_lost: AtomicBool::new(false), born: std::time::SystemTime::now(), _window: window, _vulkan: None })
 	}
 
 	/// True once the device or the surface is gone for good, and this whole
@@ -1120,9 +757,7 @@ impl Gfx {
 						surface_tex.present();
 						Err(NoFrame::Other)
 					}
-					Success(surface_tex) | Suboptimal(surface_tex) => {
-						Ok(Frame::Native(surface_tex))
-					}
+					Success(surface_tex) | Suboptimal(surface_tex) => Ok(Frame::Native(surface_tex)),
 					Outdated => {
 						surface.configure(&self.device, &self.config);
 						Err(NoFrame::Other)
@@ -1152,22 +787,13 @@ impl Gfx {
 		}
 		self.backend = Backend::Gone;
 		let want = wanted();
-		*self = Self::on(
-			self.instance.clone(),
-			window.clone(),
-			false,
-			&want.order(),
-			None,
-		)
-		.or_else(|_| Self::with_backends(window.clone(), wgpu::Backends::PRIMARY, want))?;
+		*self = Self::on(self.instance.clone(), window.clone(), false, &want.order(), None).or_else(|_| Self::with_backends(window.clone(), wgpu::Backends::PRIMARY, want))?;
 		Ok(())
 	}
 
 	pub fn frame_view(&self, frame: &Frame) -> wgpu::TextureView {
 		match (frame, &self.backend) {
-			(Frame::Native(surface_tex), _) => surface_tex
-				.texture
-				.create_view(&wgpu::TextureViewDescriptor::default()),
+			(Frame::Native(surface_tex), _) => surface_tex.texture.create_view(&wgpu::TextureViewDescriptor::default()),
 			// the scene renders to the offscreen texture (normal orientation)
 			(Frame::Gl, Backend::Gl { offscreen_view, .. }) => offscreen_view.clone(),
 			_ => unreachable!("frame/backend mismatch"),
@@ -1182,39 +808,11 @@ impl Gfx {
 				surface_tex.present();
 				Ok(())
 			}
-			(
-				Frame::Gl,
-				Backend::Gl {
-					ctx,
-					surface,
-					fb_view,
-					blit,
-					..
-				},
-			) => {
+			(Frame::Gl, Backend::Gl { ctx, surface, fb_view, blit, .. }) => {
 				// flip-blit the offscreen scene into the GL default framebuffer
-				let mut enc = self
-					.device
-					.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-						label: Some("blit"),
-					});
+				let mut enc = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("blit") });
 				{
-					let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-						label: Some("blit pass"),
-						color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-							view: fb_view,
-							resolve_target: None,
-							depth_slice: None,
-							ops: wgpu::Operations {
-								load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-								store: wgpu::StoreOp::Store,
-							},
-						})],
-						depth_stencil_attachment: None,
-						timestamp_writes: None,
-						occlusion_query_set: None,
-						multiview_mask: None,
-					});
+					let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor { label: Some("blit pass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: fb_view, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None });
 					pass.set_pipeline(&blit.pipeline);
 					pass.set_bind_group(0, &blit.bind, &[]);
 					pass.draw(0..3, 0..1);
@@ -1243,15 +841,7 @@ impl Gfx {
 		match &mut self.backend {
 			Backend::Native(surface) => surface.configure(&self.device, &self.config),
 			Backend::Gone => {}
-			Backend::Gl {
-				surface,
-				ctx,
-				fb,
-				fb_view,
-				offscreen,
-				offscreen_view,
-				blit,
-			} => {
+			Backend::Gl { surface, ctx, fb, fb_view, offscreen, offscreen_view, blit } => {
 				surface.resize(ctx, nonzero_w, nonzero_h);
 				*fb = default_fb(&self.device, FB_FORMAT, w, h);
 				*fb_view = fb.create_view(&wgpu::TextureViewDescriptor::default());
@@ -1296,14 +886,7 @@ impl Gfx {
 		let Some(sent) = &mut self.sentinel else {
 			return false;
 		};
-		sent.read.start(
-			&self.device,
-			&self.queue,
-			&[
-				(&sent.up_tex, wgpu::Origin3d::ZERO),
-				(&sent.fbo_tex, wgpu::Origin3d::ZERO),
-			],
-		)
+		sent.read.start(&self.device, &self.queue, &[(&sent.up_tex, wgpu::Origin3d::ZERO), (&sent.fbo_tex, wgpu::Origin3d::ZERO)])
 	}
 
 	/// Poll an in-flight probe. Some(Lost{..}) means a witness pattern is gone, and the
@@ -1322,10 +905,7 @@ impl Gfx {
 			Some(VramProbe::Intact)
 		} else {
 			sent.seed(&self.device, &self.queue, &sentinel_pattern());
-			Some(VramProbe::Lost {
-				uploaded: !up_ok,
-				rendered: !fbo_ok,
-			})
+			Some(VramProbe::Lost { uploaded: !up_ok, rendered: !fbo_ok })
 		}
 	}
 
@@ -1349,34 +929,9 @@ impl Gfx {
 		let unpadded = w * 8; // Rgba16Float = 8 bytes/texel
 		let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
 		let row_stride = unpadded.div_ceil(align) * align;
-		let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("dump"),
-			size: (row_stride * h) as u64,
-			usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-			mapped_at_creation: false,
-		});
+		let buf = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("dump"), size: (row_stride * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
 		let mut enc = self.device.create_command_encoder(&Default::default());
-		enc.copy_texture_to_buffer(
-			wgpu::TexelCopyTextureInfo {
-				texture: offscreen,
-				mip_level: 0,
-				origin: wgpu::Origin3d::ZERO,
-				aspect: wgpu::TextureAspect::All,
-			},
-			wgpu::TexelCopyBufferInfo {
-				buffer: &buf,
-				layout: wgpu::TexelCopyBufferLayout {
-					offset: 0,
-					bytes_per_row: Some(row_stride),
-					rows_per_image: Some(h),
-				},
-			},
-			wgpu::Extent3d {
-				width: w,
-				height: h,
-				depth_or_array_layers: 1,
-			},
-		);
+		enc.copy_texture_to_buffer(wgpu::TexelCopyTextureInfo { texture: offscreen, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row_stride), rows_per_image: Some(h) } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
 		self.queue.submit(Some(enc.finish()));
 		buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
 		let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
@@ -1387,15 +942,9 @@ impl Gfx {
 		for row in 0..h {
 			let row_start = (row * row_stride) as usize;
 			for texel in data[row_start..row_start + unpadded as usize].chunks_exact(8) {
-				let ch =
-					|i: usize| f16_to_f32(u16::from_le_bytes([texel[i * 2], texel[i * 2 + 1]]));
+				let ch = |i: usize| f16_to_f32(u16::from_le_bytes([texel[i * 2], texel[i * 2 + 1]]));
 				let to_srgb = crate::config::from_linear_u8;
-				pixels.extend_from_slice(&[
-					to_srgb(ch(0)),
-					to_srgb(ch(1)),
-					to_srgb(ch(2)),
-					(ch(3).clamp(0.0, 1.0) * 255.0 + 0.5) as u8,
-				]);
+				pixels.extend_from_slice(&[to_srgb(ch(0)), to_srgb(ch(1)), to_srgb(ch(2)), (ch(3).clamp(0.0, 1.0) * 255.0 + 0.5) as u8]);
 			}
 		}
 		let _ = image::save_buffer(path, &pixels, w, h, image::ExtendedColorType::Rgba8);
@@ -1423,10 +972,7 @@ fn f16_to_f32(bits: u16) -> f32 {
 // was billed about 200 MiB for under 1 MiB of use. MemoryUsage starts at 8 and
 // 4 MiB blocks. GL and Metal ignore the hint. Figures are in the reducing
 // resources design doc.
-fn request_device(
-	adapter: &wgpu::Adapter,
-	label: &str,
-) -> anyhow::Result<(wgpu::Device, wgpu::Queue, Loss)> {
+fn request_device(adapter: &wgpu::Adapter, label: &str) -> anyhow::Result<(wgpu::Device, wgpu::Queue, Loss)> {
 	if adapter.get_info().device_type != wgpu::DeviceType::Cpu && card_refused_on_purpose() {
 		anyhow::bail!("refused, SILK_REFUSE_CARD");
 	}
@@ -1451,14 +997,10 @@ impl Gfx {
 	// a real loss inside the call that ran into it, so it's polled at once.
 	fn lose_on_purpose(&self) {
 		static FILE: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
-		let Some(file) = FILE.get_or_init(|| std::env::var_os("SILK_LOSE_DEVICE").map(Into::into))
-		else {
+		let Some(file) = FILE.get_or_init(|| std::env::var_os("SILK_LOSE_DEVICE").map(Into::into)) else {
 			return;
 		};
-		if std::fs::metadata(file)
-			.and_then(|meta| meta.modified())
-			.is_ok_and(|touched| touched > self.born)
-		{
+		if std::fs::metadata(file).and_then(|meta| meta.modified()).is_ok_and(|touched| touched > self.born) {
 			self.device.destroy();
 			let _ = self.device.poll(wgpu::PollType::Poll);
 		}
@@ -1484,13 +1026,7 @@ thread_local! {
 
 // An instance with no options beyond its backends.
 fn plain_instance(backends: wgpu::Backends) -> wgpu::Instance {
-	wgpu::Instance::new(wgpu::InstanceDescriptor {
-		backends,
-		flags: wgpu::InstanceFlags::default(),
-		memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-		backend_options: wgpu::BackendOptions::default(),
-		display: None,
-	})
+	wgpu::Instance::new(wgpu::InstanceDescriptor { backends, flags: wgpu::InstanceFlags::default(), memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(), backend_options: wgpu::BackendOptions::default(), display: None })
 }
 
 struct Picked {
@@ -1507,28 +1043,17 @@ struct Picked {
 // where software is all there is. A card that refuses is what makes the
 // software device after it a fallback, and `refused` records one that
 // refused before this call (the GL path's).
-fn pick_device(
-	instance: &wgpu::Instance,
-	surface: Option<&wgpu::Surface<'_>>,
-	order: &[bool],
-	mut refused: Option<String>,
-	label: &str,
-) -> anyhow::Result<Picked> {
+fn pick_device(instance: &wgpu::Instance, surface: Option<&wgpu::Surface<'_>>, order: &[bool], mut refused: Option<String>, label: &str) -> anyhow::Result<Picked> {
 	let mut tried: Vec<wgpu::AdapterInfo> = Vec::new();
 	let mut last: Option<anyhow::Error> = None;
 	for &software in order {
-		let adapter =
-			match pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-				power_preference: wgpu::PowerPreference::HighPerformance,
-				compatible_surface: surface,
-				force_fallback_adapter: software,
-			})) {
-				Ok(adapter) => adapter,
-				Err(e) => {
-					last.get_or_insert_with(|| e.into());
-					continue;
-				}
-			};
+		let adapter = match pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, compatible_surface: surface, force_fallback_adapter: software })) {
+			Ok(adapter) => adapter,
+			Err(e) => {
+				last.get_or_insert_with(|| e.into());
+				continue;
+			}
+		};
 		let info = adapter.get_info();
 		if tried.contains(&info) {
 			continue;
@@ -1537,23 +1062,13 @@ fn pick_device(
 			Ok((device, queue, loss)) => {
 				let drawn = Drawn::of(&info, order.first() == Some(&true), refused.is_some());
 				match (drawn, &refused) {
-					(Drawn::Fallback, Some(why)) => eprintln!(
-						"{}: the graphics card couldn't make a device ({why}); drawing in software",
-						crate::config::APP_NAME
-					),
+					(Drawn::Fallback, Some(why)) => eprintln!("{}: the graphics card couldn't make a device ({why}); drawing in software", crate::config::APP_NAME),
 					(Drawn::Card, _) if order.first() == Some(&true) => {
 						note_no_software(&anyhow::anyhow!("none found"));
 					}
 					_ => {}
 				}
-				return Ok(Picked {
-					adapter,
-					device,
-					queue,
-					loss,
-					info,
-					drawn,
-				});
+				return Ok(Picked { adapter, device, queue, loss, info, drawn });
 			}
 			Err(e) => {
 				if info.device_type != wgpu::DeviceType::Cpu {
@@ -1572,10 +1087,7 @@ fn pick_device(
 fn note_no_software(why: &anyhow::Error) {
 	static SAID: std::sync::Once = std::sync::Once::new();
 	SAID.call_once(|| {
-		eprintln!(
-			"{}: software rendering is on, but no software renderer could draw ({why}); using the graphics card",
-			crate::config::APP_NAME
-		);
+		eprintln!("{}: software rendering is on, but no software renderer could draw ({why}); using the graphics card", crate::config::APP_NAME);
 	});
 }
 
@@ -1583,31 +1095,18 @@ fn note_no_software(why: &anyhow::Error) {
 // native paths so the 2 can't drift. `None` means this adapter can't present
 // to this surface at all (no formats), which is only reachable on the prewarmed
 // path. See `Gfx::with_dialog_gpu`.
-fn surface_config(
-	surface: &wgpu::Surface<'static>,
-	adapter: &wgpu::Adapter,
-	window: &Window,
-) -> Option<(wgpu::SurfaceConfiguration, wgpu::TextureFormat, bool)> {
+fn surface_config(surface: &wgpu::Surface<'static>, adapter: &wgpu::Adapter, window: &Window) -> Option<(wgpu::SurfaceConfiguration, wgpu::TextureFormat, bool)> {
 	let size = window.inner_size();
 	let caps = surface.get_capabilities(adapter);
 	if caps.formats.is_empty() {
 		return None;
 	}
-	let format = caps
-		.formats
-		.iter()
-		.copied()
-		.find(wgpu::TextureFormat::is_srgb)
-		.unwrap_or(caps.formats[0]);
+	let format = caps.formats.iter().copied().find(wgpu::TextureFormat::is_srgb).unwrap_or(caps.formats[0]);
 
 	let (alpha_mode, transparent) = pick_alpha_mode(&caps.alpha_modes, adapter.get_info().backend);
 
 	// the device is asked for the adapter's own limits (`request_device`)
-	let (width, height) = fit_px(
-		size.width,
-		size.height,
-		adapter.limits().max_texture_dimension_2d,
-	);
+	let (width, height) = fit_px(size.width, size.height, adapter.limits().max_texture_dimension_2d);
 	let config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 		format,
@@ -1634,10 +1133,7 @@ fn surface_config(
 // opaque, and Core Animation still reads the layer as premultiplied, which is
 // what the shaders write. Elsewhere PostMultiplied would multiply a second time,
 // so it's taken on Metal only.
-fn pick_alpha_mode(
-	offered: &[wgpu::CompositeAlphaMode],
-	backend: wgpu::Backend,
-) -> (wgpu::CompositeAlphaMode, bool) {
+fn pick_alpha_mode(offered: &[wgpu::CompositeAlphaMode], backend: wgpu::Backend) -> (wgpu::CompositeAlphaMode, bool) {
 	use wgpu::CompositeAlphaMode as Mode;
 	if offered.contains(&Mode::PreMultiplied) {
 		return (Mode::PreMultiplied, true);
@@ -1692,9 +1188,7 @@ impl Drop for LoaderHold {
 
 // Poison is ignored: a panic between loader calls leaves the loader whole.
 fn lock_loader() -> std::sync::MutexGuard<'static, ()> {
-	LOADER
-		.lock()
-		.unwrap_or_else(std::sync::PoisonError::into_inner)
+	LOADER.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 // `wait` with this thread's hold let go, since what it waits on may need it.
@@ -1746,9 +1240,7 @@ fn hold_for_windows() -> Option<LoaderHold> {
 #[derive(Debug)]
 pub struct HoldsLoader<'a, A>(pub &'a mut A);
 
-impl<A: winit::application::ApplicationHandler<T>, T: 'static>
-	winit::application::ApplicationHandler<T> for HoldsLoader<'_, A>
-{
+impl<A: winit::application::ApplicationHandler<T>, T: 'static> winit::application::ApplicationHandler<T> for HoldsLoader<'_, A> {
 	fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: winit::event::StartCause) {
 		let _loader = hold_for_windows();
 		self.0.new_events(event_loop, cause);
@@ -1764,22 +1256,12 @@ impl<A: winit::application::ApplicationHandler<T>, T: 'static>
 		self.0.user_event(event_loop, event);
 	}
 
-	fn window_event(
-		&mut self,
-		event_loop: &ActiveEventLoop,
-		window_id: winit::window::WindowId,
-		event: winit::event::WindowEvent,
-	) {
+	fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: winit::window::WindowId, event: winit::event::WindowEvent) {
 		let _loader = hold_for_windows();
 		self.0.window_event(event_loop, window_id, event);
 	}
 
-	fn device_event(
-		&mut self,
-		event_loop: &ActiveEventLoop,
-		device_id: winit::event::DeviceId,
-		event: winit::event::DeviceEvent,
-	) {
+	fn device_event(&mut self, event_loop: &ActiveEventLoop, device_id: winit::event::DeviceId, event: winit::event::DeviceEvent) {
 		let _loader = hold_for_windows();
 		self.0.device_event(event_loop, device_id, event);
 	}
@@ -1840,33 +1322,17 @@ impl DialogGpu {
 	/// Not logged: the terminal already reported the GPU, and this picks the same
 	/// one on any single-adapter box.
 	pub fn build(want: Want) -> anyhow::Result<Self> {
-		Self::on(
-			DialogSeed {
-				instance: plain_instance(wgpu::Backends::PRIMARY),
-			},
-			want,
-		)
+		Self::on(DialogSeed { instance: plain_instance(wgpu::Backends::PRIMARY) }, want)
 	}
 
 	// A device on an instance that already exists.
 	fn on(seed: DialogSeed, want: Want) -> anyhow::Result<Self> {
 		let picked = pick_device(&seed.instance, None, &want.order(), None, "silkterm device")?;
-		Ok(Self {
-			instance: seed.instance,
-			adapter: picked.adapter,
-			device: picked.device,
-			queue: picked.queue,
-			loss: picked.loss,
-			adapter_info: picked.info,
-			drawn: picked.drawn,
-			want,
-		})
+		Ok(Self { instance: seed.instance, adapter: picked.adapter, device: picked.device, queue: picked.queue, loss: picked.loss, adapter_info: picked.info, drawn: picked.drawn, want })
 	}
 
 	fn seed(&self) -> DialogSeed {
-		DialogSeed {
-			instance: self.instance.clone(),
-		}
+		DialogSeed { instance: self.instance.clone() }
 	}
 }
 
@@ -1891,10 +1357,7 @@ impl<T> Warm<T> {
 	fn settled(self) -> Self {
 		match self {
 			// a panicked worker reads as a failure, same as a returned None
-			Self::Building(job) => without_loader(|| job.join())
-				.ok()
-				.flatten()
-				.map_or(Self::Failed, Self::Ready),
+			Self::Building(job) => without_loader(|| job.join()).ok().flatten().map_or(Self::Failed, Self::Ready),
 			other => other,
 		}
 	}
@@ -1909,10 +1372,7 @@ pub struct GpuWarm {
 
 impl GpuWarm {
 	pub const fn idle() -> Self {
-		Self {
-			state: Warm::Idle,
-			seed: None,
-		}
+		Self { state: Warm::Idle, seed: None }
 	}
 
 	/// Start warming. Called once the terminal is on screen, so the
@@ -1940,10 +1400,7 @@ impl GpuWarm {
 				// A dialog can still be opened without this, at the old cost, so a
 				// failure here is a note rather than an error.
 				Err(e) => {
-					eprintln!(
-						"{}: dialog GPU warm-up failed ({e}); dialogs will open more slowly",
-						crate::config::APP_NAME
-					);
+					eprintln!("{}: dialog GPU warm-up failed ({e}); dialogs will open more slowly", crate::config::APP_NAME);
 					None
 				}
 			}
@@ -2012,19 +1469,7 @@ pub fn acceleration(info: &wgpu::AdapterInfo) -> &'static str {
 // An adapter for a test to describe itself with, since wgpu gives it no default.
 #[cfg(test)]
 pub fn test_adapter(name: &str, device_type: wgpu::DeviceType) -> wgpu::AdapterInfo {
-	wgpu::AdapterInfo {
-		name: name.to_string(),
-		vendor: 0,
-		device: 0,
-		device_type,
-		device_pci_bus_id: String::new(),
-		driver: String::new(),
-		driver_info: String::new(),
-		backend: wgpu::Backend::Vulkan,
-		subgroup_min_size: 4,
-		subgroup_max_size: 128,
-		transient_saves_memory: false,
-	}
+	wgpu::AdapterInfo { name: name.to_string(), vendor: 0, device: 0, device_type, device_pci_bus_id: String::new(), driver: String::new(), driver_info: String::new(), backend: wgpu::Backend::Vulkan, subgroup_min_size: 4, subgroup_max_size: 128, transient_saves_memory: false }
 }
 
 /// Adapter details for `--about`, with no window and no device. Only the adapter
@@ -2034,32 +1479,13 @@ pub fn test_adapter(name: &str, device_type: wgpu::DeviceType) -> wgpu::AdapterI
 /// rest of the About text is still worth printing.
 pub fn probe_adapter_info() -> Option<wgpu::AdapterInfo> {
 	let instance = plain_instance(wgpu::Backends::PRIMARY);
-	wanted().order().into_iter().find_map(|software| {
-		pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-			power_preference: wgpu::PowerPreference::HighPerformance,
-			compatible_surface: None,
-			force_fallback_adapter: software,
-		}))
-		.ok()
-		.map(|adapter| adapter.get_info())
-	})
+	wanted().order().into_iter().find_map(|software| pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, compatible_surface: None, force_fallback_adapter: software })).ok().map(|adapter| adapter.get_info()))
 }
 
 // `transparent` is whether the surface can have alpha at all, which is the first thing
 // to look at when the transparency setting appears to do nothing.
 fn log_renderer(info: &wgpu::AdapterInfo, transparent: bool) {
-	eprintln!(
-		"{}: renderer = {} [{:?} / {:?}] alpha = {}",
-		crate::config::APP_NAME,
-		info.name,
-		info.backend,
-		info.device_type,
-		if transparent {
-			"premultiplied"
-		} else {
-			"opaque"
-		},
-	);
+	eprintln!("{}: renderer = {} [{:?} / {:?}] alpha = {}", crate::config::APP_NAME, info.name, info.backend, info.device_type, if transparent { "premultiplied" } else { "opaque" });
 }
 
 // Keep the GL path's X errors away from winit. winit holds on to the last X
@@ -2086,13 +1512,7 @@ fn quiet_glx_errors() {
 			// winit logs only what nobody claimed, so it's logged here. A driver that
 			// fails every frame would otherwise fill the log.
 			if LOGGED.fetch_add(1, Ordering::Relaxed) < 20 {
-				eprintln!(
-					"{}: X error {} from GL request {}.{}, not fatal",
-					crate::config::APP_NAME,
-					event.error_code,
-					event.request_code,
-					event.minor_code
-				);
+				eprintln!("{}: X error {} from GL request {}.{}, not fatal", crate::config::APP_NAME, event.error_code, event.request_code, event.minor_code);
 			}
 			true
 		}));
@@ -2119,25 +1539,15 @@ impl GlxCodes {
 	fn query() -> Option<Self> {
 		use x11rb::protocol::xproto::ConnectionExt as _;
 		let (conn, _) = x11rb::connect(None).ok()?;
-		let ext = |name: &[u8]| {
-			conn.query_extension(name)
-				.ok()?
-				.reply()
-				.ok()
-				.filter(|r| r.present)
-		};
+		let ext = |name: &[u8]| conn.query_extension(name).ok()?.reply().ok().filter(|r| r.present);
 		let glx = ext(b"GLX")?;
 		let nv = ext(b"NV-GLX").map_or(0, |r| r.major_opcode);
-		Some(GlxCodes {
-			requests: [glx.major_opcode, nv],
-			first_error: glx.first_error,
-		})
+		Some(GlxCodes { requests: [glx.major_opcode, nv], first_error: glx.first_error })
 	}
 
 	fn claims(self, request: u8, error: u8) -> bool {
 		let first = u16::from(self.first_error);
-		(request != 0 && self.requests.contains(&request))
-			|| (first != 0 && (first..first + Self::ERRORS).contains(&u16::from(error)))
+		(request != 0 && self.requests.contains(&request)) || (first != 0 && (first..first + Self::ERRORS).contains(&u16::from(error)))
 	}
 }
 
@@ -2183,35 +1593,20 @@ fn wsi_debug_for(now: Option<&str>, shared_pixmaps: bool) -> Option<String> {
 	if shared_pixmaps || now.split([',', ' ']).any(|flag| flag == "noshm") {
 		return None;
 	}
-	Some(if now.is_empty() {
-		"noshm".to_string()
-	} else {
-		format!("{now},noshm")
-	})
+	Some(if now.is_empty() { "noshm".to_string() } else { format!("{now},noshm") })
 }
 
 // Offscreen scene target for the GL path: rendered top-left like the native
 // surface, then flip-blitted into the default framebuffer.
-fn offscreen_tex(
-	device: &wgpu::Device,
-	format: wgpu::TextureFormat,
-	w: u32,
-	h: u32,
-) -> wgpu::Texture {
+fn offscreen_tex(device: &wgpu::Device, format: wgpu::TextureFormat, w: u32, h: u32) -> wgpu::Texture {
 	device.create_texture(&wgpu::TextureDescriptor {
 		label: Some("offscreen"),
-		size: wgpu::Extent3d {
-			width: w.max(1),
-			height: h.max(1),
-			depth_or_array_layers: 1,
-		},
+		size: wgpu::Extent3d { width: w.max(1), height: h.max(1), depth_or_array_layers: 1 },
 		mip_level_count: 1,
 		sample_count: 1,
 		dimension: wgpu::TextureDimension::D2,
 		format,
-		usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-			| wgpu::TextureUsages::TEXTURE_BINDING
-			| wgpu::TextureUsages::COPY_SRC, // for the dump_offscreen diagnostic
+		usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC, // for the dump_offscreen diagnostic
 		view_formats: &[],
 	})
 }
@@ -2222,23 +1617,10 @@ const FB_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 // wrap glutin's GL context as a wgpu adapter (hal external interop)
 #[cfg(not(target_os = "macos"))]
-fn gl_adapter(
-	instance: &wgpu::Instance,
-	gl_display: &glutin::display::Display,
-) -> anyhow::Result<wgpu::Adapter> {
+fn gl_adapter(instance: &wgpu::Instance, gl_display: &glutin::display::Display) -> anyhow::Result<wgpu::Adapter> {
 	// SAFETY: the caller made the context current on this thread just before,
 	// and all GL work stays on this one thread (see `default_fb`).
-	let exposed = unsafe {
-		wgpu::hal::gles::Adapter::new_external(
-			|name| {
-				std::ffi::CString::new(name).map_or(std::ptr::null(), |cstr| {
-					gl_display.get_proc_address(&cstr).cast()
-				})
-			},
-			wgpu::GlBackendOptions::default(),
-		)
-	}
-	.ok_or_else(|| anyhow::anyhow!("wgpu GL external adapter init failed"))?;
+	let exposed = unsafe { wgpu::hal::gles::Adapter::new_external(|name| std::ffi::CString::new(name).map_or(std::ptr::null(), |cstr| gl_display.get_proc_address(&cstr).cast()), wgpu::GlBackendOptions::default()) }.ok_or_else(|| anyhow::anyhow!("wgpu GL external adapter init failed"))?;
 	// SAFETY: an external GL adapter is tied to the current context, not to an
 	// instance, so there is no other instance it could belong to.
 	Ok(unsafe { instance.create_adapter_from_hal::<Gles>(exposed) })
@@ -2248,10 +1630,7 @@ fn gl_adapter(
 // anyway, so there it reports itself unavailable and resumed() falls back
 // to the native surface.
 #[cfg(target_os = "macos")]
-fn gl_adapter(
-	_instance: &wgpu::Instance,
-	_gl_display: &glutin::display::Display,
-) -> anyhow::Result<wgpu::Adapter> {
+fn gl_adapter(_instance: &wgpu::Instance, _gl_display: &glutin::display::Display) -> anyhow::Result<wgpu::Adapter> {
 	anyhow::bail!("no wgpu GL backend on macOS")
 }
 
@@ -2262,25 +1641,7 @@ fn default_fb(device: &wgpu::Device, format: wgpu::TextureFormat, w: u32, h: u32
 	// SAFETY: aliasing the GL default framebuffer is sound only while every GL
 	// call stays on the winit main thread. Rendering here is single-threaded by
 	// construction, so don't move GL work onto helper threads.
-	unsafe {
-		device.create_texture_from_hal::<Gles>(
-			hal,
-			&wgpu::TextureDescriptor {
-				label: Some("default fb"),
-				size: wgpu::Extent3d {
-					width: w.max(1),
-					height: h.max(1),
-					depth_or_array_layers: 1,
-				},
-				mip_level_count: 1,
-				sample_count: 1,
-				dimension: wgpu::TextureDimension::D2,
-				format,
-				usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-				view_formats: &[],
-			},
-		)
-	}
+	unsafe { device.create_texture_from_hal::<Gles>(hal, &wgpu::TextureDescriptor { label: Some("default fb"), size: wgpu::Extent3d { width: w.max(1), height: h.max(1), depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT, view_formats: &[] }) }
 }
 
 // Only Backend::Gl calls this, and gl_adapter() above never lets one be built on macOS.
@@ -2304,16 +1665,7 @@ pub enum QuadMode {
 }
 
 impl QuadMode {
-	const ALL: [QuadMode; 8] = [
-		QuadMode::Solid,
-		QuadMode::CloseMark,
-		QuadMode::Rounded,
-		QuadMode::Triangle,
-		QuadMode::PickSquare,
-		QuadMode::HueStrip,
-		QuadMode::Curl,
-		QuadMode::Dashes,
-	];
+	const ALL: [QuadMode; 8] = [QuadMode::Solid, QuadMode::CloseMark, QuadMode::Rounded, QuadMode::Triangle, QuadMode::PickSquare, QuadMode::HueStrip, QuadMode::Curl, QuadMode::Dashes];
 
 	pub fn code(self) -> f32 {
 		match self {
@@ -2360,10 +1712,7 @@ impl RectInstance {
 	/// The mode in `params.x`. Only `QuadMode::code` writes it, so the numbers
 	/// compare exactly.
 	pub fn mode(&self) -> QuadMode {
-		QuadMode::ALL
-			.into_iter()
-			.find(|mode| mode.code() == self.params[0])
-			.unwrap_or(QuadMode::Solid)
+		QuadMode::ALL.into_iter().find(|mode| mode.code() == self.params[0]).unwrap_or(QuadMode::Solid)
 	}
 }
 
@@ -2387,68 +1736,26 @@ pub struct RectRenderer {
 
 impl std::fmt::Debug for RectRenderer {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("RectRenderer")
-			.field("capacity", &self.capacity)
-			.finish_non_exhaustive()
+		f.debug_struct("RectRenderer").field("capacity", &self.capacity).finish_non_exhaustive()
 	}
 }
 
 impl RectRenderer {
 	pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
-		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-			label: Some("rect shader"),
-			source: wgpu::ShaderSource::Wgsl(RECT_WGSL.into()),
-		});
+		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("rect shader"), source: wgpu::ShaderSource::Wgsl(RECT_WGSL.into()) });
 
-		let uniform = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("rect uniform"),
-			size: std::mem::size_of::<Uniform>() as u64,
-			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			mapped_at_creation: false,
-		});
+		let uniform = device.create_buffer(&wgpu::BufferDescriptor { label: Some("rect uniform"), size: std::mem::size_of::<Uniform>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
 
-		let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("rect bgl"),
-			entries: &[wgpu::BindGroupLayoutEntry {
-				binding: 0,
-				visibility: wgpu::ShaderStages::VERTEX,
-				ty: wgpu::BindingType::Buffer {
-					ty: wgpu::BufferBindingType::Uniform,
-					has_dynamic_offset: false,
-					min_binding_size: None,
-				},
-				count: None,
-			}],
-		});
+		let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("rect bgl"), entries: &[wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::VERTEX, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None }] });
 
-		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-			label: Some("rect bg"),
-			layout: &bgl,
-			entries: &[wgpu::BindGroupEntry {
-				binding: 0,
-				resource: uniform.as_entire_binding(),
-			}],
-		});
+		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("rect bg"), layout: &bgl, entries: &[wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() }] });
 
-		let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("rect layout"),
-			bind_group_layouts: &[Some(&bgl)],
-			immediate_size: 0,
-		});
+		let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("rect layout"), bind_group_layouts: &[Some(&bgl)], immediate_size: 0 });
 
 		let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 			label: Some("rect pipeline"),
 			layout: Some(&layout),
-			vertex: wgpu::VertexState {
-				module: &shader,
-				entry_point: Some("vs"),
-				compilation_options: Default::default(),
-				buffers: &[wgpu::VertexBufferLayout {
-					array_stride: std::mem::size_of::<RectInstance>() as u64,
-					step_mode: wgpu::VertexStepMode::Instance,
-					attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x4, 3 => Float32x2],
-				}],
-			},
+			vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<RectInstance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x4, 3 => Float32x2] }] },
 			fragment: Some(wgpu::FragmentState {
 				module: &shader,
 				entry_point: Some("fs"),
@@ -2461,10 +1768,7 @@ impl RectRenderer {
 					write_mask: wgpu::ColorWrites::ALL,
 				})],
 			}),
-			primitive: wgpu::PrimitiveState {
-				topology: wgpu::PrimitiveTopology::TriangleStrip,
-				..Default::default()
-			},
+			primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
 			depth_stencil: None,
 			multisample: wgpu::MultisampleState::default(),
 			multiview_mask: None,
@@ -2472,21 +1776,9 @@ impl RectRenderer {
 		});
 
 		let capacity = 256;
-		let instances = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("rect instances"),
-			size: capacity * std::mem::size_of::<RectInstance>() as u64,
-			usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-			mapped_at_creation: false,
-		});
+		let instances = device.create_buffer(&wgpu::BufferDescriptor { label: Some("rect instances"), size: capacity * std::mem::size_of::<RectInstance>() as u64, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
 
-		Self {
-			pipeline,
-			instances,
-			capacity,
-			uniform,
-			bind_group,
-			last_res: std::cell::Cell::new((0.0, 0.0)),
-		}
+		Self { pipeline, instances, capacity, uniform, bind_group, last_res: std::cell::Cell::new((0.0, 0.0)) }
 	}
 
 	pub fn set_resolution(&self, queue: &wgpu::Queue, w: f32, h: f32) {
@@ -2495,10 +1787,7 @@ impl RectRenderer {
 			return;
 		}
 		self.last_res.set((w, h));
-		let uniform_data = Uniform {
-			resolution: [w, h],
-			_pad: [0.0, 0.0],
-		};
+		let uniform_data = Uniform { resolution: [w, h], _pad: [0.0, 0.0] };
 		queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&uniform_data));
 	}
 
@@ -2506,12 +1795,7 @@ impl RectRenderer {
 		let needed = data.len() as u64;
 		if needed > self.capacity {
 			self.capacity = needed.next_power_of_two();
-			self.instances = device.create_buffer(&wgpu::BufferDescriptor {
-				label: Some("rect instances"),
-				size: self.capacity * std::mem::size_of::<RectInstance>() as u64,
-				usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-				mapped_at_creation: false,
-			});
+			self.instances = device.create_buffer(&wgpu::BufferDescriptor { label: Some("rect instances"), size: self.capacity * std::mem::size_of::<RectInstance>() as u64, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
 		}
 		if !data.is_empty() {
 			queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(data));
@@ -2742,19 +2026,12 @@ mod tests {
 	// Test ID: ddj83
 	#[test]
 	fn each_quad_mode_reaches_its_own_branch_of_the_shader() {
-		let body = RECT_WGSL
-			.split("fn fs(")
-			.nth(1)
-			.expect("the fragment shader");
+		let body = RECT_WGSL.split("fn fs(").nth(1).expect("the fragment shader");
 		let mut branches: Vec<(f32, &str)> = Vec::new();
 		let mut rest = body;
 		while let Some(at) = rest.find("in.params.x > ") {
 			let after = &rest[at + "in.params.x > ".len()..];
-			let bound = after
-				.split(')')
-				.next()
-				.and_then(|n| n.trim().parse().ok())
-				.expect("a number");
+			let bound = after.split(')').next().and_then(|n| n.trim().parse().ok()).expect("a number");
 			let end = after.find("} else").unwrap_or(after.len());
 			branches.push((bound, &after[..end]));
 			rest = &after[end..];
@@ -2777,10 +2054,7 @@ mod tests {
 				(Some((_, text)), Some(call)) => assert!(text.contains(call), "{mode:?}: {text}"),
 				(branch, call) => panic!("{mode:?}: {branch:?} against {call:?}"),
 			}
-			let quad = RectInstance {
-				params: [mode.code(), 0.0],
-				..Default::default()
-			};
+			let quad = RectInstance { params: [mode.code(), 0.0], ..Default::default() };
 			assert_eq!(quad.mode(), mode);
 		}
 	}
@@ -2806,10 +2080,7 @@ mod tests {
 			let dark = shown(see_through([0.0, 0.0, 0.0, a]), 1.0);
 			let light = shown(see_through([1.0, 1.0, 1.0, a]), 0.0);
 			let (dark_range, light_range) = (dark - 0.0, 1.0 - light);
-			assert!(
-				(dark_range - light_range).abs() < 1e-4,
-				"a {a}: dark shows {dark_range}, light {light_range}"
-			);
+			assert!((dark_range - light_range).abs() < 1e-4, "a {a}: dark shows {dark_range}, light {light_range}");
 		}
 		let opaque = [0.3, 0.6, 0.9, 1.0];
 		assert_eq!(see_through(opaque), opaque);
@@ -2836,11 +2107,7 @@ mod tests {
 			(Backend::Gl,     vec![PreMultiplied, Opaque],                          (PreMultiplied, true)),
 		];
 		for (backend, offered, want) in cases {
-			assert_eq!(
-				pick_alpha_mode(&offered, backend),
-				want,
-				"{backend:?} offering {offered:?}"
-			);
+			assert_eq!(pick_alpha_mode(&offered, backend), want, "{backend:?} offering {offered:?}");
 		}
 	}
 
@@ -2850,22 +2117,13 @@ mod tests {
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn gl_errors_are_claimed_and_others_are_not() {
-		let nvidia = GlxCodes {
-			requests: [152, 156],
-			first_error: 158,
-		};
-		assert!(
-			nvidia.claims(152, 170),
-			"GLXBadWindow from glXDestroyWindow"
-		);
+		let nvidia = GlxCodes { requests: [152, 156], first_error: 158 };
+		assert!(nvidia.claims(152, 170), "GLXBadWindow from glXDestroyWindow");
 		assert!(nvidia.claims(156, 9), "BadDrawable from NV-GLX");
 		assert!(nvidia.claims(1, 160), "a GLX error on some other request");
 		assert!(!nvidia.claims(20, 3), "BadWindow from GetProperty");
 		assert!(!nvidia.claims(1, 172), "past GLX's error range");
-		let mesa = GlxCodes {
-			requests: [152, 0],
-			first_error: 158,
-		};
+		let mesa = GlxCodes { requests: [152, 0], first_error: 158 };
 		assert!(!mesa.claims(0, 9));
 		assert!(!mesa.claims(156, 9), "no NV-GLX here");
 	}
@@ -2949,15 +2207,7 @@ mod tests {
 	fn a_card_that_refuses_a_device_falls_back_to_software() {
 		let _loader = hold_loader();
 		let instance = plain_instance(wgpu::Backends::PRIMARY);
-		let first = |software| {
-			pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-				power_preference: wgpu::PowerPreference::HighPerformance,
-				compatible_surface: None,
-				force_fallback_adapter: software,
-			}))
-			.ok()
-			.map(|adapter| adapter.get_info().device_type)
-		};
+		let first = |software| pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, compatible_surface: None, force_fallback_adapter: software })).ok().map(|adapter| adapter.get_info().device_type);
 		if first(true).is_none() {
 			eprintln!("skipped: no software adapter");
 			return;
@@ -2974,14 +2224,7 @@ mod tests {
 		REFUSE_CARD.with(|refuse| refuse.set(false));
 		let fell = fell.expect("a refused card left no device");
 		assert_eq!(fell.adapter_info.device_type, wgpu::DeviceType::Cpu);
-		assert_eq!(
-			fell.drawn,
-			if has_card {
-				Drawn::Fallback
-			} else {
-				Drawn::NoCard
-			}
-		);
+		assert_eq!(fell.drawn, if has_card { Drawn::Fallback } else { Drawn::NoCard });
 		assert_eq!(asked_anyway.unwrap().drawn, Drawn::Software);
 
 		if has_card {
@@ -2994,15 +2237,8 @@ mod tests {
 	#[test]
 	fn every_gpu_is_hardware_and_only_the_cpu_is_software() {
 		use wgpu::DeviceType;
-		assert_eq!(
-			acceleration(&test_adapter("gpu", DeviceType::Cpu)),
-			"Software (CPU)"
-		);
-		for (kind, said) in [
-			(DeviceType::DiscreteGpu, "Hardware (discrete GPU)"),
-			(DeviceType::IntegratedGpu, "Hardware (integrated GPU)"),
-			(DeviceType::VirtualGpu, "Hardware (virtual GPU)"),
-		] {
+		assert_eq!(acceleration(&test_adapter("gpu", DeviceType::Cpu)), "Software (CPU)");
+		for (kind, said) in [(DeviceType::DiscreteGpu, "Hardware (discrete GPU)"), (DeviceType::IntegratedGpu, "Hardware (integrated GPU)"), (DeviceType::VirtualGpu, "Hardware (virtual GPU)")] {
 			assert_eq!(acceleration(&test_adapter("gpu", kind)), said);
 		}
 		let unsure = test_adapter("llvmpipe (LLVM 19.1.7, 256 bits)", DeviceType::Other);
@@ -3017,21 +2253,9 @@ mod tests {
 		let mut card = test_adapter("NVIDIA GeForce RTX 3060 Ti/PCIe/SSE2", DeviceType::Other);
 		card.backend = wgpu::Backend::Gl;
 		assert_eq!(acceleration(&card), "Hardware (GPU)");
-		for name in [
-			"softpipe",
-			"Microsoft Basic Render Driver",
-			"Microsoft Remote Display Adapter",
-		] {
-			for kind in [
-				DeviceType::Other,
-				DeviceType::IntegratedGpu,
-				DeviceType::VirtualGpu,
-			] {
-				assert_eq!(
-					acceleration(&test_adapter(name, kind)),
-					"Software (CPU)",
-					"{name} {kind:?}"
-				);
+		for name in ["softpipe", "Microsoft Basic Render Driver", "Microsoft Remote Display Adapter"] {
+			for kind in [DeviceType::Other, DeviceType::IntegratedGpu, DeviceType::VirtualGpu] {
+				assert_eq!(acceleration(&test_adapter(name, kind)), "Software (CPU)", "{name} {kind:?}");
 			}
 		}
 	}
@@ -3052,26 +2276,13 @@ mod tests {
 				return;
 			}
 		};
-		let _buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("probe"),
-			size: 64 * 1024,
-			usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-			mapped_at_creation: false,
-		});
+		let _buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor { label: Some("probe"), size: 64 * 1024, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
 		let Some(report) = gpu.device.generate_allocator_report() else {
-			eprintln!(
-				"skipped: {:?} has no allocator report",
-				gpu.adapter_info.backend
-			);
+			eprintln!("skipped: {:?} has no allocator report", gpu.adapter_info.backend);
 			return;
 		};
 		let reserved_mib = report.total_reserved_bytes / (1024 * 1024);
-		assert!(
-			reserved_mib <= 32,
-			"{reserved_mib} MiB reserved for {} bytes in use on {}",
-			report.total_allocated_bytes,
-			gpu.adapter_info.name
-		);
+		assert!(reserved_mib <= 32, "{reserved_mib} MiB reserved for {} bytes in use on {}", report.total_allocated_bytes, gpu.adapter_info.name);
 	}
 
 	// A wallpaper given as BC1 or BC7 is drawn where the plain one is, padded
@@ -3090,29 +2301,15 @@ mod tests {
 				return;
 			}
 		};
-		if !gpu
-			.device
-			.features()
-			.contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
-		{
+		if !gpu.device.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC) {
 			eprintln!("skipped: {} has no BC", gpu.adapter_info.name);
 			return;
 		}
-		let (plain_device, plain_queue) =
-			pollster::block_on(gpu.adapter.request_device(&wgpu::DeviceDescriptor {
-				label: Some("no bc"),
-				required_features: wgpu::Features::empty(),
-				..Default::default()
-			}))
-			.expect("a device without BC");
+		let (plain_device, plain_queue) = pollster::block_on(gpu.adapter.request_device(&wgpu::DeviceDescriptor { label: Some("no bc"), required_features: wgpu::Features::empty(), ..Default::default() })).expect("a device without BC");
 		// 8 texel squares line up with the 4x4 blocks, so BC keeps each one a
 		// flat color and only a misplaced sample can move a pixel far. Black
 		// speckled with a dark gray both kinds keep exact takes BC7's other mode.
-		for (picture, border, speckled) in [
-			((203, 117), false, false),
-			((100, 71), true, false),
-			((70, 66), false, true),
-		] {
+		for (picture, border, speckled) in [((203, 117), false, false), ((100, 71), true, false), ((70, 66), false, true)] {
 			let rgba = image::RgbaImage::from_fn(picture.0, picture.1, |x, y| {
 				if speckled {
 					let lit = (x * 7 + y * 3) % 5 < 2;
@@ -3125,53 +2322,15 @@ mod tests {
 			});
 			let ring = 2 * u32::from(border);
 			let held = (picture.0 - ring, picture.1 - ring);
-			let plain = crate::wallpaper::Prepared {
-				summary: crate::autotheme::summarize(&rgba, 1.0),
-				rgba: rgba.clone(),
-				sizing: crate::wallpaper::Sizing {
-					full: (held.0 * 4, held.1 * 4),
-					most: if border {
-						held
-					} else {
-						(held.0 * 4, held.1 * 4)
-					},
-				},
-				opacity: 1.0,
-				fit: crate::config::Fit::Stretch,
-				anchor: [0.5, 0.5],
-				held,
-				border,
-				blocks: None,
-			};
-			for packing in [
-				crate::wallpaper::Packing::Bc1,
-				crate::wallpaper::Packing::Bc7,
-			] {
-				let packed = crate::wallpaper::Prepared {
-					blocks: Some(crate::wallpaper::Blocks {
-						packing,
-						bytes: std::sync::Arc::new(packing.encode(&rgba)),
-					}),
-					..plain.clone()
-				};
-				drawn_alike(
-					&gpu,
-					(&plain_device, &plain_queue),
-					&plain,
-					&packed,
-					picture,
-				);
+			let plain = crate::wallpaper::Prepared { summary: crate::autotheme::summarize(&rgba, 1.0), rgba: rgba.clone(), sizing: crate::wallpaper::Sizing { full: (held.0 * 4, held.1 * 4), most: if border { held } else { (held.0 * 4, held.1 * 4) } }, opacity: 1.0, fit: crate::config::Fit::Stretch, anchor: [0.5, 0.5], held, border, blocks: None };
+			for packing in [crate::wallpaper::Packing::Bc1, crate::wallpaper::Packing::Bc7] {
+				let packed = crate::wallpaper::Prepared { blocks: Some(crate::wallpaper::Blocks { packing, bytes: std::sync::Arc::new(packing.encode(&rgba)) }), ..plain.clone() };
+				drawn_alike(&gpu, (&plain_device, &plain_queue), &plain, &packed, picture);
 			}
 		}
 	}
 
-	fn drawn_alike(
-		gpu: &DialogGpu,
-		(plain_device, plain_queue): (&wgpu::Device, &wgpu::Queue),
-		plain: &crate::wallpaper::Prepared,
-		packed: &crate::wallpaper::Prepared,
-		picture: (u32, u32),
-	) {
+	fn drawn_alike(gpu: &DialogGpu, (plain_device, plain_queue): (&wgpu::Device, &wgpu::Queue), plain: &crate::wallpaper::Prepared, packed: &crate::wallpaper::Prepared, picture: (u32, u32)) {
 		let name = packed.blocks.as_ref().map_or("plain", |b| b.packing.name());
 		let held = plain.held;
 		let window = (held.0 * 3, held.1 * 3);
@@ -3181,11 +2340,7 @@ mod tests {
 			let mut renderer = crate::bgimage::ImageRenderer::new(device, queue, FB_HDR, img);
 			let probed = renderer.vram_check_start(device, queue);
 			let line = renderer.memdbg_line();
-			(
-				line,
-				probed,
-				draw_offscreen(device, queue, window, &renderer),
-			)
+			(line, probed, draw_offscreen(device, queue, window, &renderer))
 		};
 		let (line, probed, want) = draw(&gpu.device, &gpu.queue, plain);
 		assert!(!line.contains(" as ") && probed, "{line}");
@@ -3193,99 +2348,27 @@ mod tests {
 		assert!(line.contains(&format!("as {name}")) && !probed, "{line}");
 		let (line, probed, fallback) = draw(plain_device, plain_queue, packed);
 		assert!(!line.contains(" as ") && probed, "{line}");
-		let worst = |a: &[u8], b: &[u8]| {
-			a.iter()
-				.zip(b)
-				.map(|(x, y)| x.abs_diff(*y))
-				.max()
-				.unwrap_or(0)
-		};
-		assert!(
-			worst(&want, &got) <= 2,
-			"{picture:?}: {name} off by {}",
-			worst(&want, &got)
-		);
-		assert!(
-			worst(&want, &fallback) <= 2,
-			"{picture:?}: the plain fallback off by {}",
-			worst(&want, &fallback)
-		);
+		let worst = |a: &[u8], b: &[u8]| a.iter().zip(b).map(|(x, y)| x.abs_diff(*y)).max().unwrap_or(0);
+		assert!(worst(&want, &got) <= 2, "{picture:?}: {name} off by {}", worst(&want, &got));
+		assert!(worst(&want, &fallback) <= 2, "{picture:?}: the plain fallback off by {}", worst(&want, &fallback));
 	}
 
 	const FB_HDR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
 	// One wallpaper frame over black, read back as sRGB bytes.
-	fn draw_offscreen(
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		(w, h): (u32, u32),
-		renderer: &crate::bgimage::ImageRenderer,
-	) -> Vec<u8> {
-		let target = device.create_texture(&wgpu::TextureDescriptor {
-			label: Some("test target"),
-			size: wgpu::Extent3d {
-				width: w,
-				height: h,
-				depth_or_array_layers: 1,
-			},
-			mip_level_count: 1,
-			sample_count: 1,
-			dimension: wgpu::TextureDimension::D2,
-			format: FB_HDR,
-			usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-			view_formats: &[],
-		});
+	fn draw_offscreen(device: &wgpu::Device, queue: &wgpu::Queue, (w, h): (u32, u32), renderer: &crate::bgimage::ImageRenderer) -> Vec<u8> {
+		let target = device.create_texture(&wgpu::TextureDescriptor { label: Some("test target"), size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: FB_HDR, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC, view_formats: &[] });
 		let view = target.create_view(&wgpu::TextureViewDescriptor::default());
-		let mix = crate::visibility::Mix {
-			amount: 1.0,
-			perceptual: false,
-		};
+		let mix = crate::visibility::Mix { amount: 1.0, perceptual: false };
 		renderer.set_look(queue, w as f32, h as f32, mix, [0.0, 0.0, 0.0, 1.0]);
 		let row = (w * 8).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-		let buf = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("test read"),
-			size: u64::from(row * h),
-			usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-			mapped_at_creation: false,
-		});
+		let buf = device.create_buffer(&wgpu::BufferDescriptor { label: Some("test read"), size: u64::from(row * h), usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
 		let mut enc = device.create_command_encoder(&Default::default());
 		{
-			let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-				label: Some("test pass"),
-				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-					view: &view,
-					depth_slice: None,
-					resolve_target: None,
-					ops: wgpu::Operations {
-						load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-						store: wgpu::StoreOp::Store,
-					},
-				})],
-				..Default::default()
-			});
+			let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor { label: Some("test pass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &view, depth_slice: None, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store } })], ..Default::default() });
 			renderer.draw(&mut pass);
 		}
-		enc.copy_texture_to_buffer(
-			wgpu::TexelCopyTextureInfo {
-				texture: &target,
-				mip_level: 0,
-				origin: wgpu::Origin3d::ZERO,
-				aspect: wgpu::TextureAspect::All,
-			},
-			wgpu::TexelCopyBufferInfo {
-				buffer: &buf,
-				layout: wgpu::TexelCopyBufferLayout {
-					offset: 0,
-					bytes_per_row: Some(row),
-					rows_per_image: Some(h),
-				},
-			},
-			wgpu::Extent3d {
-				width: w,
-				height: h,
-				depth_or_array_layers: 1,
-			},
-		);
+		enc.copy_texture_to_buffer(wgpu::TexelCopyTextureInfo { texture: &target, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
 		queue.submit(Some(enc.finish()));
 		buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
 		let _ = device.poll(wgpu::PollType::wait_indefinitely());
@@ -3321,17 +2404,10 @@ mod tests {
 		// An error on the second goes to a handler only the first was given.
 		let heard = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 		let flag = heard.clone();
-		first
-			.device
-			.on_uncaptured_error(std::sync::Arc::new(move |_: wgpu::Error| {
-				flag.store(true, std::sync::atomic::Ordering::SeqCst);
-			}));
-		let _bad = second.device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("both map directions"),
-			size: 4,
-			usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE,
-			mapped_at_creation: false,
-		});
+		first.device.on_uncaptured_error(std::sync::Arc::new(move |_: wgpu::Error| {
+			flag.store(true, std::sync::atomic::Ordering::SeqCst);
+		}));
+		let _bad = second.device.create_buffer(&wgpu::BufferDescriptor { label: Some("both map directions"), size: 4, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation: false });
 		assert!(heard.load(std::sync::atomic::Ordering::SeqCst));
 		warm.release();
 		assert!(warm.ready_device().is_none(), "the idle release lets it go");
@@ -3344,10 +2420,7 @@ mod tests {
 	fn no_shared_pixmaps_turns_mesa_shm_off() {
 		assert_eq!(wsi_debug_for(None, false).as_deref(), Some("noshm"));
 		assert_eq!(wsi_debug_for(Some(" "), false).as_deref(), Some("noshm"));
-		assert_eq!(
-			wsi_debug_for(Some("sw"), false).as_deref(),
-			Some("sw,noshm")
-		);
+		assert_eq!(wsi_debug_for(Some("sw"), false).as_deref(), Some("sw,noshm"));
 		assert_eq!(wsi_debug_for(Some("sw noshm"), false), None);
 		assert_eq!(wsi_debug_for(Some("noshm,sw"), false), None);
 		assert_eq!(wsi_debug_for(None, true), None);
@@ -3380,11 +2453,7 @@ mod tests {
 			while matches!(&warm.state, Warm::Building(job) if !job.is_finished()) {
 				let pass = hold_loader();
 				for _ in 0..20 {
-					let encoder =
-						gpu.device
-							.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-								label: Some("pass"),
-							});
+					let encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("pass") });
 					gpu.queue.submit([encoder.finish()]);
 				}
 				drop(pass);
@@ -3430,10 +2499,7 @@ mod tests {
 		assert_eq!(without_loader(|| other.join().unwrap()), 7);
 		assert_eq!(LOADER_HELD.with_borrow(|held| held.0), 1);
 		let blocked = std::thread::spawn(|| LOADER.try_lock().is_err());
-		assert!(
-			blocked.join().unwrap(),
-			"the outer hold came back after the wait"
-		);
+		assert!(blocked.join().unwrap(), "the outer hold came back after the wait");
 	}
 
 	// wgpu reports a lost device only through its callback, so a window that
@@ -3474,10 +2540,7 @@ mod tests {
 				return;
 			}
 		};
-		let mut warm = GpuWarm {
-			state: Warm::Ready(gpu.clone()),
-			seed: None,
-		};
+		let mut warm = GpuWarm { state: Warm::Ready(gpu.clone()), seed: None };
 		assert!(warm.get().is_some());
 		gpu.device.destroy();
 		let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
@@ -3507,28 +2570,9 @@ mod tests {
 		// far past the 4 KiB each renderer starts with
 		let mut buf = text.new_ui_buffer(4000.0, 4000.0);
 		let lots = format!("{}\n", "Mm".repeat(40)).repeat(40);
-		buf.set_text(
-			&mut text.font_system,
-			&lots,
-			&Attrs::new(),
-			Shaping::Advanced,
-			None,
-		);
+		buf.set_text(&mut text.font_system, &lots, &Attrs::new(), Shaping::Advanced, None);
 		buf.shape_until_scroll(&mut text.font_system, false);
-		let area = || TextArea {
-			buffer: &buf,
-			left: 0.0,
-			top: 0.0,
-			scale: 1.0,
-			bounds: TextBounds {
-				left: 0,
-				top: 0,
-				right: 4000,
-				bottom: 4000,
-			},
-			default_color: Color::rgb(255, 255, 255),
-			custom_glyphs: &[],
-		};
+		let area = || TextArea { buffer: &buf, left: 0.0, top: 0.0, scale: 1.0, bounds: TextBounds { left: 0, top: 0, right: 4000, bottom: 4000 }, default_color: Color::rgb(255, 255, 255), custom_glyphs: &[] };
 		// glyphon leaves out what falls outside the viewport
 		text.update_viewport(&gpu.queue, 4000, 4000);
 		gpu.device.destroy();
@@ -3557,12 +2601,7 @@ mod tests {
 			}
 		};
 		let write = || {
-			let buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-				label: Some("made late"),
-				size: 16,
-				usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-				mapped_at_creation: false,
-			});
+			let buf = gpu.device.create_buffer(&wgpu::BufferDescriptor { label: Some("made late"), size: 16, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
 			gpu.queue.write_buffer(&buf, 0, &[0; 4]);
 			// a bad range is an error on a working device too
 			gpu.queue.write_buffer(&buf, 64, &[0; 4]);

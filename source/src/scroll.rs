@@ -62,12 +62,7 @@ struct Chase {
 }
 
 impl Chase {
-	const REST: Chase = Chase {
-		speed: 0.0,
-		knee: KNEE_LPS,
-		burst: 0.0,
-		overflow: false,
-	};
+	const REST: Chase = Chase { speed: 0.0, knee: KNEE_LPS, burst: 0.0, overflow: false };
 
 	// `grown` more lines arrived; `view_rows` is the height they scroll in.
 	fn nudge(&mut self, grown: f32, view_rows: f32) {
@@ -107,9 +102,7 @@ impl Chase {
 		// handoff (the STOP_BAND edge, at its closing speed) with no backlog left
 		let v_land = STOP_BAND * 1000.0 / cfg.scroll_ease_out_ms.max(1.0);
 		let brake_tau_s = cfg.scroll_ramp_down_ms.max(1.0) / 1000.0 / std::f32::consts::LN_2;
-		self.speed = self
-			.speed
-			.min(v_land + (backlog - STOP_BAND).max(0.0) / brake_tau_s);
+		self.speed = self.speed.min(v_land + (backlog - STOP_BAND).max(0.0) / brake_tau_s);
 		self.speed
 	}
 }
@@ -130,23 +123,14 @@ pub struct Scroll {
 	// output raises it and the view gives it back as it gets to them, so it is
 	// a history rather than a state. See `unshown_lines`.
 	unshown: f32,
+	// Lines `keep_place` has moved the view, all told. A handle drag measures
+	// from where it started, and this tells it how far the text has gone since.
+	kept: f64,
 }
 
 impl Scroll {
 	pub fn new() -> Self {
-		Self {
-			target: 0.0,
-			visual: 0.0,
-			mid: 0.0,
-			max: 0.0,
-			chase: Chase::REST,
-			app_off: 0.0,
-			app_mid: 0.0,
-			app_chase: Chase::REST,
-			sweep: false,
-			wheel_dir: 0.0,
-			unshown: 0.0,
-		}
+		Self { target: 0.0, visual: 0.0, mid: 0.0, max: 0.0, chase: Chase::REST, app_off: 0.0, app_mid: 0.0, app_chase: Chase::REST, sweep: false, wheel_dir: 0.0, unshown: 0.0, kept: 0.0 }
 	}
 
 	/// An app's region scrolled `shift` lines (signed, + = content moved up). The
@@ -292,6 +276,31 @@ impl Scroll {
 		}
 	}
 
+	/// `went_up` lines went into the scrollback while the view is parked in it.
+	/// The view counts from the bottom, so it moves up with them to stay on the
+	/// text being read, until that text drops off the top. A coordinate shift,
+	/// as in `nudge_output`: an ease in flight keeps its course over the text.
+	/// `unshown` is left alone, since moving it would hide from the minimap all
+	/// output that arrives while the view is parked.
+	pub fn keep_place(&mut self, went_up: f32) {
+		if went_up <= 0.0 || self.following() {
+			return;
+		}
+		let before = self.target;
+		self.target = (self.target + went_up).min(self.max);
+		self.visual = (self.visual + went_up).min(self.max);
+		self.mid = (self.mid + went_up).min(self.max);
+		// what the view moved rather than `went_up`: a view held at the top
+		// doesn't move, and a drag counting it anyway would go dead for that far
+		self.kept += f64::from(self.target - before);
+	}
+
+	/// The running total of what `keep_place` has moved the view, in lines. Only
+	/// a difference between two readings means anything.
+	pub fn kept(&self) -> f64 {
+		self.kept
+	}
+
 	/// A nudge that goes back no further than the new lines, floor or not:
 	/// output after a clear, which must not ease through the screen it cleared.
 	pub fn nudge_output_within(&mut self, grown: f32, view_rows: f32) {
@@ -390,11 +399,7 @@ impl Scroll {
 		let stop_min_lps = STOP_BAND * 1000.0 / cfg.scroll_ease_out_ms.max(1.0);
 		let gap = self.target - before;
 		if gap.abs() < STOP_BAND {
-			let floored = if gap >= 0.0 {
-				(before + stop_min_lps * dt_s).min(self.target)
-			} else {
-				(before - stop_min_lps * dt_s).max(self.target)
-			};
+			let floored = if gap >= 0.0 { (before + stop_min_lps * dt_s).min(self.target) } else { (before - stop_min_lps * dt_s).max(self.target) };
 			if (self.target - floored).abs() < (self.target - self.visual).abs() {
 				self.visual = floored;
 			}
@@ -437,8 +442,7 @@ impl Scroll {
 		if self.app_off != 0.0 {
 			let sign = self.app_off.signum();
 			let before = self.app_off.abs();
-			let limit =
-				(self.app_chase.burst > 0.0).then(|| self.app_chase.limit(before, dt_s, &cfg));
+			let limit = (self.app_chase.burst > 0.0).then(|| self.app_chase.limit(before, dt_s, &cfg));
 			self.app_mid -= self.app_mid * smoothing;
 			let mut lag = before + (self.app_mid - before) * attack;
 			if let Some(speed) = limit {
@@ -534,22 +538,13 @@ mod tests {
 				s.wheel(-120.0);
 			}
 			for _ in 0..400 {
-				assert_eq!(
-					s.unshown_lines(),
-					0.0,
-					"jump {jump}: trimmed at {}",
-					s.visual_lines()
-				);
+				assert_eq!(s.unshown_lines(), 0.0, "jump {jump}: trimmed at {}", s.visual_lines());
 				s.advance(0.016);
 				if s.visual_lines() == 0.0 {
 					break;
 				}
 			}
-			assert_eq!(
-				s.visual_lines(),
-				0.0,
-				"jump {jump}: the gesture never arrived"
-			);
+			assert_eq!(s.visual_lines(), 0.0, "jump {jump}: the gesture never arrived");
 		}
 	}
 
@@ -579,18 +574,8 @@ mod tests {
 			for frame in 0..240 {
 				s.nudge_output(10.0, 48.0);
 				s.advance(0.016);
-				assert!(
-					s.unshown_lines() > 100.0,
-					"keystroke {keystroke}: trim gone at frame {frame}, {} of {}",
-					s.unshown_lines(),
-					s.visual_lines()
-				);
-				assert!(
-					s.unshown_lines() <= s.visual_lines() + 1e-3,
-					"keystroke {keystroke}: {} past the view at {}",
-					s.unshown_lines(),
-					s.visual_lines()
-				);
+				assert!(s.unshown_lines() > 100.0, "keystroke {keystroke}: trim gone at frame {frame}, {} of {}", s.unshown_lines(), s.visual_lines());
+				assert!(s.unshown_lines() <= s.visual_lines() + 1e-3, "keystroke {keystroke}: {} past the view at {}", s.unshown_lines(), s.visual_lines());
 			}
 		}
 	}
@@ -609,19 +594,12 @@ mod tests {
 			s.nudge_output(10.0, 48.0);
 			s.advance(0.016);
 		}
-		assert!(
-			(s.unshown_lines() - s.visual_lines()).abs() < 1e-3,
-			"a plain flood is all backlog"
-		);
+		assert!((s.unshown_lines() - s.visual_lines()).abs() < 1e-3, "a plain flood is all backlog");
 		for _ in 0..4000 {
 			s.advance(0.016);
 		}
 		assert_eq!(s.visual_lines(), 0.0, "the ease never arrived");
-		assert_eq!(
-			s.unshown_lines(),
-			0.0,
-			"the view reached the bottom with lines still unshown"
-		);
+		assert_eq!(s.unshown_lines(), 0.0, "the view reached the bottom with lines still unshown");
 
 		// flood, park 1000 lines back, flood stops, jump to the bottom
 		let mut s = Scroll::new();
@@ -629,16 +607,9 @@ mod tests {
 		let mut last = 0.0;
 		let check = |s: &Scroll, last: &mut f32, printed: bool, note: &str| {
 			let u = s.unshown_lines();
-			assert!(
-				u >= 0.0 && u <= s.visual_lines() + 1e-3,
-				"{note}: {u} of {}",
-				s.visual_lines()
-			);
+			assert!(u >= 0.0 && u <= s.visual_lines() + 1e-3, "{note}: {u} of {}", s.visual_lines());
 			if !printed {
-				assert!(
-					u <= *last + 1e-3,
-					"{note}: rose to {u} from {last} with nothing printed"
-				);
+				assert!(u <= *last + 1e-3, "{note}: rose to {u} from {last} with nothing printed");
 			}
 			*last = u;
 		};
@@ -647,10 +618,7 @@ mod tests {
 			s.advance(0.016);
 			check(&s, &mut last, true, "flood");
 		}
-		assert!(
-			s.unshown_draining(),
-			"at the bottom with a backlog still to show"
-		);
+		assert!(s.unshown_draining(), "at the bottom with a backlog still to show");
 		s.scroll_to(1000.0);
 		for _ in 0..600 {
 			s.nudge_output(10.0, 48.0); // ignored while scrolled back
@@ -662,20 +630,13 @@ mod tests {
 		assert!(s.unshown_lines() > 0.0, "the flood left nothing unshown");
 		assert!(!s.unshown_draining(), "parked, but the count still drains");
 		s.jump_bottom();
-		assert!(
-			s.unshown_draining(),
-			"heading back down past the unshown lines"
-		);
+		assert!(s.unshown_draining(), "heading back down past the unshown lines");
 		for _ in 0..4000 {
 			s.advance(0.016);
 			check(&s, &mut last, false, "coming back");
 		}
 		assert_eq!(s.visual_lines(), 0.0, "never settled");
-		assert_eq!(
-			s.unshown_lines(),
-			0.0,
-			"settled at the bottom with lines still unshown"
-		);
+		assert_eq!(s.unshown_lines(), 0.0, "settled at the bottom with lines still unshown");
 
 		// the alt screen pins the view to 0, so nothing can be unshown there
 		let mut s = Scroll::new();
@@ -697,10 +658,7 @@ mod tests {
 	fn smooth_off_leaves_nothing_unshown() {
 		let _g = pin();
 		// a profile would mask the master switch, so pin the feel to custom
-		with(config::Settings {
-			scroll_smooth: false,
-			..config::Settings::default()
-		});
+		with(config::Settings { scroll_smooth: false, ..config::Settings::default() });
 		let mut s = Scroll::new();
 		s.set_max(10_000.0);
 		for _ in 0..40 {
@@ -799,11 +757,7 @@ mod tests {
 			(from, s.desired_offset())
 		};
 		let (from, to) = settle(2.1);
-		assert_eq!(
-			to,
-			from + 3,
-			"scrolling back ends on the far line, not back"
-		);
+		assert_eq!(to, from + 3, "scrolling back ends on the far line, not back");
 		let (from, to) = settle(-2.1);
 		assert_eq!(to, from - 3, "and the same going the other way");
 	}
@@ -881,10 +835,7 @@ mod tests {
 		assert!(covered > 0.1, "never started moving ({covered} lines)");
 		// generous ceiling: the knee speed for the whole window, plus slack for
 		// the ramp's first doublings
-		assert!(
-			covered < KNEE_LPS * 0.24 * 2.0,
-			"first 0.24s covered {covered} lines - that is a jump, not a slow start"
-		);
+		assert!(covered < KNEE_LPS * 0.24 * 2.0, "first 0.24s covered {covered} lines - that is a jump, not a slow start");
 	}
 
 	// Test ID: d9b23
@@ -960,11 +911,7 @@ mod tests {
 		let mut frames = 0;
 		while s.app_offset() != 0.0 {
 			s.advance(0.016);
-			assert!(
-				s.app_offset() <= prev + 1e-4,
-				"offset grew {prev} -> {}",
-				s.app_offset()
-			);
+			assert!(s.app_offset() <= prev + 1e-4, "offset grew {prev} -> {}", s.app_offset());
 			prev = s.app_offset();
 			frames += 1;
 			assert!(frames < 240, "slide never settled ({prev} left after 4s)");
@@ -988,24 +935,14 @@ mod tests {
 				view.advance(0.016);
 				slide.advance(0.016);
 				let gap = (view.visual_lines() - slide.app_offset()).abs();
-				assert!(
-					gap < 1e-3,
-					"channels diverged: view {} slide {}",
-					view.visual_lines(),
-					slide.app_offset()
-				);
+				assert!(gap < 1e-3, "channels diverged: view {} slide {}", view.visual_lines(), slide.app_offset());
 			}
 		}
 		for _ in 0..600 {
 			view.advance(0.016);
 			slide.advance(0.016);
 			let gap = (view.visual_lines() - slide.app_offset()).abs();
-			assert!(
-				gap < 1e-3,
-				"channels diverged: view {} slide {}",
-				view.visual_lines(),
-				slide.app_offset()
-			);
+			assert!(gap < 1e-3, "channels diverged: view {} slide {}", view.visual_lines(), slide.app_offset());
 		}
 		assert_eq!(slide.app_offset(), 0.0);
 		assert_eq!(view.visual_lines(), 0.0);
@@ -1064,10 +1001,7 @@ mod tests {
 		}
 		let left_i = inview.desired_offset() as f32 + inview.frac();
 		let left_o = over.desired_offset() as f32 + over.frac();
-		assert!(
-			left_o < left_i,
-			"overflowed burst ({left_o} left) should outrun the in-view one ({left_i} left)"
-		);
+		assert!(left_o < left_i, "overflowed burst ({left_o} left) should outrun the in-view one ({left_i} left)");
 	}
 
 	// Test ID: daqpv
@@ -1084,10 +1018,7 @@ mod tests {
 		for _ in 0..3000 {
 			s.advance(0.016);
 		}
-		assert!(
-			!s.animating(),
-			"must be fully settled before the second burst"
-		);
+		assert!(!s.animating(), "must be fully settled before the second burst");
 		let mut fresh = Scroll::new();
 		fresh.set_max(1000.0);
 		for _ in 0..4 {
@@ -1100,10 +1031,7 @@ mod tests {
 		}
 		let pos_s = s.desired_offset() as f32 + s.frac();
 		let pos_f = fresh.desired_offset() as f32 + fresh.frac();
-		assert!(
-			(pos_s - pos_f).abs() < 1e-4,
-			"stale overflow leaked into the next burst: {pos_s} vs fresh {pos_f}"
-		);
+		assert!((pos_s - pos_f).abs() < 1e-4, "stale overflow leaked into the next burst: {pos_s} vs fresh {pos_f}");
 	}
 
 	// Test ID: d9j4d
@@ -1172,10 +1100,7 @@ mod tests {
 	fn smooth_off_finishes_every_scroll_instantly() {
 		let _g = pin();
 		// the master switch: no eased wheel, no output lag, no app slide
-		with(config::Settings {
-			scroll_smooth: false,
-			..config::Settings::default()
-		});
+		with(config::Settings { scroll_smooth: false, ..config::Settings::default() });
 		let mut s = Scroll::new();
 		s.set_max(100.0);
 		s.wheel(30.0);
@@ -1244,10 +1169,7 @@ mod tests {
 		}
 		let first = steps[0];
 		let peak = steps.iter().copied().fold(0.0f32, f32::max);
-		assert!(
-			first < peak * 0.6,
-			"first frame moved {first} of peak {peak}: no ease-in"
-		);
+		assert!(first < peak * 0.6, "first frame moved {first} of peak {peak}: no ease-in");
 	}
 
 	// Test ID: daqrw
@@ -1275,10 +1197,7 @@ mod tests {
 		}
 		assert!(!s.animating(), "never settled");
 		let band_s = in_band as f32 * dt;
-		assert!(
-			band_s < 0.35,
-			"tail took {band_s}s inside the stop band (crawl)"
-		);
+		assert!(band_s < 0.35, "tail took {band_s}s inside the stop band (crawl)");
 	}
 
 	// The 4 feel knobs each have to change something, since 2 speed sliders were
@@ -1296,10 +1215,7 @@ mod tests {
 	fn ease_in_sets_how_gently_motion_leaves_rest() {
 		let _g = pin();
 		let traveled = |ease_in_ms: f32| {
-			with(config::Settings {
-				scroll_ease_in_ms: ease_in_ms,
-				..config::Settings::default()
-			});
+			with(config::Settings { scroll_ease_in_ms: ease_in_ms, ..config::Settings::default() });
 			let mut s = Scroll::new();
 			s.set_max(100.0);
 			s.wheel(20.0);
@@ -1311,10 +1227,7 @@ mod tests {
 		let abrupt = traveled(8.0);
 		let gentle = traveled(800.0);
 		with(config::Settings::default()); // other modules read this same store
-		assert!(
-			abrupt > gentle * 1.5,
-			"leaving rest at ease-in 8ms ({abrupt}) should far outpace 800ms ({gentle})"
-		);
+		assert!(abrupt > gentle * 1.5, "leaving rest at ease-in 8ms ({abrupt}) should far outpace 800ms ({gentle})");
 	}
 
 	// Test ID: dar9w
@@ -1326,10 +1239,7 @@ mod tests {
 		// Ease-in is a shallower lift to the knee, so the burst's opening
 		// covers less ground. Everything past the knee is Ramp-up's business.
 		let covered = |ease_in_ms: f32| {
-			with(config::Settings {
-				scroll_ease_in_ms: ease_in_ms,
-				..config::Settings::default()
-			});
+			with(config::Settings { scroll_ease_in_ms: ease_in_ms, ..config::Settings::default() });
 			let mut s = Scroll::new();
 			s.set_max(10_000.0);
 			s.nudge_output(200.0, 24.0);
@@ -1342,10 +1252,7 @@ mod tests {
 		let crisp = covered(8.0);
 		let soft = covered(800.0);
 		with(config::Settings::default());
-		assert!(
-			crisp > soft * 3.0,
-			"a crisp ease-in ({crisp} lines) should far outpace a soft one ({soft}) leaving rest"
-		);
+		assert!(crisp > soft * 3.0, "a crisp ease-in ({crisp} lines) should far outpace a soft one ({soft}) leaving rest");
 	}
 
 	// Test ID: daqyc
@@ -1354,10 +1261,7 @@ mod tests {
 	fn ramp_up_sets_how_fast_catch_up_accelerates() {
 		let _g = pin();
 		let left = |ramp_up_ms: f32| {
-			with(config::Settings {
-				scroll_ramp_up_ms: ramp_up_ms,
-				..config::Settings::default()
-			});
+			with(config::Settings { scroll_ramp_up_ms: ramp_up_ms, ..config::Settings::default() });
 			let mut s = Scroll::new();
 			s.set_max(1000.0);
 			s.nudge_output(300.0, 24.0); // deep and instantly overflowed: uncapped
@@ -1369,10 +1273,7 @@ mod tests {
 		let hard = left(50.0);
 		let soft = left(1500.0);
 		with(config::Settings::default());
-		assert!(
-			hard < soft * 0.5,
-			"a hard ramp ({hard} lines left) should outrun a soft one ({soft} left)"
-		);
+		assert!(hard < soft * 0.5, "a hard ramp ({hard} lines left) should outrun a soft one ({soft} left)");
 	}
 
 	// Test ID: dar9x
@@ -1386,10 +1287,7 @@ mod tests {
 		// wind the same backlog down once output has ceased. Frames from
 		// "output stopped" to rest is the measurement.
 		let frames_to_rest = |ramp_down_ms: f32| {
-			with(config::Settings {
-				scroll_ramp_down_ms: ramp_down_ms,
-				..config::Settings::default()
-			});
+			with(config::Settings { scroll_ramp_down_ms: ramp_down_ms, ..config::Settings::default() });
 			let mut s = Scroll::new();
 			s.set_max(5000.0);
 			s.nudge_output(400.0, 24.0); // deep, instantly overflowed
@@ -1407,10 +1305,7 @@ mod tests {
 		let quick = frames_to_rest(60.0);
 		let slow = frames_to_rest(3000.0);
 		with(config::Settings::default());
-		assert!(
-			slow > quick * 2,
-			"a gentle ramp-down should wind down far longer ({slow} frames) than a hard one ({quick})"
-		);
+		assert!(slow > quick * 2, "a gentle ramp-down should wind down far longer ({slow} frames) than a hard one ({quick})");
 	}
 
 	// Test ID: dar9y
@@ -1429,10 +1324,7 @@ mod tests {
 			s.advance(0.016);
 		}
 		let reserve = s.desired_offset() as f32 + s.frac();
-		assert!(
-			reserve > 5.0,
-			"at speed the view should trail by a braking distance, not {reserve} lines"
-		);
+		assert!(reserve > 5.0, "at speed the view should trail by a braking distance, not {reserve} lines");
 		let mut prev_pos = reserve;
 		let mut prev_v = f32::MAX;
 		let mut frames_moving = 0;
@@ -1443,18 +1335,12 @@ mod tests {
 			if v <= 0.5 {
 				break;
 			}
-			assert!(
-				v < prev_v * 1.05 + 0.1,
-				"speed rose mid wind-down: {prev_v} -> {v} lines/s"
-			);
+			assert!(v < prev_v * 1.05 + 0.1, "speed rose mid wind-down: {prev_v} -> {v} lines/s");
 			frames_moving += 1;
 			prev_v = v;
 			prev_pos = pos;
 		}
-		assert!(
-			frames_moving > 20,
-			"the wind-down lasted only {frames_moving} frames - a cliff, not a ramp-down"
-		);
+		assert!(frames_moving > 20, "the wind-down lasted only {frames_moving} frames - a cliff, not a ramp-down");
 	}
 
 	// Test ID: daqyd
@@ -1465,10 +1351,7 @@ mod tests {
 		// Frames spent inside the stop band, which is only the tail. The approach
 		// above the band is the same either way.
 		let band_frames = |ease_out_ms: f32| {
-			with(config::Settings {
-				scroll_ease_out_ms: ease_out_ms,
-				..config::Settings::default()
-			});
+			with(config::Settings { scroll_ease_out_ms: ease_out_ms, ..config::Settings::default() });
 			let mut s = Scroll::new();
 			s.set_max(100.0);
 			s.wheel(6.0);
@@ -1488,10 +1371,7 @@ mod tests {
 		let crisp = band_frames(20.0);
 		let soft = band_frames(800.0);
 		with(config::Settings::default());
-		assert!(
-			soft > crisp,
-			"a soft ease-out should linger in the tail ({soft} frames) longer than a crisp one ({crisp})"
-		);
+		assert!(soft > crisp, "a soft ease-out should linger in the tail ({soft} frames) longer than a crisp one ({crisp})");
 	}
 
 	// Test ID: d9b24
@@ -1565,32 +1445,13 @@ mod tests {
 		};
 		let brisk = steps(config::Settings::default());
 		// speed rises to a peak and then only falls: no stall-and-restart
-		let peak = brisk
-			.iter()
-			.enumerate()
-			.max_by(|a, b| a.1.total_cmp(b.1))
-			.map(|(i, _)| i)
-			.unwrap();
+		let peak = brisk.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).map(|(i, _)| i).unwrap();
 		for w in brisk[peak..].windows(2) {
-			assert!(
-				w[1] <= w[0] + 1e-4,
-				"speed picked back up after slowing: {brisk:?}"
-			);
+			assert!(w[1] <= w[0] + 1e-4, "speed picked back up after slowing: {brisk:?}");
 		}
-		let slack = steps(config::Settings {
-			scroll_ease_in_ms: 600.0,
-			scroll_ramp_up_ms: 600.0,
-			scroll_ramp_down_ms: 600.0,
-			scroll_ease_out_ms: 600.0,
-			..config::Settings::default()
-		});
+		let slack = steps(config::Settings { scroll_ease_in_ms: 600.0, scroll_ramp_up_ms: 600.0, scroll_ramp_down_ms: 600.0, scroll_ease_out_ms: 600.0, ..config::Settings::default() });
 		with(config::Settings::default()); // other modules read this same store
-		assert!(
-			slack.len() > brisk.len() * 2,
-			"the feel settings must govern a 2-line advance: {} frames brisk vs {} slack",
-			brisk.len(),
-			slack.len()
-		);
+		assert!(slack.len() > brisk.len() * 2, "the feel settings must govern a 2-line advance: {} frames brisk vs {} slack", brisk.len(), slack.len());
 	}
 
 	// Same rule at the other end: a shallow history caps the ease floor, so the
@@ -1609,5 +1470,36 @@ mod tests {
 			s.advance(0.016);
 		}
 		assert!(s.following());
+	}
+
+	// A view parked in the scrollback moves up with the lines that went up, an
+	// ease in flight keeps its course, the top of the scrollback is as far as it
+	// goes, and a view following the bottom is left to the output ease
+	// (2026112016030002).
+	// Test ID: dfjv0
+	#[test]
+	fn keep_place_shifts_a_parked_view_with_the_text() {
+		let _g = pin();
+		let mut s = Scroll::new();
+		s.set_max(200.0);
+		s.scroll_to(50.0);
+		for _ in 0..5 {
+			s.advance(0.016);
+		}
+		let (target, visual) = (s.target_lines(), s.visual_lines());
+		assert!(visual < target, "still easing up");
+		s.set_max(205.0);
+		s.keep_place(5.0);
+		assert_eq!((s.target_lines(), s.visual_lines()), (target + 5.0, visual + 5.0));
+		s.keep_place(0.0);
+		assert_eq!(s.target_lines(), target + 5.0);
+		s.scroll_to(205.0);
+		s.snap();
+		s.keep_place(5.0);
+		assert_eq!((s.target_lines(), s.visual_lines()), (205.0, 205.0), "the text dropped off");
+		s.jump_bottom();
+		s.snap();
+		s.keep_place(5.0);
+		assert_eq!((s.target_lines(), s.visual_lines()), (0.0, 0.0), "following");
 	}
 }

@@ -156,11 +156,7 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 		luma_mean: mean,
 		spread: std::array::from_fn(|i| {
 			let at = (i as f32 + 0.5) / SPREAD as f32;
-			[
-				pct(&channels[0], at),
-				pct(&channels[1], at),
-				pct(&channels[2], at),
-			]
+			[pct(&channels[0], at), pct(&channels[1], at), pct(&channels[2], at)]
 		}),
 		alpha: (a_sum / cells) as f32,
 		hue: dominant_hue(&hist),
@@ -171,16 +167,7 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 
 // The summary of an image with no pixels to read.
 fn empty_summary(opacity: f32) -> Summary {
-	Summary {
-		luma_hi: 0.0,
-		luma_lo: 0.0,
-		luma_mean: 0.0,
-		spread: [[0.0; 3]; SPREAD],
-		alpha: 1.0,
-		hue: 0.0,
-		chroma: 0.0,
-		opacity,
-	}
+	Summary { luma_hi: 0.0, luma_lo: 0.0, luma_mean: 0.0, spread: [[0.0; 3]; SPREAD], alpha: 1.0, hue: 0.0, chroma: 0.0, opacity }
 }
 
 fn pct(sorted: &[f32], p: f32) -> f32 {
@@ -326,21 +313,12 @@ pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
 	// Away from the field's near end, and never dimmer than the theme asked for, so
 	// the wallpaper can only add separation. With the floor off this leaves the
 	// theme's own lightness alone.
-	let target = if light_text {
-		(hi + floor).max(fg_l)
-	} else {
-		(lo - floor).min(fg_l)
-	}
-	.clamp(0.0, 1.0);
+	let target = if light_text { (hi + floor).max(fg_l) } else { (lo - floor).min(fg_l) }.clamp(0.0, 1.0);
 
 	// Hue from the image's complement, chroma held to a tint. An image with no
 	// hue in it keeps the theme's.
 	let chroma = fg_c.min(MAX_CHROMA);
-	let hue = if sum.chroma >= MIN_CHROMA {
-		(sum.hue + 180.0).rem_euclid(360.0)
-	} else {
-		hue_chroma(fg).0
-	};
+	let hue = if sum.chroma >= MIN_CHROMA { (sum.hue + 180.0).rem_euclid(360.0) } else { hue_chroma(fg).0 };
 	let out_fg = at_lightness(target, hue, chroma);
 
 	// The cursor is a plate with the glyph's own color on top, so the text has to
@@ -348,28 +326,10 @@ pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
 	// text, the furthest it can sit from the field and still show the glyph, and this
 	// finds the cursor that draws it. It's solved against the field's bright end, so
 	// a darker cell only widens the gap.
-	let plate = if light_text {
-		target - floor
-	} else {
-		target + floor
-	}
-	.clamp(0.0, 1.0);
-	let out_cursor = cursor_for(
-		plate,
-		field_luma(sum, sum.luma_hi, bg, mix),
-		if light_text {
-			crate::pane::CURSOR_ALPHA
-		} else {
-			crate::pane::CURSOR_ALPHA_LIGHT
-		},
-		(hue + CURSOR_ROTATE).rem_euclid(360.0),
-		hue_chroma(cursor).1.min(MAX_CHROMA),
-	);
+	let plate = if light_text { target - floor } else { target + floor }.clamp(0.0, 1.0);
+	let out_cursor = cursor_for(plate, field_luma(sum, sum.luma_hi, bg, mix), if light_text { crate::pane::CURSOR_ALPHA } else { crate::pane::CURSOR_ALPHA_LIGHT }, (hue + CURSOR_ROTATE).rem_euclid(360.0), hue_chroma(cursor).1.min(MAX_CHROMA));
 
-	Derived {
-		fg: out_fg,
-		cursor: out_cursor,
-	}
+	Derived { fg: out_fg, cursor: out_cursor }
 }
 
 #[cfg(test)]
@@ -390,11 +350,7 @@ mod tests {
 			// A light background means light mode, which draws the picture at a
 			// higher alpha than the slider reads (visibility.rs). Without this the
 			// light cases here are placed against a field nobody will ever see.
-			theme_mode: if lightness(bg) > 0.5 {
-				crate::theme::Mode::Light
-			} else {
-				crate::theme::Mode::Dark
-			},
+			theme_mode: if lightness(bg) > 0.5 { crate::theme::Mode::Light } else { crate::theme::Mode::Dark },
 			..Settings::default()
 		}
 	}
@@ -432,10 +388,7 @@ mod tests {
 			image::Rgba([c, c, c, 255])
 		});
 		let sum = summarize(&img, 1.0);
-		assert!(
-			sum.luma_hi > 0.8,
-			"the strip should set the bright end: {sum:?}"
-		);
+		assert!(sum.luma_hi > 0.8, "the strip should set the bright end: {sum:?}");
 		assert!(sum.luma_lo < 0.01, "and the rest the dark end: {sum:?}");
 	}
 
@@ -452,9 +405,7 @@ mod tests {
 		});
 		let sum = summarize(&img, 1.0);
 		let red_hue = hue_chroma(red).0;
-		let off = (sum.hue - red_hue)
-			.abs()
-			.min(360.0 - (sum.hue - red_hue).abs());
+		let off = (sum.hue - red_hue).abs().min(360.0 - (sum.hue - red_hue).abs());
 		assert!(off < 25.0, "dominant hue {off} off red {red_hue}: {sum:?}");
 		assert!(sum.chroma > MIN_CHROMA, "{sum:?}");
 	}
@@ -468,22 +419,14 @@ mod tests {
 	fn the_hue_weight_is_chroma_rather_than_how_many_cells_have_it() {
 		let faint: [u8; 3] = [0x76, 0x78, 0x84]; // barely blue
 		let vivid: [u8; 3] = [0xe6, 0x78, 0x14]; // plainly orange
-		assert!(
-			hue_chroma(faint).1 * 2.0 < hue_chroma(vivid).1,
-			"the fixture needs the two chromas far apart"
-		);
+		assert!(hue_chroma(faint).1 * 2.0 < hue_chroma(vivid).1, "the fixture needs the two chromas far apart");
 		let img = image::RgbaImage::from_fn(300, 80, |x, _| {
 			let c = if x < 210 { faint } else { vivid };
 			image::Rgba([c[0], c[1], c[2], 255])
 		});
 		let sum = summarize(&img, 1.0);
 		let near = |want: f32| (sum.hue - want).abs().min(360.0 - (sum.hue - want).abs());
-		assert!(
-			near(hue_chroma(vivid).0) < 25.0,
-			"hue {} should be the vivid patch's, not the faint field's {}",
-			sum.hue,
-			hue_chroma(faint).0
-		);
+		assert!(near(hue_chroma(vivid).0) < 25.0, "hue {} should be the vivid patch's, not the faint field's {}", sum.hue, hue_chroma(faint).0);
 	}
 
 	// Test ID: dcwvm
@@ -493,10 +436,7 @@ mod tests {
 		let sum = summarize(&plain([90, 110, 160], 32, 32), 0.35);
 		let dark = derive(&sum, &settings(SILK_BG, SILK_FG, SILK_CURSOR));
 		assert!(lightness(dark.fg) > 0.5, "{:?}", dark.fg);
-		let light = derive(
-			&sum,
-			&settings([0xf6, 0xf5, 0xf0], [0x30, 0x32, 0x38], [0x33, 0x55, 0x99]),
-		);
+		let light = derive(&sum, &settings([0xf6, 0xf5, 0xf0], [0x30, 0x32, 0x38], [0x33, 0x55, 0x99]));
 		assert!(lightness(light.fg) < 0.5, "{:?}", light.fg);
 	}
 
@@ -513,11 +453,7 @@ mod tests {
 		for rgb in [[20u8, 20, 25], [90, 90, 100], [170, 170, 180]] {
 			let out = derive(&summarize(&plain(rgb, 32, 32), 0.35), &s);
 			let got = lightness(out.fg);
-			assert!(
-				got > last + 0.1,
-				"{rgb:?} -> {:?}, L {got} after {last}",
-				out.fg
-			);
+			assert!(got > last + 0.1, "{rgb:?} -> {:?}, L {got} after {last}", out.fg);
 			last = got;
 		}
 	}
@@ -531,11 +467,7 @@ mod tests {
 	fn a_dark_image_never_dims_the_text_below_the_themes_own() {
 		let s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
 		let out = derive(&summarize(&plain([2, 2, 2], 32, 32), 0.1), &s);
-		assert!(
-			lightness(out.fg) >= lightness(SILK_FG) - 0.01,
-			"{:?} is dimmer than {SILK_FG:?}",
-			out.fg
-		);
+		assert!(lightness(out.fg) >= lightness(SILK_FG) - 0.01, "{:?} is dimmer than {SILK_FG:?}", out.fg);
 	}
 
 	// The hue half. A blue picture has to give warm text, whatever the theme's
@@ -572,17 +504,9 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_vivid_theme_foreground_comes_back_as_a_tint() {
 		let s = settings([0x00, 0x08, 0x02], [0x33, 0xff, 0x66], [0x0a, 0x7a, 0x2a]);
-		assert!(
-			hue_chroma(s.fg).1 > 0.2,
-			"Matrix's fg is vivid to start with"
-		);
+		assert!(hue_chroma(s.fg).1 > 0.2, "Matrix's fg is vivid to start with");
 		let out = derive(&summarize(&plain([40, 70, 180], 32, 32), 0.35), &s);
-		assert!(
-			hue_chroma(out.fg).1 <= MAX_CHROMA + 0.01,
-			"{:?} is chroma {}",
-			out.fg,
-			hue_chroma(out.fg).1
-		);
+		assert!(hue_chroma(out.fg).1 <= MAX_CHROMA + 0.01, "{:?} is chroma {}", out.fg, hue_chroma(out.fg).1);
 	}
 
 	// Light mode draws the picture at a higher alpha than the slider reads, so the
@@ -602,14 +526,7 @@ mod tests {
 		let lit = derive(&sum, &s);
 		s.theme_mode = crate::theme::Mode::Dark;
 		let unlit = derive(&sum, &s);
-		assert!(
-			lightness(lit.fg) < lightness(unlit.fg) - 0.01,
-			"light {:?} ({}) should sit below dark {:?} ({})",
-			lit.fg,
-			lightness(lit.fg),
-			unlit.fg,
-			lightness(unlit.fg)
-		);
+		assert!(lightness(lit.fg) < lightness(unlit.fg) - 0.01, "light {:?} ({}) should sit below dark {:?} ({})", lit.fg, lightness(lit.fg), unlit.fg, lightness(unlit.fg));
 	}
 
 	// What `derive` will place its colors against, so the test models the field the
@@ -633,34 +550,19 @@ mod tests {
 	fn text_on_the_derived_cursor_plate_clears_the_floor() {
 		let floor = Settings::default().text_min_contrast;
 		for bg in [[0u8, 0, 0], [0x1d, 0x20, 0x28], [0xf6, 0xf5, 0xf0]] {
-			let fg = if bg[0] > 0x80 {
-				[0x30, 0x32, 0x38]
-			} else {
-				SILK_FG
-			};
+			let fg = if bg[0] > 0x80 { [0x30, 0x32, 0x38] } else { SILK_FG };
 			let s = settings(bg, fg, SILK_CURSOR);
 			for rgb in [[10, 10, 12], [90, 110, 160], [230, 220, 180]] {
 				for op in [0.1f32, 0.35, 1.0] {
 					let sum = summarize(&plain(rgb, 32, 32), op);
 					let out = derive(&sum, &s);
-					let alpha = if bg[0] > 0x80 {
-						crate::pane::CURSOR_ALPHA_LIGHT
-					} else {
-						crate::pane::CURSOR_ALPHA
-					};
-					let plate = plate_over(
-						out.cursor,
-						field_luma(&sum, sum.luma_hi, bg, mix(&s, &sum)),
-						alpha,
-					);
+					let alpha = if bg[0] > 0x80 { crate::pane::CURSOR_ALPHA_LIGHT } else { crate::pane::CURSOR_ALPHA };
+					let plate = plate_over(out.cursor, field_luma(&sum, sum.luma_hi, bg, mix(&s, &sum)), alpha);
 					let gap = (lightness(out.fg) - plate).abs();
 					// Short only where the field is already past the target and the
 					// search bottoms out, which is the case the scrim covers.
 					let cornered = out.cursor == [0, 0, 0] || out.cursor == [255, 255, 255];
-					assert!(
-						gap >= floor - 0.01 || cornered,
-						"bg {bg:?} image {rgb:?} op {op}: gap {gap} under {floor}"
-					);
+					assert!(gap >= floor - 0.01 || cornered, "bg {bg:?} image {rgb:?} op {op}: gap {gap} under {floor}");
 				}
 			}
 		}
@@ -680,13 +582,10 @@ mod tests {
 				let (a, b) = ab(hue, 0.12);
 				let tinted = from_oklab(gray_lightness(behind), a, b);
 				let scale = behind / config::luma(tinted).max(1e-6);
-				let field: Vec<f32> = (0..3)
-					.map(|k| config::to_linear(tinted[k]) * scale)
-					.collect();
+				let field: Vec<f32> = (0..3).map(|k| config::to_linear(tinted[k]) * scale).collect();
 				let cursor = cursor_for(gray_lightness(behind) + 0.2, behind, alpha, 0.0, 0.04);
 				let neutral = plate_over(cursor, behind, alpha);
-				let mix =
-					|k: usize| config::to_linear(cursor[k]) * alpha + field[k] * (1.0 - alpha);
+				let mix = |k: usize| config::to_linear(cursor[k]) * alpha + field[k] * (1.0 - alpha);
 				let real = to_oklab_linear([mix(0), mix(1), mix(2)]).0;
 				worst = worst.max((neutral - real).abs());
 			}
@@ -766,12 +665,7 @@ mod tests {
 		let sum = summarize(&plain([120, 120, 130], 32, 32), 0.3);
 		let on_black = derive(&sum, &settings(SILK_BG, SILK_FG, SILK_CURSOR));
 		let on_gray = derive(&sum, &settings([0x50, 0x50, 0x58], SILK_FG, SILK_CURSOR));
-		assert!(
-			lightness(on_gray.fg) > lightness(on_black.fg),
-			"a lighter background leaves the text less room: {:?} vs {:?}",
-			on_gray.fg,
-			on_black.fg
-		);
+		assert!(lightness(on_gray.fg) > lightness(on_black.fg), "a lighter background leaves the text less room: {:?} vs {:?}", on_gray.fg, on_black.fg);
 	}
 
 	// With the floor off there is no gap to work with, so the lightness half has
@@ -783,11 +677,7 @@ mod tests {
 		let mut s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
 		s.text_min_contrast = 0.0;
 		let out = derive(&summarize(&plain([200, 200, 210], 32, 32), 1.0), &s);
-		assert!(
-			(lightness(out.fg) - lightness(SILK_FG)).abs() < 0.01,
-			"{:?} vs {SILK_FG:?}",
-			out.fg
-		);
+		assert!((lightness(out.fg) - lightness(SILK_FG)).abs() < 0.01, "{:?} vs {SILK_FG:?}", out.fg);
 	}
 
 	// An image too bright for any foreground is the case the scrim covers. What
@@ -823,10 +713,6 @@ mod tests {
 		assert!(sum.luma_hi < 1e-6, "premultiplied to nothing: {sum:?}");
 		let s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
 		let out = derive(&sum, &s);
-		assert!(
-			(lightness(out.fg) - lightness(SILK_FG)).abs() < 0.02,
-			"{:?}",
-			out.fg
-		);
+		assert!((lightness(out.fg) - lightness(SILK_FG)).abs() < 0.02, "{:?}", out.fg);
 	}
 }

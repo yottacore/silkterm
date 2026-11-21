@@ -28,12 +28,7 @@ pub(super) struct IdleClock {
 
 impl IdleClock {
 	pub(super) fn new() -> Self {
-		IdleClock {
-			since: Instant::now(),
-			wake_owed: false,
-			repaint: false,
-			retry: Retry::default(),
-		}
+		IdleClock { since: Instant::now(), wake_owed: false, repaint: false, retry: Retry::default() }
 	}
 
 	/// The device back now: it is due, there is a screen to draw on, and no
@@ -48,8 +43,7 @@ impl IdleClock {
 	// refusal of a run.
 	fn rebuild_failed(&mut self, now: Instant) -> bool {
 		self.wake_owed = true;
-		self.retry
-			.missed(now, REBUILD_RETRY_FIRST, REBUILD_RETRY_MAX);
+		self.retry.missed(now, REBUILD_RETRY_FIRST, REBUILD_RETRY_MAX);
 		self.retry.misses == 1
 	}
 
@@ -184,11 +178,7 @@ fn release_deadline(cfg: &config::Settings, idle: &Idle) -> Option<Instant> {
 	if kept_by(&rule, idle).is_some() {
 		return None;
 	}
-	let wait = if idle.hidden {
-		rule.hidden
-	} else {
-		rule.otherwise
-	};
+	let wait = if idle.hidden { rule.hidden } else { rule.otherwise };
 	Some(idle.since + wait)
 }
 
@@ -221,31 +211,17 @@ struct IdleRule {
 // for half an hour.
 fn idle_rule(cfg: &config::Settings) -> IdleRule {
 	if let Some(wait) = idle_secs() {
-		return IdleRule {
-			on: true,
-			hidden: wait,
-			otherwise: wait,
-		};
+		return IdleRule { on: true, hidden: wait, otherwise: wait };
 	}
 	let minutes = |m: usize| Duration::from_secs(m as u64 * 60);
-	IdleRule {
-		on: cfg.idle_release,
-		hidden: minutes(cfg.idle_release_hidden_min),
-		otherwise: minutes(cfg.idle_release_min),
-	}
+	IdleRule { on: cfg.idle_release, hidden: minutes(cfg.idle_release_hidden_min), otherwise: minutes(cfg.idle_release_min) }
 }
 
 // SILK_IDLE_SECS, read once, since every loop pass asks for the idle rule.
 fn idle_secs() -> Option<Duration> {
 	use std::sync::OnceLock;
 	static WAIT: OnceLock<Option<Duration>> = OnceLock::new();
-	*WAIT.get_or_init(|| {
-		std::env::var("SILK_IDLE_SECS")
-			.ok()
-			.and_then(|raw| raw.parse::<f32>().ok())
-			.filter(|secs| secs.is_finite() && *secs >= 0.0)
-			.map(Duration::from_secs_f32)
-	})
+	*WAIT.get_or_init(|| std::env::var("SILK_IDLE_SECS").ok().and_then(|raw| raw.parse::<f32>().ok()).filter(|secs| secs.is_finite() && *secs >= 0.0).map(Duration::from_secs_f32))
 }
 
 /// `SILK_IDLEDBG`: what restarts the wait and what holds the device, so a log
@@ -284,11 +260,7 @@ impl IdleTrace {
 			return;
 		}
 		let now = Instant::now();
-		match self
-			.said
-			.iter_mut()
-			.find(|(t, w, ..)| (*t, *w) == (what, why))
-		{
+		match self.said.iter_mut().find(|(t, w, ..)| (*t, *w) == (what, why)) {
 			Some((.., at, quiet)) if now.duration_since(*at) < TRACE_QUIET => *quiet += 1,
 			Some((.., at, quiet)) => {
 				idledbg(&format!("{what}: {why} (+{quiet} not said)"));
@@ -385,12 +357,7 @@ fn freeze_frame(was_hidden: bool, hidden: bool) -> Frame {
 // Windows a restore stops answering minimized a moment before its size comes
 // back, and a device rebuilt then took 1x1 as the window's size. The grid
 // shrank to 2 columns with it, and the console host's reflow lost the screen.
-fn window_hidden(
-	revealed: bool,
-	occluded: bool,
-	no_area: bool,
-	minimized: impl FnOnce() -> bool,
-) -> bool {
+fn window_hidden(revealed: bool, occluded: bool, no_area: bool, minimized: impl FnOnce() -> bool) -> bool {
 	revealed && (occluded || no_area || minimized())
 }
 
@@ -404,13 +371,7 @@ const MINIMIZED_RECHECK: Duration = Duration::from_millis(250);
 /// `freeze_sync` before `about_to_wait` does (G89), so it must see the
 /// window as shown, not a minimized answer from before.
 pub(super) fn restore_sign(event: &WindowEvent) -> bool {
-	matches!(
-		event,
-		WindowEvent::Focused(_)
-			| WindowEvent::Occluded(_)
-			| WindowEvent::Resized(_)
-			| WindowEvent::RedrawRequested
-	)
+	matches!(event, WindowEvent::Focused(_) | WindowEvent::Occluded(_) | WindowEvent::Resized(_) | WindowEvent::RedrawRequested)
 }
 
 /// Whether an event is a person at the window, for the idle clock. The pointer
@@ -427,21 +388,11 @@ pub(super) fn restore_sign(event: &WindowEvent) -> bool {
 /// an unfocused window tells it it lost focus, which it never had. `focused` is
 /// the window's focus before this event. The result names the sign for
 /// `SILK_IDLEDBG`.
-pub(super) fn sign_of_life(
-	event: &WindowEvent,
-	pointer_over: bool,
-	focused: bool,
-) -> Option<&'static str> {
+pub(super) fn sign_of_life(event: &WindowEvent, pointer_over: bool, focused: bool) -> Option<&'static str> {
 	match event {
-		WindowEvent::CursorMoved { .. } | WindowEvent::CursorEntered { .. } => {
-			pointer_over.then_some(POINTER)
-		}
+		WindowEvent::CursorMoved { .. } | WindowEvent::CursorEntered { .. } => pointer_over.then_some(POINTER),
 		WindowEvent::Focused(now) => (*now != focused).then_some("focus"),
-		WindowEvent::KeyboardInput { .. }
-		| WindowEvent::MouseInput { .. }
-		| WindowEvent::MouseWheel { .. }
-		| WindowEvent::Touch(_)
-		| WindowEvent::Ime(_) => Some("input"),
+		WindowEvent::KeyboardInput { .. } | WindowEvent::MouseInput { .. } | WindowEvent::MouseWheel { .. } | WindowEvent::Touch(_) | WindowEvent::Ime(_) => Some("input"),
 		_ => None,
 	}
 }
@@ -462,9 +413,7 @@ pub(super) struct MinimizedProbe {
 
 impl MinimizedProbe {
 	fn get(&mut self, now: Instant, ask: impl FnOnce() -> bool) -> bool {
-		let stale = self
-			.asked
-			.is_none_or(|at| now.saturating_duration_since(at) >= MINIMIZED_RECHECK);
+		let stale = self.asked.is_none_or(|at| now.saturating_duration_since(at) >= MINIMIZED_RECHECK);
 		if stale {
 			self.answer = ask();
 			self.asked = Some(now);
@@ -485,10 +434,7 @@ impl State {
 	fn window_hidden(&mut self) -> bool {
 		let window = &self.window;
 		let minimized = &mut self.minimized;
-		window_hidden(self.revealed, self.occluded, self.no_area, || {
-			FREEZE_MINIMIZED
-				&& minimized.get(Instant::now(), || window.is_minimized().unwrap_or(false))
-		})
+		window_hidden(self.revealed, self.occluded, self.no_area, || FREEZE_MINIMIZED && minimized.get(Instant::now(), || window.is_minimized().unwrap_or(false)))
 	}
 
 	/// The freeze edge, kept in one place because both render entry points call
@@ -555,11 +501,7 @@ impl State {
 	/// wallpaper, and can go again. The wallpaper is the last thing a rebuild
 	/// waits on, and a frame drawn before it would leave the stand-in up.
 	pub(super) fn repaint_done(&self) -> bool {
-		self.idle.repaint
-			&& self.gpu.is_some()
-			&& matches!(self.conserve, Conserve::Restored(_))
-			&& !self.dirty
-			&& self.frame_retry.at.is_none()
+		self.idle.repaint && self.gpu.is_some() && matches!(self.conserve, Conserve::Restored(_)) && !self.dirty && self.frame_retry.at.is_none()
 	}
 
 	/// Shown again after being out of sight. Nobody is known to be there, so
@@ -588,10 +530,7 @@ impl State {
 			if shown {
 				self.idle_trace.not_a_sign(STATUS_LINE);
 			}
-		} else if self
-			.idle
-			.output(self.gpu.is_none(), self.was_hidden, in_front)
-		{
+		} else if self.idle.output(self.gpu.is_none(), self.was_hidden, in_front) {
 			idledbg("wake: output");
 		} else if shown {
 			self.idle_trace.restart("output");
@@ -606,28 +545,13 @@ impl State {
 		}
 		let idle = self.idle_view();
 		let rule = idle_rule(cfg);
-		let hold = if dialog_up {
-			Some("a dialog is up")
-		} else {
-			kept_by(&rule, &idle)
-		};
-		let wait = if idle.hidden {
-			("hidden", rule.hidden)
-		} else {
-			("otherwise", rule.otherwise)
-		};
+		let hold = if dialog_up { Some("a dialog is up") } else { kept_by(&rule, &idle) };
+		let wait = if idle.hidden { ("hidden", rule.hidden) } else { ("otherwise", rule.otherwise) };
 		self.idle_trace.hold(hold, wait);
 	}
 
 	fn idle_view(&self) -> Idle {
-		Idle {
-			focused: self.focused,
-			hidden: self.was_hidden,
-			revealed: self.revealed,
-			bench_busy: self.bench.is_some() || self.bench_at.is_some(),
-			since: self.idle.since,
-			keeps_picture: self.keeps_picture,
-		}
+		Idle { focused: self.focused, hidden: self.was_hidden, revealed: self.revealed, bench_busy: self.bench.is_some() || self.bench_at.is_some(), since: self.idle.since, keeps_picture: self.keeps_picture }
 	}
 
 	/// Reads the hidden answer the pass's `freeze_sync` settled on.
@@ -673,10 +597,7 @@ impl State {
 			Ok(gfx) => gfx,
 			Err(e) => {
 				if self.idle.rebuild_failed(Instant::now()) {
-					eprintln!(
-						"{}: couldn't bring the GPU device back ({e}); trying again",
-						config::APP_NAME
-					);
+					eprintln!("{}: couldn't bring the GPU device back ({e}); trying again", config::APP_NAME);
 				}
 				idledbg(&format!("rebuild refused: {e}"));
 				return;
@@ -689,21 +610,12 @@ impl State {
 		self.surface_px = (w, h);
 		self.adapter_info = gfx.adapter_info.clone();
 		let drawn = gfx.drawn;
-		self.text
-			.attach_gpu(&gfx.device, &gfx.queue, gfx.format, &gfx.loss);
+		self.text.attach_gpu(&gfx.device, &gfx.queue, gfx.format, &gfx.loss);
 		let rects = RectRenderer::new(&gfx.device, gfx.format);
 		let minimap = crate::minimap::MapRenderer::new(&gfx.device, gfx.format);
 		let scrim = crate::scrim::Scrim::new(&gfx.device, gfx.format, w, h);
-		let wallpaper_img = self.wp_standin.as_ref().map(|small| {
-			ImageRenderer::new(&gfx.device, &gfx.queue, gfx.format, small).standing_in()
-		});
-		self.gpu = Some(Gpu {
-			gfx,
-			rects,
-			minimap,
-			wallpaper_img,
-			scrim,
-		});
+		let wallpaper_img = self.wp_standin.as_ref().map(|small| ImageRenderer::new(&gfx.device, &gfx.queue, gfx.format, small).standing_in());
+		self.gpu = Some(Gpu { gfx, rects, minimap, wallpaper_img, scrim });
 		self.idle.rebuilt();
 		// back only to repaint: nobody is known to be there, so the wait runs on
 		if !self.idle.repaint {
@@ -717,10 +629,7 @@ impl State {
 		self.update_title();
 		// the grid moved while nothing drew: one hard-cut catch-up frame
 		self.freeze_catchup();
-		idledbg(&format!(
-			"device rebuilt in {:?} at {w}x{h}, {drawn:?}",
-			start.elapsed()
-		));
+		idledbg(&format!("device rebuilt in {:?} at {w}x{h}, {drawn:?}", start.elapsed()));
 		self.follow_renderer(drawn);
 	}
 
@@ -761,9 +670,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-	use super::{
-		Conserve, Idle, IdleClock, IdleRule, RESTORED_SHOWN, release_deadline, window_hidden,
-	};
+	use super::{Conserve, Idle, IdleClock, IdleRule, RESTORED_SHOWN, release_deadline, window_hidden};
 	use crate::config;
 	use crate::gfx::Retry;
 	use std::time::{Duration, Instant};
@@ -777,10 +684,7 @@ mod tests {
 		use winit::event::{DeviceId, WindowEvent};
 		let device_id = DeviceId::dummy();
 		let entered = WindowEvent::CursorEntered { device_id };
-		let moved = WindowEvent::CursorMoved {
-			device_id,
-			position: winit::dpi::PhysicalPosition::new(10.0, 10.0),
-		};
+		let moved = WindowEvent::CursorMoved { device_id, position: winit::dpi::PhysicalPosition::new(10.0, 10.0) };
 		let life = |e: &WindowEvent, over: bool| sign_of_life(e, over, false).is_some();
 		assert!(!life(&entered, false));
 		assert!(!life(&moved, false));
@@ -788,14 +692,7 @@ mod tests {
 		// Wayland's compositor knows its pointer, so an enter there is over
 		assert!(life(&entered, true));
 		assert!(!life(&WindowEvent::CursorLeft { device_id }, true));
-		assert!(life(
-			&WindowEvent::MouseInput {
-				device_id,
-				state: winit::event::ElementState::Pressed,
-				button: winit::event::MouseButton::Left,
-			},
-			false
-		));
+		assert!(life(&WindowEvent::MouseInput { device_id, state: winit::event::ElementState::Pressed, button: winit::event::MouseButton::Left }, false));
 		assert!(!life(&WindowEvent::RedrawRequested, true));
 	}
 
@@ -807,18 +704,9 @@ mod tests {
 	fn focus_is_a_sign_of_life_only_as_a_change() {
 		use super::sign_of_life;
 		use winit::event::WindowEvent;
-		assert_eq!(
-			sign_of_life(&WindowEvent::Focused(true), false, false),
-			Some("focus")
-		);
-		assert_eq!(
-			sign_of_life(&WindowEvent::Focused(false), false, true),
-			Some("focus")
-		);
-		assert_eq!(
-			sign_of_life(&WindowEvent::Focused(false), false, false),
-			None
-		);
+		assert_eq!(sign_of_life(&WindowEvent::Focused(true), false, false), Some("focus"));
+		assert_eq!(sign_of_life(&WindowEvent::Focused(false), false, true), Some("focus"));
+		assert_eq!(sign_of_life(&WindowEvent::Focused(false), false, false), None);
 		assert_eq!(sign_of_life(&WindowEvent::Focused(true), false, true), None);
 	}
 
@@ -842,9 +730,7 @@ mod tests {
 	// Test ID: df4e2
 	#[test]
 	fn a_repaint_takes_the_device_back_for_one_frame() {
-		let long_ago = Instant::now()
-			.checked_sub(Duration::from_secs(1))
-			.expect("a second of uptime");
+		let long_ago = Instant::now().checked_sub(Duration::from_secs(1)).expect("a second of uptime");
 		let mut clock = IdleClock::new();
 		clock.since = long_ago;
 		assert!(clock.repaint(true));
@@ -858,10 +744,7 @@ mod tests {
 		assert!(!owed.repaint, "owed for output already");
 		let mut kept = IdleClock::new();
 		assert!(!kept.repaint(false));
-		assert!(
-			!kept.wake_owed && !kept.repaint,
-			"a window that has its device"
-		);
+		assert!(!kept.wake_owed && !kept.repaint, "a window that has its device");
 	}
 
 	// The pointer moving over a released window, partly behind others and
@@ -871,9 +754,7 @@ mod tests {
 	// Test ID: df4qc
 	#[test]
 	fn the_pointer_alone_never_takes_the_device_back() {
-		let long_ago = Instant::now()
-			.checked_sub(Duration::from_secs(1))
-			.expect("a second of uptime");
+		let long_ago = Instant::now().checked_sub(Duration::from_secs(1)).expect("a second of uptime");
 		let mut released = IdleClock::new();
 		released.since = long_ago;
 		assert!(!released.pointer(true));
@@ -900,22 +781,9 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_idle_wait_switch_is_read_once() {
-		let out = std::process::Command::new(std::env::current_exe().unwrap())
-			.args([
-				"--exact",
-				"app::idle::tests::idle_wait_child",
-				"--nocapture",
-			])
-			.env("SILK_IDLE_WAIT_CHILD", "1")
-			.env("SILK_IDLE_SECS", "5")
-			.output()
-			.unwrap();
+		let out = std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact", "app::idle::tests::idle_wait_child", "--nocapture"]).env("SILK_IDLE_WAIT_CHILD", "1").env("SILK_IDLE_SECS", "5").output().unwrap();
 		let text = String::from_utf8_lossy(&out.stdout);
-		assert!(
-			out.status.success(),
-			"{text}{}",
-			String::from_utf8_lossy(&out.stderr)
-		);
+		assert!(out.status.success(), "{text}{}", String::from_utf8_lossy(&out.stderr));
 		assert!(text.contains("idle wait checked"), "{text}");
 	}
 
@@ -927,20 +795,12 @@ mod tests {
 		}
 		let cfg = config::Settings::default();
 		let five = Duration::from_secs(5);
-		let every_wait_five = IdleRule {
-			on: true,
-			hidden: five,
-			otherwise: five,
-		};
+		let every_wait_five = IdleRule { on: true, hidden: five, otherwise: five };
 		assert_eq!(super::idle_rule(&cfg), every_wait_five);
 		// SAFETY: this child runs this one test, so no other thread is reading
 		// the environment.
 		unsafe { std::env::set_var("SILK_IDLE_SECS", "9") };
-		assert_eq!(
-			super::idle_rule(&cfg),
-			every_wait_five,
-			"read again after the first pass"
-		);
+		assert_eq!(super::idle_rule(&cfg), every_wait_five, "read again after the first pass");
 		println!("idle wait checked");
 	}
 
@@ -968,27 +828,18 @@ mod tests {
 				assert!(seen, "still not seen at pass {pass}");
 			}
 		}
-		let most = Duration::from_secs(1)
-			.div_duration_f32(MINIMIZED_RECHECK)
-			.ceil() as u32;
+		let most = Duration::from_secs(1).div_duration_f32(MINIMIZED_RECHECK).ceil() as u32;
 		assert!(asks <= most, "{asks} asks in a second, at most {most}");
 		// a restore forgets the answer, so the next pass sees it at once
 		assert!(super::restore_sign(&WindowEvent::RedrawRequested));
 		assert!(super::restore_sign(&WindowEvent::Occluded(false)));
 		assert!(super::restore_sign(&WindowEvent::Focused(true)));
-		assert!(super::restore_sign(&WindowEvent::Resized(
-			winit::dpi::PhysicalSize::new(640, 480)
-		)));
-		assert!(!super::restore_sign(&WindowEvent::Moved(
-			winit::dpi::PhysicalPosition::new(0, 0)
-		)));
+		assert!(super::restore_sign(&WindowEvent::Resized(winit::dpi::PhysicalSize::new(640, 480))));
+		assert!(!super::restore_sign(&WindowEvent::Moved(winit::dpi::PhysicalPosition::new(0, 0))));
 		probe.forget();
 		let after = start + Duration::from_secs(1);
 		assert!(!probe.get(after, || false));
-		assert!(
-			!probe.get(after, || panic!("asked again straight after")),
-			"the answer stands until the recheck"
-		);
+		assert!(!probe.get(after, || panic!("asked again straight after")), "the answer stands until the recheck");
 	}
 
 	// The idle release: off by default, never while the window has focus on
@@ -1000,14 +851,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_idle_release_waits_on_the_window_and_only_an_unwatched_one() {
 		let since = Instant::now();
-		let idle = |focused, hidden| Idle {
-			focused,
-			hidden,
-			revealed: true,
-			bench_busy: false,
-			since,
-			keeps_picture: true,
-		};
+		let idle = |focused, hidden| Idle { focused, hidden, revealed: true, bench_busy: false, since, keeps_picture: true };
 		// The release was off until 2026100312470540 turned it on by default,
 		// which `idle_release_defaults_on` pins now.
 		// let mut cfg = config::Settings::default();
@@ -1015,47 +859,23 @@ mod tests {
 		// 	release_deadline(&cfg, &idle(false, true)).is_none(),
 		// 	"off by default"
 		// );
-		let mut cfg = config::Settings {
-			idle_release: false,
-			..config::Settings::default()
-		};
-		assert!(
-			release_deadline(&cfg, &idle(false, true)).is_none(),
-			"switched off"
-		);
+		let mut cfg = config::Settings { idle_release: false, ..config::Settings::default() };
+		assert!(release_deadline(&cfg, &idle(false, true)).is_none(), "switched off");
 		cfg.idle_release = true;
 		cfg.idle_release_hidden_min = 30;
 		cfg.idle_release_min = 240;
-		assert!(
-			release_deadline(&cfg, &idle(true, false)).is_none(),
-			"focused and on screen"
-		);
-		assert_eq!(
-			release_deadline(&cfg, &idle(false, false)),
-			Some(since + Duration::from_hours(4))
-		);
-		assert_eq!(
-			release_deadline(&cfg, &idle(false, true)),
-			Some(since + Duration::from_mins(30))
-		);
+		assert!(release_deadline(&cfg, &idle(true, false)).is_none(), "focused and on screen");
+		assert_eq!(release_deadline(&cfg, &idle(false, false)), Some(since + Duration::from_hours(4)));
+		assert_eq!(release_deadline(&cfg, &idle(false, true)), Some(since + Duration::from_mins(30)));
 		// minimized or covered with focus still nominally on it: out of sight is
 		// what counts
-		assert_eq!(
-			release_deadline(&cfg, &idle(true, true)),
-			Some(since + Duration::from_mins(30))
-		);
+		assert_eq!(release_deadline(&cfg, &idle(true, true)), Some(since + Duration::from_mins(30)));
 		let mut owed = idle(false, true);
 		owed.bench_busy = true;
-		assert!(
-			release_deadline(&cfg, &owed).is_none(),
-			"a rating in flight"
-		);
+		assert!(release_deadline(&cfg, &owed).is_none(), "a rating in flight");
 		let mut unshown = idle(false, true);
 		unshown.revealed = false;
-		assert!(
-			release_deadline(&cfg, &unshown).is_none(),
-			"not on screen yet"
-		);
+		assert!(release_deadline(&cfg, &unshown).is_none(), "not on screen yet");
 	}
 
 	// A window starts unfocused, since one that never gets the focus may never
@@ -1068,28 +888,11 @@ mod tests {
 		use super::{kept_by, sign_of_life};
 		use crate::app::FOCUSED_AT_START;
 		use winit::event::WindowEvent;
-		let rule = IdleRule {
-			on: true,
-			hidden: Duration::from_mins(1),
-			otherwise: Duration::from_mins(5),
-		};
-		let never_told = Idle {
-			focused: FOCUSED_AT_START,
-			hidden: false,
-			revealed: true,
-			bench_busy: false,
-			since: Instant::now(),
-			keeps_picture: true,
-		};
+		let rule = IdleRule { on: true, hidden: Duration::from_mins(1), otherwise: Duration::from_mins(5) };
+		let never_told = Idle { focused: FOCUSED_AT_START, hidden: false, revealed: true, bench_busy: false, since: Instant::now(), keeps_picture: true };
 		assert_eq!(kept_by(&rule, &never_told), None);
-		assert_eq!(
-			sign_of_life(&WindowEvent::Focused(true), false, FOCUSED_AT_START),
-			Some("focus")
-		);
-		assert_eq!(
-			sign_of_life(&WindowEvent::Focused(false), false, FOCUSED_AT_START),
-			None
-		);
+		assert_eq!(sign_of_life(&WindowEvent::Focused(true), false, FOCUSED_AT_START), Some("focus"));
+		assert_eq!(sign_of_life(&WindowEvent::Focused(false), false, FOCUSED_AT_START), None);
 	}
 
 	// The idle trace names the one thing that keeps the device, in the order
@@ -1099,52 +902,21 @@ mod tests {
 	#[test]
 	fn each_hold_on_the_device_names_itself() {
 		use super::kept_by;
-		let rule = IdleRule {
-			on: true,
-			hidden: Duration::from_mins(1),
-			otherwise: Duration::from_mins(5),
-		};
-		let free = Idle {
-			focused: false,
-			hidden: false,
-			revealed: true,
-			bench_busy: false,
-			since: Instant::now(),
-			keeps_picture: true,
-		};
+		let rule = IdleRule { on: true, hidden: Duration::from_mins(1), otherwise: Duration::from_mins(5) };
+		let free = Idle { focused: false, hidden: false, revealed: true, bench_busy: false, since: Instant::now(), keeps_picture: true };
 		assert_eq!(kept_by(&rule, &free), None);
 		let off = IdleRule { on: false, ..rule };
 		assert_eq!(kept_by(&off, &free), Some("switched off"));
-		let unshown = Idle {
-			revealed: false,
-			..free
-		};
+		let unshown = Idle { revealed: false, ..free };
 		assert_eq!(kept_by(&rule, &unshown), Some("not shown yet"));
-		let rating = Idle {
-			bench_busy: true,
-			..free
-		};
+		let rating = Idle { bench_busy: true, ..free };
 		assert_eq!(kept_by(&rule, &rating), Some("a rating is due or running"));
-		let focused = Idle {
-			focused: true,
-			..free
-		};
+		let focused = Idle { focused: true, ..free };
 		assert_eq!(kept_by(&rule, &focused), Some("focused on screen"));
-		let blanks = Idle {
-			keeps_picture: false,
-			..free
-		};
-		assert_eq!(
-			kept_by(&rule, &blanks),
-			Some("on screen, and would go blank")
-		);
+		let blanks = Idle { keeps_picture: false, ..free };
+		assert_eq!(kept_by(&rule, &blanks), Some("on screen, and would go blank"));
 		// out of sight, neither focus nor the picture keeps it
-		let hidden = Idle {
-			hidden: true,
-			focused: true,
-			keeps_picture: false,
-			..free
-		};
+		let hidden = Idle { hidden: true, focused: true, keeps_picture: false, ..free };
 		assert_eq!(kept_by(&rule, &hidden), None);
 	}
 
@@ -1157,29 +929,11 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_window_that_would_go_blank_is_never_let_go_in_view() {
 		let since = Instant::now();
-		let cfg = config::Settings {
-			idle_release: true,
-			idle_release_hidden_min: 30,
-			idle_release_min: 240,
-			..config::Settings::default()
-		};
-		let blanks = |focused, hidden| Idle {
-			focused,
-			hidden,
-			revealed: true,
-			bench_busy: false,
-			since,
-			keeps_picture: false,
-		};
-		assert!(
-			release_deadline(&cfg, &blanks(false, false)).is_none(),
-			"unfocused in view"
-		);
+		let cfg = config::Settings { idle_release: true, idle_release_hidden_min: 30, idle_release_min: 240, ..config::Settings::default() };
+		let blanks = |focused, hidden| Idle { focused, hidden, revealed: true, bench_busy: false, since, keeps_picture: false };
+		assert!(release_deadline(&cfg, &blanks(false, false)).is_none(), "unfocused in view");
 		assert!(release_deadline(&cfg, &blanks(true, false)).is_none());
-		assert_eq!(
-			release_deadline(&cfg, &blanks(false, true)),
-			Some(since + Duration::from_mins(30))
-		);
+		assert_eq!(release_deadline(&cfg, &blanks(false, true)), Some(since + Duration::from_mins(30)));
 	}
 
 	// Off since the minimized wait was taken out again (2026100513581813): a
@@ -1259,29 +1013,15 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_minimized_window_takes_the_hidden_wait() {
 		let since = Instant::now();
-		let cfg = config::Settings {
-			idle_release: true,
-			..config::Settings::default()
-		};
+		let cfg = config::Settings { idle_release: true, ..config::Settings::default() };
 		assert_eq!(cfg.idle_release_hidden_min, 1);
 		for occluded in [false, true] {
 			let hidden = window_hidden(true, occluded, false, || true);
 			assert!(hidden, "minimized, occluded {occluded}");
 			for focused in [false, true] {
 				for keeps_picture in [false, true] {
-					let idle = Idle {
-						focused,
-						hidden,
-						revealed: true,
-						bench_busy: false,
-						since,
-						keeps_picture,
-					};
-					assert_eq!(
-						release_deadline(&cfg, &idle),
-						Some(since + Duration::from_mins(1)),
-						"focused {focused}, keeps picture {keeps_picture}"
-					);
+					let idle = Idle { focused, hidden, revealed: true, bench_busy: false, since, keeps_picture };
+					assert_eq!(release_deadline(&cfg, &idle), Some(since + Duration::from_mins(1)), "focused {focused}, keeps picture {keeps_picture}");
 				}
 			}
 		}
@@ -1307,32 +1047,17 @@ mod tests {
 	// Test ID: dcrvv
 	#[test]
 	fn output_into_a_hidden_window_does_not_keep_its_device() {
-		let long_ago = Instant::now()
-			.checked_sub(Duration::from_secs(1))
-			.expect("a second of uptime");
-		let mut clock = IdleClock {
-			since: long_ago,
-			wake_owed: false,
-			repaint: false,
-			retry: Retry::default(),
-		};
+		let long_ago = Instant::now().checked_sub(Duration::from_secs(1)).expect("a second of uptime");
+		let mut clock = IdleClock { since: long_ago, wake_owed: false, repaint: false, retry: Retry::default() };
 		assert!(!clock.output(false, true, true));
 		assert_eq!(clock.since, long_ago, "hidden output restarted the clock");
 		assert!(!clock.wake_owed);
-		assert!(
-			clock.output(true, true, true),
-			"a released window is due it"
-		);
+		assert!(clock.output(true, true, true), "a released window is due it");
 		assert!(clock.wake_owed);
 		assert_eq!(clock.since, long_ago);
 		assert!(!clock.output(true, true, true), "due once");
 
-		let mut seen = IdleClock {
-			since: long_ago,
-			wake_owed: false,
-			repaint: false,
-			retry: Retry::default(),
-		};
+		let mut seen = IdleClock { since: long_ago, wake_owed: false, repaint: false, retry: Retry::default() };
 		assert!(!seen.output(false, false, true));
 		assert!(seen.since > long_ago, "output on screen is a sign of life");
 		assert!(seen.output(true, false, true));
@@ -1346,20 +1071,10 @@ mod tests {
 	// Test ID: der5b
 	#[test]
 	fn output_from_a_tab_in_the_back_does_not_keep_the_device() {
-		let long_ago = Instant::now()
-			.checked_sub(Duration::from_secs(1))
-			.expect("a second of uptime");
-		let mut clock = IdleClock {
-			since: long_ago,
-			wake_owed: false,
-			repaint: false,
-			retry: Retry::default(),
-		};
+		let long_ago = Instant::now().checked_sub(Duration::from_secs(1)).expect("a second of uptime");
+		let mut clock = IdleClock { since: long_ago, wake_owed: false, repaint: false, retry: Retry::default() };
 		assert!(!clock.output(false, false, false));
-		assert_eq!(
-			clock.since, long_ago,
-			"a tab in the back restarted the clock"
-		);
+		assert_eq!(clock.since, long_ago, "a tab in the back restarted the clock");
 		assert!(!clock.output(true, false, false));
 		assert!(!clock.wake_owed, "a tab in the back took the device back");
 		// Hidden, it was due at the reveal whichever tab printed. Since
@@ -1381,16 +1096,11 @@ mod tests {
 		let mut clock = IdleClock::new();
 		clock.owe(true);
 		assert!(clock.rebuild_due(false, now));
-		assert!(
-			!clock.rebuild_due(true, now),
-			"a hidden window waits for the reveal"
-		);
+		assert!(!clock.rebuild_due(true, now), "a hidden window waits for the reveal");
 
 		assert!(clock.rebuild_failed(now), "the first refusal is reported");
 		assert!(!clock.rebuild_failed(now), "and only the first");
-		let wake = clock
-			.rebuild_wake(false)
-			.expect("the loop wakes for the retry");
+		let wake = clock.rebuild_wake(false).expect("the loop wakes for the retry");
 		assert!(wake > now);
 		assert!(!clock.rebuild_due(false, now), "not before the backoff");
 		assert!(clock.rebuild_due(false, wake), "tried again with no input");
@@ -1411,24 +1121,13 @@ mod tests {
 	fn the_title_note_follows_the_device_out_and_back() {
 		let now = Instant::now();
 		assert_eq!(Conserve::Off.note(now), None);
-		assert_eq!(
-			Conserve::Saving.note(now),
-			Some("resource conservation mode")
-		);
+		assert_eq!(Conserve::Saving.note(now), Some("resource conservation mode"));
 		let mut state = Conserve::Saving;
 		state.wallpaper_answered(now);
-		assert_eq!(
-			state,
-			Conserve::Saving,
-			"a wallpaper while released changes nothing"
-		);
+		assert_eq!(state, Conserve::Saving, "a wallpaper while released changes nothing");
 		state = Conserve::Restoring;
 		assert_eq!(state.note(now), Some("restoring resources ..."));
-		assert_eq!(
-			state.wake(),
-			None,
-			"restoring waits on the wallpaper, not a clock"
-		);
+		assert_eq!(state.wake(), None, "restoring waits on the wallpaper, not a clock");
 		state.wallpaper_answered(now);
 		assert_eq!(state.note(now), Some("resources restored"));
 		assert_eq!(state.wake(), Some(now + RESTORED_SHOWN));

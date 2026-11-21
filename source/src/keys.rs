@@ -75,10 +75,7 @@ impl KeyName {
 		if let (Some(ch), None) = (chars.next(), chars.next()) {
 			return (ch != '+').then(|| KeyName::Char(ch.to_ascii_lowercase()));
 		}
-		NAMED_KEYS
-			.iter()
-			.find(|(name, _)| name.eq_ignore_ascii_case(word))
-			.map(|(_, named)| KeyName::Named(*named))
+		NAMED_KEYS.iter().find(|(name, _)| name.eq_ignore_ascii_case(word)).map(|(_, named)| KeyName::Named(*named))
 	}
 
 	fn word(self) -> String {
@@ -86,28 +83,14 @@ impl KeyName {
 			KeyName::Char(ch) => ch.to_uppercase().collect(),
 			KeyName::Plus => "Plus".into(),
 			KeyName::Minus => "Minus".into(),
-			KeyName::Named(named) => NAMED_KEYS
-				.iter()
-				.find(|(_, each)| *each == named)
-				.map_or_else(|| format!("{named:?}"), |(name, _)| (*name).into()),
+			KeyName::Named(named) => NAMED_KEYS.iter().find(|(_, each)| *each == named).map_or_else(|| format!("{named:?}"), |(name, _)| (*name).into()),
 		}
 	}
 
 	// A function key or the Menu key does nothing in a shell by itself, so it
 	// may be a hotkey alone. Any other key would stop typing.
 	fn free_alone(self) -> bool {
-		matches!(
-			self,
-			KeyName::Named(
-				NamedKey::F1
-					| NamedKey::F2 | NamedKey::F3
-					| NamedKey::F4 | NamedKey::F5
-					| NamedKey::F6 | NamedKey::F7
-					| NamedKey::F8 | NamedKey::F9
-					| NamedKey::F10 | NamedKey::F11
-					| NamedKey::F12 | NamedKey::ContextMenu
-			)
-		)
+		matches!(self, KeyName::Named(NamedKey::F1 | NamedKey::F2 | NamedKey::F3 | NamedKey::F4 | NamedKey::F5 | NamedKey::F6 | NamedKey::F7 | NamedKey::F8 | NamedKey::F9 | NamedKey::F10 | NamedKey::F11 | NamedKey::F12 | NamedKey::ContextMenu))
 	}
 }
 
@@ -160,13 +143,7 @@ impl Chord {
 		let Some((last, held)) = parts.split_last() else {
 			anyhow::bail!("\"{text}\" isn't a key");
 		};
-		let mut chord = Chord {
-			key: KeyName::Plus,
-			ctrl: false,
-			alt: false,
-			shift: false,
-			command: false,
-		};
+		let mut chord = Chord { key: KeyName::Plus, ctrl: false, alt: false, shift: false, command: false };
 		for part in held {
 			match part.to_ascii_lowercase().as_str() {
 				"ctrl" | "control" => chord.ctrl = true,
@@ -182,12 +159,9 @@ impl Chord {
 		if last.is_empty() {
 			anyhow::bail!("\"{text}\": write the + key as Plus");
 		}
-		chord.key = KeyName::parse(last)
-			.ok_or_else(|| anyhow::anyhow!("\"{text}\": {last} is not a key name"))?;
+		chord.key = KeyName::parse(last).ok_or_else(|| anyhow::anyhow!("\"{text}\": {last} is not a key name"))?;
 		if !(chord.ctrl || chord.alt || chord.command || chord.key.free_alone()) {
-			anyhow::bail!(
-				"\"{text}\" needs Ctrl, Alt, or Command held, or the shell would stop getting that key"
-			);
+			anyhow::bail!("\"{text}\" needs Ctrl, Alt, or Command held, or the shell would stop getting that key");
 		}
 		Ok(chord)
 	}
@@ -196,21 +170,7 @@ impl Chord {
 	/// Mac puts the modifiers in Apple's order and names them its own way:
 	/// `Control+Command+F`. Elsewhere it is `Ctrl+Alt+Shift+T`.
 	pub fn spoken(self, mac: bool) -> String {
-		let held = if mac {
-			[
-				(self.ctrl, "Control"),
-				(self.alt, "Option"),
-				(self.shift, "Shift"),
-				(self.command, "Command"),
-			]
-		} else {
-			[
-				(self.ctrl, "Ctrl"),
-				(self.alt, "Alt"),
-				(self.shift, "Shift"),
-				(self.command, "Super"),
-			]
-		};
+		let held = if mac { [(self.ctrl, "Control"), (self.alt, "Option"), (self.shift, "Shift"), (self.command, "Command")] } else { [(self.ctrl, "Ctrl"), (self.alt, "Alt"), (self.shift, "Shift"), (self.command, "Super")] };
 		let mut out = String::new();
 		for (on, name) in held {
 			if on {
@@ -227,10 +187,7 @@ impl Chord {
 	// "-", or a digit, as on a French layout. Never a letter or another sign,
 	// and never "_", which is Ctrl+_ undo in the shell rather than Ctrl+Minus.
 	fn matches(self, key: &Key, mods: ModifiersState, loose: bool) -> bool {
-		if mods.control_key() != self.ctrl
-			|| mods.alt_key() != self.alt
-			|| mods.super_key() != self.command
-		{
+		if mods.control_key() != self.ctrl || mods.alt_key() != self.alt || mods.super_key() != self.command {
 			return false;
 		}
 		let shift_ok = mods.shift_key() == self.shift;
@@ -238,18 +195,12 @@ impl Chord {
 		match (self.key, key) {
 			(KeyName::Named(want), Key::Named(got)) => want == *got && shift_ok,
 			(KeyName::Plus, Key::Character(typed)) => (typed == "+" || typed == "=") && shift_loose,
-			(KeyName::Minus, Key::Character(typed)) => {
-				(typed == "-" && shift_loose) || (typed == "_" && self.shift && shift_ok)
-			}
+			(KeyName::Minus, Key::Character(typed)) => (typed == "-" && shift_loose) || (typed == "_" && self.shift && shift_ok),
 			(KeyName::Char(want), Key::Character(typed)) => {
 				let mut chars = typed.chars();
-				let same = chars
-					.next()
-					.is_some_and(|ch| ch.to_lowercase().eq(want.to_lowercase()))
-					&& chars.next().is_none();
+				let same = chars.next().is_some_and(|ch| ch.to_lowercase().eq(want.to_lowercase())) && chars.next().is_none();
 				let shift_fits = shift_ok || (shift_loose && want.is_ascii_digit());
-				(same && shift_fits)
-					|| (self.shift && shift_ok && us_shifted(want) == Some(typed.as_str()))
+				(same && shift_fits) || (self.shift && shift_ok && us_shifted(want) == Some(typed.as_str()))
 			}
 			_ => false,
 		}
@@ -272,21 +223,8 @@ pub enum Press {
 pub fn press(key: &Key, mods: ModifiersState, mac: bool) -> Press {
 	let shift = mods.shift_key();
 	let name = match key {
-		Key::Named(
-			NamedKey::Shift
-			| NamedKey::Control
-			| NamedKey::Alt
-			| NamedKey::AltGraph
-			| NamedKey::Super
-			| NamedKey::Meta
-			| NamedKey::Hyper
-			| NamedKey::CapsLock
-			| NamedKey::NumLock
-			| NamedKey::Fn,
-		) => return Press::Held,
-		Key::Named(named) if NAMED_KEYS.iter().any(|(_, each)| each == named) => {
-			KeyName::Named(*named)
-		}
+		Key::Named(NamedKey::Shift | NamedKey::Control | NamedKey::Alt | NamedKey::AltGraph | NamedKey::Super | NamedKey::Meta | NamedKey::Hyper | NamedKey::CapsLock | NamedKey::NumLock | NamedKey::Fn) => return Press::Held,
+		Key::Named(named) if NAMED_KEYS.iter().any(|(_, each)| each == named) => KeyName::Named(*named),
 		Key::Character(typed) => {
 			let mut chars = typed.chars();
 			let (Some(ch), None) = (chars.next(), chars.next()) else {
@@ -299,28 +237,16 @@ pub fn press(key: &Key, mods: ModifiersState, mac: bool) -> Press {
 					return Press::Refused("That key can't be a hotkey".into());
 				}
 				_ => {
-					let base = shift
-						.then(|| (' '..='~').find(|base| us_shifted(*base) == Some(typed.as_str())))
-						.flatten();
+					let base = shift.then(|| (' '..='~').find(|base| us_shifted(*base) == Some(typed.as_str()))).flatten();
 					KeyName::Char(base.unwrap_or_else(|| ch.to_lowercase().next().unwrap_or(ch)))
 				}
 			}
 		}
 		_ => return Press::Refused("That key can't be a hotkey".into()),
 	};
-	let chord = Chord {
-		key: name,
-		ctrl: mods.control_key(),
-		alt: mods.alt_key(),
-		shift,
-		command: mods.super_key(),
-	};
+	let chord = Chord { key: name, ctrl: mods.control_key(), alt: mods.alt_key(), shift, command: mods.super_key() };
 	if !(chord.ctrl || chord.alt || chord.command || name.free_alone()) {
-		let need = if mac {
-			"Control, Option, or Command"
-		} else {
-			"Ctrl, Alt, or Super"
-		};
+		let need = if mac { "Control, Option, or Command" } else { "Ctrl, Alt, or Super" };
 		return Press::Refused(format!("{} needs {need} held", chord.spoken(mac)));
 	}
 	Press::Chord(chord)
@@ -341,11 +267,7 @@ pub fn value_text(chords: &[Chord], mac: bool) -> String {
 	if chords.is_empty() {
 		return "none".into();
 	}
-	chords
-		.iter()
-		.map(|chord| chord.spoken(mac))
-		.collect::<Vec<_>>()
-		.join(" ")
+	chords.iter().map(|chord| chord.spoken(mac)).collect::<Vec<_>>().join(" ")
 }
 
 // Every hotkey there is: its name under `keys:` in the config file, then its
@@ -386,32 +308,21 @@ const TEMPLATE_GROUPS: &[&str] = &["new_tab", "split_right", "font_bigger", "new
 
 /// The config path of a hotkey, `keys.split_right`, if it can be bound.
 pub fn config_path(hotkey: Hotkey) -> Option<String> {
-	TABLE
-		.iter()
-		.find(|(each, ..)| *each == hotkey)
-		.map(|(_, name, ..)| format!("keys.{name}"))
+	TABLE.iter().find(|(each, ..)| *each == hotkey).map(|(_, name, ..)| format!("keys.{name}"))
 }
 
 /// The hotkey a config path binds, `keys.split_right`.
 pub fn hotkey_at(path: &str) -> Option<Hotkey> {
 	let name = path.strip_prefix("keys.")?;
-	TABLE
-		.iter()
-		.find(|(_, each, ..)| *each == name)
-		.map(|(hotkey, ..)| *hotkey)
+	TABLE.iter().find(|(_, each, ..)| *each == name).map(|(hotkey, ..)| *hotkey)
 }
 
 /// Every hotkey that can be bound, with its config path, in table order.
 pub fn config_paths() -> impl Iterator<Item = (Hotkey, String)> {
-	TABLE
-		.iter()
-		.map(|(hotkey, name, ..)| (*hotkey, format!("keys.{name}")))
+	TABLE.iter().map(|(hotkey, name, ..)| (*hotkey, format!("keys.{name}")))
 }
 
-fn default_text(
-	row: &(Hotkey, &'static str, &'static str, &'static str),
-	mac: bool,
-) -> &'static str {
+fn default_text(row: &(Hotkey, &'static str, &'static str, &'static str), mac: bool) -> &'static str {
 	if mac { row.3 } else { row.2 }
 }
 
@@ -423,12 +334,7 @@ pub fn template_lines(mac: bool) -> String {
 			out.push('\n');
 		}
 		// writing to a String can't fail
-		let _ = writeln!(
-			out,
-			"\t# {}: \"{}\"  ## Default",
-			row.1,
-			default_text(row, mac)
-		);
+		let _ = writeln!(out, "\t# {}: \"{}\"  ## Default", row.1, default_text(row, mac));
 	}
 	out
 }
@@ -477,23 +383,13 @@ impl Bindings {
 		// (hotkey, chords, whether the file set them)
 		let mut list: Vec<(Hotkey, Vec<Chord>, bool)> = TABLE
 			.iter()
-			.map(
-				|row| match set.iter().find(|(hotkey, _)| *hotkey == row.0) {
-					Some((_, chords)) => (row.0, chords.clone(), true),
-					// the table is checked by test, so a failed parse can't happen
-					None => (
-						row.0,
-						parse_value(default_text(row, mac)).unwrap_or_default(),
-						false,
-					),
-				},
-			)
+			.map(|row| match set.iter().find(|(hotkey, _)| *hotkey == row.0) {
+				Some((_, chords)) => (row.0, chords.clone(), true),
+				// the table is checked by test, so a failed parse can't happen
+				None => (row.0, parse_value(default_text(row, mac)).unwrap_or_default(), false),
+			})
 			.collect();
-		let own = list
-			.iter()
-			.filter(|(.., from_file)| *from_file)
-			.map(|(hotkey, chords, _)| (*hotkey, chords.clone()))
-			.collect();
+		let own = list.iter().filter(|(.., from_file)| *from_file).map(|(hotkey, chords, _)| (*hotkey, chords.clone())).collect();
 		let mut taken = Vec::new();
 		// the chords the file set are claimed first, then the defaults, in order
 		let mut claimed: Vec<(Chord, Hotkey)> = Vec::new();
@@ -504,26 +400,13 @@ impl Bindings {
 						claimed.push((*chord, *hotkey));
 						return true;
 					};
-					taken.push(Taken {
-						chord: *chord,
-						from: *hotkey,
-						by: *owner,
-						both_set: pass_set,
-					});
+					taken.push(Taken { chord: *chord, from: *hotkey, by: *owner, both_set: pass_set });
 					false
 				});
 			}
 		}
-		let list = list
-			.into_iter()
-			.map(|(hotkey, chords, _)| (hotkey, chords))
-			.collect();
-		Self {
-			list,
-			own,
-			taken,
-			mac,
-		}
+		let list = list.into_iter().map(|(hotkey, chords, _)| (hotkey, chords)).collect();
+		Self { list, own, taken, mac }
 	}
 
 	// What the launch tells the user about each chord one hotkey lost to another.
@@ -534,11 +417,7 @@ impl Bindings {
 			.map(|taken| {
 				let spoken = taken.chord.spoken(self.mac);
 				let (by, from) = (path(taken.by), path(taken.from));
-				if taken.both_set {
-					format!("`{by}` and `{from}` both use {spoken} - only `{by}` responds to it")
-				} else {
-					format!("{spoken} is set for `{by}`, so `{from}` no longer responds to it")
-				}
+				if taken.both_set { format!("`{by}` and `{from}` both use {spoken} - only `{by}` responds to it") } else { format!("{spoken} is set for `{by}`, so `{from}` no longer responds to it") }
 			})
 			.collect()
 	}
@@ -546,22 +425,14 @@ impl Bindings {
 	/// The value the config file sets for a hotkey, if it sets one. "none" is
 	/// set, and empty.
 	pub fn own(&self, hotkey: Hotkey) -> Option<&[Chord]> {
-		self.own
-			.iter()
-			.find(|(each, _)| *each == hotkey)
-			.map(|(_, chords)| chords.as_slice())
+		self.own.iter().find(|(each, _)| *each == hotkey).map(|(_, chords)| chords.as_slice())
 	}
 
 	/// These bindings with one hotkey's own value changed, or put back to its
 	/// default with None.
 	#[must_use]
 	pub fn with_own(&self, hotkey: Hotkey, chords: Option<Vec<Chord>>) -> Self {
-		let mut set: Vec<(Hotkey, Vec<Chord>)> = self
-			.own
-			.iter()
-			.filter(|(each, _)| *each != hotkey)
-			.cloned()
-			.collect();
+		let mut set: Vec<(Hotkey, Vec<Chord>)> = self.own.iter().filter(|(each, _)| *each != hotkey).cloned().collect();
 		if let Some(chords) = chords {
 			set.push((hotkey, chords));
 		}
@@ -577,21 +448,13 @@ impl Bindings {
 	/// The hotkey a press is, if any. A press with exactly the chord's keys held
 	/// wins over one that only fits loosely.
 	pub fn hotkey(&self, key: &Key, mods: ModifiersState) -> Option<Hotkey> {
-		let find = |loose| {
-			self.list
-				.iter()
-				.find(|(_, chords)| chords.iter().any(|c| c.matches(key, mods, loose)))
-				.map(|(hotkey, _)| *hotkey)
-		};
+		let find = |loose| self.list.iter().find(|(_, chords)| chords.iter().any(|c| c.matches(key, mods, loose))).map(|(hotkey, _)| *hotkey);
 		find(false).or_else(|| find(true))
 	}
 
 	/// Every chord a hotkey answers to, the one a menu shows first.
 	pub fn chords(&self, hotkey: Hotkey) -> &[Chord] {
-		self.list
-			.iter()
-			.find(|(each, _)| *each == hotkey)
-			.map_or(&[], |(_, chords)| chords.as_slice())
+		self.list.iter().find(|(each, _)| *each == hotkey).map_or(&[], |(_, chords)| chords.as_slice())
 	}
 
 	/// The chord a menu row shows for a hotkey.
@@ -608,11 +471,7 @@ impl Bindings {
 
 /// What is wrong with the `keys:` values in a config, each with the line it is
 /// on. `value` returns a path's raw text and its line numbers.
-pub fn complaints(
-	mac: bool,
-	value: impl Fn(&str) -> Option<(String, Vec<usize>)>,
-	cite: impl Fn(&[usize]) -> String,
-) -> Vec<String> {
+pub fn complaints(mac: bool, value: impl Fn(&str) -> Option<(String, Vec<usize>)>, cite: impl Fn(&[usize]) -> String) -> Vec<String> {
 	let mut out = Vec::new();
 	let mut set = Vec::new();
 	for (hotkey, path) in config_paths() {
@@ -655,12 +514,7 @@ mod tests {
 			for row in TABLE {
 				let text = default_text(row, mac);
 				let chords = parse_value(text).unwrap_or_else(|e| panic!("{}: {e}", row.1));
-				assert_eq!(
-					value_text(&chords, mac),
-					text,
-					"{} reads back as written",
-					row.1
-				);
+				assert_eq!(value_text(&chords, mac), text, "{} reads back as written", row.1);
 			}
 			let (bindings, notes) = Bindings::with(mac, &[]);
 			assert!(notes.is_empty(), "{notes:?}");
@@ -691,12 +545,7 @@ mod tests {
 		assert_eq!(chord("Menu").key, KeyName::Named(NamedKey::ContextMenu));
 		assert_eq!(chord("Ctrl+,").spoken(false), "Ctrl+,");
 		assert_eq!(parse_value("NONE").ok(), Some(Vec::new()));
-		assert_eq!(
-			parse_value("  Ctrl+Shift+W   Ctrl+F4 ")
-				.ok()
-				.map(|c| value_text(&c, false)),
-			Some("Ctrl+Shift+W Ctrl+F4".into())
-		);
+		assert_eq!(parse_value("  Ctrl+Shift+W   Ctrl+F4 ").ok().map(|c| value_text(&c, false)), Some("Ctrl+Shift+W Ctrl+F4".into()));
 	}
 
 	// A bad value names what is wrong with it, and a key that would stop
@@ -704,16 +553,7 @@ mod tests {
 	// Test ID: ddes3
 	#[test]
 	fn a_bad_chord_says_what_is_wrong() {
-		for (text, says) in [
-			("Ctrl++", "Plus"),
-			("Ctrl+", "Plus"),
-			("Ctlr+T", "isn't Ctrl, Alt, Shift, or Command"),
-			("Ctrl+Shift+Bogus", "is not a key name"),
-			("T", "needs Ctrl, Alt, or Command"),
-			("Shift+T", "needs Ctrl, Alt, or Command"),
-			("Left", "needs Ctrl, Alt, or Command"),
-			("Shift+Enter", "needs Ctrl, Alt, or Command"),
-		] {
+		for (text, says) in [("Ctrl++", "Plus"), ("Ctrl+", "Plus"), ("Ctlr+T", "isn't Ctrl, Alt, Shift, or Command"), ("Ctrl+Shift+Bogus", "is not a key name"), ("T", "needs Ctrl, Alt, or Command"), ("Shift+T", "needs Ctrl, Alt, or Command"), ("Left", "needs Ctrl, Alt, or Command"), ("Shift+Enter", "needs Ctrl, Alt, or Command")] {
 			let got = Chord::parse(text).expect_err(text).to_string();
 			assert!(got.contains(says), "{text}: {got}");
 		}
@@ -757,28 +597,10 @@ mod tests {
 		let (b, notes) = Bindings::with(false, &[(Hotkey::ClosePane, vec![chord("Ctrl+Shift+W")])]);
 		assert_eq!(b.hotkey(&typed("W"), ctrl_shift), Some(Hotkey::ClosePane));
 		assert_eq!(b.shown(Hotkey::CloseTab), Some(chord("Ctrl+F4")));
-		assert_eq!(
-			b.hotkey(&typed("W"), ALT_SHIFT),
-			None,
-			"the old one is gone"
-		);
-		assert_eq!(
-			notes,
-			[
-				"Ctrl+Shift+W is set for `keys.close_pane`, so `keys.close_tab` no longer responds to it"
-			]
-		);
-		let (b, notes) = Bindings::with(
-			false,
-			&[
-				(Hotkey::SplitDown, vec![chord("Alt+D")]),
-				(Hotkey::SplitRight, vec![chord("Alt+D")]),
-			],
-		);
-		assert_eq!(
-			b.hotkey(&typed("d"), ModifiersState::ALT),
-			Some(Hotkey::SplitRight)
-		);
+		assert_eq!(b.hotkey(&typed("W"), ALT_SHIFT), None, "the old one is gone");
+		assert_eq!(notes, ["Ctrl+Shift+W is set for `keys.close_pane`, so `keys.close_tab` no longer responds to it"]);
+		let (b, notes) = Bindings::with(false, &[(Hotkey::SplitDown, vec![chord("Alt+D")]), (Hotkey::SplitRight, vec![chord("Alt+D")])]);
+		assert_eq!(b.hotkey(&typed("d"), ModifiersState::ALT), Some(Hotkey::SplitRight));
 		assert_eq!(b.shown(Hotkey::SplitDown), None);
 		assert_eq!(notes.len(), 1, "{notes:?}");
 		assert!(notes[0].contains("both use Alt+D"), "{notes:?}");
@@ -819,10 +641,7 @@ mod tests {
 		let cite = |lines: &[usize]| format!(" line {}", lines[0]);
 		let said = complaints(false, file, cite);
 		assert_eq!(said.len(), 1, "{said:?}");
-		assert!(
-			said[0].starts_with("`keys.split_right` line 7 isn't used"),
-			"{said:?}"
-		);
+		assert!(said[0].starts_with("`keys.split_right` line 7 isn't used"), "{said:?}");
 		assert!(said[0].contains("Plsu is not a key name"), "{said:?}");
 	}
 
@@ -831,17 +650,11 @@ mod tests {
 	fn a_named_key_ignores_nothing_held() {
 		let b = Bindings::defaults(false);
 		let left = Key::Named(NamedKey::ArrowLeft);
-		assert_eq!(
-			b.hotkey(&left, ModifiersState::ALT),
-			Some(Hotkey::Focus(Toward::Left))
-		);
+		assert_eq!(b.hotkey(&left, ModifiersState::ALT), Some(Hotkey::Focus(Toward::Left)));
 		assert_eq!(b.hotkey(&left, ALT_SHIFT), None);
 		assert_eq!(b.hotkey(&left, NONE), None);
 		assert_eq!(b.hotkey(&left, ModifiersState::CONTROL), None);
-		assert_eq!(
-			b.hotkey(&Key::Named(NamedKey::F11), ModifiersState::SHIFT),
-			None
-		);
+		assert_eq!(b.hotkey(&Key::Named(NamedKey::F11), ModifiersState::SHIFT), None);
 	}
 
 	// A chord set in Settings by pressing it is one that same press answers to
@@ -855,65 +668,28 @@ mod tests {
 		let command = ModifiersState::SUPER;
 		let option_command = command.union(ModifiersState::ALT);
 		let left = Key::Named(NamedKey::ArrowLeft);
-		for (mac, key, mods, spoken) in [
-			(false, typed("T"), ctrl_shift, "Ctrl+Shift+T"),
-			(false, typed("r"), ctrl_alt, "Ctrl+Alt+R"),
-			(false, typed("+"), ALT_SHIFT, "Alt+Shift+Plus"),
-			(false, typed("_"), ALT_SHIFT, "Alt+Shift+Minus"),
-			(false, typed("="), ctrl, "Ctrl+Plus"),
-			(false, typed("{"), ctrl_shift, "Ctrl+Shift+["),
-			(false, typed("!"), ctrl_shift, "Ctrl+Shift+1"),
-			(false, typed(","), ctrl, "Ctrl+,"),
-			(false, Key::Named(NamedKey::F5), NONE, "F5"),
-			(false, left.clone(), ModifiersState::ALT, "Alt+Left"),
-			(true, typed("d"), command, "Command+D"),
-			(
-				true,
-				typed("{"),
-				command.union(ModifiersState::SHIFT),
-				"Shift+Command+[",
-			),
-			(true, left.clone(), option_command, "Option+Command+Left"),
-		] {
+		for (mac, key, mods, spoken) in [(false, typed("T"), ctrl_shift, "Ctrl+Shift+T"), (false, typed("r"), ctrl_alt, "Ctrl+Alt+R"), (false, typed("+"), ALT_SHIFT, "Alt+Shift+Plus"), (false, typed("_"), ALT_SHIFT, "Alt+Shift+Minus"), (false, typed("="), ctrl, "Ctrl+Plus"), (false, typed("{"), ctrl_shift, "Ctrl+Shift+["), (false, typed("!"), ctrl_shift, "Ctrl+Shift+1"), (false, typed(","), ctrl, "Ctrl+,"), (false, Key::Named(NamedKey::F5), NONE, "F5"), (false, left.clone(), ModifiersState::ALT, "Alt+Left"), (true, typed("d"), command, "Command+D"), (true, typed("{"), command.union(ModifiersState::SHIFT), "Shift+Command+["), (true, left.clone(), option_command, "Option+Command+Left")] {
 			let Press::Chord(chord) = press(&key, mods, mac) else {
 				panic!("{spoken} was not read as a chord");
 			};
 			assert_eq!(chord.spoken(mac), spoken);
-			assert_eq!(
-				Chord::parse(spoken).ok(),
-				Some(chord),
-				"{spoken} reads back"
-			);
+			assert_eq!(Chord::parse(spoken).ok(), Some(chord), "{spoken} reads back");
 			let (bound, _) = Bindings::with(mac, &[(Hotkey::Quit, vec![chord])]);
 			assert_eq!(bound.hotkey(&key, mods), Some(Hotkey::Quit), "{spoken}");
 		}
 		// a modifier alone is the start of a chord, not one
-		for named in [
-			NamedKey::Shift,
-			NamedKey::Control,
-			NamedKey::Alt,
-			NamedKey::Super,
-		] {
+		for named in [NamedKey::Shift, NamedKey::Control, NamedKey::Alt, NamedKey::Super] {
 			assert_eq!(press(&Key::Named(named), ctrl, false), Press::Held);
 		}
 		// a key that would stop typing at the shell says what it needs
-		for (mac, needs) in [
-			(false, "Ctrl, Alt, or Super"),
-			(true, "Control, Option, or Command"),
-		] {
+		for (mac, needs) in [(false, "Ctrl, Alt, or Super"), (true, "Control, Option, or Command")] {
 			let Press::Refused(why) = press(&typed("T"), ModifiersState::SHIFT, mac) else {
 				panic!("Shift+T taken as a hotkey");
 			};
 			assert_eq!(why, format!("Shift+T needs {needs} held"));
 		}
-		assert!(matches!(
-			press(&Key::Named(NamedKey::Enter), NONE, false),
-			Press::Refused(_)
-		));
-		assert!(matches!(
-			press(&Key::Named(NamedKey::MediaPlay), ctrl, false),
-			Press::Refused(_)
-		));
+		assert!(matches!(press(&Key::Named(NamedKey::Enter), NONE, false), Press::Refused(_)));
+		assert!(matches!(press(&Key::Named(NamedKey::MediaPlay), ctrl, false), Press::Refused(_)));
 	}
 
 	// What the file set is kept apart from what each hotkey answers to, so a
@@ -925,27 +701,12 @@ mod tests {
 		let base = Bindings::defaults(false);
 		assert!(base.own(Hotkey::CloseTab).is_none());
 		let moved = base.with_own(Hotkey::ClosePane, Some(vec![chord("Ctrl+Shift+W")]));
-		assert_eq!(
-			moved.own(Hotkey::ClosePane),
-			Some(&[chord("Ctrl+Shift+W")][..])
-		);
-		assert!(
-			moved.own(Hotkey::CloseTab).is_none(),
-			"close_tab lost a chord, set nothing"
-		);
+		assert_eq!(moved.own(Hotkey::ClosePane), Some(&[chord("Ctrl+Shift+W")][..]));
+		assert!(moved.own(Hotkey::CloseTab).is_none(), "close_tab lost a chord, set nothing");
 		assert_eq!(moved.chords(Hotkey::CloseTab), [chord("Ctrl+F4")]);
-		assert_eq!(
-			moved.taken(),
-			[Taken {
-				chord: chord("Ctrl+Shift+W"),
-				from: Hotkey::CloseTab,
-				by: Hotkey::ClosePane,
-				both_set: false,
-			}]
-		);
+		assert_eq!(moved.taken(), [Taken { chord: chord("Ctrl+Shift+W"), from: Hotkey::CloseTab, by: Hotkey::ClosePane, both_set: false }]);
 		// the same as the file saying it
-		let (from_file, _) =
-			Bindings::with(false, &[(Hotkey::ClosePane, vec![chord("Ctrl+Shift+W")])]);
+		let (from_file, _) = Bindings::with(false, &[(Hotkey::ClosePane, vec![chord("Ctrl+Shift+W")])]);
 		assert_eq!(moved, from_file);
 		// "none" is a value of its own, and None puts the default back
 		let off = moved.with_own(Hotkey::Copy, Some(Vec::new()));
@@ -954,9 +715,7 @@ mod tests {
 		assert_eq!(off.with_own(Hotkey::Copy, None), moved);
 		assert_eq!(moved.with_own(Hotkey::ClosePane, None), base);
 		// the same chord set for 2: the first in the table keeps it, and says so
-		let both = base
-			.with_own(Hotkey::SplitDown, Some(vec![chord("Alt+D")]))
-			.with_own(Hotkey::SplitRight, Some(vec![chord("Alt+D")]));
+		let both = base.with_own(Hotkey::SplitDown, Some(vec![chord("Alt+D")])).with_own(Hotkey::SplitRight, Some(vec![chord("Alt+D")]));
 		assert_eq!(both.taken().len(), 1);
 		assert!(both.taken()[0].both_set);
 		assert_eq!(both.taken()[0].by, Hotkey::SplitRight);

@@ -75,30 +75,13 @@ impl std::fmt::Debug for ImageRenderer {
 }
 
 impl ImageRenderer {
-	pub fn new(
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		format: wgpu::TextureFormat,
-		img: &crate::wallpaper::Prepared,
-	) -> Self {
+	pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat, img: &crate::wallpaper::Prepared) -> Self {
 		let rgba: &[u8] = &img.rgba;
 		let picture = img.rgba.dimensions();
 		// the plain pixels where the device takes no BC (bc1.rs, bc7.rs)
-		let blocks = img.blocks.as_ref().filter(|_| {
-			device
-				.features()
-				.contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
-		});
-		let (width, height) = if blocks.is_some() {
-			crate::bc1::padded(picture)
-		} else {
-			picture
-		};
-		let size = wgpu::Extent3d {
-			width,
-			height,
-			depth_or_array_layers: 1,
-		};
+		let blocks = img.blocks.as_ref().filter(|_| device.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC));
+		let (width, height) = if blocks.is_some() { crate::bc1::padded(picture) } else { picture };
+		let size = wgpu::Extent3d { width, height, depth_or_array_layers: 1 };
 		let texture = device.create_texture(&wgpu::TextureDescriptor {
 			label: Some("bg image"),
 			size,
@@ -107,147 +90,33 @@ impl ImageRenderer {
 			dimension: wgpu::TextureDimension::D2,
 			// sRGB either way, decoded by the sampler, so the shader reads the
 			// same linear light from both
-			format: blocks.map_or(wgpu::TextureFormat::Rgba8UnormSrgb, |blocks| {
-				blocks.packing.texture_format()
-			}),
-			usage: wgpu::TextureUsages::TEXTURE_BINDING
-				| wgpu::TextureUsages::COPY_DST
-				| wgpu::TextureUsages::COPY_SRC,
+			format: blocks.map_or(wgpu::TextureFormat::Rgba8UnormSrgb, |blocks| blocks.packing.texture_format()),
+			usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC,
 			view_formats: &[],
 		});
 		let (texels, bytes_per_row, rows) = match blocks {
-			Some(blocks) => (
-				blocks.bytes.as_slice(),
-				width / 4 * blocks.packing.block_bytes() as u32,
-				height / 4,
-			),
+			Some(blocks) => (blocks.bytes.as_slice(), width / 4 * blocks.packing.block_bytes() as u32, height / 4),
 			None => (rgba, 4 * width, height),
 		};
-		queue.write_texture(
-			wgpu::TexelCopyTextureInfo {
-				texture: &texture,
-				mip_level: 0,
-				origin: wgpu::Origin3d::ZERO,
-				aspect: wgpu::TextureAspect::All,
-			},
-			texels,
-			wgpu::TexelCopyBufferLayout {
-				offset: 0,
-				bytes_per_row: Some(bytes_per_row),
-				rows_per_image: Some(rows),
-			},
-			size,
-		);
+		queue.write_texture(wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, texels, wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(bytes_per_row), rows_per_image: Some(rows) }, size);
 		let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-		let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-			label: Some("bg sampler"),
-			mag_filter: wgpu::FilterMode::Linear,
-			min_filter: wgpu::FilterMode::Linear,
-			..Default::default()
-		});
+		let sampler = device.create_sampler(&wgpu::SamplerDescriptor { label: Some("bg sampler"), mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
 
-		let uniform = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("bg uniform"),
-			size: std::mem::size_of::<Uniform>() as u64,
-			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			mapped_at_creation: false,
-		});
+		let uniform = device.create_buffer(&wgpu::BufferDescriptor { label: Some("bg uniform"), size: std::mem::size_of::<Uniform>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
 
-		let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("bg bgl"),
-			entries: &[
-				wgpu::BindGroupLayoutEntry {
-					binding: 0,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Buffer {
-						ty: wgpu::BufferBindingType::Uniform,
-						has_dynamic_offset: false,
-						min_binding_size: None,
-					},
-					count: None,
-				},
-				wgpu::BindGroupLayoutEntry {
-					binding: 1,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Texture {
-						sample_type: wgpu::TextureSampleType::Float { filterable: true },
-						view_dimension: wgpu::TextureViewDimension::D2,
-						multisampled: false,
-					},
-					count: None,
-				},
-				wgpu::BindGroupLayoutEntry {
-					binding: 2,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-					count: None,
-				},
-			],
-		});
-		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-			label: Some("bg bind"),
-			layout: &bgl,
-			entries: &[
-				wgpu::BindGroupEntry {
-					binding: 0,
-					resource: uniform.as_entire_binding(),
-				},
-				wgpu::BindGroupEntry {
-					binding: 1,
-					resource: wgpu::BindingResource::TextureView(&view),
-				},
-				wgpu::BindGroupEntry {
-					binding: 2,
-					resource: wgpu::BindingResource::Sampler(&sampler),
-				},
-			],
-		});
+		let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("bg bgl"), entries: &[wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None }, wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }, count: None }, wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None }] });
+		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("bg bind"), layout: &bgl, entries: &[wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) }] });
 
-		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-			label: Some("bg shader"),
-			source: wgpu::ShaderSource::Wgsl(BG_WGSL.into()),
-		});
-		let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("bg layout"),
-			bind_group_layouts: &[Some(&bgl)],
-			immediate_size: 0,
-		});
-		let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-			label: Some("bg pipeline"),
-			layout: Some(&layout),
-			vertex: wgpu::VertexState {
-				module: &shader,
-				entry_point: Some("vs"),
-				compilation_options: Default::default(),
-				buffers: &[],
-			},
-			fragment: Some(wgpu::FragmentState {
-				module: &shader,
-				entry_point: Some("fs"),
-				compilation_options: Default::default(),
-				targets: &[Some(wgpu::ColorTargetState {
-					format,
-					blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-					write_mask: wgpu::ColorWrites::ALL,
-				})],
-			}),
-			primitive: wgpu::PrimitiveState {
-				topology: wgpu::PrimitiveTopology::TriangleStrip,
-				..Default::default()
-			},
-			depth_stencil: None,
-			multisample: wgpu::MultisampleState::default(),
-			multiview_mask: None,
-			cache: None,
-		});
+		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("bg shader"), source: wgpu::ShaderSource::Wgsl(BG_WGSL.into()) });
+		let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("bg layout"), bind_group_layouts: &[Some(&bgl)], immediate_size: 0 });
+		let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor { label: Some("bg pipeline"), layout: Some(&layout), vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] }, fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fs"), compilation_options: Default::default(), targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })] }), primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() }, depth_stencil: None, multisample: wgpu::MultisampleState::default(), multiview_mask: None, cache: None });
 
 		// Reference block from the image center (corners are more likely to be a
 		// flat color a zero-wipe could coincidentally match). The probe runs on
 		// GL only, and GL can't copy a compressed texture out (wgpu-hal skips
 		// it and the read would come back zeros), so a BC picture has none. The
 		// sentinels and the VT watcher still stand.
-		let probe_at = (blocks.is_none() && width >= PROBE_SIDE && height >= PROBE_SIDE)
-			.then(|| ((width - PROBE_SIDE) / 2, (height - PROBE_SIDE) / 2));
+		let probe_at = (blocks.is_none() && width >= PROBE_SIDE && height >= PROBE_SIDE).then(|| ((width - PROBE_SIDE) / 2, (height - PROBE_SIDE) / 2));
 		let probe_ref = probe_at.map_or_else(Vec::new, |(bx, by)| {
 			let mut block = Vec::with_capacity(PROBE_BYTES);
 			for row in 0..PROBE_SIDE {
@@ -258,33 +127,7 @@ impl ImageRenderer {
 		});
 		let probe_read = BlockReadback::new(device, "bg probe read", PROBE_SIDE, 1);
 
-		Self {
-			pipeline,
-			bind_group,
-			uniform,
-			image_size: [img.sizing.full.0 as f32, img.sizing.full.1 as f32],
-			sizing: img.sizing,
-			held: img.held,
-			border: img.border,
-			picture,
-			opacity: img.opacity,
-			fit: if img.fit == Fit::Zoom { 1.0 } else { 0.0 },
-			anchor: [img.anchor[0].clamp(0.0, 1.0), img.anchor[1].clamp(0.0, 1.0)],
-			standin: false,
-			texture,
-			probe_at,
-			probe_ref,
-			probe_read,
-			last: std::cell::Cell::new((
-				0.0,
-				0.0,
-				crate::visibility::Mix {
-					amount: -1.0,
-					perceptual: false,
-				},
-				[0.0; 4],
-			)),
-		}
+		Self { pipeline, bind_group, uniform, image_size: [img.sizing.full.0 as f32, img.sizing.full.1 as f32], sizing: img.sizing, held: img.held, border: img.border, picture, opacity: img.opacity, fit: if img.fit == Fit::Zoom { 1.0 } else { 0.0 }, anchor: [img.anchor[0].clamp(0.0, 1.0), img.anchor[1].clamp(0.0, 1.0)], standin: false, texture, probe_at, probe_ref, probe_read, last: std::cell::Cell::new((0.0, 0.0, crate::visibility::Mix { amount: -1.0, perceptual: false }, [0.0; 4])) }
 	}
 
 	/// Built from `Prepared::standin` while the real picture is prepared again.
@@ -328,33 +171,13 @@ impl ImageRenderer {
 
 	/// Called per frame. fit/anchor are fixed at construction, so the uniform only
 	/// changes on a resize, or when the mode or the visibility moves.
-	pub fn set_look(
-		&self,
-		queue: &wgpu::Queue,
-		w: f32,
-		h: f32,
-		mix: crate::visibility::Mix,
-		bg: [f32; 4],
-	) {
+	pub fn set_look(&self, queue: &wgpu::Queue, w: f32, h: f32, mix: crate::visibility::Mix, bg: [f32; 4]) {
 		let now = (w, h, mix, bg);
 		if self.last.get() == now {
 			return;
 		}
 		self.last.set(now);
-		let uniform_data = Uniform {
-			resolution: [w, h],
-			image_size: self.image_size,
-			amount: mix.amount,
-			fit: self.fit,
-			anchor: self.anchor,
-			bg,
-			perceptual: if mix.perceptual { 1.0 } else { 0.0 },
-			standin: if self.standin { 1.0 } else { 0.0 },
-			border: if self.border { 1.0 } else { 0.0 },
-			padded: if self.padded() { 1.0 } else { 0.0 },
-			picture: [self.picture.0 as f32, self.picture.1 as f32],
-			_pad: [0.0; 2],
-		};
+		let uniform_data = Uniform { resolution: [w, h], image_size: self.image_size, amount: mix.amount, fit: self.fit, anchor: self.anchor, bg, perceptual: if mix.perceptual { 1.0 } else { 0.0 }, standin: if self.standin { 1.0 } else { 0.0 }, border: if self.border { 1.0 } else { 0.0 }, padded: if self.padded() { 1.0 } else { 0.0 }, picture: [self.picture.0 as f32, self.picture.1 as f32], _pad: [0.0; 2] };
 		queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&uniform_data));
 	}
 
@@ -375,20 +198,14 @@ impl ImageRenderer {
 		let Some((bx, by)) = self.probe_at else {
 			return false;
 		};
-		self.probe_read.start(
-			device,
-			queue,
-			&[(&self.texture, wgpu::Origin3d { x: bx, y: by, z: 0 })],
-		)
+		self.probe_read.start(device, queue, &[(&self.texture, wgpu::Origin3d { x: bx, y: by, z: 0 })])
 	}
 
 	/// Poll an in-flight probe. Lost isn't reseeded here. On loss the caller
 	/// reloads the wallpaper wholesale (`recover_gpu`), replacing this instance.
 	pub fn vram_check_poll(&mut self, device: &wgpu::Device) -> Option<WpProbe> {
 		let probe_ref = &self.probe_ref;
-		let read = self
-			.probe_read
-			.poll(device, |data| data[..] == probe_ref[..])?;
+		let read = self.probe_read.poll(device, |data| data[..] == probe_ref[..])?;
 		Some(match read {
 			Ok(true) => WpProbe::Intact,
 			Ok(false) => WpProbe::Lost,
@@ -401,25 +218,7 @@ impl ImageRenderer {
 		let Some((bx, by)) = self.probe_at else {
 			return;
 		};
-		queue.write_texture(
-			wgpu::TexelCopyTextureInfo {
-				texture: &self.texture,
-				mip_level: 0,
-				origin: wgpu::Origin3d { x: bx, y: by, z: 0 },
-				aspect: wgpu::TextureAspect::All,
-			},
-			&[0u8; PROBE_BYTES],
-			wgpu::TexelCopyBufferLayout {
-				offset: 0,
-				bytes_per_row: Some(PROBE_SIDE * 4),
-				rows_per_image: Some(PROBE_SIDE),
-			},
-			wgpu::Extent3d {
-				width: PROBE_SIDE,
-				height: PROBE_SIDE,
-				depth_or_array_layers: 1,
-			},
-		);
+		queue.write_texture(wgpu::TexelCopyTextureInfo { texture: &self.texture, mip_level: 0, origin: wgpu::Origin3d { x: bx, y: by, z: 0 }, aspect: wgpu::TextureAspect::All }, &[0u8; PROBE_BYTES], wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(PROBE_SIDE * 4), rows_per_image: Some(PROBE_SIDE) }, wgpu::Extent3d { width: PROBE_SIDE, height: PROBE_SIDE, depth_or_array_layers: 1 });
 	}
 }
 
@@ -551,12 +350,7 @@ mod tests {
 	fn the_wallpaper_shader_compiles() {
 		use wgpu::naga;
 		let module = naga::front::wgsl::parse_str(BG_WGSL).expect("the wallpaper shader parses");
-		naga::valid::Validator::new(
-			naga::valid::ValidationFlags::all(),
-			naga::valid::Capabilities::empty(),
-		)
-		.validate(&module)
-		.expect("the wallpaper shader validates");
+		naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::empty()).validate(&module).expect("the wallpaper shader validates");
 		// and the Rust side of the uniform still lines up with the WGSL one
 		assert_eq!(std::mem::size_of::<Uniform>(), 80);
 		assert_eq!(std::mem::offset_of!(Uniform, standin), 52);
@@ -584,12 +378,8 @@ mod tests {
 	fn only_a_bordered_texture_is_remapped() {
 		let fs = BG_WGSL.split("fn fs(").nth(1).expect("the fragment shader");
 		let guard = fs.find("if (u.border > 0.5)").expect("no guard");
-		let remap = fs
-			.find("uv = (uv * (size - 2.0) + 1.0) / size;")
-			.expect("no remap");
-		let sample = fs
-			.find("var c = textureSample(tex, samp, uv);")
-			.expect("no sample");
+		let remap = fs.find("uv = (uv * (size - 2.0) + 1.0) / size;").expect("no remap");
+		let sample = fs.find("var c = textureSample(tex, samp, uv);").expect("no sample");
 		assert!(guard < remap && remap < sample);
 		assert_eq!(fs.matches("(size - 2.0)").count(), 1);
 	}

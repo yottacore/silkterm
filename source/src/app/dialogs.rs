@@ -4,9 +4,7 @@
 //! The About and Settings windows and the save notice, as the main window
 //! drives them.
 
-use super::{
-	App, EnvFlag, RAISE_REASSERT_IVL, RAISE_REASSERTS, State, env_flag, key_is_typed, open_url,
-};
+use super::{App, EnvFlag, RAISE_REASSERT_IVL, RAISE_REASSERTS, State, env_flag, key_is_typed, open_url};
 use crate::config;
 use crate::input;
 use std::time::Instant;
@@ -20,15 +18,8 @@ impl App {
 		use crate::dialog::DialogAction as DA;
 		if env_flag(EnvFlag::DlgDbg) {
 			match &event {
-				WindowEvent::KeyboardInput {
-					event: k,
-					is_synthetic,
-					..
-				} => {
-					eprintln!(
-						"[dlg] key {:?} {:?} synthetic={is_synthetic}",
-						k.logical_key, k.state
-					);
+				WindowEvent::KeyboardInput { event: k, is_synthetic, .. } => {
+					eprintln!("[dlg] key {:?} {:?} synthetic={is_synthetic}", k.logical_key, k.state);
 				}
 				WindowEvent::Focused(f) => eprintln!("[dlg] focused {f}"),
 				WindowEvent::MouseInput { state, button, .. } => {
@@ -93,11 +84,7 @@ impl App {
 					self.dialog_dirty = true;
 				}
 			}
-			WindowEvent::MouseInput {
-				state: ElementState::Pressed,
-				button,
-				..
-			} => {
+			WindowEvent::MouseInput { state: ElementState::Pressed, button, .. } => {
 				if let Some(d) = &mut self.dialog {
 					match input::acting_button(button, d.mods(), cfg!(target_os = "macos")) {
 						MouseButton::Left => {
@@ -115,21 +102,13 @@ impl App {
 					}
 				}
 			}
-			WindowEvent::MouseInput {
-				state: ElementState::Released,
-				button: MouseButton::Left,
-				..
-			} => {
+			WindowEvent::MouseInput { state: ElementState::Released, button: MouseButton::Left, .. } => {
 				if let Some(d) = &mut self.dialog {
 					act = d.mouse_up();
 					self.dialog_dirty = true;
 				}
 			}
-			WindowEvent::KeyboardInput {
-				event: key_event,
-				is_synthetic,
-				..
-			} if key_is_typed(key_event.state, is_synthetic) => {
+			WindowEvent::KeyboardInput { event: key_event, is_synthetic, .. } if key_is_typed(key_event.state, is_synthetic) => {
 				let key_event = input::name_typed(key_event);
 				if let Some(d) = &mut self.dialog {
 					if d.capture_key(&key_event.logical_key) {
@@ -159,12 +138,7 @@ impl App {
 						Key::Named(NamedKey::ArrowDown) => d.focus_vertical(true),
 						Key::Named(NamedKey::ArrowLeft) => d.key_horizontal(-1),
 						Key::Named(NamedKey::ArrowRight) => d.key_horizontal(1),
-						Key::Named(
-							nav_key @ (NamedKey::Home
-							| NamedKey::End
-							| NamedKey::Delete
-							| NamedKey::Insert),
-						) => {
+						Key::Named(nav_key @ (NamedKey::Home | NamedKey::End | NamedKey::Delete | NamedKey::Insert)) => {
 							let clip = self.state.as_mut().map(|s| &mut s.clipboard);
 							d.edit_nav(*nav_key, clip);
 						}
@@ -224,22 +198,10 @@ impl App {
 		// placed yet, so its own is wherever the origin is
 		let work = {
 			use winit::raw_window_handle::HasWindowHandle;
-			state
-				.window
-				.window_handle()
-				.ok()
-				.map(|h| h.as_raw())
-				.and_then(crate::dialog::work_area_of)
+			state.window.window_handle().ok().map(|h| h.as_raw()).and_then(crate::dialog::work_area_of)
 		};
-		let (x, y) = crate::dialog::dialog_origin(
-			(pos.x, pos.y),
-			(win.width, win.height),
-			(dlg.width, dlg.height),
-			work,
-		);
-		dialog
-			.window
-			.set_outer_position(winit::dpi::PhysicalPosition::new(x, y));
+		let (x, y) = crate::dialog::dialog_origin((pos.x, pos.y), (win.width, win.height), (dlg.width, dlg.height), work);
+		dialog.window.set_outer_position(winit::dpi::PhysicalPosition::new(x, y));
 	}
 	#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 	#[allow(clippy::unused_self, reason = "the same call as the version above")]
@@ -256,26 +218,16 @@ impl App {
 		}
 	}
 	#[cfg(not(target_os = "windows"))]
-	#[allow(
-		clippy::unused_self,
-		reason = "the same call as the Windows version above"
-	)]
+	#[allow(clippy::unused_self, reason = "the same call as the Windows version above")]
 	pub(super) fn reveal_dialog(&self) {}
 
 	// Drop the dialog window, remembering a Settings view on the way out so a
 	// reopen within SETTINGS_RESUME picks up where it left off. Every close goes
 	// through here: Cancel, OK, Esc, and the window's own close button.
 	fn close_dialog(&mut self) {
-		if let Some(view) = self
-			.dialog
-			.as_ref()
-			.and_then(crate::dialog::DialogWin::settings_view)
-		{
+		if let Some(view) = self.dialog.as_ref().and_then(crate::dialog::DialogWin::settings_view) {
 			self.settings_view = Some((Instant::now(), view));
-			self.settings_size = self
-				.dialog
-				.as_ref()
-				.and_then(crate::dialog::DialogWin::settings_size);
+			self.settings_size = self.dialog.as_ref().and_then(crate::dialog::DialogWin::settings_size);
 		}
 		self.dialog = None;
 	}
@@ -310,20 +262,12 @@ impl App {
 					self.notice_dirty = true;
 				}
 			}
-			WindowEvent::MouseInput {
-				state: ElementState::Pressed,
-				button: MouseButton::Left,
-				..
-			} => {
+			WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
 				act = n.mouse_down(None);
 				self.notice_dirty = true;
 			}
 			WindowEvent::ModifiersChanged(mods) => n.set_mods(mods.state()),
-			WindowEvent::KeyboardInput {
-				event: key_event,
-				is_synthetic,
-				..
-			} if key_is_typed(key_event.state, is_synthetic) => {
+			WindowEvent::KeyboardInput { event: key_event, is_synthetic, .. } if key_is_typed(key_event.state, is_synthetic) => {
 				act = match &input::name_typed(key_event).logical_key {
 					Key::Named(NamedKey::Escape) => n.key_escape(),
 					Key::Named(NamedKey::Enter) => n.key_enter(None),
@@ -384,12 +328,7 @@ impl App {
 		} else {
 			return;
 		};
-		let parent = self
-			.dialog
-			.as_ref()
-			.map(|d| &d.window)
-			.or(self.state.as_ref().map(|s| &s.window))
-			.and_then(|w| crate::dialog::Parent::of(w));
+		let parent = self.dialog.as_ref().map(|d| &d.window).or(self.state.as_ref().map(|s| &s.window)).and_then(|w| crate::dialog::Parent::of(w));
 		#[cfg(target_os = "windows")]
 		{
 			let _ = event_loop;
@@ -404,13 +343,7 @@ impl App {
 		#[cfg(not(target_os = "windows"))]
 		{
 			let warm = self.gpu_warm.get();
-			match crate::dialog::DialogWin::new_notice(
-				event_loop,
-				title,
-				&paras,
-				parent,
-				warm.as_ref(),
-			) {
+			match crate::dialog::DialogWin::new_notice(event_loop, title, &paras, parent, warm.as_ref()) {
 				Ok(n) => {
 					self.notice = Some(n);
 					self.notice_dirty = true;
@@ -448,11 +381,7 @@ impl App {
 	fn apply_dialog_settings(&mut self) -> bool {
 		let mut wrote = true;
 		let mut refused = false;
-		if let Some((orig, edited, mut unsaved)) = self
-			.dialog
-			.as_ref()
-			.and_then(crate::dialog::DialogWin::settings_values)
-		{
+		if let Some((orig, edited, mut unsaved)) = self.dialog.as_ref().and_then(crate::dialog::DialogWin::settings_values) {
 			if let Some(state) = self.state.as_mut() {
 				unsaved = state.apply_settings_values(&orig, edited, unsaved);
 				wrote = unsaved.is_none();
@@ -466,12 +395,7 @@ impl App {
 			// Keys reverted to default get commented back out after persist wrote the diffs,
 			// so the file returns to the template's default line. Skipped when the write was
 			// deferred.
-			if wrote
-				&& let Some(reverted) = self
-					.dialog
-					.as_mut()
-					.map(crate::dialog::DialogWin::take_reverted)
-			{
+			if wrote && let Some(reverted) = self.dialog.as_mut().map(crate::dialog::DialogWin::take_reverted) {
 				config::revert_keys(&reverted);
 			}
 			// The applied values are the new baseline, so a later Apply diffs against the
@@ -481,7 +405,9 @@ impl App {
 			// When another window saved while these changes were open, the file has
 			// both, and the window and the dialog both take it from there.
 			if let Some(d) = self.dialog.as_mut() {
-				let behind = wrote && d.take_behind();
+				// a new theme the file already had a key for went under another one
+				let moved = config::take_theme_key_moved();
+				let behind = wrote && (d.take_behind() || moved);
 				d.commit_baseline(unsaved);
 				if let Some(state) = self.state.as_mut().filter(|_| behind) {
 					state.follow_peer();
@@ -504,11 +430,7 @@ fn clipboard_has_text(state: Option<&mut State>) -> bool {
 /// in Settings, is answered every time, or the button would seem to do nothing.
 /// The others (a resize, a menu switch, shells found at launch) are said once a
 /// session for each file, or every resize would raise it again.
-pub(super) fn notice_due(
-	told: &mut Vec<std::path::PathBuf>,
-	path: &std::path::Path,
-	asked: bool,
-) -> bool {
+pub(super) fn notice_due(told: &mut Vec<std::path::PathBuf>, path: &std::path::Path, asked: bool) -> bool {
 	let first = !told.iter().any(|seen| seen == path);
 	if first {
 		told.push(path.to_path_buf());
@@ -525,21 +447,14 @@ static NOTICE_UP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool:
 #[cfg(target_os = "windows")]
 fn message_box(owner: isize, title: &str, body: &str) {
 	use std::sync::atomic::Ordering;
-	use windows_sys::Win32::UI::WindowsAndMessaging::{
-		MB_ICONWARNING, MB_OK, MB_SETFOREGROUND, MessageBoxW,
-	};
+	use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONWARNING, MB_OK, MB_SETFOREGROUND, MessageBoxW};
 	let wide = |text: &str| text.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
 	let (title, body) = (wide(title), wide(body));
 	NOTICE_UP.store(true, Ordering::SeqCst);
 	std::thread::spawn(move || {
 		// SAFETY: both strings are NUL-terminated and outlive the call
 		unsafe {
-			MessageBoxW(
-				owner as windows_sys::Win32::Foundation::HWND,
-				body.as_ptr(),
-				title.as_ptr(),
-				MB_OK | MB_ICONWARNING | MB_SETFOREGROUND,
-			);
+			MessageBoxW(owner as windows_sys::Win32::Foundation::HWND, body.as_ptr(), title.as_ptr(), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
 		}
 		NOTICE_UP.store(false, Ordering::SeqCst);
 	});
@@ -554,10 +469,7 @@ fn no_device_words(macos: bool, why: &str) -> (String, String) {
 		return (format!("no usable GPU/renderer: {why}"), String::new());
 	}
 	(
-		format!(
-			"{} needs a Metal graphics device, and none could be used.",
-			config::APP_NAME
-		),
+		format!("{} needs a Metal graphics device, and none could be used.", config::APP_NAME),
 		format!(
 			"macOS has no software renderer to draw with instead, so a Mac without Metal, \
 			such as a virtual machine with no graphics acceleration, can't run it.\n\n{why}"
@@ -606,14 +518,8 @@ pub(super) enum Underneath {
 /// Settings open and lost the changes.
 pub(super) fn underneath(event: &WindowEvent) -> Underneath {
 	match event {
-		WindowEvent::KeyboardInput { .. }
-		| WindowEvent::MouseWheel { .. }
-		| WindowEvent::Ime(_) => Underneath::Drops,
-		WindowEvent::MouseInput {
-			state: ElementState::Pressed,
-			..
-		}
-		| WindowEvent::CloseRequested => Underneath::Raises,
+		WindowEvent::KeyboardInput { .. } | WindowEvent::MouseWheel { .. } | WindowEvent::Ime(_) => Underneath::Drops,
+		WindowEvent::MouseInput { state: ElementState::Pressed, .. } | WindowEvent::CloseRequested => Underneath::Raises,
 		_ => Underneath::Takes,
 	}
 }
@@ -631,24 +537,11 @@ mod tests {
 		use super::{Underneath, underneath};
 		use winit::event::{DeviceId, ElementState, Ime, MouseButton, WindowEvent};
 		let device_id = DeviceId::dummy();
-		let press = |state| WindowEvent::MouseInput {
-			device_id,
-			state,
-			button: MouseButton::Left,
-		};
+		let press = |state| WindowEvent::MouseInput { device_id, state, button: MouseButton::Left };
 		assert_eq!(underneath(&WindowEvent::CloseRequested), Underneath::Raises);
-		assert_eq!(
-			underneath(&press(ElementState::Pressed)),
-			Underneath::Raises
-		);
-		assert_eq!(
-			underneath(&press(ElementState::Released)),
-			Underneath::Takes
-		);
-		assert_eq!(
-			underneath(&WindowEvent::Ime(Ime::Enabled)),
-			Underneath::Drops
-		);
+		assert_eq!(underneath(&press(ElementState::Pressed)), Underneath::Raises);
+		assert_eq!(underneath(&press(ElementState::Released)), Underneath::Takes);
+		assert_eq!(underneath(&WindowEvent::Ime(Ime::Enabled)), Underneath::Drops);
 		assert_eq!(underneath(&WindowEvent::Focused(true)), Underneath::Takes);
 		assert_eq!(underneath(&WindowEvent::RedrawRequested), Underneath::Takes);
 	}
@@ -661,15 +554,9 @@ mod tests {
 		let (headline, detail) = super::no_device_words(true, "No suitable graphics adapter found");
 		assert!(headline.contains("Metal"), "{headline}");
 		assert!(detail.contains("no software renderer"), "{detail}");
-		assert!(
-			detail.ends_with("No suitable graphics adapter found"),
-			"{detail}"
-		);
+		assert!(detail.ends_with("No suitable graphics adapter found"), "{detail}");
 		let (headline, detail) = super::no_device_words(false, "boom");
-		assert_eq!(
-			headline, "no usable GPU/renderer: boom",
-			"unchanged elsewhere"
-		);
+		assert_eq!(headline, "no usable GPU/renderer: boom", "unchanged elsewhere");
 		assert!(detail.is_empty());
 	}
 

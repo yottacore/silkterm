@@ -47,17 +47,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	// forward slashes so the absolute path needs no backslash escaping, and works
 	// under both rc.exe and windres (incl. windres running on the Linux cross-build)
-	let icon = Path::new(&manifest)
-		.join("assets/icon.ico")
-		.to_string_lossy()
-		.replace('\\', "/");
+	let icon = Path::new(&manifest).join("assets/icon.ico").to_string_lossy().replace('\\', "/");
 
 	let template = fs::read_to_string(Path::new(&manifest).join("assets/silkterm.rc.in"))?;
-	let rc = template
-		.replace("@ICON@", &icon)
-		.replace("@VER_CSV@", &format!("{major},{minor},{patch},0"))
-		.replace("@VER_STR@", &ver_str)
-		.replace("@DESC@", &desc);
+	let rc = template.replace("@ICON@", &icon).replace("@VER_CSV@", &format!("{major},{minor},{patch},0")).replace("@VER_STR@", &ver_str).replace("@DESC@", &desc);
 
 	let rc_path = Path::new(&out).join("silkterm.rc");
 	fs::write(&rc_path, rc)?;
@@ -82,10 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	Ok(())
 }
 
-#[allow(
-	clippy::expect_used,
-	reason = "cargo sets these for every build script run"
-)]
+#[allow(clippy::expect_used, reason = "cargo sets these for every build script run")]
 fn cargo_env(name: &str) -> String {
 	env::var(name).expect("set by cargo for a build script")
 }
@@ -112,19 +102,14 @@ fn emit_build_number() {
 		minutes_since_2000(unix_now())
 	} else {
 		pinned.parse::<u64>().unwrap_or_else(|_| {
-			println!(
-				"cargo:warning=SILK_BUILD_MINUTES is not a number ({pinned}); using the clock"
-			);
+			println!("cargo:warning=SILK_BUILD_MINUTES is not a number ({pinned}); using the clock");
 			minutes_since_2000(unix_now())
 		})
 	};
 	println!("cargo:rustc-env=SILK_BUILD={}", crockford32(minutes));
 	// The date shown beside a non-release build is worked out when the build
 	// number is viewed, in the viewer's time zone, so only the instant goes in.
-	println!(
-		"cargo:rustc-env=SILK_BUILD_UNIX={}",
-		EPOCH_2000_UNIX + minutes * 60
-	);
+	println!("cargo:rustc-env=SILK_BUILD_UNIX={}", EPOCH_2000_UNIX + minutes * 60);
 
 	// A release build shows the number alone. cicd sets SILK_RELEASE=1 for the
 	// run that can be tagged.
@@ -136,9 +121,7 @@ fn emit_build_number() {
 // Seconds since the unix epoch. A clock set before 1970 reads as 0, which comes
 // out the far end as build number "0" rather than as a failed build.
 fn unix_now() -> u64 {
-	std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.map_or(0, |since| since.as_secs())
+	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |since| since.as_secs())
 }
 
 // Compile the .rc to a COFF object and hand it to the linker. Non-fatal by
@@ -152,14 +135,7 @@ fn windres_compile(out: &str, rc_path: &Path) -> Result<(), String> {
 	for (prog, name) in windres_candidates(&arch) {
 		// -c 65001: the .rc is UTF-8 (the © in the copyright string). -O coff: a
 		// linkable object, not a raw .res.
-		let run = std::process::Command::new(&prog)
-			.args(["-c", "65001", "-O", "coff", "--target", name, "-I"])
-			.arg(out)
-			.arg("-i")
-			.arg(rc_path)
-			.arg("-o")
-			.arg(&obj)
-			.output();
+		let run = std::process::Command::new(&prog).args(["-c", "65001", "-O", "coff", "--target", name, "-I"]).arg(out).arg("-i").arg(rc_path).arg("-o").arg(&obj).output();
 		match run {
 			Ok(done) if done.status.success() => {
 				println!("cargo:rustc-link-arg-bins={}", obj.display());
@@ -176,10 +152,7 @@ fn windres_compile(out: &str, rc_path: &Path) -> Result<(), String> {
 	if tried.is_empty() {
 		return Err(format!("no windres target name known for arch {arch}"));
 	}
-	Err(format!(
-		"no resource compiler worked for {arch}: {}",
-		tried.join("; ")
-	))
+	Err(format!("no resource compiler worked for {arch}: {}", tried.join("; ")))
 }
 
 // What to try, best first. A binutils windres only speaks the architecture it
@@ -201,10 +174,7 @@ fn windres_candidates(arch: &str) -> Vec<(String, &'static str)> {
 		let name = if named.contains("llvm") { plain } else { bfd };
 		return vec![(named.to_string(), name)];
 	}
-	let mut out = vec![
-		(format!("{triple}-windres"), bfd),
-		("windres".to_string(), bfd),
-	];
+	let mut out = vec![(format!("{triple}-windres"), bfd), ("windres".to_string(), bfd)];
 	// Debian packages llvm-windres under a version suffix and nothing else, so
 	// there is no plain name to call and the versions have to be found on PATH.
 	let mut llvm: Vec<(u32, String)> = Vec::new();

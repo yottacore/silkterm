@@ -83,8 +83,7 @@ impl WakeGate {
 
 	/// The window took the notice, so the next read cycle posts a new one.
 	pub fn handled(&self) {
-		self.pending
-			.store(false, std::sync::atomic::Ordering::Release);
+		self.pending.store(false, std::sync::atomic::Ordering::Release);
 	}
 }
 
@@ -101,12 +100,7 @@ pub struct EventProxy {
 
 impl EventProxy {
 	pub fn new(id: PaneId, proxy: EventLoopProxy<UserEvent>, size: WindowSize) -> Self {
-		Self {
-			id,
-			proxy,
-			wake: Arc::new(WakeGate::default()),
-			size: Arc::new(std::sync::Mutex::new(size)),
-		}
+		Self { id, proxy, wake: Arc::new(WakeGate::default()), size: Arc::new(std::sync::Mutex::new(size)) }
 	}
 
 	fn note_size(&self, size: WindowSize) {
@@ -132,9 +126,7 @@ pub fn focus_report(mode: TermMode, gained: bool) -> Option<&'static [u8]> {
 // answer. The event has its own formatter; all this supplies is the value.
 fn query_reply(event: &Event, size: WindowSize) -> Option<Vec<u8>> {
 	match event {
-		Event::ColorRequest(index, format) => {
-			requested_color(*index).map(|rgb| format(rgb).into_bytes())
-		}
+		Event::ColorRequest(index, format) => requested_color(*index).map(|rgb| format(rgb).into_bytes()),
 		Event::TextAreaSizeRequest(format) => Some(format(size).into_bytes()),
 		_ => None,
 	}
@@ -214,27 +206,17 @@ impl EventListener for EventProxy {
 		let _ = match event {
 			Event::Wakeup if !self.wake.post() => Ok(()), // one notice is enough
 			Event::Wakeup => self.proxy.send_event(UserEvent::Wakeup(self.id)),
-			Event::Title(t) => self
-				.proxy
-				.send_event(UserEvent::Title(self.id, capped_title(t))),
+			Event::Title(t) => self.proxy.send_event(UserEvent::Title(self.id, capped_title(t))),
 			// Empty, not the app name: that is how "the program set no title" is
 			// told apart from one it happened to set to our own name.
-			Event::ResetTitle => self
-				.proxy
-				.send_event(UserEvent::Title(self.id, String::new())),
-			Event::ChildExit(status) => self
-				.proxy
-				.send_event(UserEvent::ChildExit(self.id, status_text(status))),
+			Event::ResetTitle => self.proxy.send_event(UserEvent::Title(self.id, String::new())),
+			Event::ChildExit(status) => self.proxy.send_event(UserEvent::ChildExit(self.id, status_text(status))),
 			Event::Exit => self.proxy.send_event(UserEvent::Exit(self.id)),
-			Event::PtyWrite(text) => self
-				.proxy
-				.send_event(UserEvent::PtyWrite(self.id, text.into_bytes())),
+			Event::PtyWrite(text) => self.proxy.send_event(UserEvent::PtyWrite(self.id, text.into_bytes())),
 			Event::Bell => self.proxy.send_event(UserEvent::Bell),
 			// Which pane may set the clipboard is the window's call, since only it
 			// knows which one is in use.
-			Event::ClipboardStore(kind, text) if text.len() <= CLIPBOARD_STORE_MAX => self
-				.proxy
-				.send_event(UserEvent::ClipboardStore(self.id, kind, text)),
+			Event::ClipboardStore(kind, text) if text.len() <= CLIPBOARD_STORE_MAX => self.proxy.send_event(UserEvent::ClipboardStore(self.id, kind, text)),
 			// Replies the terminal sends back to the program. Dropping these left anything
 			// asking for the background color or the text area size waiting out
 			// its timeout on every start and then guessing.
@@ -256,10 +238,7 @@ impl EventListener for EventProxy {
 // doesn't enforce it: one column panics on a CJK character or an emoji, and
 // shrinking wide text to one column reflows without end.
 fn grid_dims(cols: usize, lines: usize) -> TermDimensions {
-	TermDimensions {
-		columns: cols.max(alacritty_terminal::term::MIN_COLUMNS),
-		screen_lines: lines.max(1),
-	}
+	TermDimensions { columns: cols.max(alacritty_terminal::term::MIN_COLUMNS), screen_lines: lines.max(1) }
 }
 
 /// size descriptor handed to the crate; history is set separately via Config
@@ -283,23 +262,13 @@ impl Dimensions for TermDimensions {
 
 // How long after the terminal last stirred to look again at what runs. A
 // command most often starts within the first, and a slow one by the last.
-const TASK_LOOKS: [std::time::Duration; 3] = [
-	std::time::Duration::from_millis(300),
-	std::time::Duration::from_secs(1),
-	std::time::Duration::from_secs(3),
-];
+const TASK_LOOKS: [std::time::Duration; 3] = [std::time::Duration::from_millis(300), std::time::Duration::from_secs(1), std::time::Duration::from_secs(3)];
 
 // The first look after the stir that no probe has taken yet. Only a probe that
 // really looked counts, which is the time on the task cache.
-fn next_task_look(
-	stirred: Option<std::time::Instant>,
-	probed: Option<std::time::Instant>,
-) -> Option<std::time::Instant> {
+fn next_task_look(stirred: Option<std::time::Instant>, probed: Option<std::time::Instant>) -> Option<std::time::Instant> {
 	let stirred = stirred?;
-	TASK_LOOKS
-		.iter()
-		.map(|gap| stirred + *gap)
-		.find(|at| probed.is_none_or(|probed| *at > probed))
+	TASK_LOOKS.iter().map(|gap| stirred + *gap).find(|at| probed.is_none_or(|probed| *at > probed))
 }
 
 /// What a pane's shell is doing, as its tab reports it.
@@ -376,10 +345,7 @@ pub struct TermInstance {
 
 impl std::fmt::Debug for TermInstance {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("TermInstance")
-			.field("cols", &self.cols)
-			.field("lines", &self.lines)
-			.finish_non_exhaustive()
+		f.debug_struct("TermInstance").field("cols", &self.cols).field("lines", &self.lines).finish_non_exhaustive()
 	}
 }
 
@@ -390,31 +356,13 @@ impl TermInstance {
 		self.notifier.wake.handled();
 	}
 
-	#[allow(
-		clippy::needless_pass_by_value,
-		reason = "command is owned by the spawned terminal conceptually; the by-value constructor input threads through split_at/spawn_pane as a move"
-	)]
-	pub fn spawn(
-		id: PaneId,
-		cols: usize,
-		lines: usize,
-		cell_w: u16,
-		cell_h: u16,
-		proxy: EventLoopProxy<UserEvent>,
-		command: Option<Vec<String>>,
-		cwd: Option<std::path::PathBuf>,
-		tmux_client: bool,
-	) -> anyhow::Result<Self> {
+	#[allow(clippy::needless_pass_by_value, reason = "command is owned by the spawned terminal conceptually; the by-value constructor input threads through split_at/spawn_pane as a move")]
+	pub fn spawn(id: PaneId, cols: usize, lines: usize, cell_w: u16, cell_h: u16, proxy: EventLoopProxy<UserEvent>, command: Option<Vec<String>>, cwd: Option<std::path::PathBuf>, tmux_client: bool) -> anyhow::Result<Self> {
 		let dims = grid_dims(cols, lines);
 		let (cols, lines) = (dims.columns, dims.screen_lines);
 
 		let settings = crate::config::settings();
-		let win = WindowSize {
-			num_cols: cols as u16,
-			num_lines: lines as u16,
-			cell_width: cell_w,
-			cell_height: cell_h,
-		};
+		let win = WindowSize { num_cols: cols as u16, num_lines: lines as u16, cell_width: cell_w, cell_height: cell_h };
 		let event_proxy = EventProxy::new(id, proxy, win);
 		let mut engine = Term::new(engine_config_for(&settings), &dims, event_proxy.clone());
 		// the rows a region scroll pushes off, for the slide's reveal strip
@@ -435,10 +383,7 @@ impl TermInstance {
 		let shell_pid = pty.child().id();
 		// Windows has no master fd; the ConPTY child watcher has the shell pid.
 		#[cfg(windows)]
-		let shell_pid = pty
-			.child_watcher()
-			.pid()
-			.map_or(0, std::num::NonZeroU32::get);
+		let shell_pid = pty.child_watcher().pid().map_or(0, std::num::NonZeroU32::get);
 		let notifier = event_proxy.clone();
 		// the tap goes between the PTY and the parser; only an overlong OSC is cut
 		#[cfg(unix)]
@@ -505,11 +450,7 @@ impl TermInstance {
 	fn fresh_task(&mut self) {
 		const PROBE_IVL: std::time::Duration = std::time::Duration::from_millis(250);
 		let now = std::time::Instant::now();
-		if self
-			.task_cache
-			.as_ref()
-			.is_some_and(|(at, _)| now.duration_since(*at) < PROBE_IVL)
-		{
+		if self.task_cache.as_ref().is_some_and(|(at, _)| now.duration_since(*at) < PROBE_IVL) {
 			return;
 		}
 		let task = match self.running_program() {
@@ -536,10 +477,7 @@ impl TermInstance {
 		self.fresh_task();
 		self.fresh_cwd();
 		let cwd = self.cwd_cache.get_mut().as_ref();
-		(
-			seen_task(self.task_cache.as_ref()),
-			cwd.and_then(|(_, dir)| dir.as_deref()),
-		)
+		(seen_task(self.task_cache.as_ref()), cwd.and_then(|(_, dir)| dir.as_deref()))
 	}
 
 	/// Makes the next `task()` look again rather than use its cache.
@@ -553,10 +491,7 @@ impl TermInstance {
 	/// that prints nothing, with the cursor not blinking, brings no later
 	/// frame, so its tab never named it.
 	pub fn task_wake(&self) -> Option<std::time::Instant> {
-		next_task_look(
-			self.stirred_at.get(),
-			self.task_cache.as_ref().map(|(at, _)| *at),
-		)
+		next_task_look(self.stirred_at.get(), self.task_cache.as_ref().map(|(at, _)| *at))
 	}
 
 	/// Look again past both caches. True when the answer changed, so the tab
@@ -644,10 +579,7 @@ impl TermInstance {
 	/// program that has since exited, on unix, where that can be told.
 	pub fn cwd(&self) -> Option<std::path::PathBuf> {
 		self.fresh_cwd();
-		self.cwd_cache
-			.borrow()
-			.as_ref()
-			.and_then(|(_, dir)| dir.clone())
+		self.cwd_cache.borrow().as_ref().and_then(|(_, dir)| dir.clone())
 	}
 
 	fn fresh_cwd(&self) {
@@ -657,19 +589,10 @@ impl TermInstance {
 		// mount that has stopped responding, each of those stalls the render.
 		const PROBE_IVL: std::time::Duration = std::time::Duration::from_millis(250);
 		let now = std::time::Instant::now();
-		if self
-			.cwd_cache
-			.borrow()
-			.as_ref()
-			.is_some_and(|(at, _)| now.duration_since(*at) < PROBE_IVL)
-		{
+		if self.cwd_cache.borrow().as_ref().is_some_and(|(at, _)| now.duration_since(*at) < PROBE_IVL) {
 			return;
 		}
-		let dir = self
-			.reported_cwd
-			.live()
-			.filter(|dir| dir.is_dir())
-			.or_else(|| self.os_cwd());
+		let dir = self.reported_cwd.live().filter(|dir| dir.is_dir()).or_else(|| self.os_cwd());
 		*self.cwd_cache.borrow_mut() = Some((now, dir));
 	}
 
@@ -799,19 +722,14 @@ impl TermInstance {
 	/// parser and dies with the shell, so anything added afterwards (the
 	/// --keep-open exit line) needs a parser of our own.
 	pub fn feed(&self, bytes: &[u8]) {
-		let mut parser = alacritty_terminal::vte::ansi::Processor::<
-			alacritty_terminal::vte::ansi::StdSyncHandler,
-		>::default();
+		let mut parser = alacritty_terminal::vte::ansi::Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::default();
 		parser.advance(&mut *self.term.lock(), bytes);
 	}
 
 	pub fn resize(&mut self, cols: usize, lines: usize, cell_w: u16, cell_h: u16) {
 		let dims = grid_dims(cols, lines);
 		let (cols, lines) = (dims.columns, dims.screen_lines);
-		let (regrid, tell) = resize_changes(
-			(self.cols, self.lines, self.cell),
-			(cols, lines, (cell_w, cell_h)),
-		);
+		let (regrid, tell) = resize_changes((self.cols, self.lines, self.cell), (cols, lines, (cell_w, cell_h)));
 		if !tell {
 			return;
 		}
@@ -821,12 +739,7 @@ impl TermInstance {
 		if regrid {
 			self.term.lock_unfair().resize(dims);
 		}
-		let win = WindowSize {
-			num_cols: cols as u16,
-			num_lines: lines as u16,
-			cell_width: cell_w,
-			cell_height: cell_h,
-		};
+		let win = WindowSize { num_cols: cols as u16, num_lines: lines as u16, cell_width: cell_w, cell_height: cell_h };
 		self.notifier.note_size(win);
 		let _ = self.sender.send(Msg::Resize(win));
 	}
@@ -861,10 +774,7 @@ fn status_line_only<T: EventListener>(term: &mut Term<T>, was: Option<Point>) ->
 		rows = usize::MAX;
 	}
 	term.reset_damage();
-	(
-		rows == 1 && !on_cursor_row && !scrolled_back && was == Some(cursor),
-		cursor,
-	)
+	(rows == 1 && !on_cursor_row && !scrolled_back && was == Some(cursor), cursor)
 }
 
 impl Drop for TermInstance {
@@ -937,7 +847,7 @@ pub fn sanitize_shell_env() {
 	let Some(session) = session_env() else {
 		return;
 	};
-	let inherited: std::collections::HashMap<String, String> = std::env::vars().collect();
+	let inherited = inherited_env(std::env::vars_os());
 	for (name, value) in env_fixups(SHELL_PRIVATE_ENV, &session, &inherited) {
 		// SAFETY: single-threaded here, since this runs at the top of main, before
 		// the event loop, any worker thread, or any PTY exists.
@@ -950,24 +860,26 @@ pub fn sanitize_shell_env() {
 	}
 }
 
+// Our own environment as text, for env_fixups to compare. std::env::vars panics
+// on the first entry that isn't Unicode, and one is easy to get: OLDPWD after a
+// cd into a folder with a Latin-1 name. A name that isn't Unicode can't be on
+// the list, so it's skipped. A value that isn't is kept lossy, since it's only
+// compared, and only a listed name is ever written back. Everything else
+// reaches a pane's shell untouched, as raw bytes.
+fn inherited_env(vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>) -> std::collections::HashMap<String, String> {
+	vars.into_iter().filter_map(|(name, value)| Some((name.into_string().ok()?, value.to_string_lossy().into_owned()))).collect()
+}
+
 // What has to change for each named variable to read the way a freshly launched
 // process would see it: Some(value) to set, None to drop (the session never set
 // it, so neither should a pane). Pure, and the list is passed in rather than
 // read off cfg!, so both platforms' answers are testable from either box, for
 // the same reason config_base_for takes a Layout.
 #[cfg_attr(not(windows), allow(dead_code))]
-fn env_fixups(
-	names: &[&str],
-	session: &std::collections::HashMap<String, String>,
-	inherited: &std::collections::HashMap<String, String>,
-) -> Vec<(String, Option<String>)> {
+fn env_fixups(names: &[&str], session: &std::collections::HashMap<String, String>, inherited: &std::collections::HashMap<String, String>) -> Vec<(String, Option<String>)> {
 	// Windows environment names are case-insensitive, and a block keeps whatever
 	// spelling set it first, so both sides can disagree on case alone.
-	let find = |vars: &std::collections::HashMap<String, String>, name: &str| {
-		vars.iter()
-			.find(|(key, _)| key.eq_ignore_ascii_case(name))
-			.map(|(_, value)| value.clone())
-	};
+	let find = |vars: &std::collections::HashMap<String, String>, name: &str| vars.iter().find(|(key, _)| key.eq_ignore_ascii_case(name)).map(|(_, value)| value.clone());
 	names
 		.iter()
 		.filter_map(|name| {
@@ -990,9 +902,7 @@ fn env_fixups(
 fn session_env() -> Option<std::collections::HashMap<String, String>> {
 	use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 	use windows_sys::Win32::Security::TOKEN_QUERY;
-	use windows_sys::Win32::System::Environment::{
-		CreateEnvironmentBlock, DestroyEnvironmentBlock,
-	};
+	use windows_sys::Win32::System::Environment::{CreateEnvironmentBlock, DestroyEnvironmentBlock};
 	use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
 	// SAFETY: plain Win32 calls. The token and the block are each released on
@@ -1016,10 +926,7 @@ fn session_env() -> Option<std::collections::HashMap<String, String>> {
 		// doesn't exist. Windows expands them once when it composes an environment,
 		// and so does this, against the session block rather than our own, since
 		// ours is what's being replaced.
-		let vars = raw
-			.iter()
-			.map(|(name, value)| (name.clone(), expand_refs(value, &raw)))
-			.collect();
+		let vars = raw.iter().map(|(name, value)| (name.clone(), expand_refs(value, &raw))).collect();
 		Some(vars)
 	}
 }
@@ -1031,10 +938,7 @@ fn session_env() -> Option<std::collections::HashMap<String, String>> {
 // variables a session never sets, since a name a login profile exports would
 // be dropped here rather than restored.
 #[cfg(not(windows))]
-#[allow(
-	clippy::unnecessary_wraps,
-	reason = "the Option is the Windows arm's failure, kept so both arms read the same"
-)]
+#[allow(clippy::unnecessary_wraps, reason = "the Option is the Windows arm's failure, kept so both arms read the same")]
 fn session_env() -> Option<std::collections::HashMap<String, String>> {
 	Some(std::collections::HashMap::new())
 }
@@ -1092,11 +996,7 @@ fn parse_env_block(block: &[u16]) -> std::collections::HashMap<String, String> {
 		.split(|unit| *unit == 0)
 		.filter_map(|entry| {
 			let text = String::from_utf16_lossy(entry);
-			let at = text
-				.char_indices()
-				.skip(1)
-				.find(|(_, ch)| *ch == '=')
-				.map(|(idx, _)| idx)?;
+			let at = text.char_indices().skip(1).find(|(_, ch)| *ch == '=').map(|(idx, _)| idx)?;
 			Some((text[..at].to_string(), text[at + 1..].to_string()))
 		})
 		.collect()
@@ -1106,9 +1006,7 @@ fn parse_env_block(block: &[u16]) -> std::collections::HashMap<String, String> {
 // " (deleted)" suffix, so the answer has to still exist.
 #[cfg(all(unix, not(target_os = "macos")))]
 fn process_cwd(pid: u32) -> Option<std::path::PathBuf> {
-	std::fs::read_link(format!("/proc/{pid}/cwd"))
-		.ok()
-		.filter(|dir| dir.is_dir())
+	std::fs::read_link(format!("/proc/{pid}/cwd")).ok().filter(|dir| dir.is_dir())
 }
 
 // macOS has no /proc. bash and zsh never report where they are, so before this
@@ -1124,27 +1022,12 @@ fn process_cwd(pid: u32) -> Option<std::path::PathBuf> {
 	// at most `size` bytes into it and says how many it wrote.
 	let mut info: libc::proc_vnodepathinfo = unsafe { std::mem::zeroed() };
 	// SAFETY: as above.
-	let wrote = unsafe {
-		libc::proc_pidinfo(
-			pid,
-			libc::PROC_PIDVNODEPATHINFO,
-			0,
-			std::ptr::from_mut(&mut info).cast(),
-			size,
-		)
-	};
+	let wrote = unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDVNODEPATHINFO, 0, std::ptr::from_mut(&mut info).cast(), size) };
 	if wrote != size {
 		return None;
 	}
 	// libc splits the path's MAXPATHLEN chars into rows; it ends at the NUL
-	let path: Vec<u8> = info
-		.pvi_cdir
-		.vip_path
-		.iter()
-		.flatten()
-		.map(|&c| u8::from_ne_bytes(c.to_ne_bytes()))
-		.take_while(|&b| b != 0)
-		.collect();
+	let path: Vec<u8> = info.pvi_cdir.vip_path.iter().flatten().map(|&c| u8::from_ne_bytes(c.to_ne_bytes())).take_while(|&b| b != 0).collect();
 	let dir = std::path::PathBuf::from(std::ffi::OsStr::from_bytes(&path));
 	(!path.is_empty() && dir.is_dir()).then_some(dir)
 }
@@ -1169,15 +1052,7 @@ pub(crate) fn proc_comm(pid: u32) -> Option<String> {
 	let size = libc::c_int::try_from(std::mem::size_of::<BsdShortInfo>()).ok()?;
 	let mut info = BsdShortInfo::default();
 	// SAFETY: the call writes at most `size` bytes and says how many it wrote
-	let wrote = unsafe {
-		libc::proc_pidinfo(
-			pid,
-			PROC_PIDT_SHORTBSDINFO,
-			0,
-			std::ptr::from_mut(&mut info).cast(),
-			size,
-		)
-	};
+	let wrote = unsafe { libc::proc_pidinfo(pid, PROC_PIDT_SHORTBSDINFO, 0, std::ptr::from_mut(&mut info).cast(), size) };
 	if wrote != size {
 		return None;
 	}
@@ -1247,16 +1122,9 @@ fn command_child_name(shell_pid: u32, shell_started: u64) -> Option<String> {
 // name, as pid, exe name, and start time (0 when unknown). Walks the process
 // table, since there's no narrower query, and stops at the first hit.
 #[cfg(windows)]
-fn find_child(
-	parent: u32,
-	parent_started: u64,
-	mut pick: impl FnMut(&[u16]) -> bool,
-) -> Option<(u32, [u16; 260], u64)> {
+fn find_child(parent: u32, parent_started: u64, mut pick: impl FnMut(&[u16]) -> bool) -> Option<(u32, [u16; 260], u64)> {
 	use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
-	use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-		CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
-		TH32CS_SNAPPROCESS,
-	};
+	use windows_sys::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS};
 
 	// SAFETY: takes no pointer.
 	let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
@@ -1299,9 +1167,7 @@ fn launcher_target(image: &std::path::Path) -> Option<String> {
 		return None;
 	}
 	let target = bin.parent()?.join("usr").join("bin").join(name);
-	target
-		.is_file()
-		.then(|| name.to_string_lossy().into_owned())
+	target.is_file().then(|| name.to_string_lossy().into_owned())
 }
 
 // Windows: a wait on the command a probe named. cmd doesn't wait for a program
@@ -1334,26 +1200,13 @@ enum Watched {
 impl ChildWatch {
 	fn start(pid: u32, started: u64, on_end: impl Fn() + Send + 'static) -> Watched {
 		use windows_sys::Win32::Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, GetLastError};
-		use windows_sys::Win32::System::Threading::{
-			INFINITE, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-			RegisterWaitForSingleObject, WT_EXECUTEONLYONCE,
-		};
+		use windows_sys::Win32::System::Threading::{INFINITE, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, RegisterWaitForSingleObject, WT_EXECUTEONLYONCE};
 
 		// SAFETY: takes no pointer.
-		let process = unsafe {
-			OpenProcess(
-				PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
-				0,
-				pid,
-			)
-		};
+		let process = unsafe { OpenProcess(PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
 		if process.is_null() {
 			// SAFETY: takes no pointer.
-			return if unsafe { GetLastError() } == ERROR_INVALID_PARAMETER {
-				Watched::Gone
-			} else {
-				Watched::Blind
-			};
+			return if unsafe { GetLastError() } == ERROR_INVALID_PARAMETER { Watched::Gone } else { Watched::Blind };
 		}
 		if started != 0 && handle_start_time(process) != Some(started) {
 			// SAFETY: closed once, and not used after.
@@ -1364,16 +1217,7 @@ impl ChildWatch {
 		let mut wait = std::ptr::null_mut();
 		// SAFETY: a live process handle and a context that lives until Drop has
 		// unregistered the wait and waited out its callback.
-		let ok = unsafe {
-			RegisterWaitForSingleObject(
-				&raw mut wait,
-				process,
-				Some(child_ended),
-				on_end.cast(),
-				INFINITE,
-				WT_EXECUTEONLYONCE,
-			)
-		};
+		let ok = unsafe { RegisterWaitForSingleObject(&raw mut wait, process, Some(child_ended), on_end.cast(), INFINITE, WT_EXECUTEONLYONCE) };
 		if ok == 0 {
 			// SAFETY: never registered, so nothing else holds either.
 			unsafe {
@@ -1382,13 +1226,7 @@ impl ChildWatch {
 			}
 			return Watched::Blind;
 		}
-		Watched::Yes(Self {
-			pid,
-			started,
-			process,
-			wait,
-			on_end,
-		})
+		Watched::Yes(Self { pid, started, process, wait, on_end })
 	}
 
 	fn is(&self, (pid, started): (u32, u64)) -> bool {
@@ -1397,10 +1235,7 @@ impl ChildWatch {
 }
 
 #[cfg(windows)]
-unsafe extern "system" fn child_ended(
-	context: *mut std::ffi::c_void,
-	_timed_out: windows_sys::Win32::Foundation::BOOLEAN,
-) {
+unsafe extern "system" fn child_ended(context: *mut std::ffi::c_void, _timed_out: windows_sys::Win32::Foundation::BOOLEAN) {
 	// SAFETY: the OnEnd ChildWatch made, freed only once this has returned.
 	let on_end = unsafe { &*context.cast::<OnEnd>() };
 	on_end();
@@ -1446,19 +1281,8 @@ impl ShellProc {
 	const LAUNCH_TICKS: u64 = Self::LAUNCH_SECS * 10_000_000;
 
 	fn new(pid: u32) -> Self {
-		let launches = (pid != 0)
-			.then(|| process_image(pid))
-			.flatten()
-			.and_then(|image| launcher_target(&image));
-		Self {
-			pid,
-			started: process_start_time(pid).unwrap_or(0),
-			launches,
-			inner: std::cell::Cell::new(None),
-			give_up_after: std::time::Instant::now()
-				+ std::time::Duration::from_secs(Self::LAUNCH_SECS * 2),
-			gave_up: std::cell::Cell::new(false),
-		}
+		let launches = (pid != 0).then(|| process_image(pid)).flatten().and_then(|image| launcher_target(&image));
+		Self { pid, started: process_start_time(pid).unwrap_or(0), launches, inner: std::cell::Cell::new(None), give_up_after: std::time::Instant::now() + std::time::Duration::from_secs(Self::LAUNCH_SECS * 2), gave_up: std::cell::Cell::new(false) }
 	}
 
 	// The pid and start time to probe: the real shell's once found.
@@ -1469,16 +1293,12 @@ impl ShellProc {
 		let Some(name) = self.launches.as_deref().filter(|_| !self.gave_up.get()) else {
 			return (self.pid, self.started);
 		};
-		let hit = find_child(self.pid, self.started, |exe| {
-			exe_file_name(exe).eq_ignore_ascii_case(name)
-		})
-		.filter(|&(_, _, at)| at.saturating_sub(self.started) <= Self::LAUNCH_TICKS);
+		let hit = find_child(self.pid, self.started, |exe| exe_file_name(exe).eq_ignore_ascii_case(name)).filter(|&(_, _, at)| at.saturating_sub(self.started) <= Self::LAUNCH_TICKS);
 		if let Some((pid, _, at)) = hit {
 			self.inner.set(Some((pid, at)));
 			return (pid, at);
 		}
-		self.gave_up
-			.set(std::time::Instant::now() > self.give_up_after);
+		self.gave_up.set(std::time::Instant::now() > self.give_up_after);
 		(self.pid, self.started)
 	}
 }
@@ -1489,10 +1309,7 @@ fn process_image(pid: u32) -> Option<std::path::PathBuf> {
 	use std::os::windows::ffi::OsStringExt;
 
 	use windows_sys::Win32::Foundation::CloseHandle;
-	use windows_sys::Win32::System::Threading::{
-		OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
-		QueryFullProcessImageNameW,
-	};
+	use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};
 
 	// SAFETY: takes no pointer.
 	let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
@@ -1502,9 +1319,7 @@ fn process_image(pid: u32) -> Option<std::path::PathBuf> {
 	let mut wide = vec![0u16; 1024];
 	let mut len = u32::try_from(wide.len()).unwrap_or(0);
 	// SAFETY: an open process handle, and a buffer `len` units long.
-	let ok = unsafe {
-		QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, wide.as_mut_ptr(), &raw mut len)
-	};
+	let ok = unsafe { QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, wide.as_mut_ptr(), &raw mut len) };
 	// SAFETY: closed once, and not used after.
 	unsafe { CloseHandle(process) };
 	if ok == 0 {
@@ -1528,15 +1343,8 @@ fn exe_file_name(raw: &[u16]) -> String {
 fn exe_display_name(raw: &[u16]) -> String {
 	let name = exe_file_name(raw);
 	let name = name.rsplit(['\\', '/']).next().unwrap_or(&name);
-	let stem = name
-		.rfind('.')
-		.filter(|dot| *dot > 0)
-		.map_or(name, |dot| &name[..dot]);
-	if stem.is_empty() {
-		"command".to_string()
-	} else {
-		stem.to_string()
-	}
+	let stem = name.rfind('.').filter(|dot| *dot > 0).map_or(name, |dot| &name[..dot]);
+	if stem.is_empty() { "command".to_string() } else { stem.to_string() }
 }
 
 // Windows: a process's creation time as a raw FILETIME, for is_command_child.
@@ -1564,24 +1372,10 @@ fn handle_start_time(process: windows_sys::Win32::Foundation::HANDLE) -> Option<
 	use windows_sys::Win32::Foundation::FILETIME;
 	use windows_sys::Win32::System::Threading::GetProcessTimes;
 
-	let mut created = FILETIME {
-		dwLowDateTime: 0,
-		dwHighDateTime: 0,
-	};
-	let mut ignored = [FILETIME {
-		dwLowDateTime: 0,
-		dwHighDateTime: 0,
-	}; 3];
+	let mut created = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
+	let mut ignored = [FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 }; 3];
 	// SAFETY: an open process handle and 4 live FILETIMEs to write.
-	let ok = unsafe {
-		GetProcessTimes(
-			process,
-			&raw mut created,
-			&raw mut ignored[0],
-			&raw mut ignored[1],
-			&raw mut ignored[2],
-		)
-	};
+	let ok = unsafe { GetProcessTimes(process, &raw mut created, &raw mut ignored[0], &raw mut ignored[1], &raw mut ignored[2]) };
 	(ok != 0).then(|| u64::from(created.dwHighDateTime) << 32 | u64::from(created.dwLowDateTime))
 }
 
@@ -1600,9 +1394,7 @@ fn peb_cwd(shell_pid: u32) -> Option<std::path::PathBuf> {
 	use windows_sys::Wdk::System::Threading::{NtQueryInformationProcess, ProcessBasicInformation};
 	use windows_sys::Win32::Foundation::CloseHandle;
 	use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
-	use windows_sys::Win32::System::Threading::{
-		OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
-	};
+	use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
 
 	// PEB -> RTL_USER_PROCESS_PARAMETERS -> CurrentDirectory.DosPath, 64-bit.
 	const PROCESS_PARAMETERS: usize = 0x20;
@@ -1621,41 +1413,18 @@ fn peb_cwd(shell_pid: u32) -> Option<std::path::PathBuf> {
 		}
 		let read = |at: usize, into: *mut c_void, len: usize| -> bool {
 			let mut got = 0usize;
-			at != 0
-				&& ReadProcessMemory(process, at as *const c_void, into, len, &raw mut got) != 0
-				&& got == len
+			at != 0 && ReadProcessMemory(process, at as *const c_void, into, len, &raw mut got) != 0 && got == len
 		};
 		let mut basic: ProcessBasicInfo = std::mem::zeroed();
-		let status = NtQueryInformationProcess(
-			process,
-			ProcessBasicInformation,
-			(&raw mut basic).cast::<c_void>(),
-			u32::try_from(size_of::<ProcessBasicInfo>()).unwrap_or(0),
-			std::ptr::null_mut(),
-		);
+		let status = NtQueryInformationProcess(process, ProcessBasicInformation, (&raw mut basic).cast::<c_void>(), u32::try_from(size_of::<ProcessBasicInfo>()).unwrap_or(0), std::ptr::null_mut());
 		let peb = usize::try_from(basic.peb).unwrap_or(0);
 		let mut params = 0usize;
 		let mut dos_path = UnicodeString::default();
-		let ok = status == 0
-			&& read(
-				peb + PROCESS_PARAMETERS,
-				(&raw mut params).cast::<c_void>(),
-				size_of::<usize>(),
-			) && read(
-			params + CURRENT_DIRECTORY,
-			(&raw mut dos_path).cast::<c_void>(),
-			size_of::<UnicodeString>(),
-		);
+		let ok = status == 0 && read(peb + PROCESS_PARAMETERS, (&raw mut params).cast::<c_void>(), size_of::<usize>()) && read(params + CURRENT_DIRECTORY, (&raw mut dos_path).cast::<c_void>(), size_of::<UnicodeString>());
 		// Length is in bytes, and a path is UTF-16 - halve it for the buffer.
 		let chars = usize::from(dos_path.length) / 2;
 		let mut wide = vec![0u16; chars];
-		let ok = ok
-			&& chars > 0
-			&& read(
-				dos_path.buffer as usize,
-				wide.as_mut_ptr().cast::<c_void>(),
-				chars * 2,
-			);
+		let ok = ok && chars > 0 && read(dos_path.buffer as usize, wide.as_mut_ptr().cast::<c_void>(), chars * 2);
 		CloseHandle(process);
 		if !ok {
 			return None;
@@ -1714,12 +1483,7 @@ fn usable_cwd(dir: Option<std::path::PathBuf>) -> Option<std::path::PathBuf> {
 	dir.filter(|dir| dir.is_absolute())
 }
 
-fn pane_options(
-	command: Option<&[String]>,
-	cwd: Option<std::path::PathBuf>,
-	tmux_client: bool,
-	term_name: &str,
-) -> tty::Options {
+fn pane_options(command: Option<&[String]>, cwd: Option<std::path::PathBuf>, tmux_client: bool, term_name: &str) -> tty::Options {
 	// a CLI/menu-supplied command runs as argv[0] + args; else the default shell
 	let mut opts = tty::Options::default();
 	// The argv is split already, so Windows has to get it back whole: a spaced
@@ -1748,11 +1512,7 @@ fn pane_options(
 	// ssh passes TERM on as-is, and a host with no alacritty entry can't run
 	// nano or less, so empty is xterm-256color rather than the engine's pick
 	// (2026102114411311).
-	let term_name = if term_name.is_empty() {
-		DEFAULT_TERM
-	} else {
-		term_name
-	};
+	let term_name = if term_name.is_empty() { DEFAULT_TERM } else { term_name };
 	opts.env.insert("TERM".to_string(), term_name.to_string());
 	opts
 }
@@ -1769,11 +1529,7 @@ fn wsl_cd(argv: &[String], dir: &std::path::Path) -> Option<Vec<String>> {
 	// split on both separators: a Windows path can get here on any platform, and
 	// Path would hand back the whole string for one on unix
 	let first = argv.first()?;
-	let prog = first
-		.rsplit(['/', '\\'])
-		.next()
-		.unwrap_or(first)
-		.to_ascii_lowercase();
+	let prog = first.rsplit(['/', '\\']).next().unwrap_or(first).to_ascii_lowercase();
 	if prog != "wsl.exe" && prog != "wsl" {
 		return None;
 	}
@@ -1781,20 +1537,13 @@ fn wsl_cd(argv: &[String], dir: &std::path::Path) -> Option<Vec<String>> {
 		return None;
 	}
 	let mut out = argv.to_vec();
-	out.splice(
-		1..1,
-		["--cd".to_string(), dir.to_string_lossy().into_owned()],
-	);
+	out.splice(1..1, ["--cd".to_string(), dir.to_string_lossy().into_owned()]);
 	Some(out)
 }
 
 #[cfg(test)]
 mod tests {
-	use super::{
-		SHELL_PRIVATE_ENV, TITLE_MAX_BYTES, WakeGate, capped_title, env_fixups, expand_refs,
-		grid_dims, is_command_child, join_for, parse_env_block, query_reply, requested_color,
-		resize_changes, usable_cwd, wsl_cd,
-	};
+	use super::{SHELL_PRIVATE_ENV, TITLE_MAX_BYTES, WakeGate, capped_title, env_fixups, expand_refs, grid_dims, inherited_env, is_command_child, join_for, parse_env_block, query_reply, requested_color, resize_changes, usable_cwd, wsl_cd};
 
 	// tmux redraws its status line clock with nobody there, and that kept the
 	// idle release from ever starting on a window showing tmux. Only a redraw of
@@ -1806,10 +1555,7 @@ mod tests {
 		use alacritty_terminal::event::VoidListener;
 		use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
 		const TICK: &[u8] = b"\x1b[?25l\x1b[30m\x1b[42m\x1b[30;1H[0] 0:sh*\x1b[70X\x1b[70C\"b23\" 06:41 20-Nov-26\x1b(B\x1b[m\x1b[?12l\x1b[?25h\x1b[1;3H";
-		let dims = super::TermDimensions {
-			columns: 100,
-			screen_lines: 30,
-		};
+		let dims = super::TermDimensions { columns: 100, screen_lines: 30 };
 		let mut term = super::Term::new(super::engine_config(), &dims, VoidListener);
 		let mut parser = Processor::<StdSyncHandler>::default();
 		let mut was = None;
@@ -1819,26 +1565,14 @@ mod tests {
 			was = Some(cursor);
 			only
 		};
-		assert!(
-			!after(b"\x1b[1;1H$ "),
-			"the first look, with everything new"
-		);
+		assert!(!after(b"\x1b[1;1H$ "), "the first look, with everything new");
 		assert!(after(TICK), "a tick of tmux's clock");
 		assert!(after(TICK), "and the next");
 		assert!(!after(b"tick\r\n$ "), "a line printed");
-		assert!(
-			!after(b"\r[====    ] 40%\r"),
-			"a progress bar on the cursor's row"
-		);
-		assert!(
-			!after(b"\x1b7\x1b[29;1Hab\x1b[30;1Hcd\x1b8"),
-			"2 rows redrawn"
-		);
+		assert!(!after(b"\r[====    ] 40%\r"), "a progress bar on the cursor's row");
+		assert!(!after(b"\x1b7\x1b[29;1Hab\x1b[30;1Hcd\x1b8"), "2 rows redrawn");
 		assert!(!after(b"\x1b[5;5H"), "the cursor moved");
-		assert!(
-			!after(b"\x1b7\x1b[30;1Hab\x1b8x"),
-			"a status line and a key echoed"
-		);
+		assert!(!after(b"\x1b7\x1b[30;1Hab\x1b8x"), "a status line and a key echoed");
 		assert!(!after(b"\x1b]2;title\x07"), "nothing redrawn, as before");
 		assert!(after(b"\x1b7\x1b[1;1Hclock\x1b8"), "a clock on the top row");
 	}
@@ -1867,40 +1601,24 @@ mod tests {
 		use super::{TASK_LOOKS, next_task_look};
 		use std::time::Duration;
 		let stirred = std::time::Instant::now();
-		assert_eq!(
-			next_task_look(None, Some(stirred)),
-			None,
-			"no stir, no look"
-		);
+		assert_eq!(next_task_look(None, Some(stirred)), None, "no stir, no look");
 		let first = stirred + TASK_LOOKS[0];
 		assert_eq!(next_task_look(Some(stirred), None), Some(first));
 		// the probe that saw the shell as the command was about to start
 		let stale = stirred + Duration::from_millis(5);
 		assert_eq!(next_task_look(Some(stirred), Some(stale)), Some(first));
-		assert!(
-			first > stale + Duration::from_millis(250),
-			"past the probe's cache"
-		);
+		assert!(first > stale + Duration::from_millis(250), "past the probe's cache");
 		for pair in TASK_LOOKS.windows(2) {
 			let took = stirred + pair[0];
-			assert_eq!(
-				next_task_look(Some(stirred), Some(took)),
-				Some(stirred + pair[1])
-			);
+			assert_eq!(next_task_look(Some(stirred), Some(took)), Some(stirred + pair[1]));
 		}
 		let last = stirred + TASK_LOOKS[TASK_LOOKS.len() - 1];
-		assert_eq!(
-			next_task_look(Some(stirred), Some(last)),
-			None,
-			"and then it stops"
-		);
+		assert_eq!(next_task_look(Some(stirred), Some(last)), None, "and then it stops");
 		// a probe taken from frames late on leaves only what is after it
 		let late = stirred + Duration::from_millis(1500);
 		assert_eq!(next_task_look(Some(stirred), Some(late)), Some(last));
 		// an older probe than the stir doesn't count
-		let before = stirred
-			.checked_sub(Duration::from_secs(1))
-			.unwrap_or(stirred);
+		let before = stirred.checked_sub(Duration::from_secs(1)).unwrap_or(stirred);
 		assert_eq!(next_task_look(Some(stirred), Some(before)), Some(first));
 	}
 
@@ -1931,21 +1649,12 @@ mod tests {
 		}
 
 		let seen = Seen::default();
-		let dims = super::TermDimensions {
-			columns: 20,
-			screen_lines: 4,
-		};
+		let dims = super::TermDimensions { columns: 20, screen_lines: 4 };
 		let mut term = Term::new(super::engine_config(), &dims, seen.clone());
 		let mut parser = Processor::<StdSyncHandler>::default();
 		// "hello" to the clipboard, then the primary selection, then a read
-		parser.advance(
-			&mut term,
-			b"\x1b]52;c;aGVsbG8=\x07\x1b]52;p;aGVsbG8=\x07\x1b]52;c;?\x07",
-		);
-		assert_eq!(
-			*seen.0.lock().expect("seen lock"),
-			["Clipboard hello", "Selection hello"]
-		);
+		parser.advance(&mut term, b"\x1b]52;c;aGVsbG8=\x07\x1b]52;p;aGVsbG8=\x07\x1b]52;c;?\x07");
+		assert_eq!(*seen.0.lock().expect("seen lock"), ["Clipboard hello", "Selection hello"]);
 	}
 
 	// fish, vim, and muffer ask for focus changes, and got nothing.
@@ -1959,20 +1668,10 @@ mod tests {
 
 		let mut term = Term::new(super::engine_config(), &grid_dims(20, 4), VoidListener);
 		let mut parser = Processor::<StdSyncHandler>::default();
-		assert_eq!(
-			super::focus_report(*term.mode(), true),
-			None,
-			"not asked yet"
-		);
+		assert_eq!(super::focus_report(*term.mode(), true), None, "not asked yet");
 		parser.advance(&mut term, b"\x1b[?1004h");
-		assert_eq!(
-			super::focus_report(*term.mode(), true),
-			Some(&b"\x1b[I"[..])
-		);
-		assert_eq!(
-			super::focus_report(*term.mode(), false),
-			Some(&b"\x1b[O"[..])
-		);
+		assert_eq!(super::focus_report(*term.mode(), true), Some(&b"\x1b[I"[..]));
+		assert_eq!(super::focus_report(*term.mode(), false), Some(&b"\x1b[O"[..]));
 		parser.advance(&mut term, b"\x1b[?1004l");
 		assert_eq!(super::focus_report(*term.mode(), false), None, "turned off");
 	}
@@ -1982,11 +1681,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_engine_splits_words_on_the_configured_separators() {
-		let s = crate::config::Settings {
-			word_separators: " ,;".to_string(),
-			scrollback: 1234,
-			..Default::default()
-		};
+		let s = crate::config::Settings { word_separators: " ,;".to_string(), scrollback: 1234, ..Default::default() };
 		let config = super::engine_config_for(&s);
 		assert_eq!(config.semantic_escape_chars, " ,;");
 		assert_eq!(config.scrolling_history, 1234);
@@ -2026,10 +1721,7 @@ mod tests {
 		let seen = titles.0.lock().expect("titles lock").clone();
 		assert_eq!(seen.len(), 3, "{seen:?}");
 		for (len, cap) in &seen {
-			assert!(
-				*len <= TITLE_MAX_BYTES && *cap < 2 * TITLE_MAX_BYTES,
-				"{seen:?}"
-			);
+			assert!(*len <= TITLE_MAX_BYTES && *cap < 2 * TITLE_MAX_BYTES, "{seen:?}");
 		}
 		assert_eq!(seen[1].0, 5, "an ordinary title is left alone");
 		assert!(seen[2].0 > 0, "the pushed title comes back");
@@ -2076,17 +1768,10 @@ mod tests {
 		let stays = std::thread::spawn(|| std::thread::sleep(Duration::from_secs(5)));
 		let start = Instant::now();
 		assert!(!join_for(stays, Duration::from_millis(100)));
-		assert!(
-			start.elapsed() < Duration::from_secs(2),
-			"waited {:?}",
-			start.elapsed()
-		);
+		assert!(start.elapsed() < Duration::from_secs(2), "waited {:?}", start.elapsed());
 
 		let ends = std::thread::spawn(|| std::thread::sleep(Duration::from_millis(10)));
-		assert!(
-			join_for(ends, Duration::from_secs(5)),
-			"a normal close is reaped"
-		);
+		assert!(join_for(ends, Duration::from_secs(5)), "a normal close is reaped");
 	}
 
 	// A program that closed its terminal and kept running spun the reader thread
@@ -2098,32 +1783,16 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_hung_up_terminal_does_not_spin_the_reader() {
-		let out = std::process::Command::new(std::env::current_exe().unwrap())
-			.args(["--exact", "term::tests::hung_up_child", "--nocapture"])
-			.env("SILK_HUP_CHILD", "1")
-			.output()
-			.unwrap();
+		let out = std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact", "term::tests::hung_up_child", "--nocapture"]).env("SILK_HUP_CHILD", "1").output().unwrap();
 		let text = String::from_utf8_lossy(&out.stdout);
-		assert!(
-			out.status.success(),
-			"{text}{}",
-			String::from_utf8_lossy(&out.stderr)
-		);
-		let cpu: u64 = text
-			.lines()
-			.find_map(|l| l.strip_prefix("cpu_ms "))
-			.and_then(|v| v.trim().parse().ok())
-			.expect("child reports its CPU time");
+		assert!(out.status.success(), "{text}{}", String::from_utf8_lossy(&out.stderr));
+		let cpu: u64 = text.lines().find_map(|l| l.strip_prefix("cpu_ms ")).and_then(|v| v.trim().parse().ok()).expect("child reports its CPU time");
 		// about 2000 while it spun
 		assert!(cpu < 300, "the reader used {cpu} ms of CPU in 2 s");
 		// the pause may not cost output from a program that opens its terminal
 		// again, or hold up the end of the pane
 		assert!(text.contains("reopened yes"), "{text}");
-		let ended: u64 = text
-			.lines()
-			.find_map(|l| l.strip_prefix("ended_ms "))
-			.and_then(|v| v.trim().parse().ok())
-			.expect("child reports when the pane ended");
+		let ended: u64 = text.lines().find_map(|l| l.strip_prefix("ended_ms ")).and_then(|v| v.trim().parse().ok()).expect("child reports when the pane ended");
 		assert!(ended < 1000, "the pane ended {ended} ms after its program");
 	}
 
@@ -2150,28 +1819,9 @@ mod tests {
 			return; // only does anything when the test above starts it
 		}
 		let dims = grid_dims(80, 24);
-		let term = std::sync::Arc::new(alacritty_terminal::sync::FairMutex::new(Term::new(
-			super::engine_config(),
-			&dims,
-			VoidListener,
-		)));
-		let opts = tty::Options {
-			shell: Some(tty::Shell::new(
-				"/bin/sh".into(),
-				vec![
-					"-c".into(),
-					"exec </dev/null >/dev/null 2>&1; sleep 3; echo back >/dev/tty; sleep 0.5"
-						.into(),
-				],
-			)),
-			..Default::default()
-		};
-		let win = WindowSize {
-			num_cols: 80,
-			num_lines: 24,
-			cell_width: 8,
-			cell_height: 16,
-		};
+		let term = std::sync::Arc::new(alacritty_terminal::sync::FairMutex::new(Term::new(super::engine_config(), &dims, VoidListener)));
+		let opts = tty::Options { shell: Some(tty::Shell::new("/bin/sh".into(), vec!["-c".into(), "exec </dev/null >/dev/null 2>&1; sleep 3; echo back >/dev/tty; sleep 0.5".into()])), ..Default::default() };
+		let win = WindowSize { num_cols: 80, num_lines: 24, cell_width: 8, cell_height: 16 };
 		let pty = tty::new(&opts, win, 0).unwrap();
 		let event_loop = EventLoop::new(term.clone(), VoidListener, pty, false, false).unwrap();
 		let start = Instant::now();
@@ -2183,18 +1833,9 @@ mod tests {
 		println!("cpu_ms {}", cpu_ms() - before);
 		// the loop ends by itself once the program exits
 		let _ = handle.join();
-		println!(
-			"ended_ms {}",
-			start.elapsed().as_millis().saturating_sub(3500)
-		);
-		let text = term.lock().bounds_to_string(
-			Point::new(Line(0), Column(0)),
-			Point::new(Line(23), Column(79)),
-		);
-		println!(
-			"reopened {}",
-			if text.contains("back") { "yes" } else { "no" }
-		);
+		println!("ended_ms {}", start.elapsed().as_millis().saturating_sub(3500));
+		let text = term.lock().bounds_to_string(Point::new(Line(0), Column(0)), Point::new(Line(23), Column(79)));
+		println!("reopened {}", if text.contains("back") { "yes" } else { "no" });
 	}
 
 	// ssh hands TERM to the far side as-is, and a host with no alacritty entry
@@ -2218,24 +1859,12 @@ mod tests {
 			let argv = ["/bin/sh", "-c", probe].map(String::from);
 			let opts = super::pane_options(Some(&argv), None, false, term_name);
 			let dims = grid_dims(80, 24);
-			let term = std::sync::Arc::new(alacritty_terminal::sync::FairMutex::new(Term::new(
-				super::engine_config(),
-				&dims,
-				VoidListener,
-			)));
-			let win = WindowSize {
-				num_cols: 80,
-				num_lines: 24,
-				cell_width: 8,
-				cell_height: 16,
-			};
+			let term = std::sync::Arc::new(alacritty_terminal::sync::FairMutex::new(Term::new(super::engine_config(), &dims, VoidListener)));
+			let win = WindowSize { num_cols: 80, num_lines: 24, cell_width: 8, cell_height: 16 };
 			let pty = tty::new(&opts, win, 0).unwrap();
 			let event_loop = EventLoop::new(term.clone(), VoidListener, pty, false, false).unwrap();
 			let _ = event_loop.spawn().join();
-			let text = term.lock().bounds_to_string(
-				Point::new(Line(0), Column(0)),
-				Point::new(Line(0), Column(79)),
-			);
+			let text = term.lock().bounds_to_string(Point::new(Line(0), Column(0)), Point::new(Line(0), Column(79)));
 			let (_, rest) = text.split_once('<').expect("the program printed");
 			rest.split_once('>').expect("the whole TERM").0.to_string()
 		};
@@ -2244,10 +1873,7 @@ mod tests {
 		// Set on the pane itself, since setup_env puts alacritty in this
 		// process's TERM where the entry exists, and a test run may have any.
 		let empty = super::pane_options(None, None, false, "");
-		assert_eq!(
-			empty.env.get("TERM").map(String::as_str),
-			Some("xterm-256color")
-		);
+		assert_eq!(empty.env.get("TERM").map(String::as_str), Some("xterm-256color"));
 		assert_eq!(seen_by_program(""), "xterm-256color");
 		assert_eq!(seen_by_program("alacritty"), "alacritty");
 	}
@@ -2266,11 +1892,7 @@ mod tests {
 		use alacritty_terminal::event::{Event, WindowSize};
 		use alacritty_terminal::vte::ansi::NamedColor;
 		let s = crate::config::settings();
-		for (index, want) in [
-			(NamedColor::Foreground as usize, s.fg),
-			(NamedColor::Background as usize, s.bg),
-			(NamedColor::Cursor as usize, s.cursor),
-		] {
+		for (index, want) in [(NamedColor::Foreground as usize, s.fg), (NamedColor::Background as usize, s.bg), (NamedColor::Cursor as usize, s.cursor)] {
 			let got = requested_color(index).expect("a named slot answers");
 			assert_eq!([got.r, got.g, got.b], want);
 		}
@@ -2282,32 +1904,13 @@ mod tests {
 		assert!(requested_color(9999).is_none(), "and nothing else does");
 
 		// and the whole reply, as the listener assembles it
-		let size = WindowSize {
-			num_cols: 80,
-			num_lines: 24,
-			cell_width: 9,
-			cell_height: 18,
-		};
-		let bg = Event::ColorRequest(
-			NamedColor::Background as usize,
-			std::sync::Arc::new(|rgb: alacritty_terminal::vte::ansi::Rgb| {
-				format!("\x1b]11;rgb:{:04x}/{:04x}/{:04x}\x07", rgb.r, rgb.g, rgb.b)
-			}),
-		);
+		let size = WindowSize { num_cols: 80, num_lines: 24, cell_width: 9, cell_height: 18 };
+		let bg = Event::ColorRequest(NamedColor::Background as usize, std::sync::Arc::new(|rgb: alacritty_terminal::vte::ansi::Rgb| format!("\x1b]11;rgb:{:04x}/{:04x}/{:04x}\x07", rgb.r, rgb.g, rgb.b)));
 		let reply = query_reply(&bg, size).expect("a background query is answered");
 		assert!(reply.starts_with(b"\x1b]11;rgb:"), "{reply:?}");
 
-		let area = Event::TextAreaSizeRequest(std::sync::Arc::new(|w: WindowSize| {
-			format!(
-				"\x1b[4;{};{}t",
-				w.num_lines * w.cell_height,
-				w.num_cols * w.cell_width
-			)
-		}));
-		assert_eq!(
-			query_reply(&area, size).as_deref(),
-			Some(b"\x1b[4;432;720t".as_slice())
-		);
+		let area = Event::TextAreaSizeRequest(std::sync::Arc::new(|w: WindowSize| format!("\x1b[4;{};{}t", w.num_lines * w.cell_height, w.num_cols * w.cell_width)));
+		assert_eq!(query_reply(&area, size).as_deref(), Some(b"\x1b[4;432;720t".as_slice()));
 
 		assert!(query_reply(&Event::Bell, size).is_none());
 	}
@@ -2328,19 +1931,10 @@ mod tests {
 	#[test]
 	fn wsl_is_handed_the_directory_ahead_of_its_own_command() {
 		let dir = std::path::Path::new("/home/jim");
-		assert_eq!(
-			wsl_cd(&argv("wsl.exe -d DebianWSL2"), dir).unwrap(),
-			argv("wsl.exe --cd /home/jim -d DebianWSL2")
-		);
+		assert_eq!(wsl_cd(&argv("wsl.exe -d DebianWSL2"), dir).unwrap(), argv("wsl.exe --cd /home/jim -d DebianWSL2"));
 		// options must precede the command, so the insert goes at the front
-		assert_eq!(
-			wsl_cd(&argv("wsl.exe bash -l"), dir).unwrap(),
-			argv("wsl.exe --cd /home/jim bash -l")
-		);
-		assert_eq!(
-			wsl_cd(&argv(r"C:\Windows\System32\WSL.EXE"), dir).unwrap(),
-			argv(r"C:\Windows\System32\WSL.EXE --cd /home/jim")
-		);
+		assert_eq!(wsl_cd(&argv("wsl.exe bash -l"), dir).unwrap(), argv("wsl.exe --cd /home/jim bash -l"));
+		assert_eq!(wsl_cd(&argv(r"C:\Windows\System32\WSL.EXE"), dir).unwrap(), argv(r"C:\Windows\System32\WSL.EXE --cd /home/jim"));
 	}
 
 	// Test ID: dc3t5
@@ -2408,16 +2002,8 @@ mod tests {
 	#[test]
 	fn a_pane_hands_its_program_and_arguments_down_whole() {
 		let wsl = ["wsl.exe".to_string()];
-		let opts = super::pane_options(
-			Some(&wsl),
-			Some(crate::testdir::run_dir().to_path_buf()),
-			false,
-			"",
-		);
-		assert!(
-			opts.escape_args,
-			"a split argv has to be joined back with quotes"
-		);
+		let opts = super::pane_options(Some(&wsl), Some(crate::testdir::run_dir().to_path_buf()), false, "");
+		assert!(opts.escape_args, "a split argv has to be joined back with quotes");
 	}
 
 	// The Windows freeze on a long run of output: a read that empties the pipe
@@ -2433,20 +2019,9 @@ mod tests {
 		use std::io::Read;
 
 		let flood = "for /l %i in (0,0,1) do @echo 0123456789012345678901234567890123456789";
-		let args = std::iter::once("/c")
-			.chain(flood.split(' '))
-			.map(String::from)
-			.collect();
-		let opts = tty::Options {
-			shell: Some(tty::Shell::new("cmd.exe".into(), args)),
-			..Default::default()
-		};
-		let win = alacritty_terminal::event::WindowSize {
-			num_cols: 80,
-			num_lines: 24,
-			cell_width: 8,
-			cell_height: 16,
-		};
+		let args = std::iter::once("/c").chain(flood.split(' ')).map(String::from).collect();
+		let opts = tty::Options { shell: Some(tty::Shell::new("cmd.exe".into(), args)), ..Default::default() };
+		let win = alacritty_terminal::event::WindowSize { num_cols: 80, num_lines: 24, cell_width: 8, cell_height: 16 };
 		let mut pty = tty::new(&opts, win, 0).expect("spawn");
 		let poller = std::sync::Arc::new(Poller::new().unwrap());
 		// SAFETY: the pty stays alive, and registered, until the end of the test
@@ -2459,13 +2034,8 @@ mod tests {
 		// without the fix goes quiet at round 2, after its first full drain
 		for round in 0..8 {
 			events.clear();
-			poller
-				.wait(&mut events, Some(std::time::Duration::from_secs(10)))
-				.unwrap();
-			assert!(
-				!events.is_empty(),
-				"no word for 10 s after {total} bytes in {round} rounds"
-			);
+			poller.wait(&mut events, Some(std::time::Duration::from_secs(10))).unwrap();
+			assert!(!events.is_empty(), "no word for 10 s after {total} bytes in {round} rounds");
 			total += pty.reader().read(&mut buf).unwrap_or(0);
 		}
 		// Ending the flood by dropping the pty can block while nobody reads
@@ -2500,16 +2070,7 @@ mod tests {
 		// tree. The old `cmd /c ping ...` left a ping behind on every run, and they
 		// never exit on their own, so 15 had piled up. A cmd.exe waiting on a pipe
 		// does the same `cd` with no grandchild under it to strand.
-		let hold = |dir: &std::path::Path| {
-			Command::new("cmd.exe")
-				.arg("/k")
-				.current_dir(dir)
-				.stdin(Stdio::piped())
-				.stdout(Stdio::null())
-				.stderr(Stdio::null())
-				.spawn()
-				.expect("spawn cmd.exe")
-		};
+		let hold = |dir: &std::path::Path| Command::new("cmd.exe").arg("/k").current_dir(dir).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("spawn cmd.exe");
 		// one that stays put, for the plain "did we read the right one"
 		let mut still = hold(&started_in);
 		// and one that moves, for the half that matters, told to `cd` on its stdin
@@ -2523,12 +2084,7 @@ mod tests {
 		let mut roamed = None;
 		for _ in 0..60 {
 			roamed = peb_cwd(roams.id());
-			if roamed
-				.as_deref()
-				.map(std::path::Path::to_path_buf)
-				.map(|dir| real(&dir))
-				== Some(real(&moved_to))
-			{
+			if roamed.as_deref().map(std::path::Path::to_path_buf).map(|dir| real(&dir)) == Some(real(&moved_to)) {
 				break;
 			}
 			std::thread::sleep(std::time::Duration::from_millis(50));
@@ -2542,16 +2098,8 @@ mod tests {
 		let _ = still.wait();
 		let _ = roams.wait();
 
-		assert_eq!(
-			stayed.map(|dir| real(&dir)),
-			Some(real(&started_in)),
-			"a process that never moved read back somewhere else"
-		);
-		assert_eq!(
-			roamed.map(|dir| real(&dir)),
-			Some(real(&moved_to)),
-			"the directory the shell moved to never came back"
-		);
+		assert_eq!(stayed.map(|dir| real(&dir)), Some(real(&started_in)), "a process that never moved read back somewhere else");
+		assert_eq!(roamed.map(|dir| real(&dir)), Some(real(&moved_to)), "the directory the shell moved to never came back");
 	}
 
 	// cmd doesn't wait for a program with no console, so a tab kept naming one
@@ -2563,12 +2111,7 @@ mod tests {
 		use std::process::{Command, Stdio};
 
 		use super::{ChildWatch, Watched, process_start_time};
-		let mut child = Command::new("cmd")
-			.args(["/c", "ping -n 3 127.0.0.1 >nul"])
-			.stdin(Stdio::null())
-			.stdout(Stdio::null())
-			.spawn()
-			.expect("spawn cmd");
+		let mut child = Command::new("cmd").args(["/c", "ping -n 3 127.0.0.1 >nul"]).stdin(Stdio::null()).stdout(Stdio::null()).spawn().expect("spawn cmd");
 		let started = process_start_time(child.id()).unwrap_or(0);
 		let (tx, rx) = std::sync::mpsc::channel();
 		let Watched::Yes(watch) = ChildWatch::start(child.id(), started, move || {
@@ -2584,10 +2127,7 @@ mod tests {
 		assert!(early.is_err(), "nothing while it runs");
 		assert!(late.is_ok(), "news once it ends");
 		// a pid now somebody else's is no command of ours
-		assert!(matches!(
-			ChildWatch::start(std::process::id(), 1, || {}),
-			Watched::Gone
-		));
+		assert!(matches!(ChildWatch::start(std::process::id(), 1, || {}), Watched::Gone));
 	}
 
 	// Git Bash's bin\bash.exe starts the real bash as its child and waits, so a
@@ -2601,25 +2141,14 @@ mod tests {
 		use std::process::{Command, Stdio};
 
 		use super::{ShellProc, command_child_name, peb_cwd};
-		let Some(launcher) = ["ProgramFiles", "ProgramW6432"]
-			.iter()
-			.filter_map(|var| std::env::var(var).ok())
-			.map(|base| std::path::PathBuf::from(base).join(r"Git\bin\bash.exe"))
-			.find(|path| path.is_file())
-		else {
+		let Some(launcher) = ["ProgramFiles", "ProgramW6432"].iter().filter_map(|var| std::env::var(var).ok()).map(|base| std::path::PathBuf::from(base).join(r"Git\bin\bash.exe")).find(|path| path.is_file()) else {
 			eprintln!("no Git for Windows here, skipped");
 			return;
 		};
 		let real = |dir: &std::path::Path| std::fs::canonicalize(dir).expect("canonicalize");
 		let moved_to = std::path::PathBuf::from(r"C:\Windows");
 		// bash reads commands off the pipe and exits when it closes
-		let mut child = Command::new(&launcher)
-			.current_dir(crate::testdir::run_dir())
-			.stdin(Stdio::piped())
-			.stdout(Stdio::null())
-			.stderr(Stdio::null())
-			.spawn()
-			.expect("spawn Git Bash");
+		let mut child = Command::new(&launcher).current_dir(crate::testdir::run_dir()).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("spawn Git Bash");
 		let shell = ShellProc::new(child.id());
 		if let Some(pipe) = child.stdin.as_mut() {
 			let _ = writeln!(pipe, "cd /c/Windows");
@@ -2628,10 +2157,7 @@ mod tests {
 		let mut seen = (None, None);
 		for _ in 0..100 {
 			let (pid, started) = shell.current();
-			seen = (
-				peb_cwd(pid).map(|dir| real(&dir)),
-				command_child_name(pid, started),
-			);
+			seen = (peb_cwd(pid).map(|dir| real(&dir)), command_child_name(pid, started));
 			if seen == (Some(real(&moved_to)), None) {
 				break;
 			}
@@ -2645,25 +2171,12 @@ mod tests {
 		});
 		if !gone {
 			// kill() would end the launcher alone and strand the real bash
-			let _ = Command::new("taskkill")
-				.args(["/F", "/T", "/PID", &child.id().to_string()])
-				.output();
+			let _ = Command::new("taskkill").args(["/F", "/T", "/PID", &child.id().to_string()]).output();
 			let _ = child.wait();
 		}
-		assert_eq!(
-			seen.0,
-			Some(real(&moved_to)),
-			"the title folder stayed where the pane started"
-		);
-		assert_eq!(
-			seen.1, None,
-			"a bash at its prompt read as running a command"
-		);
-		assert_ne!(
-			inner,
-			child.id(),
-			"the launcher's own pid was never looked past"
-		);
+		assert_eq!(seen.0, Some(real(&moved_to)), "the title folder stayed where the pane started");
+		assert_eq!(seen.1, None, "a bash at its prompt read as running a command");
+		assert_ne!(inner, child.id(), "the launcher's own pid was never looked past");
 	}
 
 	// Only Git for Windows' layout is a launcher. MSYS2's bash sits in usr\bin
@@ -2715,15 +2228,7 @@ mod tests {
 		std::fs::create_dir_all(&moved_to).expect("mkdir");
 
 		// each shell waits on its own stdin and runs nothing but a cd
-		let hold = |dir: &std::path::Path| {
-			Command::new("/bin/sh")
-				.current_dir(dir)
-				.stdin(Stdio::piped())
-				.stdout(Stdio::null())
-				.stderr(Stdio::null())
-				.spawn()
-				.expect("spawn /bin/sh")
-		};
+		let hold = |dir: &std::path::Path| Command::new("/bin/sh").current_dir(dir).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("spawn /bin/sh");
 		let mut still = hold(&started_in);
 		let mut roams = hold(&started_in);
 		if let Some(pipe) = roams.stdin.as_mut() {
@@ -2745,16 +2250,8 @@ mod tests {
 		let _ = still.wait();
 		let _ = roams.wait();
 
-		assert_eq!(
-			stayed.as_deref().map(real),
-			Some(real(&started_in)),
-			"a process that never moved read back somewhere else"
-		);
-		assert_eq!(
-			roamed.as_deref().map(real),
-			Some(real(&moved_to)),
-			"the directory the shell moved to never came back"
-		);
+		assert_eq!(stayed.as_deref().map(real), Some(real(&started_in)), "a process that never moved read back somewhere else");
+		assert_eq!(roamed.as_deref().map(real), Some(real(&moved_to)), "the directory the shell moved to never came back");
 	}
 
 	// A tab names the program in the foreground: the terminal's foreground
@@ -2770,14 +2267,7 @@ mod tests {
 		use std::os::unix::process::CommandExt;
 		use std::process::{Command, Stdio};
 
-		let mut child = Command::new("/bin/sleep")
-			.arg("30")
-			.process_group(0)
-			.stdin(Stdio::null())
-			.stdout(Stdio::null())
-			.stderr(Stdio::null())
-			.spawn()
-			.expect("spawn sleep");
+		let mut child = Command::new("/bin/sleep").arg("30").process_group(0).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("spawn sleep");
 		let pid = libc::pid_t::try_from(child.id()).expect("pid");
 		// SAFETY: a plain query on a child this test owns
 		let pgid = unsafe { libc::getpgid(pid) };
@@ -2812,10 +2302,7 @@ mod tests {
 	}
 
 	fn vars(pairs: &[(&str, &str)]) -> std::collections::HashMap<String, String> {
-		pairs
-			.iter()
-			.map(|(name, value)| ((*name).to_string(), (*value).to_string()))
-			.collect()
+		pairs.iter().map(|(name, value)| ((*name).to_string(), (*value).to_string())).collect()
 	}
 
 	// A shell's private bookkeeping must not change how a different shell starts.
@@ -2825,21 +2312,9 @@ mod tests {
 	// Test ID: dbjjh
 	#[test]
 	fn a_shell_private_variable_is_put_back_to_the_session_value() {
-		let session = vars(&[(
-			"PSModulePath",
-			r"C:\Program Files\WindowsPowerShell\Modules",
-		)]);
-		let inherited = vars(&[(
-			"PSModulePath",
-			r"C:\Program Files\PowerShell\7\Modules;C:\Program Files\WindowsPowerShell\Modules",
-		)]);
-		assert_eq!(
-			env_fixups(&["PSModulePath"], &session, &inherited),
-			vec![(
-				"PSModulePath".to_string(),
-				Some(r"C:\Program Files\WindowsPowerShell\Modules".to_string()),
-			)]
-		);
+		let session = vars(&[("PSModulePath", r"C:\Program Files\WindowsPowerShell\Modules")]);
+		let inherited = vars(&[("PSModulePath", r"C:\Program Files\PowerShell\7\Modules;C:\Program Files\WindowsPowerShell\Modules")]);
+		assert_eq!(env_fixups(&["PSModulePath"], &session, &inherited), vec![("PSModulePath".to_string(), Some(r"C:\Program Files\WindowsPowerShell\Modules".to_string()),)]);
 	}
 
 	// pwsh's -ExecutionPolicy sets this and every descendant inherits it. The
@@ -2850,10 +2325,7 @@ mod tests {
 	fn a_variable_the_session_never_set_is_dropped() {
 		let session = vars(&[("PATH", r"C:\bin")]);
 		let inherited = vars(&[("PSExecutionPolicyPreference", "Bypass")]);
-		assert_eq!(
-			env_fixups(&["PSExecutionPolicyPreference"], &session, &inherited),
-			vec![("PSExecutionPolicyPreference".to_string(), None)]
-		);
+		assert_eq!(env_fixups(&["PSExecutionPolicyPreference"], &session, &inherited), vec![("PSExecutionPolicyPreference".to_string(), None)]);
 	}
 
 	// Launched from the desktop rather than from a shell, the inherited
@@ -2902,10 +2374,7 @@ mod tests {
 		block.push(0);
 
 		let found = parse_env_block(&block);
-		assert_eq!(
-			found.get("PSModulePath").map(String::as_str),
-			Some("one;two")
-		);
+		assert_eq!(found.get("PSModulePath").map(String::as_str), Some("one;two"));
 		assert_eq!(found.get("Path").map(String::as_str), Some(r"C:\bin"));
 		assert_eq!(found.get("=C:").map(String::as_str), Some(r"C:\work"));
 	}
@@ -2918,10 +2387,7 @@ mod tests {
 	#[test]
 	fn a_stored_reference_expands_and_an_unknown_one_survives() {
 		let vars = vars(&[("ProgramFiles", r"C:\Program Files")]);
-		assert_eq!(
-			expand_refs(r"%ProgramFiles%\WindowsPowerShell\Modules", &vars),
-			r"C:\Program Files\WindowsPowerShell\Modules"
-		);
+		assert_eq!(expand_refs(r"%ProgramFiles%\WindowsPowerShell\Modules", &vars), r"C:\Program Files\WindowsPowerShell\Modules");
 		assert_eq!(expand_refs("%NotAThing%;tail", &vars), "%NotAThing%;tail");
 		assert_eq!(expand_refs("100% done", &vars), "100% done");
 	}
@@ -2933,17 +2399,40 @@ mod tests {
 	// Test ID: dbjjr
 	#[test]
 	fn an_empty_session_drops_every_private_variable() {
-		let inherited = vars(&[
-			("PSModulePath", "/opt/microsoft/powershell/7/Modules"),
-			("PSExecutionPolicyPreference", "Bypass"),
-			("OLDPWD", "/home/me/elsewhere"),
-			("PATH", "/usr/bin"),
-		]);
+		let inherited = vars(&[("PSModulePath", "/opt/microsoft/powershell/7/Modules"), ("PSExecutionPolicyPreference", "Bypass"), ("OLDPWD", "/home/me/elsewhere"), ("PATH", "/usr/bin")]);
 		let fixups = env_fixups(SHELL_PRIVATE_ENV, &vars(&[]), &inherited);
 		assert_eq!(fixups.len(), SHELL_PRIVATE_ENV.len());
 		assert!(fixups.iter().all(|(_, value)| value.is_none()));
 		// and the one nobody asked about is untouched
 		assert!(!fixups.iter().any(|(name, _)| name == "PATH"));
+	}
+
+	// One variable whose bytes aren't UTF-8 used to abort every launch, --version
+	// included, since the whole environment was read as text. OLDPWD after a cd
+	// into a Latin-1 folder is enough. It still has to be seen, so it's dropped.
+	// Test ID: dfjva
+	#[test]
+	fn a_variable_that_is_not_unicode_does_not_stop_the_launch() {
+		use std::ffi::OsString;
+		#[cfg(unix)]
+		let bad = |text: &str| {
+			use std::os::unix::ffi::OsStringExt;
+			let mut bytes = text.as_bytes().to_vec();
+			bytes.push(0xe9);
+			OsString::from_vec(bytes)
+		};
+		#[cfg(windows)]
+		let bad = |text: &str| {
+			use std::os::windows::ffi::OsStringExt;
+			let mut wide: Vec<u16> = text.encode_utf16().collect();
+			wide.push(0xd800);
+			OsString::from_wide(&wide)
+		};
+		let inherited = inherited_env([(OsString::from("OLDPWD"), bad("/data/caf")), (OsString::from("PATH"), OsString::from("/usr/bin")), (bad("FOO"), OsString::from("x"))]);
+		assert_eq!(inherited.len(), 2);
+		assert_eq!(inherited.get("PATH").map(String::as_str), Some("/usr/bin"));
+		let fixups = env_fixups(&["OLDPWD"], &vars(&[]), &inherited);
+		assert_eq!(fixups, vec![("OLDPWD".to_string(), None)]);
 	}
 
 	// Whatever a program prints, the terminal must not end up typing for it.
@@ -2980,18 +2469,11 @@ mod tests {
 
 		impl EventListener for Replies {
 			fn send_event(&self, event: Event) {
-				let size = WindowSize {
-					num_cols: COLS as u16,
-					num_lines: LINES as u16,
-					cell_width: 8,
-					cell_height: 16,
-				};
+				let size = WindowSize { num_cols: COLS as u16, num_lines: LINES as u16, cell_width: 8, cell_height: 16 };
 				let bytes = match event {
 					Event::PtyWrite(text) => text.into_bytes(),
 
-					ref query @ (Event::ColorRequest(..) | Event::TextAreaSizeRequest(..)) => {
-						query_reply(query, size).unwrap_or_default()
-					}
+					ref query @ (Event::ColorRequest(..) | Event::TextAreaSizeRequest(..)) => query_reply(query, size).unwrap_or_default(),
 					_ => return,
 				};
 				self.0.lock().expect("reply lock").extend_from_slice(&bytes);
@@ -3000,14 +2482,8 @@ mod tests {
 
 		fn drive(stream: &[u8]) {
 			let replies = Replies::default();
-			let config = Config {
-				scrolling_history: HISTORY,
-				..Config::default()
-			};
-			let dims = TermDimensions {
-				columns: COLS,
-				screen_lines: LINES,
-			};
+			let config = Config { scrolling_history: HISTORY, ..Config::default() };
+			let dims = TermDimensions { columns: COLS, screen_lines: LINES };
 			let mut term = Term::new(config, &dims, replies.clone());
 			term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
 			let mut parser = Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::default();
@@ -3021,37 +2497,21 @@ mod tests {
 			let said = replies.0.lock().expect("reply lock").clone();
 			let shown = String::from_utf8_lossy(&said);
 			// A reply the program can steer is a command the user never typed.
-			assert!(
-				!shown.contains(MARKER),
-				"a reply had the program's own text: {shown:?}"
-			);
+			assert!(!shown.contains(MARKER), "a reply had the program's own text: {shown:?}");
 			// And a reply that can contain a line ending submits itself.
-			assert!(
-				!said.iter().any(|&b| matches!(b, b'\n' | b'\r' | 0)),
-				"a reply had a line ending: {shown:?}"
-			);
+			assert!(!said.iter().any(|&b| matches!(b, b'\n' | b'\r' | 0)), "a reply had a line ending: {shown:?}");
 			// Nothing we answer is long. An unbounded one would be a way to flood
 			// the shell's input as well as a way to hide something in it.
 			assert!(said.len() < 4096, "a reply ran to {} bytes", said.len());
 
 			let grid = term.grid();
 			let cursor = grid.cursor.point;
-			assert!(
-				cursor.line.0 >= 0 && (cursor.line.0 as usize) < LINES,
-				"cursor left the screen: {cursor:?}"
-			);
+			assert!(cursor.line.0 >= 0 && (cursor.line.0 as usize) < LINES, "cursor left the screen: {cursor:?}");
 			assert!(cursor.column.0 < COLS, "cursor left the screen: {cursor:?}");
-			assert!(
-				grid.display_offset() <= grid.history_size(),
-				"the view sits past the scrollback"
-			);
+			assert!(grid.display_offset() <= grid.history_size(), "the view sits past the scrollback");
 			// The scrollback is what a burst of output is allowed to cost. Without
 			// a ceiling on it a program prints until the process is killed.
-			assert!(
-				grid.history_size() <= HISTORY,
-				"scrollback grew to {} past its {HISTORY} limit",
-				grid.history_size()
-			);
+			assert!(grid.history_size() <= HISTORY, "scrollback grew to {} past its {HISTORY} limit", grid.history_size());
 		}
 
 		// Test ID: dcdjk

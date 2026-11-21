@@ -28,21 +28,9 @@ pub const WINDOW_MENU: &str = "Window";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BarItem {
-	Action {
-		label: String,
-		action: MenuAction,
-		check: Option<bool>,
-		key: Option<Chord>,
-	},
-	System {
-		label: String,
-		item: SystemItem,
-		key: Option<Chord>,
-	},
-	Submenu {
-		label: String,
-		items: Vec<BarItem>,
-	},
+	Action { label: String, action: MenuAction, check: Option<bool>, key: Option<Chord> },
+	System { label: String, item: SystemItem, key: Option<Chord> },
+	Submenu { label: String, items: Vec<BarItem> },
 	Separator,
 }
 
@@ -55,77 +43,31 @@ pub struct BarMenu {
 // These 3 are in the app menu on a Mac, so they leave the menus they're in
 // elsewhere.
 fn in_app_menu(action: MenuAction) -> bool {
-	matches!(
-		action,
-		MenuAction::About | MenuAction::Settings | MenuAction::Quit
-	)
+	matches!(action, MenuAction::About | MenuAction::Settings | MenuAction::Quit)
 }
 
 /// Command plus a key, for the rows `AppKit` handles itself.
 pub fn command(key: char) -> Chord {
-	Chord {
-		key: KeyName::Char(key),
-		ctrl: false,
-		alt: false,
-		shift: false,
-		command: true,
-	}
+	Chord { key: KeyName::Char(key), ctrl: false, alt: false, shift: false, command: true }
 }
 
 // The row's chord, the first one its hotkey responds to. Only a chord with
 // Command goes on a row: `AppKit` takes a row's chord before the window sees
 // the press, and one without Command would take keys meant for the shell.
 fn key_for(keys: &Bindings, action: MenuAction) -> Option<Chord> {
-	menu_hotkey(action)
-		.and_then(|hotkey| keys.shown(hotkey))
-		.filter(|chord| chord.command)
+	menu_hotkey(action).and_then(|hotkey| keys.shown(hotkey)).filter(|chord| chord.command)
 }
 
 fn action_row(keys: &Bindings, label: String, action: MenuAction) -> BarItem {
-	BarItem::Action {
-		label,
-		action,
-		check: None,
-		key: key_for(keys, action),
-	}
+	BarItem::Action { label, action, check: None, key: key_for(keys, action) }
 }
 
 fn system(label: &str, item: SystemItem, key: Option<Chord>) -> BarItem {
-	BarItem::System {
-		label: label.into(),
-		item,
-		key,
-	}
+	BarItem::System { label: label.into(), item, key }
 }
 
 fn app_menu(keys: &Bindings) -> BarMenu {
-	BarMenu {
-		title: APP_NAME.into(),
-		items: vec![
-			action_row(keys, format!("About {APP_NAME}"), MenuAction::About),
-			BarItem::Separator,
-			action_row(keys, "Settings\u{2026}".into(), MenuAction::Settings),
-			BarItem::Separator,
-			system("Services", SystemItem::Services, None),
-			BarItem::Separator,
-			system(
-				&format!("Hide {APP_NAME}"),
-				SystemItem::Hide,
-				Some(command('h')),
-			),
-			system(
-				"Hide others",
-				SystemItem::HideOthers,
-				Some(Chord {
-					alt: true,
-					..command('h')
-				}),
-			),
-			system("Show all", SystemItem::ShowAll, None),
-			BarItem::Separator,
-			action_row(keys, format!("Quit {APP_NAME}"), MenuAction::Quit),
-		],
-	}
+	BarMenu { title: APP_NAME.into(), items: vec![action_row(keys, format!("About {APP_NAME}"), MenuAction::About), BarItem::Separator, action_row(keys, "Settings\u{2026}".into(), MenuAction::Settings), BarItem::Separator, system("Services", SystemItem::Services, None), BarItem::Separator, system(&format!("Hide {APP_NAME}"), SystemItem::Hide, Some(command('h'))), system("Hide others", SystemItem::HideOthers, Some(Chord { alt: true, ..command('h') })), system("Show all", SystemItem::ShowAll, None), BarItem::Separator, action_row(keys, format!("Quit {APP_NAME}"), MenuAction::Quit)] }
 }
 
 // Apple's Window menu, with SilkTerm's own tabs where a Mac app has its window
@@ -133,18 +75,7 @@ fn app_menu(keys: &Bindings) -> BarMenu {
 // releases its own tiling rows. Each window is a process of its own, so the
 // list and Bring all to front include only this one's.
 fn window_menu(keys: &Bindings) -> BarMenu {
-	BarMenu {
-		title: WINDOW_MENU.into(),
-		items: vec![
-			system("Minimize", SystemItem::Minimize, Some(command('m'))),
-			system("Zoom", SystemItem::Zoom, None),
-			BarItem::Separator,
-			action_row(keys, "Show previous tab".into(), MenuAction::PrevTab),
-			action_row(keys, "Show next tab".into(), MenuAction::NextTab),
-			BarItem::Separator,
-			system("Bring all to front", SystemItem::BringAllToFront, None),
-		],
-	}
+	BarMenu { title: WINDOW_MENU.into(), items: vec![system("Minimize", SystemItem::Minimize, Some(command('m'))), system("Zoom", SystemItem::Zoom, None), BarItem::Separator, action_row(keys, "Show previous tab".into(), MenuAction::PrevTab), action_row(keys, "Show next tab".into(), MenuAction::NextTab), BarItem::Separator, system("Bring all to front", SystemItem::BringAllToFront, None)] }
 }
 
 /// What a row hands `AppKit` for its chord: the character the press is matched
@@ -157,13 +88,7 @@ pub fn key_equivalent(chord: Chord) -> Option<(String, Chord)> {
 	let text = match chord.key {
 		KeyName::Char(key) => match us_shifted(key) {
 			Some(shifted) if chord.shift => {
-				return Some((
-					shifted.into(),
-					Chord {
-						shift: false,
-						..chord
-					},
-				));
+				return Some((shifted.into(), Chord { shift: false, ..chord }));
 			}
 			_ => key.to_string(),
 		},
@@ -210,21 +135,8 @@ fn bar_items(keys: &Bindings, entries: Vec<Entry>) -> Vec<BarItem> {
 	entries
 		.into_iter()
 		.map(|entry| match entry {
-			Entry::Item {
-				label,
-				action,
-				check,
-				..
-			} => BarItem::Action {
-				label,
-				action,
-				check,
-				key: key_for(keys, action),
-			},
-			Entry::Sub { label, items, .. } => BarItem::Submenu {
-				label,
-				items: bar_items(keys, items),
-			},
+			Entry::Item { label, action, check, .. } => BarItem::Action { label, action, check, key: key_for(keys, action) },
+			Entry::Sub { label, items, .. } => BarItem::Submenu { label, items: bar_items(keys, items) },
 			Entry::Sep => BarItem::Separator,
 		})
 		.collect()
@@ -246,10 +158,7 @@ pub fn layout(window_menus: Vec<(&str, Vec<Entry>)>, keys: &Bindings) -> Vec<Bar
 			items.splice(0..0, first);
 		}
 		if !items.is_empty() {
-			menus.push(BarMenu {
-				title: title.into(),
-				items,
-			});
+			menus.push(BarMenu { title: title.into(), items });
 		}
 	}
 	menus.push(window_menu(keys));
@@ -266,10 +175,7 @@ mod native {
 	use objc2::rc::Retained;
 	use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol};
 	use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
-	use objc2_app_kit::{
-		NSApplication, NSControlStateValueOff, NSControlStateValueOn, NSEventModifierFlags, NSMenu,
-		NSMenuItem,
-	};
+	use objc2_app_kit::{NSApplication, NSControlStateValueOff, NSControlStateValueOn, NSEventModifierFlags, NSMenu, NSMenuItem};
 	use objc2_foundation::NSString;
 	use winit::event_loop::EventLoopProxy;
 
@@ -318,10 +224,7 @@ mod native {
 
 	impl MenuTarget {
 		fn new(mtm: MainThreadMarker, proxy: EventLoopProxy<UserEvent>) -> Retained<Self> {
-			let this = Self::alloc(mtm).set_ivars(Ivars {
-				proxy,
-				actions: RefCell::new(Vec::new()),
-			});
+			let this = Self::alloc(mtm).set_ivars(Ivars { proxy, actions: RefCell::new(Vec::new()) });
 			// SAFETY: NSObject's init, on an object just allocated.
 			unsafe { msg_send![super(this), init] }
 		}
@@ -339,11 +242,7 @@ mod native {
 
 	/// Put the menu bar up, or rebuild it when `key` says what it shows has
 	/// changed. Replaces the default menu winit installs.
-	pub fn refresh(
-		key: u64,
-		build: impl FnOnce() -> Vec<BarMenu>,
-		proxy: &EventLoopProxy<UserEvent>,
-	) {
+	pub fn refresh(key: u64, build: impl FnOnce() -> Vec<BarMenu>, proxy: &EventLoopProxy<UserEvent>) {
 		let Some(mtm) = MainThreadMarker::new() else {
 			return;
 		};
@@ -374,24 +273,12 @@ mod native {
 		});
 	}
 
-	fn submenu(
-		mtm: MainThreadMarker,
-		app: &NSApplication,
-		title: &str,
-		items: &[BarItem],
-		target: &MenuTarget,
-		actions: &mut Vec<MenuAction>,
-	) -> Retained<NSMenu> {
+	fn submenu(mtm: MainThreadMarker, app: &NSApplication, title: &str, items: &[BarItem], target: &MenuTarget, actions: &mut Vec<MenuAction>) -> Retained<NSMenu> {
 		let menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::from_str(title));
 		for item in items {
 			let row = match item {
 				BarItem::Separator => NSMenuItem::separatorItem(mtm),
-				BarItem::Action {
-					label,
-					action,
-					check,
-					key,
-				} => {
+				BarItem::Action { label, action, check, key } => {
 					let row = menu_item(mtm, label, Some(sel!(pick:)), *key);
 					let target: &AnyObject = target;
 					// SAFETY: the target responds to pick:, and is kept alive in
@@ -404,11 +291,7 @@ mod native {
 						row.setToolTip(Some(&NSString::from_str(help)));
 					}
 					if let Some(on) = check {
-						row.setState(if *on {
-							NSControlStateValueOn
-						} else {
-							NSControlStateValueOff
-						});
+						row.setState(if *on { NSControlStateValueOn } else { NSControlStateValueOff });
 					}
 					row
 				}
@@ -426,8 +309,7 @@ mod native {
 					};
 					let row = menu_item(mtm, label, action, *key);
 					if *item == SystemItem::Services {
-						let services =
-							NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::from_str(label));
+						let services = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::from_str(label));
 						row.setSubmenu(Some(&services));
 						app.setServicesMenu(Some(&services));
 					}
@@ -445,31 +327,14 @@ mod native {
 		menu
 	}
 
-	fn menu_item(
-		mtm: MainThreadMarker,
-		label: &str,
-		action: Option<objc2::runtime::Sel>,
-		key: Option<Chord>,
-	) -> Retained<NSMenuItem> {
+	fn menu_item(mtm: MainThreadMarker, label: &str, action: Option<objc2::runtime::Sel>, key: Option<Chord>) -> Retained<NSMenuItem> {
 		let key = key.and_then(key_equivalent);
 		let key_text = NSString::from_str(key.as_ref().map_or("", |(text, _)| text.as_str()));
 		// SAFETY: every selector passed here is one AppKit or MenuTarget responds to.
-		let row = unsafe {
-			NSMenuItem::initWithTitle_action_keyEquivalent(
-				NSMenuItem::alloc(mtm),
-				&NSString::from_str(label),
-				action,
-				&key_text,
-			)
-		};
+		let row = unsafe { NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &NSString::from_str(label), action, &key_text) };
 		if let Some((_, key)) = key {
 			let mut mask = NSEventModifierFlags::empty();
-			for (held, flag) in [
-				(key.command, NSEventModifierFlags::Command),
-				(key.shift, NSEventModifierFlags::Shift),
-				(key.alt, NSEventModifierFlags::Option),
-				(key.ctrl, NSEventModifierFlags::Control),
-			] {
+			for (held, flag) in [(key.command, NSEventModifierFlags::Command), (key.shift, NSEventModifierFlags::Shift), (key.alt, NSEventModifierFlags::Option), (key.ctrl, NSEventModifierFlags::Control)] {
 				if held {
 					mask |= flag;
 				}
@@ -496,12 +361,7 @@ mod tests {
 	}
 
 	fn find(menus: &[BarMenu], want: MenuAction) -> Option<(&str, &BarItem)> {
-		menus.iter().find_map(|menu| {
-			menu.items
-				.iter()
-				.find(|item| matches!(item, BarItem::Action { action, .. } if *action == want))
-				.map(|item| (menu.title.as_str(), item))
-		})
+		menus.iter().find_map(|menu| menu.items.iter().find(|item| matches!(item, BarItem::Action { action, .. } if *action == want)).map(|item| (menu.title.as_str(), item)))
 	}
 
 	// Test ID: ddcef
@@ -510,12 +370,7 @@ mod tests {
 		let menus = layout(window_menus(), &Bindings::defaults(true));
 		let titles: Vec<&str> = menus.iter().map(|m| m.title.as_str()).collect();
 		// Help had only About, which moved to the app menu
-		assert_eq!(
-			titles,
-			[
-				"SilkTerm", "File", "Edit", "View", "Tabs", "Panes", "Window"
-			]
-		);
+		assert_eq!(titles, ["SilkTerm", "File", "Edit", "View", "Tabs", "Panes", "Window"]);
 		let app: Vec<String> = menus[0]
 			.items
 			.iter()
@@ -525,43 +380,11 @@ mod tests {
 				BarItem::Separator => "-".into(),
 			})
 			.collect();
-		assert_eq!(
-			app,
-			[
-				"About SilkTerm",
-				"-",
-				"Settings\u{2026}",
-				"-",
-				"Services",
-				"-",
-				"Hide SilkTerm",
-				"Hide others",
-				"Show all",
-				"-",
-				"Quit SilkTerm",
-			]
-		);
+		assert_eq!(app, ["About SilkTerm", "-", "Settings\u{2026}", "-", "Services", "-", "Hide SilkTerm", "Hide others", "Show all", "-", "Quit SilkTerm",]);
 		for menu in &menus {
-			assert_ne!(
-				menu.items.first(),
-				Some(&BarItem::Separator),
-				"{}",
-				menu.title
-			);
-			assert_ne!(
-				menu.items.last(),
-				Some(&BarItem::Separator),
-				"{}",
-				menu.title
-			);
-			assert!(
-				!menu
-					.items
-					.windows(2)
-					.any(|pair| pair.iter().all(|item| *item == BarItem::Separator)),
-				"{}",
-				menu.title
-			);
+			assert_ne!(menu.items.first(), Some(&BarItem::Separator), "{}", menu.title);
+			assert_ne!(menu.items.last(), Some(&BarItem::Separator), "{}", menu.title);
+			assert!(!menu.items.windows(2).any(|pair| pair.iter().all(|item| *item == BarItem::Separator)), "{}", menu.title);
 		}
 	}
 
@@ -658,16 +481,7 @@ mod tests {
 	fn keys(items: &[BarItem], out: &mut Vec<(String, Chord)>) {
 		for item in items {
 			match item {
-				BarItem::Action {
-					label,
-					key: Some(key),
-					..
-				}
-				| BarItem::System {
-					label,
-					key: Some(key),
-					..
-				} => out.push((label.clone(), *key)),
+				BarItem::Action { label, key: Some(key), .. } | BarItem::System { label, key: Some(key), .. } => out.push((label.clone(), *key)),
 				BarItem::Submenu { items, .. } => keys(items, out),
 				_ => {}
 			}
@@ -683,11 +497,7 @@ mod tests {
 		fn titles(items: &[BarItem], out: &mut Vec<String>) {
 			for item in items {
 				match item {
-					BarItem::Action {
-						label,
-						action: MenuAction::NewTabShell(_) | MenuAction::SplitShell(..),
-						..
-					} => out.push(label.clone()),
+					BarItem::Action { label, action: MenuAction::NewTabShell(_) | MenuAction::SplitShell(..), .. } => out.push(label.clone()),
 					BarItem::Submenu { items, .. } => titles(items, out),
 					_ => {}
 				}
@@ -727,52 +537,20 @@ mod tests {
 		for menu in &menus {
 			keys(&menu.items, &mut have);
 		}
-		let shown: Vec<(&str, String)> = have
-			.iter()
-			.map(|(label, key)| (label.as_str(), key.spoken(true)))
-			.collect();
-		assert_eq!(
-			shown,
-			[
-				("Settings\u{2026}", "Command+,".to_string()),
-				("Hide SilkTerm", "Command+H".to_string()),
-				("Hide others", "Option+Command+H".to_string()),
-				("Quit SilkTerm", "Command+Q".to_string()),
-				("New window", "Command+N".to_string()),
-				("Copy", "Command+C".to_string()),
-				("Paste", "Command+V".to_string()),
-				("Increase font size", "Command+Plus".to_string()),
-				("Decrease font size", "Command+Minus".to_string()),
-				("Reset font size", "Command+0".to_string()),
-				("Fullscreen", "Control+Command+F".to_string()),
-				("New tab", "Command+T".to_string()),
-				("Close tab", "Command+W".to_string()),
-				("Split vertical", "Command+D".to_string()),
-				("Split horizontal", "Shift+Command+D".to_string()),
-				("Close pane", "Option+Command+W".to_string()),
-				("Minimize", "Command+M".to_string()),
-				("Show previous tab", "Shift+Command+[".to_string()),
-				("Show next tab", "Shift+Command+]".to_string()),
-			]
-		);
+		let shown: Vec<(&str, String)> = have.iter().map(|(label, key)| (label.as_str(), key.spoken(true))).collect();
+		assert_eq!(shown, [("Settings\u{2026}", "Command+,".to_string()), ("Hide SilkTerm", "Command+H".to_string()), ("Hide others", "Option+Command+H".to_string()), ("Quit SilkTerm", "Command+Q".to_string()), ("New window", "Command+N".to_string()), ("Copy", "Command+C".to_string()), ("Paste", "Command+V".to_string()), ("Increase font size", "Command+Plus".to_string()), ("Decrease font size", "Command+Minus".to_string()), ("Reset font size", "Command+0".to_string()), ("Fullscreen", "Control+Command+F".to_string()), ("New tab", "Command+T".to_string()), ("Close tab", "Command+W".to_string()), ("Split vertical", "Command+D".to_string()), ("Split horizontal", "Shift+Command+D".to_string()), ("Close pane", "Option+Command+W".to_string()), ("Minimize", "Command+M".to_string()), ("Show previous tab", "Shift+Command+[".to_string()), ("Show next tab", "Shift+Command+]".to_string()),]);
 		// every hotkey with a row shows the chord it responds to first; the focus
 		// moves, the tab carrying and the Menu key have no row
 		let bound = Bindings::defaults(true);
 		for (hotkey, _) in crate::keys::config_paths() {
 			use crate::input::Hotkey;
-			if matches!(
-				hotkey,
-				Hotkey::Focus(_) | Hotkey::MoveTab { .. } | Hotkey::ContextMenu
-			) {
+			if matches!(hotkey, Hotkey::Focus(_) | Hotkey::MoveTab { .. } | Hotkey::ContextMenu) {
 				continue;
 			}
 			let Some(chord) = bound.shown(hotkey) else {
 				continue;
 			};
-			assert!(
-				have.iter().any(|(_, key)| *key == chord),
-				"{hotkey:?} has no row"
-			);
+			assert!(have.iter().any(|(_, key)| *key == chord), "{hotkey:?} has no row");
 		}
 		for menu in &menus {
 			labels(&menu.items);
@@ -818,31 +596,16 @@ mod tests {
 			assert!(!have[i + 1..].contains(action), "{action:?} twice");
 		}
 		let file = menus.iter().find(|m| m.title == "File").expect("File");
-		assert!(matches!(
-			file.items.first(),
-			Some(BarItem::Action {
-				action: MenuAction::NewWindow,
-				..
-			})
-		));
+		assert!(matches!(file.items.first(), Some(BarItem::Action { action: MenuAction::NewWindow, .. })));
 		let (_, row) = find(&menus, MenuAction::ToggleMinimap).expect("Minimap");
 		assert!(matches!(row, BarItem::Action { check: Some(_), .. }));
 		for copy_select in [false, true] {
 			for copy_output in [false, true] {
-				let menus = layout(
-					crate::app::sample_window_menus_copying(copy_select, copy_output),
-					&Bindings::defaults(true),
-				);
-				for (action, on) in [
-					(MenuAction::ToggleCopySelect, copy_select),
-					(MenuAction::ToggleCopyOutput, copy_output),
-				] {
+				let menus = layout(crate::app::sample_window_menus_copying(copy_select, copy_output), &Bindings::defaults(true));
+				for (action, on) in [(MenuAction::ToggleCopySelect, copy_select), (MenuAction::ToggleCopyOutput, copy_output)] {
 					let (title, row) = find(&menus, action).expect("copy mode row");
 					assert_eq!(title, "Edit");
-					assert!(
-						matches!(row, BarItem::Action { check: Some(c), .. } if *c == on),
-						"{action:?}"
-					);
+					assert!(matches!(row, BarItem::Action { check: Some(c), .. } if *c == on), "{action:?}");
 				}
 			}
 		}
@@ -860,32 +623,16 @@ mod tests {
 	fn the_mac_menu_bar_follows_the_bindings() {
 		use crate::input::Hotkey;
 		let chord = |text| Chord::parse(text).expect(text);
-		let (keys, _) = Bindings::with(
-			true,
-			&[
-				(Hotkey::SplitRight, vec![chord("Option+Command+R")]),
-				(Hotkey::ClosePane, vec![chord("Shift+Command+W")]),
-				(Hotkey::Copy, vec![chord("Control+Option+C")]),
-			],
-		);
+		let (keys, _) = Bindings::with(true, &[(Hotkey::SplitRight, vec![chord("Option+Command+R")]), (Hotkey::ClosePane, vec![chord("Shift+Command+W")]), (Hotkey::Copy, vec![chord("Control+Option+C")])]);
 		let menus = layout(window_menus(), &keys);
 		let key_of = |want| match find(&menus, want) {
 			Some((_, BarItem::Action { key, .. })) => key.map(|k| k.spoken(true)),
 			_ => panic!("{want:?} has no row"),
 		};
-		assert_eq!(
-			key_of(MenuAction::SplitVertical).as_deref(),
-			Some("Option+Command+R")
-		);
-		assert_eq!(
-			key_of(MenuAction::Close).as_deref(),
-			Some("Shift+Command+W")
-		);
+		assert_eq!(key_of(MenuAction::SplitVertical).as_deref(), Some("Option+Command+R"));
+		assert_eq!(key_of(MenuAction::Close).as_deref(), Some("Shift+Command+W"));
 		assert_eq!(key_of(MenuAction::Copy), None);
-		assert_eq!(
-			key_of(MenuAction::SplitHorizontal).as_deref(),
-			Some("Shift+Command+D")
-		);
+		assert_eq!(key_of(MenuAction::SplitHorizontal).as_deref(), Some("Shift+Command+D"));
 		let defaults = layout(window_menus(), &Bindings::defaults(true));
 		assert_ne!(defaults, menus);
 	}
@@ -904,32 +651,16 @@ mod tests {
 			.items
 			.iter()
 			.map(|item| match item {
-				BarItem::Action { label, key, .. } | BarItem::System { label, key, .. } => {
-					match key {
-						Some(key) => format!("{label} {}", key.spoken(true)),
-						None => label.clone(),
-					}
-				}
+				BarItem::Action { label, key, .. } | BarItem::System { label, key, .. } => match key {
+					Some(key) => format!("{label} {}", key.spoken(true)),
+					None => label.clone(),
+				},
 				BarItem::Submenu { label, .. } => format!("{label} >"),
 				BarItem::Separator => "-".into(),
 			})
 			.collect();
-		assert_eq!(
-			rows,
-			[
-				"Minimize Command+M",
-				"Zoom",
-				"-",
-				"Show previous tab Shift+Command+[",
-				"Show next tab Shift+Command+]",
-				"-",
-				"Bring all to front",
-			]
-		);
-		for (action, hotkey) in [
-			(MenuAction::PrevTab, crate::input::Hotkey::PrevTab),
-			(MenuAction::NextTab, crate::input::Hotkey::NextTab),
-		] {
+		assert_eq!(rows, ["Minimize Command+M", "Zoom", "-", "Show previous tab Shift+Command+[", "Show next tab Shift+Command+]", "-", "Bring all to front",]);
+		for (action, hotkey) in [(MenuAction::PrevTab, crate::input::Hotkey::PrevTab), (MenuAction::NextTab, crate::input::Hotkey::NextTab)] {
 			assert_eq!(crate::app::menu_hotkey(action), Some(hotkey));
 			assert_eq!(find(&menus, action).map(|(title, _)| title), Some("Window"));
 		}
@@ -940,23 +671,7 @@ mod tests {
 		let next = bound.shown(crate::input::Hotkey::NextTab).expect("chord");
 		let (text, handed) = key_equivalent(next).expect("a key");
 		assert_eq!((text.as_str(), handed.shift), ("}", false));
-		for (chord, text) in [
-			(command('c'), "c"),
-			(
-				Chord {
-					shift: true,
-					..command('t')
-				},
-				"t",
-			),
-			(
-				Chord {
-					alt: true,
-					..command('h')
-				},
-				"h",
-			),
-		] {
+		for (chord, text) in [(command('c'), "c"), (Chord { shift: true, ..command('t') }, "t"), (Chord { alt: true, ..command('h') }, "h")] {
 			assert_eq!(key_equivalent(chord), Some((text.to_string(), chord)));
 		}
 	}

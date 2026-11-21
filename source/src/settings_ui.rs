@@ -200,11 +200,7 @@ pub enum TipAt {
 fn dlg() -> Dlg {
 	#[cfg(test)]
 	DLG_BUILDS.with(|n| n.set(n.get() + 1));
-	let base = if config::is_dark() {
-		DARK_DLG
-	} else {
-		LIGHT_DLG
-	};
+	let base = if config::is_dark() { DARK_DLG } else { LIGHT_DLG };
 	let settings = config::settings();
 	// The 2 attention colors are themable and mean different things (see
 	// theme.rs). `highlight` paints everything that calls attention at once, such
@@ -212,15 +208,7 @@ fn dlg() -> Dlg {
 	// button fill is a dimmed version of it, mixed toward the panel so a pressed
 	// button reads as pressed rather than as the focused one. `focus` paints only
 	// the ring around whatever the keyboard is on.
-	Dlg {
-		panel_bg: settings.dialog_bg,
-		text: settings.dialog_fg,
-		gutter: settings.gutter,
-		handle: settings.highlight,
-		btn_hl: mix3(settings.dialog_bg, settings.highlight, 0.62),
-		focus_out: settings.focus,
-		..base
-	}
+	Dlg { panel_bg: settings.dialog_bg, text: settings.dialog_fg, gutter: settings.gutter, handle: settings.highlight, btn_hl: mix3(settings.dialog_bg, settings.highlight, 0.62), focus_out: settings.focus, ..base }
 }
 
 /// Mode-adaptive dialog colors for the pop-out window (clear + About text).
@@ -514,12 +502,8 @@ pub(crate) fn slider_of(settings: &Settings, key: Key) -> f32 {
 		Key::ScrollEaseIn => falling_slider(settings.scroll_ease_in_ms, EASE_IN_MIN, EASE_IN_MAX),
 		Key::ScrollRampUp => falling_slider(settings.scroll_ramp_up_ms, RAMP_UP_MIN, RAMP_UP_MAX),
 		Key::SingleScreenTau => tau_to_speed(settings.scroll_single_screen_tau_ms),
-		Key::ScrollRampDown => {
-			falling_slider(settings.scroll_ramp_down_ms, RAMP_DOWN_MIN, RAMP_DOWN_MAX)
-		}
-		Key::ScrollEaseOut => {
-			falling_slider(settings.scroll_ease_out_ms, EASE_OUT_MIN, EASE_OUT_MAX)
-		}
+		Key::ScrollRampDown => falling_slider(settings.scroll_ramp_down_ms, RAMP_DOWN_MIN, RAMP_DOWN_MAX),
+		Key::ScrollEaseOut => falling_slider(settings.scroll_ease_out_ms, EASE_OUT_MIN, EASE_OUT_MAX),
 		Key::WheelLines => settings.wheel_lines,
 		Key::ScrollbarThickness => settings.scrollbar_thickness,
 		Key::MinimapWidth => settings.minimap_width,
@@ -532,13 +516,7 @@ pub(crate) fn slider_of(settings: &Settings, key: Key) -> f32 {
 }
 // Why "Minutes when hidden" is grayed on a desktop that never says so.
 const fn hidden_wait_tip(sees_hidden: bool) -> Option<&'static str> {
-	if sees_hidden {
-		None
-	} else {
-		Some(
-			"Wayland doesn't tell a window when it's hidden, so Minutes otherwise is used instead.",
-		)
-	}
+	if sees_hidden { None } else { Some("Wayland doesn't tell a window when it's hidden, so Minutes otherwise is used instead.") }
 }
 
 // Why the tmux rows are grayed where there's no tmux to run.
@@ -630,10 +608,7 @@ fn radio_of(settings: &Settings, key: Key) -> usize {
 		Key::ThemeMode => settings.theme_mode.index(),
 		Key::TmuxOnClose => settings.tmux_on_close.index(),
 		Key::OptionAsAlt => settings.option_as_alt.index(),
-		Key::Theme => crate::theme::all_names(&settings.user_themes)
-			.iter()
-			.position(|n| n.eq_ignore_ascii_case(settings.theme.trim()))
-			.unwrap_or(0),
+		Key::Theme => crate::theme::all_names(&settings.user_themes).iter().position(|n| n.eq_ignore_ascii_case(settings.theme.trim())).unwrap_or(0),
 		keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => 0,
 	}
 }
@@ -690,12 +665,7 @@ fn warning_room(line_h: f32) -> f32 {
 }
 
 // A rect for something that isn't on show.
-const NO_RECT: Rect = Rect {
-	x: 0.0,
-	y: 0.0,
-	w: 0.0,
-	h: 0.0,
-};
+const NO_RECT: Rect = Rect { x: 0.0, y: 0.0, w: 0.0, h: 0.0 };
 
 // `r` cut down to what falls inside `to`. Zero width when nothing does.
 fn clip_rect(r: Rect, to: Rect) -> Rect {
@@ -703,22 +673,12 @@ fn clip_rect(r: Rect, to: Rect) -> Rect {
 	let x1 = (r.x + r.w).min(to.x + to.w);
 	let y0 = r.y.max(to.y);
 	let y1 = (r.y + r.h).min(to.y + to.h);
-	Rect {
-		x: x0,
-		y: y0,
-		w: (x1 - x0).max(0.0),
-		h: (y1 - y0).max(0.0),
-	}
+	Rect { x: x0, y: y0, w: (x1 - x0).max(0.0), h: (y1 - y0).max(0.0) }
 }
 
 /// A plain quad in one color.
 pub fn quad(x: f32, y: f32, w: f32, h: f32, color: [u8; 3]) -> RectInstance {
-	RectInstance {
-		pos: [x, y],
-		size: [w, h],
-		color: config::srgb_f32(color),
-		..Default::default()
-	}
+	RectInstance { pos: [x, y], size: [w, h], color: config::srgb_f32(color), ..Default::default() }
 }
 
 // A frame `t` thick just outside `r`.
@@ -779,18 +739,7 @@ impl EditState {
 	// prompt box's field, which belongs to no row.
 	fn new(row: usize, buf: String) -> EditState {
 		let cur = buf.len();
-		EditState {
-			row,
-			buf,
-			cur,
-			sel: None,
-			view: 0.0,
-			view_to: 0.0,
-			caret_vis: None,
-			blink_t: 0.0,
-			last_sig: (usize::MAX, None, usize::MAX),
-			wallpaper_folder: false,
-		}
+		EditState { row, buf, cur, sel: None, view: 0.0, view_to: 0.0, caret_vis: None, blink_t: 0.0, last_sig: (usize::MAX, None, usize::MAX), wallpaper_folder: false }
 	}
 	// Smooth blink: solid just after activity, then a soft cosine pulse (never a
 	// hard on/off pop).
@@ -845,44 +794,20 @@ struct SliderScale {
 impl SliderScale {
 	fn of(kind: &Kind) -> Option<Self> {
 		match *kind {
-			Kind::Slider {
-				min,
-				max,
-				int,
-				log,
-				typed_max,
-			} => Some(Self {
-				min,
-				max,
-				int,
-				log,
-				typed_max,
-			}),
+			Kind::Slider { min, max, int, log, typed_max } => Some(Self { min, max, int, log, typed_max }),
 			_ => None,
 		}
 	}
 
 	// 0..1 along the track. A value typed past the end sits at the end.
 	fn frac(self, value: f32) -> f32 {
-		let frac = if self.log {
-			log_pos(value, self.min, self.max)
-		} else {
-			(value - self.min) / (self.max - self.min)
-		};
+		let frac = if self.log { log_pos(value, self.min, self.max) } else { (value - self.min) / (self.max - self.min) };
 		// clamp lets NaN through
-		if frac.is_nan() {
-			0.0
-		} else {
-			frac.clamp(0.0, 1.0)
-		}
+		if frac.is_nan() { 0.0 } else { frac.clamp(0.0, 1.0) }
 	}
 
 	fn at(self, frac: f32) -> f32 {
-		let value = if self.log {
-			log_val(frac, self.min, self.max)
-		} else {
-			self.min + frac.clamp(0.0, 1.0) * (self.max - self.min)
-		};
+		let value = if self.log { log_val(frac, self.min, self.max) } else { self.min + frac.clamp(0.0, 1.0) * (self.max - self.min) };
 		self.whole(value)
 	}
 
@@ -899,11 +824,7 @@ impl SliderScale {
 		let next = if self.log {
 			let ratio = (self.max / self.min).powf(if shift { 0.1 } else { 0.01 });
 			let next = self.whole(value * ratio.powi(dir));
-			if self.int && next == value.round() {
-				next + dir as f32
-			} else {
-				next
-			}
+			if self.int && next == value.round() { next + dir as f32 } else { next }
 		} else {
 			self.whole(value + dir as f32 * slider_step(self.min, self.max, self.int, shift))
 		};
@@ -919,17 +840,9 @@ impl SliderScale {
 	// The longest numbers the box can show: either end, and for a decimal the
 	// top of each band before it drops a place, since 999.9 is longer than 3600.
 	fn widest_texts(self) -> Vec<String> {
-		let bands: &[f32] = if self.int {
-			&[]
-		} else {
-			&[99.94, 999.94, -99.94, -999.94]
-		};
+		let bands: &[f32] = if self.int { &[] } else { &[99.94, 999.94, -99.94, -999.94] };
 		let reachable = |v: &&f32| (self.min..=self.typed_max).contains(*v);
-		[self.min, self.typed_max]
-			.iter()
-			.chain(bands.iter().filter(reachable))
-			.map(|&v| fmt_number(self.whole(v), self.int))
-			.collect()
+		[self.min, self.typed_max].iter().chain(bands.iter().filter(reachable)).map(|&v| fmt_number(self.whole(v), self.int)).collect()
 	}
 }
 
@@ -967,13 +880,7 @@ pub enum EditCmd {
 	Delete,
 	SelectAll,
 }
-const EDIT_MENU: [(&str, EditCmd); 5] = [
-	("Cut", EditCmd::Cut),
-	("Copy", EditCmd::Copy),
-	("Paste", EditCmd::Paste),
-	("Delete", EditCmd::Delete),
-	("Select all", EditCmd::SelectAll),
-];
+const EDIT_MENU: [(&str, EditCmd); 5] = [("Cut", EditCmd::Cut), ("Copy", EditCmd::Copy), ("Paste", EditCmd::Paste), ("Delete", EditCmd::Delete), ("Select all", EditCmd::SelectAll)];
 
 // The Windows file-type rows, which act on the registry rather than a setting.
 fn assoc_of(key: Key) -> Option<Assoc> {
@@ -1008,9 +915,7 @@ const SEARCH_ROW: usize = PSEUDO_ROW + 64;
 
 // Which value box a pseudo row stands for, if it is one of the picker's.
 fn pick_field_of(row: usize) -> Option<pick::Field> {
-	pick::Field::ALL
-		.get(row.checked_sub(PICK_ROW_BASE)?)
-		.copied()
+	pick::Field::ALL.get(row.checked_sub(PICK_ROW_BASE)?).copied()
 }
 fn pick_field_row(f: pick::Field) -> usize {
 	PICK_ROW_BASE + pick::Field::ALL.iter().position(|&a| a == f).unwrap_or(0)
@@ -1065,18 +970,7 @@ pub struct Marks {
 impl TextItem {
 	// Unclipped text at the normal size and weight.
 	fn plain(text: impl Into<Cow<'static, str>>, x: f32, y: f32, color: [u8; 3]) -> Self {
-		Self {
-			text: text.into(),
-			x,
-			y,
-			color,
-			clip: None,
-			bold: false,
-			italic: false,
-			scale: 1.0,
-			marks: None,
-			band: None,
-		}
+		Self { text: text.into(), x, y, color, clip: None, bold: false, italic: false, scale: 1.0, marks: None, band: None }
 	}
 }
 
@@ -1137,7 +1031,7 @@ pub struct SettingsDialog {
 	// Chords are spoken the Mac's way. Stored so a test can ask for either.
 	mac: bool,
 	edit_drag: Option<usize>, // field row being drag-selected with the mouse
-	select_all_on_up: bool, // a fresh single-click field entry: select all on release unless it became a drag
+	select_all_on_up: bool,   // a fresh single-click field entry: select all on release unless it became a drag
 	// multi-click detection (double = select word, triple = select all)
 	last_click: Option<(std::time::Instant, f32, f32)>,
 	click_streak: u8,
@@ -1191,9 +1085,7 @@ pub struct SettingsDialog {
 // Only the tab, since 3 whole copies of the settings would bury the rest.
 impl std::fmt::Debug for SettingsDialog {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("SettingsDialog")
-			.field("tab", &self.tab)
-			.finish_non_exhaustive()
+		f.debug_struct("SettingsDialog").field("tab", &self.tab).finish_non_exhaustive()
 	}
 }
 
@@ -1205,13 +1097,7 @@ impl SettingsDialog {
 		match kind {
 			Kind::Header(_) => lay().header_height.max(line_h + lay().header_pad),
 			// column titles, a line per shell, then the Add button
-			Kind::ShellList => {
-				line_h
-					+ lay().shell_head_gap
-					+ shells as f32 * line
-					+ lay().shell_add_gap
-					+ Self::btn_h_for(line_h)
-			}
+			Kind::ShellList => line_h + lay().shell_head_gap + shells as f32 * line + lay().shell_add_gap + Self::btn_h_for(line_h),
 			_ => line,
 		}
 	}
@@ -1227,11 +1113,7 @@ impl SettingsDialog {
 	// How tall row `i` looks. A row drawn beside another shares that row's line,
 	// so it stands a line tall even though it advances the walk by nothing.
 	fn row_screen_h(&self, i: usize) -> f32 {
-		if self.specs[i].beside {
-			self.line_row_h()
-		} else {
-			self.row_h(&self.specs[i].kind)
-		}
+		if self.specs[i].beside { self.line_row_h() } else { self.row_h(&self.specs[i].kind) }
 	}
 	// An editable field is taller than a checkbox, since its text needs clear
 	// space above and below.
@@ -1247,10 +1129,7 @@ impl SettingsDialog {
 	// A button's caption centers on its capitals like a tab title, so the
 	// button grows the same way when the font's descent needs more room.
 	fn btn_h_for(line_h: f32) -> f32 {
-		lay()
-			.button_height
-			.max(line_h + lay().row_pad)
-			.max(crate::text::ui_band_floor(line_h))
+		lay().button_height.max(line_h + lay().row_pad).max(crate::text::ui_band_floor(line_h))
 	}
 
 	// A heading that only repeats its own tab's title says nothing the tab strip
@@ -1263,35 +1142,23 @@ impl SettingsDialog {
 
 	// The rows one tab draws, in order.
 	fn visible(specs: &[Spec], tab: usize) -> impl Iterator<Item = (usize, &Spec)> {
-		specs
-			.iter()
-			.enumerate()
-			.filter(move |(_, spec)| spec.tab == tab && !Self::header_is_tab_title(spec))
+		specs.iter().enumerate().filter(move |(_, spec)| spec.tab == tab && !Self::header_is_tab_title(spec))
 	}
 
 	// The rows after `i` on the same tab, in order. Scanned forward from `i`
 	// rather than filtered from the top: row_y calls this per row, and the walk
 	// down a tab would otherwise be quadratic in the whole declaration.
 	fn after(specs: &[Spec], i: usize, tab: usize) -> impl Iterator<Item = (usize, &Spec)> {
-		specs
-			.iter()
-			.enumerate()
-			.skip(i + 1)
-			.filter(move |(_, spec)| spec.tab == tab && !Self::header_is_tab_title(spec))
+		specs.iter().enumerate().skip(i + 1).filter(move |(_, spec)| spec.tab == tab && !Self::header_is_tab_title(spec))
 	}
 	// The next row down from `i`, skipping anything that shares `i`'s own line.
 	fn next_row(specs: &[Spec], i: usize, tab: usize) -> Option<&Spec> {
-		Self::after(specs, i, tab)
-			.find(|(_, spec)| !spec.beside)
-			.map(|(_, spec)| spec)
+		Self::after(specs, i, tab).find(|(_, spec)| !spec.beside).map(|(_, spec)| spec)
 	}
 	// The row drawn beside `i`, when there is one. The second of the pair has
 	// the line's height, which is what keeps `row_y` returning the same y for both.
 	fn paired_with(specs: &[Spec], i: usize, tab: usize) -> Option<usize> {
-		Self::after(specs, i, tab)
-			.next()
-			.filter(|(_, next)| next.beside)
-			.map(|(j, _)| j)
+		Self::after(specs, i, tab).next().filter(|(_, next)| next.beside).map(|(j, _)| j)
 	}
 	fn pairs_down(specs: &[Spec], i: usize, tab: usize) -> bool {
 		Self::paired_with(specs, i, tab).is_some()
@@ -1311,10 +1178,7 @@ impl SettingsDialog {
 	// (2026100710173200). A line with anything else on it splits the column.
 	fn packs(specs: &[Spec], i: usize) -> bool {
 		let (lead, parts, _) = Self::line_of(specs, i);
-		parts > 1
-			&& specs[lead..lead + parts]
-				.iter()
-				.all(|s| matches!(s.kind, Kind::Toggle))
+		parts > 1 && specs[lead..lead + parts].iter().all(|s| matches!(s.kind, Kind::Toggle))
 	}
 	// A packed line in a group with other rows keeps its first box in the control
 	// column, under theirs, and only the rest pack after it. One alone under its
@@ -1322,12 +1186,7 @@ impl SettingsDialog {
 	fn lead_keeps_column(specs: &[Spec], i: usize) -> bool {
 		let (lead, parts, _) = Self::line_of(specs, i);
 		let heading = |s: &&Spec| matches!(s.kind, Kind::Header(_));
-		specs[..lead]
-			.iter()
-			.rev()
-			.take_while(|s| !heading(s))
-			.chain(specs[lead + parts..].iter().take_while(|s| !heading(s)))
-			.any(|s| !s.beside)
+		specs[..lead].iter().rev().take_while(|s| !heading(s)).chain(specs[lead + parts..].iter().take_while(|s| !heading(s))).any(|s| !s.beside)
 	}
 	// Whether row `i`'s label counts toward the label column.
 	fn in_label_column(specs: &[Spec], i: usize) -> bool {
@@ -1335,23 +1194,13 @@ impl SettingsDialog {
 	}
 	// Where part `k` of the packed line led by `lead` puts its label and its box,
 	// in from the line's left edge. A warning mark moves with its label.
-	fn packed_at(
-		specs: &[Spec],
-		lead: usize,
-		k: usize,
-		label_ws: &[f32],
-		line_h: f32,
-	) -> (f32, f32) {
+	fn packed_at(specs: &[Spec], lead: usize, k: usize, label_ws: &[f32], line_h: f32) -> (f32, f32) {
 		let mut x = 0.0;
 		for (j, spec) in specs.iter().enumerate().skip(lead).take(k + 1) {
 			let label = if spec.label.is_empty() {
 				0.0
 			} else {
-				let mark = if spec.warning.is_empty() {
-					0.0
-				} else {
-					warning_room(line_h)
-				};
+				let mark = if spec.warning.is_empty() { 0.0 } else { warning_room(line_h) };
 				label_ws.get(j).copied().unwrap_or(0.0) + mark + font_gap(PART_LABEL_GAP, line_h)
 			};
 			if j == lead + k {
@@ -1364,8 +1213,7 @@ impl SettingsDialog {
 	// How far a packed line runs, from its first label to the end of its last box.
 	fn packed_w(specs: &[Spec], lead: usize, label_ws: &[f32], line_h: f32) -> f32 {
 		let (_, parts, _) = Self::line_of(specs, lead);
-		Self::packed_at(specs, lead, parts - 1, label_ws, line_h).1
-			+ square_box(lay().swatch, line_h)
+		Self::packed_at(specs, lead, parts - 1, label_ws, line_h).1 + square_box(lay().swatch, line_h)
 	}
 	// The control column a line led by `lead` needs, from what each part has to
 	// show: a dropdown its pair floor, a toggle its box and any label before it.
@@ -1382,11 +1230,7 @@ impl SettingsDialog {
 				let spec = &specs[lead + k];
 				let own = match spec.kind {
 					Kind::Dropdown(_) => lay().dropdown_pair_width * font_scale,
-					Kind::Toggle if k > 0 && !spec.label.is_empty() => {
-						label_ws.get(lead + k).copied().unwrap_or(0.0)
-							+ font_gap(PART_LABEL_GAP, line_h)
-							+ square_box(lay().swatch, line_h)
-					}
+					Kind::Toggle if k > 0 && !spec.label.is_empty() => label_ws.get(lead + k).copied().unwrap_or(0.0) + font_gap(PART_LABEL_GAP, line_h) + square_box(lay().swatch, line_h),
 					Kind::Toggle => square_box(lay().swatch, line_h),
 					_ => 0.0,
 				};
@@ -1400,8 +1244,7 @@ impl SettingsDialog {
 	// can't disagree.
 	fn leads_subgroup(specs: &[Spec], i: usize, tab: usize) -> bool {
 		// half a line leads nothing, and its own indent means nothing either
-		!specs[i].beside
-			&& Self::next_row(specs, i, tab).is_some_and(|next| next.indent > specs[i].indent)
+		!specs[i].beside && Self::next_row(specs, i, tab).is_some_and(|next| next.indent > specs[i].indent)
 	}
 
 	// Clear space above a drawn row: a group heading is set off from the section
@@ -1424,10 +1267,7 @@ impl SettingsDialog {
 	// The tabs the dialog's height is taken from. The shell list's height moves
 	// with the data, and the hotkeys are a long fixed list; both scroll instead.
 	fn fixed_tabs(specs: &[Spec]) -> impl Iterator<Item = usize> + '_ {
-		(0..tab_titles().len()).filter(|&t| {
-			!Self::visible(specs, t)
-				.any(|(_, spec)| matches!(spec.kind, Kind::ShellList | Kind::Hotkey(_)))
-		})
+		(0..tab_titles().len()).filter(|&t| !Self::visible(specs, t).any(|(_, spec)| matches!(spec.kind, Kind::ShellList | Kind::Hotkey(_))))
 	}
 
 	// Natural height of one tab's rows (gaps included). Static so `new` can size
@@ -1445,11 +1285,7 @@ impl SettingsDialog {
 	// What a row adds to the walk down a tab. A row with another drawn beside it
 	// adds nothing; the one beside it adds the line they share.
 	fn row_advance(specs: &[Spec], i: usize, tab: usize, line_h: f32, shells: usize) -> f32 {
-		if Self::pairs_down(specs, i, tab) {
-			0.0
-		} else {
-			Self::row_h_for(&specs[i].kind, line_h, shells)
-		}
+		if Self::pairs_down(specs, i, tab) { 0.0 } else { Self::row_h_for(&specs[i].kind, line_h, shells) }
 	}
 
 	/// `line_h` is the chrome (UI font) line height; `chrome` is the text it has
@@ -1459,15 +1295,7 @@ impl SettingsDialog {
 	/// `scale` is the window's DIP -> physical factor; every other argument arrives
 	/// in physical pixels and is converted on the way in (see the module note on
 	/// the DIP boundary).
-	pub fn new(
-		screen_w: f32,
-		screen_h: f32,
-		line_h: f32,
-		chrome: Chrome,
-		max_w: f32,
-		max_h: f32,
-		scale: f32,
-	) -> Self {
+	pub fn new(screen_w: f32, screen_h: f32, line_h: f32, chrome: Chrome, max_w: f32, max_h: f32, scale: f32) -> Self {
 		let scale = sane_scale(scale);
 		let (screen_w, screen_h) = (screen_w / scale, screen_h / scale);
 		let (line_h, max_w, max_h) = (line_h / scale, max_w / scale, max_h / scale);
@@ -1477,16 +1305,10 @@ impl SettingsDialog {
 		// stretchy controls spread out.
 		let natural = Self::natural_dip(line_h, &chrome);
 		let (w, natural_h) = natural;
-		let (min_w, min_h) =
-			Self::min_size_dip(line_h, chrome.btn_w, Self::side_off_for(&chrome.tab_ws));
+		let (min_w, min_h) = Self::min_size_dip(line_h, chrome.btn_w, Self::side_off_for(&chrome.tab_ws));
 		let w = w.min(max_w.max(min_w));
 		let h = natural_h.min(max_h.max(min_h));
-		let rect = Rect {
-			x: ((screen_w - w) / 2.0).max(0.0),
-			y: ((screen_h - h) / 2.0).max(0.0),
-			w,
-			h,
-		};
+		let rect = Rect { x: ((screen_w - w) / 2.0).max(0.0), y: ((screen_h - h) / 2.0).max(0.0), w, h };
 		let specs: &'static [Spec] = &ui().specs;
 		let settings = (*config::settings()).clone();
 		let mut dialog = Self {
@@ -1561,14 +1383,7 @@ impl SettingsDialog {
 	// the boundary. `new` and `rescale` both solve it, and it is long enough that
 	// a second copy would drift.
 	fn natural_dip(line_h: f32, chrome: &Chrome) -> (f32, f32) {
-		let Chrome {
-			label_w,
-			btn_w,
-			row_btn_w,
-			value_w,
-			revert_w,
-			..
-		} = *chrome;
+		let Chrome { label_w, btn_w, row_btn_w, value_w, revert_w, .. } = *chrome;
 		let (tab_ws, label_ws) = (&chrome.tab_ws, &chrome.label_ws);
 		let specs: &'static [Spec] = &ui().specs;
 		// A tab whose height moves with the data, the shell list's, scrolls
@@ -1577,11 +1392,8 @@ impl SettingsDialog {
 		// each tab is measured with its own strip. Down the side the list has
 		// to fit as well.
 		let nodes = tab_nodes();
-		let tallest = Self::fixed_tabs(specs)
-			.map(|t| Self::above_rows_for(line_h, t) + Self::tab_content_h(specs, t, line_h, 0))
-			.fold(0.0f32, f32::max);
-		let natural_h = (tallest + lay().rows_pad * 2.0 + Self::footer_h_for(line_h))
-			.max(Self::side_list_h(line_h, nodes.len()) + 1.0);
+		let tallest = Self::fixed_tabs(specs).map(|t| Self::above_rows_for(line_h, t) + Self::tab_content_h(specs, t, line_h, 0)).fold(0.0f32, f32::max);
+		let natural_h = (tallest + lay().rows_pad * 2.0 + Self::footer_h_for(line_h)).max(Self::side_list_h(line_h, nodes.len()) + 1.0);
 		let (tabs_w, side_off) = match tabs_side() {
 			TabsSide::Top => (Self::strip_w_for(tab_ws), 0.0),
 			TabsSide::Left => (0.0, Self::side_off_for(tab_ws)),
@@ -1597,25 +1409,11 @@ impl SettingsDialog {
 			})
 			.max()
 			.unwrap_or(0) as f32;
-		let radio_w =
-			lay().pad + label_w + max_radio_opts * lay().radio_pitch * font_scale + lay().pad;
+		let radio_w = lay().pad + label_w + max_radio_opts * lay().radio_pitch * font_scale + lay().pad;
 		// a dropdown's collapsed box (+ revert column) must fit too, and a shared
 		// line needs every part's room in every one of its even parts
-		let dd_ctl = (0..specs.len())
-			.filter(|&i| !specs[i].beside)
-			.map(|lead| Self::line_need(specs, lead, label_ws, line_h))
-			.chain(
-				specs
-					.iter()
-					.filter(|s| matches!(s.kind, Kind::Dropdown(_)) && !s.beside)
-					.map(|_| lay().dropdown_width * font_scale),
-			)
-			.fold(0.0f32, f32::max);
-		let dd_w = if dd_ctl > 0.0 {
-			lay().pad + label_w + dd_ctl + 6.0 + revert_w + lay().pad
-		} else {
-			0.0
-		};
+		let dd_ctl = (0..specs.len()).filter(|&i| !specs[i].beside).map(|lead| Self::line_need(specs, lead, label_ws, line_h)).chain(specs.iter().filter(|s| matches!(s.kind, Kind::Dropdown(_)) && !s.beside).map(|_| lay().dropdown_width * font_scale)).fold(0.0f32, f32::max);
+		let dd_w = if dd_ctl > 0.0 { lay().pad + label_w + dd_ctl + 6.0 + revert_w + lay().pad } else { 0.0 };
 		// a row of push-buttons starts at the control column and must fit too
 		let max_row_btns = specs
 			.iter()
@@ -1625,46 +1423,21 @@ impl SettingsDialog {
 			})
 			.max()
 			.unwrap_or(0) as f32;
-		let btns_w = if max_row_btns > 0.0 {
-			lay().pad
-				+ label_w + max_row_btns * row_btn_w
-				+ (max_row_btns - 1.0) * lay().button_gap
-				+ lay().pad
-		} else {
-			0.0
-		};
+		let btns_w = if max_row_btns > 0.0 { lay().pad + label_w + max_row_btns * row_btn_w + (max_row_btns - 1.0) * lay().button_gap + lay().pad } else { 0.0 };
 		// the shells grid spans the whole content width, so its columns are a floor
 		// on the panel rather than on a column of it
-		let grid_w = if specs.iter().any(|s| matches!(s.kind, Kind::ShellList)) {
-			lay().pad + Self::shell_columns_w(line_h, chrome) + lay().pad
-		} else {
-			0.0
-		};
+		let grid_w = if specs.iter().any(|s| matches!(s.kind, Kind::ShellList)) { lay().pad + Self::shell_columns_w(line_h, chrome) + lay().pad } else { 0.0 };
 		// a packed line of toggles ignores the columns, so it is a floor of its own
 		let packed_w = (0..specs.len())
 			.filter(|&lead| !specs[lead].beside && Self::packs(specs, lead))
 			.map(|lead| {
 				let run = Self::packed_w(specs, lead, label_ws, line_h);
-				let line = if Self::lead_keeps_column(specs, lead) {
-					label_w + run - Self::packed_at(specs, lead, 0, label_ws, line_h).1
-				} else {
-					f32::from(specs[lead].indent) * lay().indent + run
-				};
+				let line = if Self::lead_keeps_column(specs, lead) { label_w + run - Self::packed_at(specs, lead, 0, label_ws, line_h).1 } else { f32::from(specs[lead].indent) * lay().indent + run };
 				lay().pad + line + 6.0 + revert_w + lay().pad
 			})
 			.fold(0.0f32, f32::max);
 		// a wider number box widens this floor, as a longer label does
-		let w = (lay().width
-			+ (label_w - lay().label_width)
-			+ (btn_w - lay().button_width) * 3.0
-			+ (value_w - lay().value_width))
-			.max(tabs_w)
-			.max(packed_w)
-			.max(radio_w)
-			.max(dd_w)
-			.max(btns_w)
-			.max(grid_w)
-			+ side_off;
+		let w = (lay().width + (label_w - lay().label_width) + (btn_w - lay().button_width) * 3.0 + (value_w - lay().value_width)).max(tabs_w).max(packed_w).max(radio_w).max(dd_w).max(btns_w).max(grid_w) + side_off;
 		(w, natural_h)
 	}
 
@@ -1710,12 +1483,7 @@ impl SettingsDialog {
 		dip * self.scale
 	}
 	fn rect_px(&self, r: Rect) -> Rect {
-		Rect {
-			x: self.to_px(r.x),
-			y: self.to_px(r.y),
-			w: self.to_px(r.w),
-			h: self.to_px(r.h),
-		}
+		Rect { x: self.to_px(r.x), y: self.to_px(r.y), w: self.to_px(r.w), h: self.to_px(r.h) }
 	}
 	// Scale a batch of quads out to physical pixels. `params.y` is a stroke width
 	// or corner radius, so it is a measurement too and scales with the rest. A
@@ -1726,13 +1494,7 @@ impl SettingsDialog {
 			quad.size = [self.to_px(quad.size[0]), self.to_px(quad.size[1])];
 			match quad.mode() {
 				QuadMode::Triangle => {}
-				QuadMode::Solid
-				| QuadMode::CloseMark
-				| QuadMode::Rounded
-				| QuadMode::PickSquare
-				| QuadMode::HueStrip
-				| QuadMode::Curl
-				| QuadMode::Dashes => quad.params[1] = self.to_px(quad.params[1]),
+				QuadMode::Solid | QuadMode::CloseMark | QuadMode::Rounded | QuadMode::PickSquare | QuadMode::HueStrip | QuadMode::Curl | QuadMode::Dashes => quad.params[1] = self.to_px(quad.params[1]),
 			}
 		}
 	}
@@ -1760,13 +1522,7 @@ impl SettingsDialog {
 		let s = self.scale;
 		self.mouse_move_dip(x / s, y / s, &mut |t| measure(t) / s)
 	}
-	pub fn mouse_right(
-		&mut self,
-		x: f32,
-		y: f32,
-		paste_ok: bool,
-		measure: &mut impl FnMut(&str) -> f32,
-	) {
+	pub fn mouse_right(&mut self, x: f32, y: f32, paste_ok: bool, measure: &mut impl FnMut(&str) -> f32) {
 		let s = self.scale;
 		self.mouse_right_dip(x / s, y / s, paste_ok, &mut |t| measure(t) / s);
 	}
@@ -1782,9 +1538,7 @@ impl SettingsDialog {
 	/// up. False when the tab has none.
 	#[cfg(test)]
 	pub fn open_a_dropdown(&mut self) -> bool {
-		let Some(i) = (0..self.specs.len()).find(|&i| {
-			self.specs[i].tab == self.tab && matches!(self.specs[i].kind, Kind::Dropdown(_))
-		}) else {
+		let Some(i) = (0..self.specs.len()).find(|&i| self.specs[i].tab == self.tab && matches!(self.specs[i].kind, Kind::Dropdown(_))) else {
 			return false;
 		};
 		self.dd_open(i);
@@ -1796,8 +1550,7 @@ impl SettingsDialog {
 		#[cfg(test)]
 		HOVER_TIPS.with(|n| n.set(n.get() + 1));
 		let s = self.scale;
-		self.hover_at_dip(mx / s, my / s)
-			.map(|(at, anchor)| (at, self.rect_px(anchor)))
+		self.hover_at_dip(mx / s, my / s).map(|(at, anchor)| (at, self.rect_px(anchor)))
 	}
 	/// The words of a tip `hover_at` found.
 	pub fn tip_words(&self, at: TipAt) -> Cow<'static, str> {
@@ -1808,17 +1561,12 @@ impl SettingsDialog {
 	}
 	#[cfg(test)]
 	pub fn hover_tip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
-		self.hover_at(mx, my)
-			.map(|(at, anchor)| (self.tip_words(at), anchor))
+		self.hover_at(mx, my).map(|(at, anchor)| (self.tip_words(at), anchor))
 	}
 
 	/// The drawing boundary: the layout is solved in DIP, then everything handed
 	/// to the renderer is multiplied out to physical pixels.
-	pub fn rects(
-		&self,
-		line_h: f32,
-		mut measure: impl FnMut(&str) -> f32,
-	) -> (Vec<RectInstance>, Vec<RectInstance>) {
+	pub fn rects(&self, line_h: f32, mut measure: impl FnMut(&str) -> f32) -> (Vec<RectInstance>, Vec<RectInstance>) {
 		let s = self.scale;
 		let (mut fixed, mut rows) = self.rects_dip(line_h / s, |t| measure(t) / s);
 		self.quads_px(&mut fixed);
@@ -1831,10 +1579,7 @@ impl SettingsDialog {
 		self.texts_px(&mut items);
 		items
 	}
-	pub fn overlay(
-		&self,
-		measure: &mut impl FnMut(&str) -> f32,
-	) -> (Vec<RectInstance>, Vec<TextItem>) {
+	pub fn overlay(&self, measure: &mut impl FnMut(&str) -> f32) -> (Vec<RectInstance>, Vec<TextItem>) {
 		let s = self.scale;
 		let (mut quads, mut items) = self.overlay_dip(&mut |t| measure(t) / s);
 		self.quads_px(&mut quads);
@@ -1856,10 +1601,7 @@ impl SettingsDialog {
 		Self::tab_h_for(self.line_h)
 	}
 	fn tab_h_for(line_h: f32) -> f32 {
-		lay()
-			.tab_height
-			.max(line_h + lay().tab_pad_v)
-			.max(crate::text::ui_band_floor(line_h))
+		lay().tab_height.max(line_h + lay().tab_pad_v).max(crate::text::ui_band_floor(line_h))
 	}
 	fn gutter_h_for(line_h: f32, rows: usize) -> f32 {
 		(Self::tab_h_for(line_h) + lay().tab_top) * rows as f32
@@ -1868,9 +1610,7 @@ impl SettingsDialog {
 	// the panel's padding beside a list, then the search box.
 	fn above_rows_for(line_h: f32, leaf: usize) -> f32 {
 		let strip = match tabs_side() {
-			TabsSide::Top => {
-				Self::gutter_h_for(line_h, path_len(tab_nodes(), leaf)) + 1.0 + lay().tabs_gap
-			}
+			TabsSide::Top => Self::gutter_h_for(line_h, path_len(tab_nodes(), leaf)) + 1.0 + lay().tabs_gap,
 			TabsSide::Left => lay().pad,
 		};
 		strip + Self::search_band_h_for(line_h)
@@ -1880,19 +1620,14 @@ impl SettingsDialog {
 		if tabs_side() != TabsSide::Left {
 			return 0.0;
 		}
-		lay().tab_top * 2.0 + (Self::tab_h_for(line_h) + lay().tab_gap) * count as f32
-			- lay().tab_gap
+		lay().tab_top * 2.0 + (Self::tab_h_for(line_h) + lay().tab_gap) * count as f32 - lay().tab_gap
 	}
 	// The list's width: its widest entry at its depth, with a gap either side.
 	fn side_w_for(tab_ws: &[f32]) -> f32 {
 		if tabs_side() != TabsSide::Left {
 			return 0.0;
 		}
-		let widest = tab_nodes()
-			.iter()
-			.zip(tab_ws)
-			.map(|(n, w)| f32::from(n.depth) * lay().tab_indent + w)
-			.fold(0.0f32, f32::max);
+		let widest = tab_nodes().iter().zip(tab_ws).map(|(n, w)| f32::from(n.depth) * lay().tab_indent + w).fold(0.0f32, f32::max);
 		lay().tab_gap * 2.0 + widest
 	}
 	// What the list and the rule beside it take off the rows' left edge.
@@ -1910,18 +1645,10 @@ impl SettingsDialog {
 	fn strip_w_for(tab_ws: &[f32]) -> f32 {
 		let nodes = tab_nodes();
 		let row_w = |parent: Option<usize>| {
-			let ws: Vec<f32> = (0..nodes.len())
-				.filter(|&i| nodes[i].parent == parent)
-				.map(|i| tab_ws.get(i).copied().unwrap_or(0.0))
-				.collect();
-			lay().pad * 2.0
-				+ ws.iter().sum::<f32>()
-				+ lay().tab_gap * ws.len().saturating_sub(1) as f32
+			let ws: Vec<f32> = (0..nodes.len()).filter(|&i| nodes[i].parent == parent).map(|i| tab_ws.get(i).copied().unwrap_or(0.0)).collect();
+			lay().pad * 2.0 + ws.iter().sum::<f32>() + lay().tab_gap * ws.len().saturating_sub(1) as f32
 		};
-		std::iter::once(None)
-			.chain((0..nodes.len()).filter(|&i| !nodes[i].is_leaf()).map(Some))
-			.map(row_w)
-			.fold(0.0f32, f32::max)
+		std::iter::once(None).chain((0..nodes.len()).filter(|&i| !nodes[i].is_leaf()).map(Some)).map(row_w).fold(0.0f32, f32::max)
 	}
 	fn tab_bar_y(&self, row: usize) -> f32 {
 		self.rect.y + lay().tab_top + (self.tab_h() + lay().tab_top) * row as f32
@@ -1935,18 +1662,8 @@ impl SettingsDialog {
 	// side it is the list, the rule along its right.
 	fn gutter_rect(&self) -> Rect {
 		match tabs_side() {
-			TabsSide::Top => Rect {
-				x: self.rect.x,
-				y: self.rect.y,
-				w: self.rect.w,
-				h: Self::gutter_h_for(self.line_h, path_len(tab_nodes(), self.tab)),
-			},
-			TabsSide::Left => Rect {
-				x: self.rect.x,
-				y: self.rect.y,
-				w: self.side_w(),
-				h: self.rect.h,
-			},
+			TabsSide::Top => Rect { x: self.rect.x, y: self.rect.y, w: self.rect.w, h: Self::gutter_h_for(self.line_h, path_len(tab_nodes(), self.tab)) },
+			TabsSide::Left => Rect { x: self.rect.x, y: self.rect.y, w: self.side_w(), h: self.rect.h },
 		}
 	}
 	// The tabs shown in strip row `row` across the top: the top level, then the
@@ -1961,14 +1678,10 @@ impl SettingsDialog {
 				None => return Vec::new(),
 			}
 		};
-		(0..nodes.len())
-			.filter(|&i| nodes[i].parent == parent)
-			.collect()
+		(0..nodes.len()).filter(|&i| nodes[i].parent == parent).collect()
 	}
 	fn row_w(&self, shown: &[usize]) -> f32 {
-		lay().pad * 2.0
-			+ shown.iter().map(|&i| self.tab_ws[i]).sum::<f32>()
-			+ lay().tab_gap * shown.len().saturating_sub(1) as f32
+		lay().pad * 2.0 + shown.iter().map(|&i| self.tab_ws[i]).sum::<f32>() + lay().tab_gap * shown.len().saturating_sub(1) as f32
 	}
 	// Where a tab sits, and where the whole strip does. The strip has an offset of
 	// its own rather than following the rows' sideways scroll: a tab panned off the
@@ -1986,10 +1699,7 @@ impl SettingsDialog {
 		if over <= 0.0 {
 			return 0.0;
 		}
-		let right = lay().pad
-			+ shown[..=k].iter().map(|&i| self.tab_ws[i]).sum::<f32>()
-			+ lay().tab_gap * k as f32
-			+ lay().pad;
+		let right = lay().pad + shown[..=k].iter().map(|&i| self.tab_ws[i]).sum::<f32>() + lay().tab_gap * k as f32 + lay().pad;
 		(right - self.rect.w).clamp(0.0, over)
 	}
 	// The list, when taller than the panel, slides the same way.
@@ -2000,8 +1710,7 @@ impl SettingsDialog {
 			return 0.0;
 		}
 		let cur = leaf_node(nodes, self.tab);
-		let bottom =
-			lay().tab_top * 2.0 + (self.tab_h() + lay().tab_gap) * (cur + 1) as f32 - lay().tab_gap;
+		let bottom = lay().tab_top * 2.0 + (self.tab_h() + lay().tab_gap) * (cur + 1) as f32 - lay().tab_gap;
 		(bottom - self.rect.h).clamp(0.0, over)
 	}
 	// Where tab `node` sits. Empty when it isn't on show, which across the top
@@ -2015,25 +1724,12 @@ impl SettingsDialog {
 				let Some(k) = shown.iter().position(|&i| i == node) else {
 					return NO_RECT;
 				};
-				let x = self.rect.x - self.tab_scroll(row, &shown)
-					+ lay().pad + shown[..k].iter().map(|&i| self.tab_ws[i]).sum::<f32>()
-					+ lay().tab_gap * k as f32;
-				Rect {
-					x,
-					y: self.tab_bar_y(row),
-					w: self.tab_ws[node],
-					h: self.tab_h(),
-				}
+				let x = self.rect.x - self.tab_scroll(row, &shown) + lay().pad + shown[..k].iter().map(|&i| self.tab_ws[i]).sum::<f32>() + lay().tab_gap * k as f32;
+				Rect { x, y: self.tab_bar_y(row), w: self.tab_ws[node], h: self.tab_h() }
 			}
 			TabsSide::Left => {
 				let step = f32::from(n.depth) * lay().tab_indent;
-				Rect {
-					x: self.rect.x + lay().tab_gap + step,
-					y: self.rect.y + lay().tab_top + (self.tab_h() + lay().tab_gap) * node as f32
-						- self.side_scroll(),
-					w: (self.side_w() - lay().tab_gap * 2.0 - step).max(0.0),
-					h: self.tab_h(),
-				}
+				Rect { x: self.rect.x + lay().tab_gap + step, y: self.rect.y + lay().tab_top + (self.tab_h() + lay().tab_gap) * node as f32 - self.side_scroll(), w: (self.side_w() - lay().tab_gap * 2.0 - step).max(0.0), h: self.tab_h() }
 			}
 		}
 	}
@@ -2041,16 +1737,8 @@ impl SettingsDialog {
 	fn tab_strip(&self) -> Rect {
 		let gut = self.gutter_rect();
 		match tabs_side() {
-			TabsSide::Top => Rect {
-				x: gut.x + 1.0,
-				w: (gut.w - 2.0).max(0.0),
-				..gut
-			},
-			TabsSide::Left => Rect {
-				y: gut.y + 1.0,
-				h: (gut.h - 2.0).max(0.0),
-				..gut
-			},
+			TabsSide::Top => Rect { x: gut.x + 1.0, w: (gut.w - 2.0).max(0.0), ..gut },
+			TabsSide::Left => Rect { y: gut.y + 1.0, h: (gut.h - 2.0).max(0.0), ..gut },
 		}
 	}
 	fn rows_y0(&self) -> f32 {
@@ -2066,13 +1754,7 @@ impl SettingsDialog {
 	}
 	fn viewport(&self) -> Rect {
 		let y0 = self.rows_y0();
-		Rect {
-			x: self.rows_x0(),
-			y: y0,
-			w: (self.rect.w - self.side_off()).max(0.0),
-			h: (self.rect.y + self.rect.h - Self::footer_h_for(self.line_h) - self.hbar_h() - y0)
-				.max(0.0),
-		}
+		Rect { x: self.rows_x0(), y: y0, w: (self.rect.w - self.side_off()).max(0.0), h: (self.rect.y + self.rect.h - Self::footer_h_for(self.line_h) - self.hbar_h() - y0).max(0.0) }
 	}
 	// The footer under the rows: its line, the clear space, and the buttons.
 	fn footer_h_for(line_h: f32) -> f32 {
@@ -2092,38 +1774,16 @@ impl SettingsDialog {
 		let w = (self.rect.x + self.rect.w - 1.0 - x).max(0.0);
 		let vp = self.viewport();
 		let foot = vp.y + vp.h + self.hbar_h();
-		[
-			Rect {
-				x,
-				y: top,
-				w,
-				h: (vp.y - top).max(0.0),
-			},
-			Rect {
-				x,
-				y: foot,
-				w,
-				h: (self.rect.y + self.rect.h - 1.0 - foot).max(0.0),
-			},
-		]
+		[Rect { x, y: top, w, h: (vp.y - top).max(0.0) }, Rect { x, y: foot, w, h: (self.rect.y + self.rect.h - 1.0 - foot).max(0.0) }]
 	}
 	// The strip the sideways bar takes off the bottom of the rows, when there is
 	// one. It goes above the footer's clear space rather than in it: that space is
 	// what keeps a stray click off Cancel and OK.
 	fn hbar_h(&self) -> f32 {
-		if self.max_hscroll() > 0.0 {
-			lay().scrollbar_width + lay().scrollbar_inset * 2.0
-		} else {
-			0.0
-		}
+		if self.max_hscroll() > 0.0 { lay().scrollbar_width + lay().scrollbar_inset * 2.0 } else { 0.0 }
 	}
 	fn content_h(&self) -> f32 {
-		lay().rows_pad * 2.0
-			+ if self.searching() {
-				self.search_content_h()
-			} else {
-				Self::tab_content_h(self.specs, self.tab, self.line_h, self.edited.shells.len())
-			}
+		lay().rows_pad * 2.0 + if self.searching() { self.search_content_h() } else { Self::tab_content_h(self.specs, self.tab, self.line_h, self.edited.shells.len()) }
 	}
 	fn max_scroll(&self) -> f32 {
 		(self.content_h() - self.viewport().h).max(0.0)
@@ -2138,10 +1798,7 @@ impl SettingsDialog {
 			TabsSide::Top => Self::gutter_h_for(line_h, 1) + 1.0 + l.tabs_gap,
 			TabsSide::Left => l.pad,
 		} + Self::search_band_h_for(line_h);
-		(
-			side_off + l.pad * 2.0 + btn_w.max(l.button_width) * 3.0 + l.button_gap * 2.0,
-			above + l.rows_pad * 2.0 + row * 2.0 + Self::footer_h_for(line_h),
-		)
+		(side_off + l.pad * 2.0 + btn_w.max(l.button_width) * 3.0 + l.button_gap * 2.0, above + l.rows_pad * 2.0 + row * 2.0 + Self::footer_h_for(line_h))
 	}
 	// Rows are laid out at the natural width or the window's, whichever is
 	// larger: a narrower window scrolls sideways rather than truncating, a wider
@@ -2177,16 +1834,8 @@ impl SettingsDialog {
 		let left = self.content_x() + lay().pad + self.label_w;
 		let full = self.ctl_right_full();
 		let w = ((full - left) / parts as f32).max(0.0);
-		let start = if k > 0 {
-			left + k as f32 * w + PAIR_GAP / 2.0
-		} else {
-			left
-		};
-		let end = if k + 1 < parts {
-			left + (k + 1) as f32 * w - PAIR_GAP / 2.0
-		} else {
-			full
-		};
+		let start = if k > 0 { left + k as f32 * w + PAIR_GAP / 2.0 } else { left };
+		let end = if k + 1 < parts { left + (k + 1) as f32 * w - PAIR_GAP / 2.0 } else { full };
 		(start, end)
 	}
 	fn hthumb(&self) -> Option<Rect> {
@@ -2195,22 +1844,12 @@ impl SettingsDialog {
 			return None;
 		}
 		let track = self.htrack();
-		let thumb_w =
-			(track.w * self.viewport().w / self.layout_w()).max(lay().scrollbar_thumb_min);
-		Some(Rect {
-			x: track.x + (self.hscroll / scroll_max) * (track.w - thumb_w).max(0.0),
-			w: thumb_w,
-			..track
-		})
+		let thumb_w = (track.w * self.viewport().w / self.layout_w()).max(lay().scrollbar_thumb_min);
+		Some(Rect { x: track.x + (self.hscroll / scroll_max) * (track.w - thumb_w).max(0.0), w: thumb_w, ..track })
 	}
 	fn htrack(&self) -> Rect {
 		let vp = self.viewport();
-		Rect {
-			x: vp.x + lay().pad,
-			y: vp.y + vp.h + lay().scrollbar_inset,
-			w: (vp.w - lay().pad * 2.0).max(1.0),
-			h: lay().scrollbar_width,
-		}
+		Rect { x: vp.x + lay().pad, y: vp.y + vp.h + lay().scrollbar_inset, w: (vp.w - lay().pad * 2.0).max(1.0), h: lay().scrollbar_width }
 	}
 	pub fn wheel(&mut self, dx_px: f32, dy_px: f32) {
 		if self.modal() {
@@ -2252,10 +1891,7 @@ impl SettingsDialog {
 		self.dismiss_menu();
 	}
 	pub fn view(&self) -> View {
-		View {
-			tab: self.tab,
-			scroll: self.scroll,
-		}
+		View { tab: self.tab, scroll: self.scroll }
 	}
 	/// Open on these values instead of the live copy. The app hands in the file
 	/// as it is now, since another window may have saved since this one loaded.
@@ -2278,15 +1914,7 @@ impl SettingsDialog {
 	}
 	// Anything begun counts, a value half typed or a color half picked included.
 	fn holds_changes(&self) -> bool {
-		self.orig != self.edited
-			|| self.unsaved.is_some()
-			|| !self.reverted.is_empty()
-			|| self.edit.is_some()
-			|| self.pick.is_some()
-			|| self.prompt.is_some()
-			|| self.capture.is_some()
-			|| self.drag.is_some()
-			|| self.shell_drag.is_some()
+		self.orig != self.edited || self.unsaved.is_some() || !self.reverted.is_empty() || self.edit.is_some() || self.pick.is_some() || self.prompt.is_some() || self.capture.is_some() || self.drag.is_some() || self.shell_drag.is_some()
 	}
 	/// Whether another window saved while this one had changes, cleared.
 	pub fn take_behind(&mut self) -> bool {
@@ -2303,23 +1931,13 @@ impl SettingsDialog {
 	/// automatic size shows. Both copies take the size, as a shell scan is
 	/// folded, so it doesn't read as an edit. True when anything moved.
 	pub fn follow_window(&mut self, monitor: Option<&str>, live: &Settings) -> bool {
-		let kept = |s: &Settings| {
-			(
-				s.remembered_columns,
-				s.remembered_rows,
-				s.remembered_font_zoom,
-			)
-		};
+		let kept = |s: &Settings| (s.remembered_columns, s.remembered_rows, s.remembered_font_zoom);
 		let moved = self.monitor.as_deref() != monitor;
-		let resized =
-			kept(&self.edited) != kept(live) || self.edited.monitor_sizes != live.monitor_sizes;
+		let resized = kept(&self.edited) != kept(live) || self.edited.monitor_sizes != live.monitor_sizes;
 		if moved {
 			self.monitor = monitor.map(str::to_string);
 		}
-		for settings in [&mut self.orig, &mut self.edited]
-			.into_iter()
-			.chain(self.unsaved.as_mut())
-		{
+		for settings in [&mut self.orig, &mut self.edited].into_iter().chain(self.unsaved.as_mut()) {
 			if resized {
 				settings.remembered_columns = live.remembered_columns;
 				settings.remembered_rows = live.remembered_rows;
@@ -2349,12 +1967,7 @@ impl SettingsDialog {
 		}
 		let vp = self.viewport();
 		let thumb_h = (vp.h * vp.h / self.content_h()).max(lay().scrollbar_thumb_min);
-		Some(Rect {
-			x: self.rect.x + self.rect.w - lay().scrollbar_inset - lay().scrollbar_width,
-			y: vp.y + (self.scroll / scroll_max) * (vp.h - thumb_h),
-			w: lay().scrollbar_width,
-			h: thumb_h,
-		})
+		Some(Rect { x: self.rect.x + self.rect.w - lay().scrollbar_inset - lay().scrollbar_width, y: vp.y + (self.scroll / scroll_max) * (vp.h - thumb_h), w: lay().scrollbar_width, h: thumb_h })
 	}
 
 	// Alt-key accelerators: while Alt is held the buttons underline their first
@@ -2362,14 +1975,7 @@ impl SettingsDialog {
 	// (Shift+Tab) and Ctrl (Ctrl+Tab) steer keyboard focus / tab switching.
 	#[cfg(test)]
 	pub fn set_mods(&mut self, alt: bool, shift: bool, ctrl: bool) {
-		self.set_keys(crate::input::EditKeys {
-			alt,
-			shift,
-			shortcut: ctrl,
-			word: ctrl,
-			line: false,
-			types: !ctrl,
-		});
+		self.set_keys(crate::input::EditKeys { alt, shift, shortcut: ctrl, word: ctrl, line: false, types: !ctrl });
 	}
 	/// The held keys as the platform reads them (`input::edit_keys`).
 	pub fn set_keys(&mut self, keys: crate::input::EditKeys) {
@@ -2438,9 +2044,7 @@ impl SettingsDialog {
 		}
 		let sel = radio_of(&self.edited, key);
 		match self.specs[i].kind {
-			Kind::Dropdown(opts) => opts
-				.get(sel)
-				.map_or(Cow::Borrowed(""), |o| Cow::Borrowed(*o)),
+			Kind::Dropdown(opts) => opts.get(sel).map_or(Cow::Borrowed(""), |o| Cow::Borrowed(*o)),
 			_ => Cow::Borrowed(""),
 		}
 	}
@@ -2466,12 +2070,7 @@ impl SettingsDialog {
 	// sub-control, in visual order. (Used by the focus tests.)
 	#[cfg(test)]
 	fn focusables(&self) -> Vec<usize> {
-		(0..self.specs.len())
-			.filter(|&i| {
-				self.specs[i].tab == self.tab
-					&& (0..self.parts_of(i)).any(|p| !self.part_disabled(i, p))
-			})
-			.collect()
+		(0..self.specs.len()).filter(|&i| self.specs[i].tab == self.tab && (0..self.parts_of(i)).any(|p| !self.part_disabled(i, p))).collect()
 	}
 	// The tab's first control, past the search box over it.
 	fn first_focus(&self) -> Option<Focus> {
@@ -2529,14 +2128,8 @@ impl SettingsDialog {
 			// (pressing Save turns Save off). Resume from where it sat rather
 			// than snapping back to the top of the tab.
 			None => match self.focus.map(Self::focus_order) {
-				Some(k) if forward => ring
-					.iter()
-					.position(|&r| Self::focus_order(r) > k)
-					.unwrap_or(0),
-				Some(k) => ring
-					.iter()
-					.rposition(|&r| Self::focus_order(r) < k)
-					.unwrap_or(n - 1),
+				Some(k) if forward => ring.iter().position(|&r| Self::focus_order(r) > k).unwrap_or(0),
+				Some(k) => ring.iter().rposition(|&r| Self::focus_order(r) < k).unwrap_or(n - 1),
 				None if forward => 0,
 				None => n - 1,
 			},
@@ -2647,11 +2240,7 @@ impl SettingsDialog {
 		if n == 0 {
 			return;
 		}
-		self.tab = if forward {
-			(self.tab + 1) % n
-		} else {
-			(self.tab + n - 1) % n
-		};
+		self.tab = if forward { (self.tab + 1) % n } else { (self.tab + n - 1) % n };
 		self.scroll = 0.0;
 		self.hscroll = 0.0;
 		self.drag = None;
@@ -2704,9 +2293,7 @@ impl SettingsDialog {
 			let n = EDIT_MENU.len() as i32;
 			if let Some(menu) = &mut self.emenu {
 				let step = if forward { 1 } else { -1 };
-				let cur = menu
-					.hover
-					.map_or(if forward { -1 } else { 0 }, |h| h as i32);
+				let cur = menu.hover.map_or(if forward { -1 } else { 0 }, |h| h as i32);
 				menu.hover = Some((cur + step).rem_euclid(n) as usize);
 			}
 			return;
@@ -2904,23 +2491,10 @@ impl SettingsDialog {
 			return self.edit.as_ref().map_or(String::new(), |e| e.buf.clone());
 		}
 		if let Some(f) = pick_field_of(i) {
-			return self
-				.pick
-				.as_ref()
-				.map_or_else(String::new, |p| f.text(p.hsv));
+			return self.pick.as_ref().map_or_else(String::new, |p| f.text(p.hsv));
 		}
 		if let Some((shell_index, command)) = shell_field_of(i) {
-			return self
-				.edited
-				.shells
-				.get(shell_index)
-				.map_or_else(String::new, |entry| {
-					if command {
-						entry.command.clone()
-					} else {
-						entry.title.clone()
-					}
-				});
+			return self.edited.shells.get(shell_index).map_or_else(String::new, |entry| if command { entry.command.clone() } else { entry.title.clone() });
 		}
 		match self.specs[i].kind {
 			Kind::Text => self.get_text(self.specs[i].key),
@@ -3020,10 +2594,7 @@ impl SettingsDialog {
 	}
 	// The name a hotkey goes by on its own row, for a note on another one.
 	fn hotkey_label(&self, hotkey: Hotkey) -> &'static str {
-		self.specs
-			.iter()
-			.find(|spec| matches!(spec.kind, Kind::Hotkey(each) if each == hotkey))
-			.map_or("", |spec| spec.label)
+		self.specs.iter().find(|spec| matches!(spec.kind, Kind::Hotkey(each) if each == hotkey)).map_or("", |spec| spec.label)
 	}
 	// What a hotkey row's box shows: its chords, whether it has none, and what
 	// is worth saying about a chord it lost or took. A lost chord is said the way
@@ -3038,46 +2609,22 @@ impl SettingsDialog {
 		}
 		let keys = &self.edited.keys;
 		let chords = keys.chords(hotkey);
-		let shown = if chords.is_empty() {
-			"Off".to_string()
-		} else {
-			chords
-				.iter()
-				.map(|chord| chord.spoken(self.mac))
-				.collect::<Vec<_>>()
-				.join(" or ")
-		};
+		let shown = if chords.is_empty() { "Off".to_string() } else { chords.iter().map(|chord| chord.spoken(self.mac)).collect::<Vec<_>>().join(" or ") };
 		let mut notes = Vec::new();
 		// every hotkey row walks every clash each frame, so the chord's name is
 		// only built for a clash of its own
 		for taken in keys.taken() {
 			if taken.from == hotkey {
-				notes.push(format!(
-					"{} is set for {}",
-					taken.chord.spoken(self.mac),
-					self.hotkey_label(taken.by)
-				));
+				notes.push(format!("{} is set for {}", taken.chord.spoken(self.mac), self.hotkey_label(taken.by)));
 			} else if taken.by == hotkey && taken.both_set {
-				notes.push(format!(
-					"{} is also set for {}",
-					taken.chord.spoken(self.mac),
-					self.hotkey_label(taken.from)
-				));
+				notes.push(format!("{} is also set for {}", taken.chord.spoken(self.mac), self.hotkey_label(taken.from)));
 			} else if taken.by == hotkey {
-				notes.push(format!(
-					"took {} from {}",
-					taken.chord.spoken(self.mac),
-					self.hotkey_label(taken.from)
-				));
+				notes.push(format!("took {} from {}", taken.chord.spoken(self.mac), self.hotkey_label(taken.from)));
 			}
 		}
 		for (from, chord, by) in &self.moved {
 			if *from == hotkey && keys.chords(*by).contains(chord) {
-				notes.push(format!(
-					"{} is set for {}",
-					chord.spoken(self.mac),
-					self.hotkey_label(*by)
-				));
+				notes.push(format!("{} is set for {}", chord.spoken(self.mac), self.hotkey_label(*by)));
 			}
 		}
 		(shown, chords.is_empty(), notes.join("; "))
@@ -3150,12 +2697,7 @@ impl SettingsDialog {
 	// The warning mark: just after the label's text, centered in the row.
 	fn warning_box(&self, i: usize, measure: &mut impl FnMut(&str) -> f32) -> Rect {
 		let h = self.line_h * WARN_H;
-		Rect {
-			x: self.label_x(i) + measure(self.specs[i].label) + self.line_h * WARN_GAP,
-			y: self.centered_in_row(i, h),
-			w: self.line_h * WARN_W,
-			h,
-		}
+		Rect { x: self.label_x(i) + measure(self.specs[i].label) + self.line_h * WARN_GAP, y: self.centered_in_row(i, h), w: self.line_h * WARN_W, h }
 	}
 	// Left edge of a row's label: its own sub-group depth in from the panel pad.
 	fn label_x(&self, i: usize) -> f32 {
@@ -3179,21 +2721,14 @@ impl SettingsDialog {
 		}
 		let (_, parts, k) = Self::line_of(self.specs, i);
 		let start = self.part_span(k, parts).0;
-		if self.specs[i].beside && !self.specs[i].label.is_empty() {
-			start
-				+ self.label_ws.get(i).copied().unwrap_or(0.0)
-				+ font_gap(PART_LABEL_GAP, self.line_h)
-		} else {
-			start
-		}
+		if self.specs[i].beside && !self.specs[i].label.is_empty() { start + self.label_ws.get(i).copied().unwrap_or(0.0) + font_gap(PART_LABEL_GAP, self.line_h) } else { start }
 	}
 	// Label and box of row `i` on a packed line. The line starts where its first
 	// row's label would, indent and all. Where the first box keeps the column,
 	// the rest move along with it.
 	fn packed_x(&self, i: usize) -> (f32, f32) {
 		let (lead, _, k) = Self::line_of(self.specs, i);
-		let start =
-			self.content_x() + lay().pad + f32::from(self.specs[lead].indent) * lay().indent;
+		let start = self.content_x() + lay().pad + f32::from(self.specs[lead].indent) * lay().indent;
 		let (label, ctl) = Self::packed_at(self.specs, lead, k, &self.label_ws, self.line_h);
 		if !Self::lead_keeps_column(self.specs, lead) {
 			return (start + label, start + ctl);
@@ -3217,76 +2752,41 @@ impl SettingsDialog {
 	}
 	fn track(&self, i: usize) -> Rect {
 		let x = self.control_x(i);
-		Rect {
-			x,
-			y: self.centered_in_row(i, 6.0),
-			w: (self.ctl_right(i) - self.value_w - 14.0 - x).max(lay().slider_width / 4.0),
-			h: 6.0,
-		}
+		Rect { x, y: self.centered_in_row(i, 6.0), w: (self.ctl_right(i) - self.value_w - 14.0 - x).max(lay().slider_width / 4.0), h: 6.0 }
 	}
 	// The color chip is as tall as the hex field beside it, so the pair reads
 	// as one control rather than 2 of different sizes.
 	fn swatch(&self, i: usize) -> Rect {
 		let h = self.field_h();
-		Rect {
-			x: self.control_x(i),
-			y: self.centered_in_row(i, h),
-			w: h,
-			h,
-		}
+		Rect { x: self.control_x(i), y: self.centered_in_row(i, h), w: h, h }
 	}
 	fn hexbox(&self, i: usize) -> Rect {
 		let h = self.field_h();
 		let x = self.control_x(i) + h + 8.0;
-		Rect {
-			x,
-			y: self.centered_in_row(i, h),
-			w: (self.ctl_right(i) - x).max(lay().hex_width),
-			h,
-		}
+		Rect { x, y: self.centered_in_row(i, h), w: (self.ctl_right(i) - x).max(lay().hex_width), h }
 	}
 	// editable numeric field to the right of a slider (shows/edits the value)
 	fn valbox(&self, i: usize) -> Rect {
 		let h = self.field_h();
-		Rect {
-			x: self.ctl_right(i) - self.value_w,
-			y: self.centered_in_row(i, h),
-			w: self.value_w,
-			h,
-		}
+		Rect { x: self.ctl_right(i) - self.value_w, y: self.centered_in_row(i, h), w: self.value_w, h }
 	}
 	// wide editable field (background-image path), control_x -> the revert column
 	fn textbox(&self, i: usize) -> Rect {
 		let x = self.control_x(i);
 		let h = self.field_h();
-		Rect {
-			x,
-			y: self.centered_in_row(i, h),
-			w: (self.ctl_right(i) - x).max(lay().value_width),
-			h,
-		}
+		Rect { x, y: self.centered_in_row(i, h), w: (self.ctl_right(i) - x).max(lay().value_width), h }
 	}
 	// right-edge revert-to-default icon for row `i`
 	fn revert_box(&self, i: usize) -> Rect {
 		let h = self.check_sz();
-		Rect {
-			x: self.content_x() + self.layout_w() - lay().pad - self.revert_w,
-			y: self.centered_in_row(i, h),
-			w: self.revert_w,
-			h,
-		}
+		Rect { x: self.content_x() + self.layout_w() - lay().pad - self.revert_w, y: self.centered_in_row(i, h), w: self.revert_w, h }
 	}
 	fn check_sz(&self) -> f32 {
 		square_box(lay().swatch, self.line_h)
 	}
 	fn checkbox(&self, i: usize) -> Rect {
 		let size = self.check_sz();
-		Rect {
-			x: self.control_x(i),
-			y: self.centered_in_row(i, size),
-			w: size,
-			h: size,
-		}
+		Rect { x: self.control_x(i), y: self.centered_in_row(i, size), w: size, h: size }
 	}
 	fn dual_pitch(&self) -> f32 {
 		lay().dual_pitch * self.ui_scale()
@@ -3294,12 +2794,7 @@ impl SettingsDialog {
 	// checkbox `part` (0/1) on a Dual row; its label sits just to the right
 	fn dual_box(&self, i: usize, part: u16) -> Rect {
 		let size = self.check_sz();
-		Rect {
-			x: self.control_x(i) + part as f32 * self.dual_pitch(),
-			y: self.centered_in_row(i, size),
-			w: size,
-			h: size,
-		}
+		Rect { x: self.control_x(i) + part as f32 * self.dual_pitch(), y: self.centered_in_row(i, size), w: size, h: size }
 	}
 	// Radio geometry scales with the UI font (HiDPI or a large desktop font), so
 	// multi-option labels don't collide the way fixed 96px pitch does at 2x.
@@ -3319,12 +2814,7 @@ impl SettingsDialog {
 	// indicator box for radio option `choice` in row `i`
 	fn radio_box(&self, i: usize, choice: usize) -> Rect {
 		let size = self.radio_box_sz();
-		Rect {
-			x: self.control_x(i) + choice as f32 * self.radio_pitch(),
-			y: self.centered_in_row(i, size),
-			w: size,
-			h: size,
-		}
+		Rect { x: self.control_x(i) + choice as f32 * self.radio_pitch(), y: self.centered_in_row(i, size), w: size, h: size }
 	}
 	// Collapsed dropdown box (the always-visible control): shows the current option
 	// + a down-arrow; clicking it opens the popup list.
@@ -3332,17 +2822,8 @@ impl SettingsDialog {
 		let h = self.field_h();
 		let x = self.control_x(i);
 		let shares_a_line = self.specs[i].beside || Self::pairs_down(self.specs, i, self.tab);
-		let floor = if shares_a_line {
-			lay().dropdown_pair_width
-		} else {
-			lay().dropdown_width
-		};
-		Rect {
-			x,
-			y: self.centered_in_row(i, h),
-			w: (self.ctl_right(i) - x).max(floor * self.ui_scale()),
-			h,
-		}
+		let floor = if shares_a_line { lay().dropdown_pair_width } else { lay().dropdown_width };
+		Rect { x, y: self.centered_in_row(i, h), w: (self.ctl_right(i) - x).max(floor * self.ui_scale()), h }
 	}
 	// One option row inside the open popup.
 	fn dd_item_h(&self) -> f32 {
@@ -3356,26 +2837,12 @@ impl SettingsDialog {
 		let h = n as f32 * self.dd_item_h();
 		let vp = self.viewport();
 		let down_y = boxr.y + boxr.h;
-		let y = if down_y + h <= vp.y + vp.h || boxr.y - h < vp.y {
-			down_y
-		} else {
-			boxr.y - h
-		};
-		Rect {
-			x: boxr.x,
-			y,
-			w: boxr.w,
-			h,
-		}
+		let y = if down_y + h <= vp.y + vp.h || boxr.y - h < vp.y { down_y } else { boxr.y - h };
+		Rect { x: boxr.x, y, w: boxr.w, h }
 	}
 	fn dd_item_rect(&self, i: usize, n: usize, choice: usize) -> Rect {
 		let popup = self.dd_popup(i, n);
-		Rect {
-			x: popup.x,
-			y: popup.y + choice as f32 * self.dd_item_h(),
-			w: popup.w,
-			h: self.dd_item_h(),
-		}
+		Rect { x: popup.x, y: popup.y + choice as f32 * self.dd_item_h(), w: popup.w, h: self.dd_item_h() }
 	}
 	// Number of focusable sub-controls in row `i` (0 for a header). Sliders and
 	// the Dual (cursor) row expose 2; every other control is a single part.
@@ -3402,9 +2869,7 @@ impl SettingsDialog {
 	// else asks the setting behind it.
 	fn part_disabled(&self, i: usize, part: u16) -> bool {
 		match self.specs[i].kind {
-			Kind::Buttons(_) => {
-				assoc_of(self.specs[i].key).is_none() && !self.theme_btn_enabled(ThemeBtn::of(part))
-			}
+			Kind::Buttons(_) => assoc_of(self.specs[i].key).is_none() && !self.theme_btn_enabled(ThemeBtn::of(part)),
 			// Nothing in the grid is ever grayed: every stop is a value the user
 			// can always edit, and reordering left the keyboard with the arrows.
 			Kind::ShellList => false,
@@ -3417,9 +2882,7 @@ impl SettingsDialog {
 	fn disabled_tip(&self, key: Key) -> Option<&'static str> {
 		match key {
 			Key::IdleHiddenMin => hidden_wait_tip(self.sees_hidden),
-			Key::TmuxNewSession | Key::TmuxSessionName | Key::TmuxOnClose => {
-				no_tmux_tip(self.tmux_found)
-			}
+			Key::TmuxNewSession | Key::TmuxSessionName | Key::TmuxOnClose => no_tmux_tip(self.tmux_found),
 			_ => None,
 		}
 	}
@@ -3433,15 +2896,9 @@ impl SettingsDialog {
 		ROW_TIPS.with(|n| n.set(n.get() + 1));
 		let text = self.row_tip_text(i, key);
 		let monitor = self.monitor.as_deref();
-		let plain = matches!(
-			fields::source(&self.edited, key, monitor),
-			None | Some(knobs::Source::Own | knobs::Source::Default)
-		) && fields::changed(&self.edited, key).is_empty();
+		let plain = matches!(fields::source(&self.edited, key, monitor), None | Some(knobs::Source::Own | knobs::Source::Default)) && fields::changed(&self.edited, key).is_empty();
 		let mut line = if plain {
-			match self
-				.value_pair(i, key)
-				.filter(|(now, default)| now != default)
-			{
+			match self.value_pair(i, key).filter(|(now, default)| now != default) {
 				Some((now, default)) => format!("Current value: {now}\nDefault value: {default}"),
 				None => String::new(),
 			}
@@ -3455,11 +2912,7 @@ impl SettingsDialog {
 			&& let Err(e) = crate::tabtitle::tab_template(&self.edited.tab_text)
 		{
 			let problem = format!("{e} Tabs use the default text until it's fixed.");
-			line = if line.is_empty() {
-				problem
-			} else {
-				format!("{problem}\n\n{line}")
-			};
+			line = if line.is_empty() { problem } else { format!("{problem}\n\n{line}") };
 		}
 		if line.is_empty() {
 			return text;
@@ -3494,33 +2947,18 @@ impl SettingsDialog {
 	fn written(&self, i: usize, key: Key, s: &Settings) -> String {
 		match self.specs[i].kind {
 			Kind::Slider { int, .. } => fmt_number(slider_of(s, key), int),
-			Kind::Toggle | Kind::Dual { .. } => {
-				if toggle_of(s, key) { "On" } else { "Off" }.to_string()
-			}
+			Kind::Toggle | Kind::Dual { .. } => if toggle_of(s, key) { "On" } else { "Off" }.to_string(),
 			Kind::Radio(options) | Kind::Dropdown(options) => match self.choices(key) {
 				Some(choices) => {
-					let at = fields::get(s, key)
-						.map(|v| v.as_text().to_string())
-						.unwrap_or_default();
-					choices
-						.into_iter()
-						.find(|(k, _)| k.eq_ignore_ascii_case(&at))
-						.map_or(at, |(_, label)| label)
+					let at = fields::get(s, key).map(|v| v.as_text().to_string()).unwrap_or_default();
+					choices.into_iter().find(|(k, _)| k.eq_ignore_ascii_case(&at)).map_or(at, |(_, label)| label)
 				}
-				None => options
-					.get(radio_of(s, key))
-					.map_or_else(String::new, |o| (*o).to_string()),
+				None => options.get(radio_of(s, key)).map_or_else(String::new, |o| (*o).to_string()),
 			},
 			Kind::Color => config::format_hex(color_of(s, key)),
 			Kind::Text => {
-				let text = fields::get(s, key)
-					.map(|v| v.as_text().to_string())
-					.unwrap_or_default();
-				if text.is_empty() {
-					"(none)".to_string()
-				} else {
-					text
-				}
+				let text = fields::get(s, key).map(|v| v.as_text().to_string()).unwrap_or_default();
+				if text.is_empty() { "(none)".to_string() } else { text }
 			}
 			Kind::Hotkey(_) | Kind::Header(_) | Kind::Buttons(_) | Kind::ShellList => String::new(),
 		}
@@ -3537,19 +2975,12 @@ impl SettingsDialog {
 					if chords.is_empty() {
 						return "Off".to_string();
 					}
-					chords
-						.iter()
-						.map(|chord| chord.spoken(self.mac))
-						.collect::<Vec<_>>()
-						.join(" or ")
+					chords.iter().map(|chord| chord.spoken(self.mac)).collect::<Vec<_>>().join(" or ")
 				};
 				let shipped = crate::keys::Bindings::defaults(self.mac);
 				Some((spoken(&self.edited.keys), spoken(&shipped)))
 			}
-			_ => Some((
-				self.written(i, key, &self.edited),
-				self.with_default(key, |s| self.written(i, key, s)),
-			)),
+			_ => Some((self.written(i, key, &self.edited), self.with_default(key, |s| self.written(i, key, s)))),
 		}
 	}
 	fn row_tip_text(&self, i: usize, key: Key) -> Option<Cow<'static, str>> {
@@ -3565,8 +2996,7 @@ impl SettingsDialog {
 	}
 	#[cfg(test)]
 	fn hover_tip_dip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
-		self.hover_at_dip(mx, my)
-			.map(|(at, anchor)| (self.tip_words(at), anchor))
+		self.hover_at_dip(mx, my).map(|(at, anchor)| (self.tip_words(at), anchor))
 	}
 	// The flyover for whatever the cursor rests on, if it has one, and the rect
 	// the tip box hangs under.
@@ -3599,8 +3029,7 @@ impl SettingsDialog {
 				continue;
 			}
 			let arrow = self.revert_box(i);
-			if self.has_revert(i) && !self.specs[i].revert_help.is_empty() && arrow.contains(mx, my)
-			{
+			if self.has_revert(i) && !self.specs[i].revert_help.is_empty() && arrow.contains(mx, my) {
 				return Some((TipAt::Said(self.specs[i].revert_help), arrow));
 			}
 			// hover target: the row's label + control span. The shells grid is the
@@ -3611,10 +3040,7 @@ impl SettingsDialog {
 				Kind::Buttons(captions) => {
 					let first = self.row_btn_rect(i, 0);
 					let last = self.row_btn_rect(i, captions.len().saturating_sub(1) as u16);
-					Rect {
-						w: last.x + last.w - first.x,
-						..first
-					}
+					Rect { w: last.x + last.w - first.x, ..first }
 				}
 				Kind::Hotkey(_) => self.textbox(i),
 				_ => self.checkbox(i),
@@ -3623,25 +3049,11 @@ impl SettingsDialog {
 			// warning mark, each option's label and every control, up to the
 			// revert column (2026100812334387). Only the arrow has its own.
 			let hit = if matches!(self.specs[i].kind, Kind::ShellList) {
-				Rect {
-					x: self.content_x() + lay().pad,
-					y: self.shell_head_y(i),
-					w: self.layout_w() - lay().pad * 2.0,
-					h: self.line_h,
-				}
+				Rect { x: self.content_x() + lay().pad, y: self.shell_head_y(i), w: self.layout_w() - lay().pad * 2.0, h: self.line_h }
 			} else {
 				// part of a shared line starts at its own label
-				let x = if self.specs[i].beside {
-					self.label_x(i)
-				} else {
-					self.content_x() + lay().pad
-				};
-				Rect {
-					x,
-					y: self.row_y(i),
-					w: (self.ctl_right(i) - x).max(ctl.x + ctl.w - x),
-					h: self.row_screen_h(i),
-				}
+				let x = if self.specs[i].beside { self.label_x(i) } else { self.content_x() + lay().pad };
+				Rect { x, y: self.row_y(i), w: (self.ctl_right(i) - x).max(ctl.x + ctl.w - x), h: self.row_screen_h(i) }
 			};
 			if !hit.contains(mx, my) {
 				continue;
@@ -3650,9 +3062,7 @@ impl SettingsDialog {
 			// grayed by the desktop alone, so each box shows its own
 			let (key, anchor) = match self.specs[i].kind {
 				Kind::ShellList => (self.specs[i].key, hit),
-				Kind::Dual { keys, .. } if mx >= self.dual_box(i, 1).x => {
-					(keys[1], self.dual_box(i, 1))
-				}
+				Kind::Dual { keys, .. } if mx >= self.dual_box(i, 1).x => (keys[1], self.dual_box(i, 1)),
 				Kind::Dual { keys, .. } => (keys[0], ctl),
 				_ => (self.specs[i].key, ctl),
 			};
@@ -3670,12 +3080,7 @@ impl SettingsDialog {
 				if part == 0 {
 					// the handle overhangs the track by half its width at either end
 					let t = self.track(i);
-					Rect {
-						x: t.x - SLIDER_HANDLE_W / 2.0,
-						y: t.y - 7.0,
-						w: t.w + SLIDER_HANDLE_W,
-						h: t.h + 14.0,
-					}
+					Rect { x: t.x - SLIDER_HANDLE_W / 2.0, y: t.y - 7.0, w: t.w + SLIDER_HANDLE_W, h: t.h + 14.0 }
 				} else {
 					self.valbox(i)
 				}
@@ -3683,12 +3088,7 @@ impl SettingsDialog {
 			Kind::Dual { .. } => {
 				let bx = self.dual_box(i, part);
 				let (y, h) = self.with_label_line(i, bx.y, bx.h);
-				Rect {
-					x: bx.x,
-					y,
-					w: self.dual_pitch() - 12.0,
-					h,
-				}
+				Rect { x: bx.x, y, w: self.dual_pitch() - 12.0, h }
 			}
 			Kind::Toggle => self.checkbox(i),
 			Kind::Text | Kind::Hotkey(_) => self.textbox(i),
@@ -3697,12 +3097,7 @@ impl SettingsDialog {
 			Kind::Radio(opts) => {
 				let first = self.radio_box(i, 0);
 				let (y, h) = self.with_label_line(i, first.y - 2.0, first.h + 4.0);
-				Rect {
-					x: first.x,
-					y,
-					w: opts.len() as f32 * self.radio_pitch() - 12.0,
-					h,
-				}
+				Rect { x: first.x, y, w: opts.len() as f32 * self.radio_pitch() - 12.0, h }
 			}
 			Kind::Dropdown(_) => self.dd_box(i),
 			Kind::Buttons(_) => self.row_btn_rect(i, part),
@@ -3726,16 +3121,11 @@ impl SettingsDialog {
 	// couple of pixels out and only the hex field's own border stands down.
 	fn ring_is_the_box(&self, i: usize, part: u16) -> bool {
 		match self.specs[i].kind {
-			Kind::Text | Kind::Dropdown(_) | Kind::Buttons(_) | Kind::Color | Kind::Hotkey(_) => {
-				true
-			}
+			Kind::Text | Kind::Dropdown(_) | Kind::Buttons(_) | Kind::Color | Kind::Hotkey(_) => true,
 			Kind::Slider { .. } => part == 1,
 			// the 2 fields and the Add button are boxes; the checkbox and the
 			// icon buttons aren't, so they keep the ring a couple of pixels out
-			Kind::ShellList => matches!(
-				shell_stop(part, self.edited.shells.len()),
-				ShellStop::Add | ShellStop::Entry(_, ShellPart::Name | ShellPart::Command)
-			),
+			Kind::ShellList => matches!(shell_stop(part, self.edited.shells.len()), ShellStop::Add | ShellStop::Entry(_, ShellPart::Name | ShellPart::Command)),
 			_ => false,
 		}
 	}
@@ -3746,9 +3136,7 @@ impl SettingsDialog {
 	// "default" only when both its keys are.
 	// Asked per row each frame, so it walks the keys rather than collecting them.
 	fn row_is_default(&self, i: usize) -> bool {
-		self.row_span(i)
-			.flat_map(|j| self.own_keys(j))
-			.all(|&k| self.is_default(k))
+		self.row_span(i).flat_map(|j| self.own_keys(j)).all(|&k| self.is_default(k))
 	}
 	// A row of push-buttons has no value, and the shells grid is a list rather
 	// than a setting, so neither has a default to go back to. A row drawn beside
@@ -3766,10 +3154,7 @@ impl SettingsDialog {
 	// Every setting one revert arrow resets: the row's own, both halves of a
 	// Dual, and every row drawn beside it on its line.
 	fn row_keys(&self, i: usize) -> Vec<Key> {
-		self.row_span(i)
-			.flat_map(|j| self.own_keys(j))
-			.copied()
-			.collect()
+		self.row_span(i).flat_map(|j| self.own_keys(j)).copied().collect()
 	}
 	// The rows one revert arrow stands for: `i`, and every row beside it on its
 	// line unless `i` is itself one of those.
@@ -3805,17 +3190,8 @@ impl SettingsDialog {
 		let x_ok = self.rect.x + self.rect.w - lay().pad - self.btn_w;
 		let x_apply = x_ok - lay().button_gap - self.btn_w;
 		let x_cancel = x_apply - lay().button_gap - self.btn_w;
-		let mk = |x| Rect {
-			x,
-			y,
-			w: self.btn_w,
-			h: self.btn_h(),
-		};
-		[
-			(Action::Cancel, mk(x_cancel), "Cancel"),
-			(Action::Apply, mk(x_apply), "Apply"),
-			(Action::Ok, mk(x_ok), "OK"),
-		]
+		let mk = |x| Rect { x, y, w: self.btn_w, h: self.btn_h() };
+		[(Action::Cancel, mk(x_cancel), "Cancel"), (Action::Apply, mk(x_apply), "Apply"), (Action::Ok, mk(x_ok), "OK")]
 	}
 
 	// file types
@@ -3838,45 +3214,26 @@ impl SettingsDialog {
 	// nothing for Apply to write and nothing for Cancel to undo.
 	fn assoc_set(&mut self, assoc: Assoc, on: bool) {
 		let done = if on {
-			std::env::current_exe()
-				.map_err(anyhow::Error::from)
-				.and_then(|exe| {
-					let exe = crate::fileassoc::exe_to_register(&exe, &|p| p.exists());
-					crate::fileassoc::register(assoc, &exe, &mut *self.assoc)
-				})
+			std::env::current_exe().map_err(anyhow::Error::from).and_then(|exe| {
+				let exe = crate::fileassoc::exe_to_register(&exe, &|p| p.exists());
+				crate::fileassoc::register(assoc, &exe, &mut *self.assoc)
+			})
 		} else {
 			crate::fileassoc::unregister(assoc, &mut *self.assoc)
 		};
 		crate::fileassoc::changed();
 		self.assoc_refresh();
 		let say = match done {
-			Err(why) => Some((
-				"Windows didn't accept the change".to_string(),
-				format!("{why:#}"),
-			)),
+			Err(why) => Some(("Windows didn't accept the change".to_string(), format!("{why:#}"))),
 			Ok(()) if on => {
 				let picked = crate::fileassoc::overridden(assoc, &*self.assoc);
-				(!picked.is_empty()).then(|| {
-					(
-						format!(
-							"Windows still opens {} files with the app picked for them",
-							picked.join(" and ")
-						),
-						"To change that, choose Open with on one, then SilkTerm, then Always"
-							.to_string(),
-					)
-				})
+				(!picked.is_empty()).then(|| (format!("Windows still opens {} files with the app picked for them", picked.join(" and ")), "To change that, choose Open with on one, then SilkTerm, then Always".to_string()))
 			}
 			Ok(()) => None,
 		};
 		if let Some((title, detail)) = say {
 			self.commit_edit();
-			self.prompt = Some(Prompt {
-				job: PromptJob::Notice,
-				title,
-				focus: PromptFocus::Ok,
-				warn: Some(detail),
-			});
+			self.prompt = Some(Prompt { job: PromptJob::Notice, title, focus: PromptFocus::Ok, warn: Some(detail) });
 		}
 	}
 
@@ -3884,12 +3241,7 @@ impl SettingsDialog {
 	// they line up under whatever the row above them has.
 	fn row_btn_rect(&self, i: usize, part: u16) -> Rect {
 		let h = self.btn_h();
-		Rect {
-			x: self.control_x(i) + f32::from(part) * (self.row_btn_w + lay().button_gap),
-			y: self.row_y(i) + (self.row_screen_h(i) - h) / 2.0,
-			w: self.row_btn_w,
-			h,
-		}
+		Rect { x: self.control_x(i) + f32::from(part) * (self.row_btn_w + lay().button_gap), y: self.row_y(i) + (self.row_screen_h(i) - h) / 2.0, w: self.row_btn_w, h }
 	}
 
 	// A change made here. The row's field is set first, the way each accessor
@@ -3959,17 +3311,8 @@ impl SettingsDialog {
 	// Rotate switch: the folder with it on, the image with it off.
 	fn wallpaper_box_is_folder(&self) -> bool {
 		match &self.edit {
-			Some(edit)
-				if self
-					.specs
-					.get(edit.row)
-					.is_some_and(|s| s.key == Key::BgImage) =>
-			{
-				edit.wallpaper_folder
-			}
-			_ => {
-				!fields::by_hand(&self.edited, Key::BgImage) && self.edited.wallpaper_rotate_enabled
-			}
+			Some(edit) if self.specs.get(edit.row).is_some_and(|s| s.key == Key::BgImage) => edit.wallpaper_folder,
+			_ => !fields::by_hand(&self.edited, Key::BgImage) && self.edited.wallpaper_rotate_enabled,
 		}
 	}
 
@@ -3992,15 +3335,8 @@ impl SettingsDialog {
 		// An emptied box goes back to the default, and so does the usual folder
 		// typed out, since that is what the file reads it as.
 		let (key, empty) = match key {
-			Key::BgImage if self.wallpaper_box_is_folder() => (
-				Key::BgFolder,
-				trimmed.is_empty() || trimmed == config::WALLPAPER_DIR_TOKEN,
-			),
-			Key::BgImage
-			| Key::FontFamily
-			| Key::LinkOpenCommand
-			| Key::TabTemplate
-			| Key::TmuxSessionName => (key, trimmed.is_empty()),
+			Key::BgImage if self.wallpaper_box_is_folder() => (Key::BgFolder, trimmed.is_empty() || trimmed == config::WALLPAPER_DIR_TOKEN),
+			Key::BgImage | Key::FontFamily | Key::LinkOpenCommand | Key::TabTemplate | Key::TmuxSessionName => (key, trimmed.is_empty()),
 			Key::StartupDirectory => (key, false),
 			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => return,
 		};
@@ -4067,10 +3403,7 @@ impl SettingsDialog {
 		match self.choices(key) {
 			Some(options) => {
 				let at = fields::chosen(&self.edited, key);
-				options
-					.iter()
-					.position(|(k, _)| k.eq_ignore_ascii_case(&at))
-					.unwrap_or(0)
+				options.iter().position(|(k, _)| k.eq_ignore_ascii_case(&at)).unwrap_or(0)
 			}
 			None => radio_of(&self.edited, key),
 		}
@@ -4089,11 +3422,7 @@ impl SettingsDialog {
 				Some(out)
 			}
 			Key::Theme => {
-				let mut out: Vec<(String, String)> =
-					crate::theme::all_names(&self.edited.user_themes)
-						.into_iter()
-						.map(|name| (name.clone(), name))
-						.collect();
+				let mut out: Vec<(String, String)> = crate::theme::all_names(&self.edited.user_themes).into_iter().map(|name| (name.clone(), name)).collect();
 				out.push((CUSTOM.to_string(), fields::custom_label(key).to_string()));
 				Some(out)
 			}
@@ -4123,11 +3452,7 @@ impl SettingsDialog {
 		}
 		match key {
 			Key::BgFit => {
-				self.edited.wallpaper_default_fit = if idx == 1 {
-					config::Fit::Zoom
-				} else {
-					config::Fit::Stretch
-				};
+				self.edited.wallpaper_default_fit = if idx == 1 { config::Fit::Zoom } else { config::Fit::Stretch };
 			}
 			Key::ScrimFunction => {
 				if let Some(function) = Choice::from_index(idx) {
@@ -4245,11 +3570,7 @@ impl SettingsDialog {
 		if key == Key::PerfProfile {
 			self.edited.stepped_profile = None;
 		}
-		let keys: &[Key] = if key == Key::BgImage {
-			&[Key::BgImage, Key::BgFolder]
-		} else {
-			&[key]
-		};
+		let keys: &[Key] = if key == Key::BgImage { &[Key::BgImage, Key::BgFolder] } else { &[key] };
 		for &k in keys {
 			if fields::field(k).is_some() {
 				fields::reset(&mut self.edited, k, self.monitor.as_deref());
@@ -4269,15 +3590,8 @@ impl SettingsDialog {
 	/// the rows still at their default go back to the template's line.
 	pub fn take_reverted(&mut self) -> Vec<&'static str> {
 		let mut reverted = std::mem::take(&mut self.reverted);
-		let keys: Vec<Key> = (0..self.specs.len())
-			.flat_map(|j| self.own_keys(j))
-			.copied()
-			.collect();
-		reverted.retain(|cfg_key| {
-			keys.iter()
-				.find(|&&key| ui().settings_of(key).contains(cfg_key))
-				.is_none_or(|&key| self.is_default(key))
-		});
+		let keys: Vec<Key> = (0..self.specs.len()).flat_map(|j| self.own_keys(j)).copied().collect();
+		reverted.retain(|cfg_key| keys.iter().find(|&&key| ui().settings_of(key).contains(cfg_key)).is_none_or(|&key| self.is_default(key)));
 		reverted
 	}
 
@@ -4291,13 +3605,7 @@ impl SettingsDialog {
 		// double/triple-click detection (word / whole-value selection in fields)
 		let now = std::time::Instant::now();
 		self.click_streak = match self.last_click {
-			Some((t, lx, ly))
-				if now.duration_since(t).as_millis() < 400
-					&& (x - lx).abs() < 6.0
-					&& (y - ly).abs() < 6.0 =>
-			{
-				self.click_streak.saturating_add(1)
-			}
+			Some((t, lx, ly)) if now.duration_since(t).as_millis() < 400 && (x - lx).abs() < 6.0 && (y - ly).abs() < 6.0 => self.click_streak.saturating_add(1),
 			_ => 1,
 		};
 		self.last_click = Some((now, x, y));
@@ -4348,10 +3656,7 @@ impl SettingsDialog {
 		}
 		// a click inside the field being edited keeps the edit (caret/selection
 		// handling below); anywhere else commits it
-		let keep_edit = self
-			.edit
-			.as_ref()
-			.is_some_and(|e| self.field_rect(e.row).is_some_and(|r| r.contains(x, y)));
+		let keep_edit = self.edit.as_ref().is_some_and(|e| self.field_rect(e.row).is_some_and(|r| r.contains(x, y)));
 		if !keep_edit {
 			self.commit_edit();
 		}
@@ -4380,17 +3685,12 @@ impl SettingsDialog {
 		// it sits in, so an 8 DIP bar isn't an 8 DIP target.
 		if let Some(thumb) = self.hthumb() {
 			let track = self.htrack();
-			let band = Rect {
-				y: track.y - lay().scrollbar_inset,
-				h: self.hbar_h(),
-				..track
-			};
+			let band = Rect { y: track.y - lay().scrollbar_inset, h: self.hbar_h(), ..track };
 			if band.contains(x, y) {
 				let grab = if x >= thumb.x && x <= thumb.x + thumb.w {
 					x - thumb.x
 				} else {
-					let frac = ((x - track.x - thumb.w / 2.0) / (track.w - thumb.w).max(1.0))
-						.clamp(0.0, 1.0);
+					let frac = ((x - track.x - thumb.w / 2.0) / (track.w - thumb.w).max(1.0)).clamp(0.0, 1.0);
 					self.hscroll = frac * self.max_hscroll();
 					thumb.w / 2.0
 				};
@@ -4423,11 +3723,7 @@ impl SettingsDialog {
 			// 3 whose parts gray separately keep their own per-part check. A
 			// pair row's key is only its first part, so gating the whole row on
 			// that key took the click away from a live second part.
-			if !matches!(
-				self.specs[i].kind,
-				Kind::Buttons(_) | Kind::ShellList | Kind::Dual { .. }
-			) && self.disabled(self.specs[i].key)
-			{
+			if !matches!(self.specs[i].kind, Kind::Buttons(_) | Kind::ShellList | Kind::Dual { .. }) && self.disabled(self.specs[i].key) {
 				continue;
 			}
 			match self.specs[i].kind {
@@ -4439,9 +3735,7 @@ impl SettingsDialog {
 						return Action::None;
 					}
 					let track = self.track(i);
-					let hit = x >= track.x - 8.0
-						&& x <= track.x + track.w + 8.0
-						&& (y - (track.y + track.h / 2.0)).abs() <= 12.0;
+					let hit = x >= track.x - 8.0 && x <= track.x + track.w + 8.0 && (y - (track.y + track.h / 2.0)).abs() <= 12.0;
 					if hit {
 						self.focus = Some(Focus::Row(i, 0));
 						self.drag = Some(i);
@@ -4487,10 +3781,7 @@ impl SettingsDialog {
 					// hit either checkbox (or its label span, out to the next pitch)
 					for part in 0u16..2 {
 						let bx = self.dual_box(i, part);
-						if x >= bx.x
-							&& x <= bx.x + self.dual_pitch() - 8.0
-							&& (y - (bx.y + bx.h / 2.0)).abs() <= bx.h / 2.0 + 4.0
-						{
+						if x >= bx.x && x <= bx.x + self.dual_pitch() - 8.0 && (y - (bx.y + bx.h / 2.0)).abs() <= bx.h / 2.0 + 4.0 {
 							if self.disabled(keys[part as usize]) {
 								continue; // grayed checkbox ignores clicks
 							}
@@ -4505,11 +3796,7 @@ impl SettingsDialog {
 					for choice in 0..options.len() {
 						let radio_rect = self.radio_box(i, choice);
 						// click the box or its label
-						if x >= radio_rect.x
-							&& x <= radio_rect.x + self.radio_pitch() - 8.0
-							&& (y - (radio_rect.y + radio_rect.h / 2.0)).abs()
-								<= radio_rect.h / 2.0 + 4.0
-						{
+						if x >= radio_rect.x && x <= radio_rect.x + self.radio_pitch() - 8.0 && (y - (radio_rect.y + radio_rect.h / 2.0)).abs() <= radio_rect.h / 2.0 + 4.0 {
 							self.focus = Some(Focus::Row(i, 0));
 							self.set_radio(self.specs[i].key, choice);
 							return Action::None;
@@ -4560,11 +3847,7 @@ impl SettingsDialog {
 		}
 		if let Some((shell_index, command)) = shell_field_of(i) {
 			let grid = self.shell_row()?;
-			return Some(if command {
-				self.shell_cmd_box(grid, shell_index)
-			} else {
-				self.shell_name_box(grid, shell_index)
-			});
+			return Some(if command { self.shell_cmd_box(grid, shell_index) } else { self.shell_name_box(grid, shell_index) });
 		}
 		match self.specs[i].kind {
 			Kind::Slider { .. } => Some(self.valbox(i)),
@@ -4601,11 +3884,7 @@ impl SettingsDialog {
 			self.focus = Some(Focus::Row(r, part));
 		}
 		let Some(edit) = &mut self.edit else { return };
-		let cur = caret_from_click(
-			&edit.buf,
-			x - (field.x + lay().field_pad) + edit.view,
-			measure,
-		);
+		let cur = caret_from_click(&edit.buf, x - (field.x + lay().field_pad) + edit.view, measure);
 		if shift && same_row {
 			if edit.sel.is_none() {
 				edit.sel = Some(edit.cur);
@@ -4645,32 +3924,18 @@ impl SettingsDialog {
 		let w = lay().edit_menu_width * self.ui_scale();
 		let h = EDIT_MENU.len() as f32 * self.em_item_h();
 		// clamp into the panel; flip upward when it would spill past the bottom
-		let x = menu
-			.x
-			.min(self.rect.x + self.rect.w - w - 2.0)
-			.max(self.rect.x);
-		let y = if menu.y + h > self.rect.y + self.rect.h - 2.0 {
-			(menu.y - h).max(self.rect.y)
-		} else {
-			menu.y
-		};
+		let x = menu.x.min(self.rect.x + self.rect.w - w - 2.0).max(self.rect.x);
+		let y = if menu.y + h > self.rect.y + self.rect.h - 2.0 { (menu.y - h).max(self.rect.y) } else { menu.y };
 		Rect { x, y, w, h }
 	}
 	fn em_item_rect(&self, item: usize) -> Rect {
 		let r = self.em_rect();
-		Rect {
-			x: r.x,
-			y: r.y + item as f32 * self.em_item_h(),
-			w: r.w,
-			h: self.em_item_h(),
-		}
+		Rect { x: r.x, y: r.y + item as f32 * self.em_item_h(), w: r.w, h: self.em_item_h() }
 	}
 	fn em_enabled(&self, item: usize) -> bool {
 		let edit = self.edit.as_ref();
 		match EDIT_MENU[item].1 {
-			EditCmd::Cut | EditCmd::Copy | EditCmd::Delete => {
-				edit.is_some_and(|e| e.sel_range().is_some())
-			}
+			EditCmd::Cut | EditCmd::Copy | EditCmd::Delete => edit.is_some_and(|e| e.sel_range().is_some()),
 			EditCmd::Paste => self.emenu.as_ref().is_some_and(|m| m.paste_ok),
 			EditCmd::SelectAll => edit.is_some_and(|e| !e.buf.is_empty()),
 		}
@@ -4680,13 +3945,7 @@ impl SettingsDialog {
 	}
 	// Right-click in an editable field: open (or keep) the edit, place the caret
 	// at the click unless it falls inside the selection (standard), pop the menu.
-	fn mouse_right_dip(
-		&mut self,
-		x: f32,
-		y: f32,
-		paste_ok: bool,
-		measure: &mut impl FnMut(&str) -> f32,
-	) {
+	fn mouse_right_dip(&mut self, x: f32, y: f32, paste_ok: bool, measure: &mut impl FnMut(&str) -> f32) {
 		self.mouse = (x, y);
 		self.emenu = None;
 		self.open = None;
@@ -4695,10 +3954,7 @@ impl SettingsDialog {
 		// the row behind the box and OK would then save under that row's value.
 		if self.pick.is_some() {
 			let g = self.pick_geom();
-			if let Some(f) = pick::Field::ALL
-				.into_iter()
-				.find(|&f| g.field(f).contains(x, y))
-			{
+			if let Some(f) = pick::Field::ALL.into_iter().find(|&f| g.field(f).contains(x, y)) {
 				self.pick_focus_to(pick::Focus::Field(f));
 				self.pop_field_menu(g.field(f), x, y, paste_ok, measure);
 			}
@@ -4758,14 +4014,7 @@ impl SettingsDialog {
 	// Caret placement plus the menu itself, shared by the panel rows and the theme
 	// prompt's own field. A click inside an existing selection leaves it alone, so
 	// the menu can act on it (standard).
-	fn pop_field_menu(
-		&mut self,
-		field: Rect,
-		x: f32,
-		y: f32,
-		paste_ok: bool,
-		measure: &mut impl FnMut(&str) -> f32,
-	) {
+	fn pop_field_menu(&mut self, field: Rect, x: f32, y: f32, paste_ok: bool, measure: &mut impl FnMut(&str) -> f32) {
 		if let Some(edit) = &mut self.edit {
 			let rel_x = x - (field.x + lay().field_pad) + edit.view;
 			let cur = caret_from_click(&edit.buf, rel_x, measure);
@@ -4775,12 +4024,7 @@ impl SettingsDialog {
 				edit.sel = None;
 			}
 		}
-		self.emenu = Some(EMenu {
-			x,
-			y,
-			hover: None,
-			paste_ok,
-		});
+		self.emenu = Some(EMenu { x, y, hover: None, paste_ok });
 	}
 	// Keyboard Menu key: pop the context menu at the caret of the active edit.
 	fn menu_key_dip(&mut self, paste_ok: bool, measure: &mut impl FnMut(&str) -> f32) {
@@ -4788,14 +4032,8 @@ impl SettingsDialog {
 		let Some(field) = self.field_rect(edit.row) else {
 			return;
 		};
-		let cx = (field.x + lay().field_pad + measure(&edit.buf[..edit.cur]) - edit.view)
-			.clamp(field.x, field.x + field.w);
-		self.emenu = Some(EMenu {
-			x: cx,
-			y: field.y + field.h,
-			hover: Some(0),
-			paste_ok,
-		});
+		let cx = (field.x + lay().field_pad + measure(&edit.buf[..edit.cur]) - edit.view).clamp(field.x, field.x + field.w);
+		self.emenu = Some(EMenu { x: cx, y: field.y + field.h, hover: Some(0), paste_ok });
 	}
 
 	// Per-frame upkeep of the active field edit, with real frame time: eases the
@@ -4822,9 +4060,7 @@ impl SettingsDialog {
 		// the view further, and the selection ran off to the end of the text.
 		if let Some(row) = self.edit_drag {
 			let (mx, my) = self.mouse;
-			let past_edge = self
-				.field_rect(row)
-				.is_some_and(|f| mx < f.x || mx > f.x + f.w);
+			let past_edge = self.field_rect(row).is_some_and(|f| mx < f.x || mx > f.x + f.w);
 			if past_edge {
 				let _ = self.mouse_move_dip(mx, my, measure);
 			}
@@ -4871,12 +4107,7 @@ impl SettingsDialog {
 	// pointer itself, so a move that changes none of this needs no frame.
 	fn mouse_move_dip(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) -> bool {
 		self.mouse = (x, y);
-		if let Some(was) = self
-			.pick
-			.as_ref()
-			.filter(|p| p.drag.is_some())
-			.map(|p| p.hsv)
-		{
+		if let Some(was) = self.pick.as_ref().filter(|p| p.drag.is_some()).map(|p| p.hsv) {
 			self.pick_drag_to(x, y);
 			return self.pick.as_ref().is_some_and(|p| p.hsv != was);
 		}
@@ -4947,9 +4178,7 @@ impl SettingsDialog {
 		if let Some(grab) = self.drag_thumb {
 			let was = self.scroll;
 			let vp = self.viewport();
-			let thumb_h = self
-				.thumb()
-				.map_or_else(|| lay().scrollbar_thumb_min, |t| t.h);
+			let thumb_h = self.thumb().map_or_else(|| lay().scrollbar_thumb_min, |t| t.h);
 			let frac = ((y - grab - vp.y) / (vp.h - thumb_h).max(1.0)).clamp(0.0, 1.0);
 			self.scroll = frac * self.max_scroll();
 			return self.scroll.to_bits() != was.to_bits();
@@ -4957,9 +4186,7 @@ impl SettingsDialog {
 		if let Some(grab) = self.drag_hthumb {
 			let was = self.hscroll;
 			let track = self.htrack();
-			let thumb_w = self
-				.hthumb()
-				.map_or_else(|| lay().scrollbar_thumb_min, |t| t.w);
+			let thumb_w = self.hthumb().map_or_else(|| lay().scrollbar_thumb_min, |t| t.w);
 			let frac = ((x - grab - track.x) / (track.w - thumb_w).max(1.0)).clamp(0.0, 1.0);
 			self.hscroll = frac * self.max_hscroll();
 			return self.hscroll.to_bits() != was.to_bits();
@@ -5095,11 +4322,7 @@ impl SettingsDialog {
 		// a theme name, a shell's title or its command line: any ordinary
 		// character, within a sane length (a command may be a long path)
 		if edit.row >= PSEUDO_ROW {
-			let cap = if shell_field_of(edit.row).is_some_and(|(_, cmd)| cmd) {
-				512
-			} else {
-				64
-			};
+			let cap = if shell_field_of(edit.row).is_some_and(|(_, cmd)| cmd) { 512 } else { 64 };
 			if c.is_control() || edit.buf.len() - sel_len >= cap {
 				return false;
 			}
@@ -5119,9 +4342,7 @@ impl SettingsDialog {
 			// numeric slider field: digits always; one '.' only for float sliders
 			Kind::Slider { int, .. } => {
 				// what stays of the buffer, either side of the selection
-				let (head, tail) = edit.sel_range().map_or((edit.buf.as_str(), ""), |(a, b)| {
-					(&edit.buf[..a], &edit.buf[b..])
-				});
+				let (head, tail) = edit.sel_range().map_or((edit.buf.as_str(), ""), |(a, b)| (&edit.buf[..a], &edit.buf[b..]));
 				let dot_ok = !int && c == '.' && !head.contains('.') && !tail.contains('.');
 				(c.is_ascii_digit() || dot_ok) && head.len() + tail.len() < 8
 			}
@@ -5154,10 +4375,8 @@ impl SettingsDialog {
 				self.open_edit(SEARCH_ROW, true);
 			}
 			if let Some(Focus::Row(i, _)) = self.focus
-				&& matches!(
-					self.specs[i].kind,
-					Kind::Text | Kind::Color | Kind::Slider { .. }
-				) {
+				&& matches!(self.specs[i].kind, Kind::Text | Kind::Color | Kind::Slider { .. })
+			{
 				self.open_edit(i, true);
 			}
 			return;
@@ -5322,10 +4541,7 @@ impl SettingsDialog {
 			Kind::Text => self.set_text(self.specs[i].key, &buf),
 			// a valid partial number applies live, clamped to what the box takes
 			Kind::Slider { .. } => {
-				if let (Some(scale), Ok(value)) = (
-					SliderScale::of(&self.specs[i].kind),
-					buf.trim().parse::<f32>(),
-				) {
+				if let (Some(scale), Ok(value)) = (SliderScale::of(&self.specs[i].kind), buf.trim().parse::<f32>()) {
 					self.set_f32(self.specs[i].key, scale.typed(value));
 				}
 			}
@@ -5363,12 +4579,7 @@ impl SettingsDialog {
 	pub fn key_enter(&mut self) -> Action {
 		if self.emenu.is_some() {
 			// fire the highlighted (enabled) menu item
-			let cmd = self
-				.emenu
-				.as_ref()
-				.and_then(|m| m.hover)
-				.filter(|&k| self.em_enabled(k))
-				.map(|k| EDIT_MENU[k].1);
+			let cmd = self.emenu.as_ref().and_then(|m| m.hover).filter(|&k| self.em_enabled(k)).map(|k| EDIT_MENU[k].1);
 			self.emenu = None;
 			return cmd.map_or(Action::None, Action::Edit);
 		}
@@ -5438,91 +4649,47 @@ impl SettingsDialog {
 
 	// caret line (and selection highlight) inside a focused field, at the
 	// measured prefix widths
-	fn caret_quad(
-		&self,
-		colors: &Dlg,
-		out: &mut Vec<RectInstance>,
-		field: Rect,
-		measure: &mut impl FnMut(&str) -> f32,
-	) {
+	fn caret_quad(&self, colors: &Dlg, out: &mut Vec<RectInstance>, field: Rect, measure: &mut impl FnMut(&str) -> f32) {
 		let Some(edit) = &self.edit else { return };
 		let left = field.x + lay().field_pad - edit.view;
 		let (lo, hi) = (field.x + 1.0, field.x + field.w - 1.0);
 		// the caret's own x is the eased position (smooth caret travel); other
 		// selection edges are exact
-		let caret_x = edit
-			.caret_vis
-			.unwrap_or_else(|| measure(&edit.buf[..edit.cur]));
+		let caret_x = edit.caret_vis.unwrap_or_else(|| measure(&edit.buf[..edit.cur]));
 		if let Some((a, b)) = edit.sel_range() {
 			let edge = |i: usize, measure: &mut dyn FnMut(&str) -> f32| {
-				if i == edit.cur {
-					caret_x
-				} else {
-					measure(&edit.buf[..i])
-				}
+				if i == edit.cur { caret_x } else { measure(&edit.buf[..i]) }
 			};
 			let x1 = (left + edge(a, measure)).clamp(lo, hi);
 			let x2 = (left + edge(b, measure)).clamp(lo, hi);
 			if x2 > x1 {
 				// the text draws after the rects, so it stays legible on top
-				out.push(RectInstance {
-					pos: [x1, field.y + 2.0],
-					size: [x2 - x1, field.h - 4.0],
-					color: config::srgb_f32(mix3(colors.field_bg, colors.focus_out, 0.45)),
-					..Default::default()
-				});
+				out.push(RectInstance { pos: [x1, field.y + 2.0], size: [x2 - x1, field.h - 4.0], color: config::srgb_f32(mix3(colors.field_bg, colors.focus_out, 0.45)), ..Default::default() });
 			}
 		}
 		let x = (left + caret_x).clamp(lo, hi - 1.5);
 		// smooth blink: fade the bar toward the field bg instead of a hard on/off
 		let color = mix3(colors.field_bg, colors.focus_out, edit.caret_alpha());
-		out.push(RectInstance {
-			pos: [x, field.y + 2.0],
-			size: [1.5, field.h - 4.0],
-			color: config::srgb_f32(color),
-			..Default::default()
-		});
+		out.push(RectInstance { pos: [x, field.y + 2.0], size: [1.5, field.h - 4.0], color: config::srgb_f32(color), ..Default::default() });
 	}
 
 	// (fixed chrome, scrolled rows): the rows vec is drawn scissored to
 	// `viewport()` so scrolled-out controls can't paint over the chrome.
 	// `measure` gives the rendered width of a string in the UI font (for the caret).
-	fn rects_dip(
-		&self,
-		line_h: f32,
-		mut measure: impl FnMut(&str) -> f32,
-	) -> (Vec<RectInstance>, Vec<RectInstance>) {
+	fn rects_dip(&self, line_h: f32, mut measure: impl FnMut(&str) -> f32) -> (Vec<RectInstance>, Vec<RectInstance>) {
 		let colors = dlg();
 		let mut fixed = Vec::new();
 		let mut out = Vec::new();
 		// panel
-		fixed.push(quad(
-			self.rect.x,
-			self.rect.y,
-			self.rect.w,
-			self.rect.h,
-			colors.panel_bg,
-		));
+		fixed.push(quad(self.rect.x, self.rect.y, self.rect.w, self.rect.h, colors.panel_bg));
 		border(&mut fixed, self.rect, 1.0, colors.panel_border);
 		// The rows sit a shade down toward the gutter, so the bands that hold
 		// still over and under them read lighter, each with a line along the
 		// rows. On every tab whether it scrolls or not.
 		let [top, foot] = self.fixed_bands();
 		let rows_y = top.y + top.h;
-		fixed.push(quad(
-			top.x,
-			rows_y,
-			top.w,
-			(foot.y - rows_y).max(0.0),
-			colors.rows_bg(),
-		));
-		fixed.push(quad(
-			top.x,
-			top.y + top.h - 1.0,
-			top.w,
-			1.0,
-			colors.panel_border,
-		));
+		fixed.push(quad(top.x, rows_y, top.w, (foot.y - rows_y).max(0.0), colors.rows_bg()));
+		fixed.push(quad(top.x, top.y + top.h - 1.0, top.w, 1.0, colors.panel_border));
 		fixed.push(quad(foot.x, foot.y, foot.w, 1.0, colors.panel_border));
 		// The tab strip: a recessed gutter closed off by a rule, with the tabs
 		// standing on that rule. The current one is a lighter gray rather than an
@@ -5546,13 +4713,7 @@ impl SettingsDialog {
 				continue; // scrolled right out of the strip, or not on show
 			}
 			let active = path.contains(&tab);
-			fixed.push(quad(
-				r.x,
-				r.y,
-				r.w,
-				r.h,
-				if active { colors.tab_hl } else { colors.tab_bg },
-			));
+			fixed.push(quad(r.x, r.y, r.w, r.h, if active { colors.tab_hl } else { colors.tab_bg }));
 		}
 		// scrollbar (only when the active tab overflows the viewport)
 		if let Some(thumb) = self.thumb() {
@@ -5585,38 +4746,13 @@ impl SettingsDialog {
 					let value = self.get_f32(self.specs[i].key);
 					let frac = SliderScale::of(&self.specs[i].kind).map_or(0.0, |s| s.frac(value));
 					let handle_x = track.x + frac * track.w - SLIDER_HANDLE_W / 2.0;
-					out.push(quad(
-						handle_x,
-						track.y - 6.0,
-						SLIDER_HANDLE_W,
-						track.h + 12.0,
-						if off {
-							colors.panel_border
-						} else {
-							colors.handle
-						},
-					));
+					out.push(quad(handle_x, track.y - 6.0, SLIDER_HANDLE_W, track.h + 12.0, if off { colors.panel_border } else { colors.handle }));
 					// editable numeric field
 					let val_box = self.valbox(i);
-					out.push(quad(
-						val_box.x,
-						val_box.y,
-						val_box.w,
-						val_box.h,
-						colors.field_bg,
-					));
+					out.push(quad(val_box.x, val_box.y, val_box.w, val_box.h, colors.field_bg));
 					let focused = matches!(&self.edit, Some(edit) if edit.row == i);
 					if !self.ring_on(i, 1) {
-						border(
-							&mut out,
-							val_box,
-							1.0,
-							if focused && !off {
-								colors.focus_out
-							} else {
-								colors.panel_border
-							},
-						);
+						border(&mut out, val_box, 1.0, if focused && !off { colors.focus_out } else { colors.panel_border });
 					}
 					if focused && !off {
 						self.caret_quad(&colors, &mut out, val_box, &mut measure);
@@ -5624,36 +4760,15 @@ impl SettingsDialog {
 				}
 				Kind::Color => {
 					let swatch = self.swatch(i);
-					out.push(quad(
-						swatch.x,
-						swatch.y,
-						swatch.w,
-						swatch.h,
-						self.get_col(self.specs[i].key),
-					));
+					out.push(quad(swatch.x, swatch.y, swatch.w, swatch.h, self.get_col(self.specs[i].key)));
 					if !self.ring_on(i, 0) {
 						border(&mut out, swatch, 1.0, colors.panel_border);
 					}
 					let hex_box = self.hexbox(i);
-					out.push(quad(
-						hex_box.x,
-						hex_box.y,
-						hex_box.w,
-						hex_box.h,
-						colors.field_bg,
-					));
+					out.push(quad(hex_box.x, hex_box.y, hex_box.w, hex_box.h, colors.field_bg));
 					let focused = matches!(&self.edit, Some(edit) if edit.row == i);
 					if !self.ring_on(i, 1) {
-						border(
-							&mut out,
-							hex_box,
-							1.0,
-							if focused {
-								colors.focus_out
-							} else {
-								colors.panel_border
-							},
-						);
+						border(&mut out, hex_box, 1.0, if focused { colors.focus_out } else { colors.panel_border });
 					}
 					if focused {
 						self.caret_quad(&colors, &mut out, hex_box, &mut measure);
@@ -5661,25 +4776,10 @@ impl SettingsDialog {
 				}
 				Kind::Text => {
 					let text_box = self.textbox(i);
-					out.push(quad(
-						text_box.x,
-						text_box.y,
-						text_box.w,
-						text_box.h,
-						colors.field_bg,
-					));
+					out.push(quad(text_box.x, text_box.y, text_box.w, text_box.h, colors.field_bg));
 					let focused = matches!(&self.edit, Some(edit) if edit.row == i);
 					if !self.ring_on(i, 0) {
-						border(
-							&mut out,
-							text_box,
-							1.0,
-							if focused {
-								colors.focus_out
-							} else {
-								colors.panel_border
-							},
-						);
+						border(&mut out, text_box, 1.0, if focused { colors.focus_out } else { colors.panel_border });
 					}
 					if focused {
 						self.caret_quad(&colors, &mut out, text_box, &mut measure);
@@ -5687,50 +4787,19 @@ impl SettingsDialog {
 				}
 				Kind::Hotkey(_) => {
 					let key_box = self.textbox(i);
-					out.push(quad(
-						key_box.x,
-						key_box.y,
-						key_box.w,
-						key_box.h,
-						colors.field_bg,
-					));
+					out.push(quad(key_box.x, key_box.y, key_box.w, key_box.h, colors.field_bg));
 					if !self.ring_on(i, 0) {
-						border(
-							&mut out,
-							key_box,
-							1.0,
-							if self.capture == Some(i) {
-								colors.focus_out
-							} else {
-								colors.panel_border
-							},
-						);
+						border(&mut out, key_box, 1.0, if self.capture == Some(i) { colors.focus_out } else { colors.panel_border });
 					}
 				}
 				Kind::Toggle => {
 					let off = self.disabled(self.specs[i].key);
 					let check_box = self.checkbox(i);
-					out.push(quad(
-						check_box.x,
-						check_box.y,
-						check_box.w,
-						check_box.h,
-						colors.field_bg,
-					));
+					out.push(quad(check_box.x, check_box.y, check_box.w, check_box.h, colors.field_bg));
 					border(&mut out, check_box, 1.0, colors.panel_border);
 					// filled inner square when on (the checkmark glyph is drawn in texts)
 					if self.get_toggle(self.specs[i].key) {
-						out.push(quad(
-							check_box.x + 4.0,
-							check_box.y + 4.0,
-							check_box.w - 8.0,
-							check_box.h - 8.0,
-							if off {
-								colors.panel_border
-							} else {
-								colors.handle
-							},
-						));
+						out.push(quad(check_box.x + 4.0, check_box.y + 4.0, check_box.w - 8.0, check_box.h - 8.0, if off { colors.panel_border } else { colors.handle }));
 					}
 				}
 				Kind::Dual { keys, .. } => {
@@ -5740,17 +4809,7 @@ impl SettingsDialog {
 						out.push(quad(bx.x, bx.y, bx.w, bx.h, colors.field_bg));
 						border(&mut out, bx, 1.0, colors.panel_border);
 						if self.get_toggle(keys[part as usize]) {
-							out.push(quad(
-								bx.x + 4.0,
-								bx.y + 4.0,
-								bx.w - 8.0,
-								bx.h - 8.0,
-								if off {
-									colors.panel_border
-								} else {
-									colors.handle
-								},
-							));
+							out.push(quad(bx.x + 4.0, bx.y + 4.0, bx.w - 8.0, bx.h - 8.0, if off { colors.panel_border } else { colors.handle }));
 						}
 					}
 				}
@@ -5758,22 +4817,10 @@ impl SettingsDialog {
 					let sel = self.get_radio(self.specs[i].key);
 					for choice in 0..options.len() {
 						let radio_rect = self.radio_box(i, choice);
-						out.push(quad(
-							radio_rect.x,
-							radio_rect.y,
-							radio_rect.w,
-							radio_rect.h,
-							colors.field_bg,
-						));
+						out.push(quad(radio_rect.x, radio_rect.y, radio_rect.w, radio_rect.h, colors.field_bg));
 						border(&mut out, radio_rect, 1.0, colors.panel_border);
 						if choice == sel {
-							out.push(quad(
-								radio_rect.x + 4.0,
-								radio_rect.y + 4.0,
-								radio_rect.w - 8.0,
-								radio_rect.h - 8.0,
-								colors.handle,
-							));
+							out.push(quad(radio_rect.x + 4.0, radio_rect.y + 4.0, radio_rect.w - 8.0, radio_rect.h - 8.0, colors.handle));
 						}
 					}
 				}
@@ -5783,16 +4830,7 @@ impl SettingsDialog {
 					let box_r = self.dd_box(i);
 					out.push(quad(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
 					if !self.ring_on(i, 0) {
-						border(
-							&mut out,
-							box_r,
-							1.0,
-							if self.open == Some(i) && !off {
-								colors.focus_out
-							} else {
-								colors.panel_border
-							},
-						);
+						border(&mut out, box_r, 1.0, if self.open == Some(i) && !off { colors.focus_out } else { colors.panel_border });
 					}
 				}
 				// A pressed button fills with the highlight, the same click feedback
@@ -5801,11 +4839,7 @@ impl SettingsDialog {
 				Kind::Buttons(captions) => {
 					for part in 0..captions.len() as u16 {
 						let r = self.row_btn_rect(i, part);
-						let fill = if self.pressed_row == Some((i, part)) {
-							colors.btn_hl
-						} else {
-							colors.btn_bg
-						};
+						let fill = if self.pressed_row == Some((i, part)) { colors.btn_hl } else { colors.btn_bg };
 						out.push(quad(r.x, r.y, r.w, r.h, fill));
 						if !self.ring_on(i, part) {
 							border(&mut out, r, 1.0, colors.panel_border);
@@ -5818,13 +4852,7 @@ impl SettingsDialog {
 				Kind::Header(_) => {
 					let y = self.header_rule_y(i);
 					let x = self.content_x() + lay().pad;
-					out.push(quad(
-						x,
-						y,
-						self.layout_w() - lay().pad * 2.0,
-						1.0,
-						colors.panel_border,
-					));
+					out.push(quad(x, y, self.layout_w() - lay().pad * 2.0, 1.0, colors.panel_border));
 				}
 			}
 		}
@@ -5835,26 +4863,13 @@ impl SettingsDialog {
 			&& !matches!(self.specs[fr].kind, Kind::Header(_))
 		{
 			let r = self.focus_ctl_rect(fr, fp);
-			let inset = if self.ring_is_the_box(fr, fp) {
-				0.0
-			} else {
-				2.0
-			};
-			let ring = Rect {
-				x: r.x - inset,
-				y: r.y - inset,
-				w: r.w + inset * 2.0,
-				h: r.h + inset * 2.0,
-			};
+			let inset = if self.ring_is_the_box(fr, fp) { 0.0 } else { 2.0 };
+			let ring = Rect { x: r.x - inset, y: r.y - inset, w: r.w + inset * 2.0, h: r.h + inset * 2.0 };
 			border(&mut out, ring, 1.0, colors.focus_out);
 		}
 		for (btn_idx, (_, r, label)) in self.buttons().into_iter().enumerate() {
 			// pressed button fills with the highlight for click feedback
-			let fill = if self.pressed == Some(btn_idx) {
-				colors.btn_hl
-			} else {
-				colors.btn_bg
-			};
+			let fill = if self.pressed == Some(btn_idx) { colors.btn_hl } else { colors.btn_bg };
 			fixed.push(quad(r.x, r.y, r.w, r.h, fill));
 			let ring = self.focus == Some(Focus::Button(btn_idx));
 			// Only the default button (OK) is outlined in the highlight color;
@@ -5883,35 +4898,15 @@ impl SettingsDialog {
 	// A triangle with an exclamation mark cut out of it, in the label's color. All
 	// quads, for the same reason as the grid's icons: no interface font can be
 	// relied on to have the sign. Not red, since red is only for removal.
-	fn warning_quads(
-		&self,
-		colors: &Dlg,
-		i: usize,
-		out: &mut Vec<RectInstance>,
-		measure: &mut impl FnMut(&str) -> f32,
-	) {
+	fn warning_quads(&self, colors: &Dlg, i: usize, out: &mut Vec<RectInstance>, measure: &mut impl FnMut(&str) -> f32) {
 		let r = self.warning_box(i, measure);
-		let color = if self.disabled(self.specs[i].key) {
-			colors.dim
-		} else {
-			colors.text
-		};
-		out.push(RectInstance {
-			pos: [r.x, r.y],
-			size: [r.w, r.h],
-			color: config::srgb_f32(color),
-			params: [QuadMode::Triangle.code(), 3.0],
-		});
+		let color = if self.disabled(self.specs[i].key) { colors.dim } else { colors.text };
+		out.push(RectInstance { pos: [r.x, r.y], size: [r.w, r.h], color: config::srgb_f32(color), params: [QuadMode::Triangle.code(), 3.0] });
 		let stroke = (r.w * 0.13).max(1.5);
 		let x = r.x + (r.w - stroke) / 2.0;
 		let cut = config::srgb_f32(colors.rows_bg());
 		for (top, h) in [(0.36, 0.32), (0.76, 0.0)] {
-			out.push(RectInstance {
-				pos: [x, r.y + r.h * top],
-				size: [stroke, (r.h * h).max(stroke)],
-				color: cut,
-				..Default::default()
-			});
+			out.push(RectInstance { pos: [x, r.y + r.h * top], size: [stroke, (r.h * h).max(stroke)], color: cut, ..Default::default() });
 		}
 	}
 
@@ -5931,20 +4926,7 @@ impl SettingsDialog {
 			if r.w <= 0.0 {
 				continue;
 			}
-			out.push(TextItem {
-				color: if path.contains(&tab) {
-					colors.text
-				} else {
-					colors.dim
-				},
-				clip: Some(strip),
-				band: Some(r),
-				..mk(
-					node.title.into(),
-					r.x + lay().tab_pad / 2.0,
-					row_text_y(r.y, r.h),
-				)
-			});
+			out.push(TextItem { color: if path.contains(&tab) { colors.text } else { colors.dim }, clip: Some(strip), band: Some(r), ..mk(node.title.into(), r.x + lay().tab_pad / 2.0, row_text_y(r.y, r.h)) });
 		}
 		self.search_texts(&colors, &mut out);
 		// row text clips to the scroll viewport so it can't draw over the chrome
@@ -5958,44 +4940,23 @@ impl SettingsDialog {
 			if let Kind::Header(section) = self.specs[i].kind {
 				// heading near the top of the row; the rule sits lower (gap between)
 				let hy = self.row_y(i) + 5.0;
-				out.push(TextItem {
-					bold: true,
-					clip: Some(vp),
-					..mk(section.into(), self.content_x() + lay().pad, hy)
-				});
+				out.push(TextItem { bold: true, clip: Some(vp), ..mk(section.into(), self.content_x() + lay().pad, hy) });
 				continue;
 			}
 			let off = self.disabled(self.specs[i].key);
 			let label_color = if off { colors.dim } else { colors.text };
 			// a half-line whose control says what it is has no label at all
 			if !self.specs[i].label.is_empty() {
-				out.push(TextItem {
-					color: label_color,
-					clip: Some(vp),
-					..mk(self.specs[i].label.into(), self.label_x(i), ty)
-				});
+				out.push(TextItem { color: label_color, clip: Some(vp), ..mk(self.specs[i].label.into(), self.label_x(i), ty) });
 			}
 			// revert-to-default icon: bright + clickable when off-default, dim when at it
 			if self.has_revert(i) {
 				let revert_rect = self.revert_box(i);
-				out.push(TextItem {
-					color: if self.row_is_default(i) {
-						colors.dim
-					} else {
-						colors.handle
-					},
-					clip: Some(vp),
-					..mk(ui().icons.revert.into(), revert_rect.x + REVERT_INSET, ty)
-				});
+				out.push(TextItem { color: if self.row_is_default(i) { colors.dim } else { colors.handle }, clip: Some(vp), ..mk(ui().icons.revert.into(), revert_rect.x + REVERT_INSET, ty) });
 			}
 			// horizontal view offset of row i's field while it's being edited (the
 			// text slides left as the view scrolls; the box clip crops the rest)
-			let view = |i: usize| -> f32 {
-				self.edit
-					.as_ref()
-					.filter(|e| e.row == i)
-					.map_or(0.0, |e| e.view)
-			};
+			let view = |i: usize| -> f32 { self.edit.as_ref().filter(|e| e.row == i).map_or(0.0, |e| e.view) };
 			match self.specs[i].kind {
 				Kind::Slider { int, .. } => {
 					let val_box = self.valbox(i);
@@ -6003,15 +4964,7 @@ impl SettingsDialog {
 						Some(edit) if edit.row == i => edit.buf.clone(),
 						_ => self.fmt_val(self.specs[i].key, int),
 					};
-					out.push(TextItem {
-						color: label_color,
-						clip: Some(clip_rect(val_box, vp)),
-						..mk(
-							txt.into(),
-							val_box.x + lay().field_pad - view(i),
-							row_text_y(val_box.y, val_box.h),
-						)
-					});
+					out.push(TextItem { color: label_color, clip: Some(clip_rect(val_box, vp)), ..mk(txt.into(), val_box.x + lay().field_pad - view(i), row_text_y(val_box.y, val_box.h)) });
 				}
 				Kind::Color => {
 					let hex_box = self.hexbox(i);
@@ -6019,15 +4972,7 @@ impl SettingsDialog {
 						Some(edit) if edit.row == i => edit.buf.clone(),
 						_ => config::format_hex(self.get_col(self.specs[i].key)),
 					};
-					out.push(TextItem {
-						color: colors.text,
-						clip: Some(clip_rect(hex_box, vp)),
-						..mk(
-							txt.into(),
-							hex_box.x + lay().field_pad - view(i),
-							row_text_y(hex_box.y, hex_box.h),
-						)
-					});
+					out.push(TextItem { color: colors.text, clip: Some(clip_rect(hex_box, vp)), ..mk(txt.into(), hex_box.x + lay().field_pad - view(i), row_text_y(hex_box.y, hex_box.h)) });
 				}
 				Kind::Text => {
 					let text_box = self.textbox(i);
@@ -6042,15 +4987,7 @@ impl SettingsDialog {
 					} else {
 						(val.into(), colors.text)
 					};
-					out.push(TextItem {
-						color,
-						clip: Some(clip_rect(text_box, vp)),
-						..mk(
-							txt,
-							text_box.x + lay().field_pad - view(i),
-							row_text_y(text_box.y, text_box.h),
-						)
-					});
+					out.push(TextItem { color, clip: Some(clip_rect(text_box, vp)), ..mk(txt, text_box.x + lay().field_pad - view(i), row_text_y(text_box.y, text_box.h)) });
 				}
 				Kind::Hotkey(_) => {
 					let key_box = self.textbox(i);
@@ -6059,19 +4996,11 @@ impl SettingsDialog {
 					let mut tx = key_box.x + lay().field_pad;
 					if !shown.is_empty() {
 						let width = measure(&shown);
-						out.push(TextItem {
-							color: if off { colors.dim } else { colors.text },
-							clip: Some(clip_rect(key_box, vp)),
-							..mk(shown.into(), tx, ty)
-						});
+						out.push(TextItem { color: if off { colors.dim } else { colors.text }, clip: Some(clip_rect(key_box, vp)), ..mk(shown.into(), tx, ty) });
 						tx += width + line_h;
 					}
 					if !note.is_empty() {
-						out.push(TextItem {
-							color: colors.dim,
-							clip: Some(clip_rect(key_box, vp)),
-							..mk(note.into(), tx, ty)
-						});
+						out.push(TextItem { color: colors.dim, clip: Some(clip_rect(key_box, vp)), ..mk(note.into(), tx, ty) });
 					}
 				}
 				Kind::Dual { keys, labels } => {
@@ -6079,11 +5008,7 @@ impl SettingsDialog {
 						let off = self.disabled(keys[part as usize]);
 						let color = if off { colors.dim } else { colors.text };
 						let bx = self.dual_box(i, part);
-						out.push(TextItem {
-							color,
-							clip: Some(vp),
-							..mk(labels[part as usize].into(), self.label_after(bx), ty)
-						});
+						out.push(TextItem { color, clip: Some(vp), ..mk(labels[part as usize].into(), self.label_after(bx), ty) });
 					}
 				}
 				Kind::Radio(options) => {
@@ -6091,11 +5016,7 @@ impl SettingsDialog {
 					let color = if off { colors.dim } else { colors.text };
 					for (choice, opt) in options.iter().enumerate() {
 						let radio_rect = self.radio_box(i, choice);
-						out.push(TextItem {
-							color,
-							clip: Some(vp),
-							..mk((*opt).into(), self.label_after(radio_rect), ty)
-						});
+						out.push(TextItem { color, clip: Some(vp), ..mk((*opt).into(), self.label_after(radio_rect), ty) });
 					}
 				}
 				Kind::Dropdown(_) => {
@@ -6103,36 +5024,15 @@ impl SettingsDialog {
 					let color = if off { colors.dim } else { colors.text };
 					let box_r = self.dd_box(i);
 					let label = self.dd_closed_label(i);
-					out.push(TextItem {
-						color,
-						clip: Some(clip_rect(box_r, vp)),
-						..mk(label, box_r.x + 8.0, row_text_y(box_r.y, box_r.h))
-					});
-					out.push(TextItem {
-						color,
-						clip: Some(vp),
-						..mk(
-							ui().icons.dropdown_arrow.into(),
-							box_r.x + box_r.w - 18.0,
-							row_text_y(box_r.y, box_r.h),
-						)
-					});
+					out.push(TextItem { color, clip: Some(clip_rect(box_r, vp)), ..mk(label, box_r.x + 8.0, row_text_y(box_r.y, box_r.h)) });
+					out.push(TextItem { color, clip: Some(vp), ..mk(ui().icons.dropdown_arrow.into(), box_r.x + box_r.w - 18.0, row_text_y(box_r.y, box_r.h)) });
 				}
 				Kind::Buttons(captions) => {
 					for (part, caption) in captions.iter().enumerate() {
 						let r = self.row_btn_rect(i, part as u16);
-						let color = if self.part_disabled(i, part as u16) {
-							colors.dim
-						} else {
-							colors.text
-						};
+						let color = if self.part_disabled(i, part as u16) { colors.dim } else { colors.text };
 						let lx = r.x + (r.w - measure(caption)).max(0.0) / 2.0;
-						out.push(TextItem {
-							color,
-							clip: Some(vp),
-							band: Some(r),
-							..mk((*caption).into(), lx, row_text_y(r.y, r.h))
-						});
+						out.push(TextItem { color, clip: Some(vp), band: Some(r), ..mk((*caption).into(), lx, row_text_y(r.y, r.h)) });
 					}
 				}
 				Kind::ShellList => {
@@ -6141,17 +5041,8 @@ impl SettingsDialog {
 					// remove button get none: neither is a value, and a title over
 					// either would read as a column of data that isn't there.
 					let head_y = self.shell_head_y(i);
-					for (title, tx) in [
-						("Name", cols.name),
-						("Command", cols.command),
-						(shell_grid::SEEN_TITLE, cols.seen),
-						(shell_grid::ACTIVE_TITLE, cols.active),
-					] {
-						out.push(TextItem {
-							color: colors.dim,
-							clip: Some(vp),
-							..mk(title.into(), tx, head_y)
-						});
+					for (title, tx) in [("Name", cols.name), ("Command", cols.command), (shell_grid::SEEN_TITLE, cols.seen), (shell_grid::ACTIVE_TITLE, cols.active)] {
+						out.push(TextItem { color: colors.dim, clip: Some(vp), ..mk(title.into(), tx, head_y) });
 					}
 					for shell_index in 0..self.edited.shells.len() {
 						let name_box = self.shell_name_box(i, shell_index);
@@ -6160,65 +5051,25 @@ impl SettingsDialog {
 						let cmd_row = shell_field_row(shell_index, true);
 						let entry = &self.edited.shells[shell_index];
 						// an inactive shell is still listed, but reads as parked
-						let color = if entry.active {
-							colors.text
-						} else {
-							colors.dim
-						};
+						let color = if entry.active { colors.text } else { colors.dim };
 						let text = |row: usize, stored: &str| -> String {
 							match &self.edit {
 								Some(edit) if edit.row == row => edit.buf.clone(),
 								_ => stored.to_string(),
 							}
 						};
-						out.push(TextItem {
-							color,
-							clip: Some(clip_rect(name_box, vp)),
-							..mk(
-								text(name_row, &entry.title).into(),
-								name_box.x + lay().field_pad - view(name_row),
-								row_text_y(name_box.y, name_box.h),
-							)
-						});
+						out.push(TextItem { color, clip: Some(clip_rect(name_box, vp)), ..mk(text(name_row, &entry.title).into(), name_box.x + lay().field_pad - view(name_row), row_text_y(name_box.y, name_box.h)) });
 						let cmd = text(cmd_row, &entry.command);
-						let (cmd, cmd_color): (Cow<'static, str>, _) = if cmd.is_empty() {
-							(Cow::Borrowed("(required)"), colors.dim)
-						} else {
-							(cmd.into(), color)
-						};
-						out.push(TextItem {
-							color: cmd_color,
-							clip: Some(clip_rect(cmd_box, vp)),
-							..mk(
-								cmd,
-								cmd_box.x + lay().field_pad - view(cmd_row),
-								row_text_y(cmd_box.y, cmd_box.h),
-							)
-						});
+						let (cmd, cmd_color): (Cow<'static, str>, _) = if cmd.is_empty() { (Cow::Borrowed("(required)"), colors.dim) } else { (cmd.into(), color) };
+						out.push(TextItem { color: cmd_color, clip: Some(clip_rect(cmd_box, vp)), ..mk(cmd, cmd_box.x + lay().field_pad - view(cmd_row), row_text_y(cmd_box.y, cmd_box.h)) });
 						// Last seen is the program's own note, never edited here
-						let seen_text: Cow<'static, str> = if entry.last_seen.is_empty() {
-							Cow::Borrowed(shell_grid::NEVER_SEEN)
-						} else {
-							entry.last_seen.clone().into()
-						};
-						out.push(TextItem {
-							color: colors.dim,
-							clip: Some(vp),
-							..mk(
-								seen_text,
-								cols.seen,
-								row_text_y(self.shell_line_y(i, shell_index), self.shell_line_h()),
-							)
-						});
+						let seen_text: Cow<'static, str> = if entry.last_seen.is_empty() { Cow::Borrowed(shell_grid::NEVER_SEEN) } else { entry.last_seen.clone().into() };
+						out.push(TextItem { color: colors.dim, clip: Some(vp), ..mk(seen_text, cols.seen, row_text_y(self.shell_line_y(i, shell_index), self.shell_line_h())) });
 					}
 					let add = self.shell_add_box(i);
 					let caption = "Add";
 					let lx = add.x + (add.w - measure(caption)).max(0.0) / 2.0;
-					out.push(TextItem {
-						clip: Some(vp),
-						band: Some(add),
-						..mk(caption.into(), lx, row_text_y(add.y, add.h))
-					});
+					out.push(TextItem { clip: Some(vp), band: Some(add), ..mk(caption.into(), lx, row_text_y(add.y, add.h)) });
 				}
 				Kind::Toggle | Kind::Header(_) => {}
 			}
@@ -6226,10 +5077,7 @@ impl SettingsDialog {
 		for (_, r, label) in self.buttons() {
 			// center the caption within the button
 			let lx = r.x + (r.w - measure(label)).max(0.0) / 2.0;
-			out.push(TextItem {
-				band: Some(r),
-				..mk(label.into(), lx, row_text_y(r.y, r.h))
-			});
+			out.push(TextItem { band: Some(r), ..mk(label.into(), lx, row_text_y(r.y, r.h)) });
 		}
 		out
 	}
@@ -6277,10 +5125,7 @@ impl SettingsDialog {
 	}
 	// Everything for the second pass: the open dropdown popup and/or the field
 	// context menu (only one is ever open at a time in practice).
-	fn overlay_dip(
-		&self,
-		measure: &mut impl FnMut(&str) -> f32,
-	) -> (Vec<RectInstance>, Vec<TextItem>) {
+	fn overlay_dip(&self, measure: &mut impl FnMut(&str) -> f32) -> (Vec<RectInstance>, Vec<TextItem>) {
 		let colors = dlg();
 		let (mut rects, mut texts) = self.dropdown_overlay(&colors);
 		// the prompt box sits over everything, including an open popup
@@ -6295,13 +5140,7 @@ impl SettingsDialog {
 		}
 		let menu = self.em_rect();
 		let t = 1.0;
-		rects.push(quad(
-			menu.x - t,
-			menu.y - t,
-			menu.w + 2.0 * t,
-			menu.h + 2.0 * t,
-			colors.panel_border,
-		));
+		rects.push(quad(menu.x - t, menu.y - t, menu.w + 2.0 * t, menu.h + 2.0 * t, colors.panel_border));
 		rects.push(quad(menu.x, menu.y, menu.w, menu.h, colors.field_bg));
 		let hover = self.emenu.as_ref().and_then(|m| m.hover);
 		for (item, (label, _)) in EDIT_MENU.iter().enumerate() {
@@ -6310,12 +5149,7 @@ impl SettingsDialog {
 			if enabled && hover == Some(item) {
 				rects.push(quad(r.x + 1.0, r.y, r.w - 2.0, r.h, colors.btn_hl));
 			}
-			texts.push(TextItem::plain(
-				*label,
-				r.x + 10.0,
-				r.y + (r.h - self.line_h) / 2.0,
-				if enabled { colors.text } else { colors.dim },
-			));
+			texts.push(TextItem::plain(*label, r.x + 10.0, r.y + (r.h - self.line_h) / 2.0, if enabled { colors.text } else { colors.dim }));
 		}
 		(rects, texts)
 	}
@@ -6330,11 +5164,7 @@ fn measured_plus(measured_px: f32, clear_dip: f32, scale: f32) -> f32 {
 /// A scale factor the boundary can divide by. A monitor that reports nothing
 /// useful must not take the layout to zero or NaN.
 pub fn sane_scale(scale: f32) -> f32 {
-	if scale.is_finite() && scale > 0.0 {
-		scale
-	} else {
-		1.0
-	}
+	if scale.is_finite() && scale > 0.0 { scale } else { 1.0 }
 }
 
 /// The chrome's text, measured in the UI font. `chrome_widths` fills it in
@@ -6365,19 +5195,7 @@ impl Chrome {
 		// the clear space after it rather than moving a column at the default
 		// font, where the date measures 78.3 against the 78 it was drawn for.
 		let whole = |w: f32| (w / scale).floor();
-		Chrome {
-			label_w: dip(self.label_w).max(l.label_width),
-			btn_w: dip(self.btn_w).max(l.button_width),
-			row_btn_w: dip(self.row_btn_w).max(l.button_width),
-			value_w: dip(self.value_w).max(l.value_width),
-			tab_ws: self.tab_ws.into_iter().map(dip).collect(),
-			label_ws: self.label_ws.into_iter().map(dip).collect(),
-			revert_w: whole(self.revert_w).max(l.revert_width),
-			seen_w: whole(self.seen_w).max(l.shell_seen_width),
-			active_w: whole(self.active_w).max(l.shell_active_width),
-			pick_label_w: whole(self.pick_label_w).max(l.pick_label_width),
-			pick_field_w: whole(self.pick_field_w).max(l.pick_field_width),
-		}
+		Chrome { label_w: dip(self.label_w).max(l.label_width), btn_w: dip(self.btn_w).max(l.button_width), row_btn_w: dip(self.row_btn_w).max(l.button_width), value_w: dip(self.value_w).max(l.value_width), tab_ws: self.tab_ws.into_iter().map(dip).collect(), label_ws: self.label_ws.into_iter().map(dip).collect(), revert_w: whole(self.revert_w).max(l.revert_width), seen_w: whole(self.seen_w).max(l.shell_seen_width), active_w: whole(self.active_w).max(l.shell_active_width), pick_label_w: whole(self.pick_label_w).max(l.pick_label_width), pick_field_w: whole(self.pick_field_w).max(l.pick_field_width) }
 	}
 }
 
@@ -6405,21 +5223,12 @@ pub fn chrome_widths(text: &mut crate::text::TextCtx, scale: f32) -> Chrome {
 		// bar a first one that keeps it
 		.filter(|&(i, _)| SettingsDialog::in_label_column(specs, i))
 		.map(|(_, spec)| {
-			let mark = if spec.warning.is_empty() {
-				0.0
-			} else {
-				warning_room(line_h)
-			};
-			text.measure_ui_text(spec.label, &attrs)
-				+ f32::from(spec.indent) * dip(lay().indent)
-				+ mark
+			let mark = if spec.warning.is_empty() { 0.0 } else { warning_room(line_h) };
+			text.measure_ui_text(spec.label, &attrs) + f32::from(spec.indent) * dip(lay().indent) + mark
 		})
 		.fold(0.0f32, f32::max);
 	let label_w = measured_plus(label_w, lay().label_gap, scale);
-	let btn_w: f32 = ["Cancel", "Apply", "OK"]
-		.iter()
-		.map(|caption| text.measure_ui_text(caption, &attrs))
-		.fold(0.0f32, f32::max);
+	let btn_w: f32 = ["Cancel", "Apply", "OK"].iter().map(|caption| text.measure_ui_text(caption, &attrs)).fold(0.0f32, f32::max);
 	let btn_w = measured_plus(btn_w, lay().button_pad, scale);
 	// the buttons that sit on a row are measured apart from the footer's, so a
 	// long caption there widens its own row instead of every button in the dialog
@@ -6435,80 +5244,28 @@ pub fn chrome_widths(text: &mut crate::text::TextCtx, scale: f32) -> Chrome {
 		.fold(0.0f32, f32::max);
 	let row_btn_w = measured_plus(row_btn_w, lay().button_pad, scale);
 	// one box width for every slider, the widest any of them can show
-	let value_w = specs
-		.iter()
-		.filter_map(|spec| SliderScale::of(&spec.kind))
-		.flat_map(SliderScale::widest_texts)
-		.map(|number| text.measure_ui_text(&number, &attrs))
-		.fold(0.0f32, f32::max);
+	let value_w = specs.iter().filter_map(|spec| SliderScale::of(&spec.kind)).flat_map(SliderScale::widest_texts).map(|number| text.measure_ui_text(&number, &attrs)).fold(0.0f32, f32::max);
 	let value_w = measured_plus(value_w, lay().field_pad * 2.0, scale);
-	let tab_ws = tab_nodes()
-		.iter()
-		.map(|node| {
-			measured_plus(
-				text.measure_ui_text(node.title, &attrs),
-				lay().tab_pad,
-				scale,
-			)
-		})
-		.collect();
+	let tab_ws = tab_nodes().iter().map(|node| measured_plus(text.measure_ui_text(node.title, &attrs), lay().tab_pad, scale)).collect();
 	// a label on a shared line sits in its own part, before its box, so the part
 	// has to know how long it is
-	let label_ws = ui()
-		.specs
-		.iter()
-		.map(|spec| text.measure_ui_text(spec.label, &attrs))
-		.collect();
-	let revert_w = measured_plus(
-		widest_text(text, &attrs, &[ui().icons.revert]),
-		REVERT_INSET * 2.0,
-		scale,
-	);
+	let label_ws = ui().specs.iter().map(|spec| text.measure_ui_text(spec.label, &attrs)).collect();
+	let revert_w = measured_plus(widest_text(text, &attrs, &[ui().icons.revert]), REVERT_INSET * 2.0, scale);
 	// dates and hex values come from the data, so each is measured at its
 	// font's widest digit
 	let digit = widest_char(text, &attrs, "0123456789");
 	let date = [4, 2, 2].map(|n| digit.repeat(n)).join("-");
-	let seen_w = widest_text(
-		text,
-		&attrs,
-		&[shell_grid::SEEN_TITLE, &date, shell_grid::NEVER_SEEN],
-	);
+	let seen_w = widest_text(text, &attrs, &[shell_grid::SEEN_TITLE, &date, shell_grid::NEVER_SEEN]);
 	let active_w = widest_text(text, &attrs, &[shell_grid::ACTIVE_TITLE]);
 	let pick_labels: Vec<&str> = crate::pick::Field::ALL.iter().map(|f| f.label()).collect();
-	let pick_label_w = measured_plus(
-		widest_text(text, &attrs, &pick_labels),
-		font_gap(PART_LABEL_GAP, line_h / scale),
-		scale,
-	);
-	let hex = format!(
-		"#{}",
-		widest_char(text, &attrs, "0123456789abcdef").repeat(6)
-	);
-	let pick_field_w = measured_plus(
-		widest_text(text, &attrs, &[&hex, &digit.repeat(3)]),
-		lay().field_pad * 2.0,
-		scale,
-	);
-	Chrome {
-		label_w,
-		btn_w,
-		row_btn_w,
-		value_w,
-		tab_ws,
-		label_ws,
-		revert_w,
-		seen_w,
-		active_w,
-		pick_label_w,
-		pick_field_w,
-	}
+	let pick_label_w = measured_plus(widest_text(text, &attrs, &pick_labels), font_gap(PART_LABEL_GAP, line_h / scale), scale);
+	let hex = format!("#{}", widest_char(text, &attrs, "0123456789abcdef").repeat(6));
+	let pick_field_w = measured_plus(widest_text(text, &attrs, &[&hex, &digit.repeat(3)]), lay().field_pad * 2.0, scale);
+	Chrome { label_w, btn_w, row_btn_w, value_w, tab_ws, label_ws, revert_w, seen_w, active_w, pick_label_w, pick_field_w }
 }
 
 fn widest_text(text: &mut crate::text::TextCtx, attrs: &glyphon::Attrs, texts: &[&str]) -> f32 {
-	texts
-		.iter()
-		.map(|s| text.measure_ui_text(s, attrs))
-		.fold(0.0f32, f32::max)
+	texts.iter().map(|s| text.measure_ui_text(s, attrs)).fold(0.0f32, f32::max)
 }
 
 // The character of `set` that draws widest in the UI font, as a string.
@@ -6527,10 +5284,7 @@ fn widest_char(text: &mut crate::text::TextCtx, attrs: &glyphon::Attrs, set: &st
 /// Returns true if `old` and `new` differ in any field that needs a text-context
 /// rebuild (cell metrics change) rather than just a re-render.
 pub fn needs_text_rebuild(old: &Settings, new: &Settings) -> bool {
-	old.font_size != new.font_size
-		|| old.line_height_scale != new.line_height_scale
-		|| old.font_family != new.font_family
-		|| old.margin != new.margin
+	old.font_size != new.font_size || old.line_height_scale != new.line_height_scale || old.font_family != new.font_family || old.margin != new.margin
 }
 
 /// Returns true if a background-image-affecting setting changed.
@@ -6557,11 +5311,7 @@ pub fn wallpaper_changed(old: &Settings, new: &Settings) -> bool {
 
 #[cfg(test)]
 mod tests {
-	use super::{
-		Chrome, EASE_IN_MAX, EASE_IN_MIN, EASE_OUT_MAX, EASE_OUT_MIN, Key, Kind, RAMP_DOWN_MAX,
-		RAMP_DOWN_MIN, RAMP_UP_MAX, RAMP_UP_MIN, SettingsDialog, TAU_MAX, TAU_MIN, falling_slider,
-		lay, speed_to_tau, tab_nodes, tab_titles, tau_to_speed,
-	};
+	use super::{Chrome, EASE_IN_MAX, EASE_IN_MIN, EASE_OUT_MAX, EASE_OUT_MIN, Key, Kind, RAMP_DOWN_MAX, RAMP_DOWN_MIN, RAMP_UP_MAX, RAMP_UP_MIN, SettingsDialog, TAU_MAX, TAU_MIN, falling_slider, lay, speed_to_tau, tab_nodes, tab_titles, tau_to_speed};
 	use crate::config;
 	use crate::gfx::QuadMode;
 	use crate::ui_spec::TabsSide;
@@ -6575,13 +5325,7 @@ mod tests {
 	// On Custom with Choose automatically off, so a profile's rows show their own.
 	pub(super) fn custom(d: &mut SettingsDialog) {
 		use knobs::Value;
-		own(
-			d,
-			&[
-				(Key::PerfAuto, Value::Bool(false)),
-				(Key::PerfProfile, Value::Text(knobs::CUSTOM.into())),
-			],
-		);
+		own(d, &[(Key::PerfAuto, Value::Bool(false)), (Key::PerfProfile, Value::Text(knobs::CUSTOM.into()))]);
 	}
 
 	// A tip as text a test can compare and keep.
@@ -6599,11 +5343,7 @@ mod tests {
 
 	// Each row's label measured in that font, `scale` times over.
 	fn labels7(scale: f32) -> Vec<f32> {
-		super::ui()
-			.specs
-			.iter()
-			.map(|s| chars7(s.label) * scale)
-			.collect()
+		super::ui().specs.iter().map(|s| chars7(s.label) * scale).collect()
 	}
 
 	pub(super) fn mk_dialog(max_h: f32) -> SettingsDialog {
@@ -6611,31 +5351,12 @@ mod tests {
 	}
 	// A tab by its title, since moving a tab moves every number after it.
 	fn tab_named(title: &str) -> usize {
-		tab_titles()
-			.iter()
-			.position(|t| *t == title)
-			.unwrap_or_else(|| panic!("no {title} tab"))
+		tab_titles().iter().position(|t| *t == title).unwrap_or_else(|| panic!("no {title} tab"))
 	}
 	// Everything a real dialog is handed arrives in physical pixels, so a scale
 	// of 2 means twice the line height, label width, tab widths, and height cap.
 	fn mk_dialog_at(max_h: f32, scale: f32) -> SettingsDialog {
-		let mut d = SettingsDialog::new(
-			0.0,
-			0.0,
-			18.0 * scale,
-			Chrome {
-				label_w: 170.0 * scale,
-				btn_w: 80.0 * scale,
-				row_btn_w: 90.0 * scale,
-				value_w: 0.0,
-				tab_ws: vec![90.0 * scale; tab_nodes().len()],
-				label_ws: labels7(scale),
-				..Chrome::default()
-			},
-			f32::MAX,
-			max_h * scale,
-			scale,
-		);
+		let mut d = SettingsDialog::new(0.0, 0.0, 18.0 * scale, Chrome { label_w: 170.0 * scale, btn_w: 80.0 * scale, row_btn_w: 90.0 * scale, value_w: 0.0, tab_ws: vec![90.0 * scale; tab_nodes().len()], label_ws: labels7(scale), ..Chrome::default() }, f32::MAX, max_h * scale, scale);
 		at_defaults(&mut d);
 		d
 	}
@@ -6679,40 +5400,16 @@ mod tests {
 		d.set_size(700.0, 600.0);
 		d.edited.margin = 42.0;
 		d.tab = 2;
-		let (was_w, was_line_h, was_label_w, was_natural) =
-			(d.rect.w, d.line_h, d.label_w, d.natural);
+		let (was_w, was_line_h, was_label_w, was_natural) = (d.rect.w, d.line_h, d.label_w, d.natural);
 		// what a real caller hands over: the same chrome, measured at 2x
-		d.rescale(
-			18.0 * 2.0,
-			Chrome {
-				label_w: 170.0 * 2.0,
-				btn_w: 80.0 * 2.0,
-				row_btn_w: 90.0 * 2.0,
-				value_w: 0.0,
-				tab_ws: vec![90.0 * 2.0; tab_nodes().len()],
-				label_ws: labels7(2.0),
-				..Chrome::default()
-			},
-			f32::MAX,
-			900.0 * 2.0,
-			2.0,
-		);
+		d.rescale(18.0 * 2.0, Chrome { label_w: 170.0 * 2.0, btn_w: 80.0 * 2.0, row_btn_w: 90.0 * 2.0, value_w: 0.0, tab_ws: vec![90.0 * 2.0; tab_nodes().len()], label_ws: labels7(2.0), ..Chrome::default() }, f32::MAX, 900.0 * 2.0, 2.0);
 		// twice the pixels for the same DIP, so nothing below the boundary moved
 		assert!((d.line_h - was_line_h).abs() < 0.01, "line height moved");
 		assert!((d.label_w - was_label_w).abs() < 0.01, "label column moved");
-		assert!(
-			(d.natural.0 - was_natural.0).abs() < 0.01,
-			"natural width moved"
-		);
-		assert!(
-			(d.natural.1 - was_natural.1).abs() < 0.01,
-			"natural height moved"
-		);
+		assert!((d.natural.0 - was_natural.0).abs() < 0.01, "natural width moved");
+		assert!((d.natural.1 - was_natural.1).abs() < 0.01, "natural height moved");
 		// and the window is the same size on screen
-		assert!(
-			(d.to_px(d.rect.w) - was_w * 2.0).abs() < 0.01,
-			"the box is a different size on screen"
-		);
+		assert!((d.to_px(d.rect.w) - was_w * 2.0).abs() < 0.01, "the box is a different size on screen");
 		// the user's own state is untouched
 		assert!((d.edited.margin - 42.0).abs() < f32::EPSILON, "edit lost");
 		assert_eq!(d.tab, 2, "tab lost");
@@ -6728,37 +5425,12 @@ mod tests {
 	fn a_window_that_keeps_its_pixels_through_a_scale_change_still_fits_them() {
 		let mut d = mk_dialog_at(900.0, 1.0);
 		d.set_size(700.0, 600.0);
-		d.rescale(
-			18.0 * 2.0,
-			Chrome {
-				label_w: 170.0 * 2.0,
-				btn_w: 80.0 * 2.0,
-				row_btn_w: 90.0 * 2.0,
-				value_w: 0.0,
-				tab_ws: vec![90.0 * 2.0; tab_nodes().len()],
-				label_ws: labels7(2.0),
-				..Chrome::default()
-			},
-			f32::MAX,
-			900.0 * 2.0,
-			2.0,
-		);
+		d.rescale(18.0 * 2.0, Chrome { label_w: 170.0 * 2.0, btn_w: 80.0 * 2.0, row_btn_w: 90.0 * 2.0, value_w: 0.0, tab_ws: vec![90.0 * 2.0; tab_nodes().len()], label_ws: labels7(2.0), ..Chrome::default() }, f32::MAX, 900.0 * 2.0, 2.0);
 		// rescale alone keeps the DIP, which is twice the pixels the window has
-		assert!(
-			d.to_px(d.rect.w) > 700.0 + 1.0,
-			"the box would fit the window with no resize, so there is nothing to fix"
-		);
+		assert!(d.to_px(d.rect.w) > 700.0 + 1.0, "the box would fit the window with no resize, so there is nothing to fix");
 		d.set_size(700.0, 600.0);
-		assert!(
-			(d.to_px(d.rect.w) - 700.0).abs() < 1.0,
-			"box is {} px wide in a 700 px window",
-			d.to_px(d.rect.w)
-		);
-		assert!(
-			(d.to_px(d.rect.h) - 600.0).abs() < 1.0,
-			"box is {} px tall in a 600 px window",
-			d.to_px(d.rect.h)
-		);
+		assert!((d.to_px(d.rect.w) - 700.0).abs() < 1.0, "box is {} px wide in a 700 px window", d.to_px(d.rect.w));
+		assert!((d.to_px(d.rect.h) - 600.0).abs() < 1.0, "box is {} px tall in a 600 px window", d.to_px(d.rect.h));
 	}
 
 	// A tab's title is drawn `tab_pad / 2` inside its own box, and the box is only
@@ -6775,16 +5447,8 @@ mod tests {
 			let title_dip = 61.0;
 			// what chrome_widths hands over, back in the dialog's own units
 			let box_dip = super::measured_plus(title_dip * scale, pad, scale) / scale;
-			assert!(
-				(box_dip - (title_dip + pad)).abs() <= 1.0 / scale,
-				"at {scale}x the box is {box_dip}, wanted {}",
-				title_dip + pad
-			);
-			assert!(
-				box_dip >= title_dip + pad / 2.0,
-				"at {scale}x the title overflows its box ({box_dip} < {})",
-				title_dip + pad / 2.0
-			);
+			assert!((box_dip - (title_dip + pad)).abs() <= 1.0 / scale, "at {scale}x the box is {box_dip}, wanted {}", title_dip + pad);
+			assert!(box_dip >= title_dip + pad / 2.0, "at {scale}x the title overflows its box ({box_dip} < {})", title_dip + pad / 2.0);
 		}
 	}
 
@@ -6816,18 +5480,12 @@ mod tests {
 		assert!(d.take_reverted().is_empty());
 		// reverting the size keeps the switch where the change put it
 		d.set_f32(Key::FontSize, 99.0);
-		assert!(
-			!d.edited.use_system_font_size,
-			"typing a size turned it off"
-		);
+		assert!(!d.edited.use_system_font_size, "typing a size turned it off");
 		d.revert(Key::FontSize);
 		assert!(!crate::fields::by_hand(&d.edited, Key::FontSize));
 		assert!(!d.edited.use_system_font_size);
 		// a hotkey's line is put back at Apply, so it is queued
-		d.edited.keys = d
-			.edited
-			.keys
-			.with_own(crate::input::Hotkey::Copy, Some(Vec::new()));
+		d.edited.keys = d.edited.keys.with_own(crate::input::Hotkey::Copy, Some(Vec::new()));
 		d.revert(Key::HotkeyCopy);
 		assert!(d.take_reverted().contains(&"keys.copy"));
 		assert!(d.take_reverted().is_empty(), "taking clears the list");
@@ -6867,12 +5525,8 @@ mod tests {
 	fn the_dialog_is_as_tall_as_its_tallest_fixed_tab() {
 		let mut d = mk_dialog(4000.0);
 		let fixed: Vec<usize> = SettingsDialog::fixed_tabs(d.specs).collect();
-		let shell_tab = (0..tab_titles().len())
-			.find(|t| !fixed.contains(t))
-			.expect("the Shell tab is not a fixed one");
-		d.edited.shells = (0..60)
-			.map(|i| shell_entry(&format!("Shell {i}"), "sh"))
-			.collect();
+		let shell_tab = (0..tab_titles().len()).find(|t| !fixed.contains(t)).expect("the Shell tab is not a fixed one");
+		d.edited.shells = (0..60).map(|i| shell_entry(&format!("Shell {i}"), "sh")).collect();
 		let mut tallest = 0.0f32;
 		for &t in &fixed {
 			d.tab = t;
@@ -6892,9 +5546,7 @@ mod tests {
 		for _ in 0..20 {
 			d.focus_move(true);
 		}
-		let Some(super::Focus::Row(i, _)) = d.focus else {
-			panic!("focus left the rows")
-		};
+		let Some(super::Focus::Row(i, _)) = d.focus else { panic!("focus left the rows") };
 		let vp = d.viewport();
 		assert!(d.row_y(i) >= vp.y && d.row_y(i) + d.row_screen_h(i) <= vp.y + vp.h);
 	}
@@ -6917,22 +5569,12 @@ mod tests {
 		assert!(d.hthumb().is_some());
 		let bar = d.htrack();
 		let vp = d.viewport();
-		assert_eq!(
-			vp.h,
-			rows_before - d.hbar_h(),
-			"the bar takes its strip off the rows"
-		);
+		assert_eq!(vp.h, rows_before - d.hbar_h(), "the bar takes its strip off the rows");
 		assert!(bar.y >= vp.y + vp.h, "the bar sits below the rows");
-		assert!(
-			bar.y + bar.h + super::lay().buttons_gap <= d.buttons()[0].1.y + 0.01,
-			"and the footer keeps its whole clear space below it"
-		);
+		assert!(bar.y + bar.h + super::lay().buttons_gap <= d.buttons()[0].1.y + 0.01, "and the footer keeps its whole clear space below it");
 
 		// the revert column starts off the right-hand edge and scrolling reaches it
-		let row = SettingsDialog::visible(d.specs, d.tab)
-			.find(|(i, _)| d.has_revert(*i))
-			.map(|(i, _)| i)
-			.expect("a tab with something to revert");
+		let row = SettingsDialog::visible(d.specs, d.tab).find(|(i, _)| d.has_revert(*i)).map(|(i, _)| i).expect("a tab with something to revert");
 		assert!(d.revert_box(row).x + d.revert_box(row).w > d.rect.x + d.rect.w);
 		d.wheel(-1e9, 0.0);
 		assert_eq!(d.hscroll, d.max_hscroll());
@@ -6955,24 +5597,15 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn widening_stretches_the_control_and_not_its_value_field() {
 		let mut d = mk_dialog(2000.0);
-		let row = SettingsDialog::visible(d.specs, 0)
-			.find(|(_, s)| matches!(s.kind, Kind::Slider { .. }))
-			.map(|(i, _)| i)
-			.expect("a slider on the first tab");
+		let row = SettingsDialog::visible(d.specs, 0).find(|(_, s)| matches!(s.kind, Kind::Slider { .. })).map(|(i, _)| i).expect("a slider on the first tab");
 		let narrow = (d.track(row).w, d.valbox(row), d.revert_box(row));
 		let (val_gap, rev_gap) = (right_gap(&d, narrow.1), right_gap(&d, narrow.2));
 
 		d.set_size(d.size().0 + 300.0, d.size().1);
-		assert!(
-			d.track(row).w > narrow.0 + 299.0,
-			"the slider took the whole 300"
-		);
+		assert!(d.track(row).w > narrow.0 + 299.0, "the slider took the whole 300");
 		assert!((right_gap(&d, d.valbox(row)) - val_gap).abs() < 0.01);
 		assert!((right_gap(&d, d.revert_box(row)) - rev_gap).abs() < 0.01);
-		assert!(
-			d.valbox(row).w == narrow.1.w,
-			"the value field is fixed width"
-		);
+		assert!(d.valbox(row).w == narrow.1.w, "the value field is fixed width");
 	}
 
 	// Commented out 20261006: a line may have more than 2 rows now
@@ -7039,24 +5672,11 @@ mod tests {
 			assert!(d.has_revert(lead), "the line's first row has the arrow");
 			for j in lead + 1..lead + parts {
 				assert_eq!(d.row_y(lead), d.row_y(j), "one line, not {parts}");
-				assert!(
-					!d.has_revert(j),
-					"{:?} has an arrow of its own",
-					d.specs[j].key
-				);
+				assert!(!d.has_revert(j), "{:?} has an arrow of its own", d.specs[j].key);
 				assert!(d.row_keys(lead).contains(&d.specs[j].key));
 				// the part before ends before this one's label starts
-				assert!(
-					d.ctl_right(j - 1) <= d.label_x(j),
-					"{:?} runs into {:?}",
-					d.specs[j - 1].key,
-					d.specs[j].key
-				);
-				assert!(
-					d.control_x(j) < d.ctl_right(j),
-					"{:?} has room to draw in",
-					d.specs[j].key
-				);
+				assert!(d.ctl_right(j - 1) <= d.label_x(j), "{:?} runs into {:?}", d.specs[j - 1].key, d.specs[j].key);
+				assert!(d.control_x(j) < d.ctl_right(j), "{:?} has room to draw in", d.specs[j].key);
 			}
 		}
 		// Commented out 20261017: the tab text line, the one with 4 parts, is
@@ -7076,18 +5696,11 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_tab_text_row_keeps_what_is_typed_and_its_tip_names_a_mistake() {
 		let mut d = mk_dialog(4000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::TabTemplate)
-			.expect("the tab text row");
+		let i = d.specs.iter().position(|s| s.key == Key::TabTemplate).expect("the tab text row");
 		assert!(matches!(d.specs[i].kind, Kind::Text));
 		let help = d.specs[i].help;
 		for name in crate::tabtitle::TAB_MACROS {
-			assert!(
-				help.contains(&format!("%{name}%")),
-				"the tip leaves out {name}"
-			);
+			assert!(help.contains(&format!("%{name}%")), "the tip leaves out {name}");
 		}
 		let tip = |d: &SettingsDialog| d.row_tip(i, Key::TabTemplate).map_or("", tip_text);
 
@@ -7098,21 +5711,12 @@ mod tests {
 
 		d.set_text(Key::TabTemplate, "{ %SHELL%");
 		assert_eq!(d.get_text(Key::TabTemplate), "{ %SHELL%");
-		assert!(
-			tip(&d).contains(
-				"The { at character 1 has no closing }. Tabs use the default text until it's fixed."
-			),
-			"{}",
-			tip(&d)
-		);
+		assert!(tip(&d).contains("The { at character 1 has no closing }. Tabs use the default text until it's fixed."), "{}", tip(&d));
 		assert!(tip(&d).starts_with(help), "the help still comes first");
 
 		d.set_text(Key::TabTemplate, "   ");
 		assert!(d.is_default(Key::TabTemplate));
-		assert_eq!(
-			d.get_text(Key::TabTemplate),
-			crate::tabtitle::DEFAULT_TAB_TEXT
-		);
+		assert_eq!(d.get_text(Key::TabTemplate), crate::tabtitle::DEFAULT_TAB_TEXT);
 		assert_eq!(tip(&d), help);
 	}
 
@@ -7284,11 +5888,7 @@ mod tests {
 				}
 				for part in 0..d.parts_of(i) {
 					let r = d.focus_ctl_rect(i, part);
-					spots.extend([
-						(r.x + 2.0, part),
-						(r.x + r.w / 2.0, part),
-						(r.x + r.w - 2.0, part),
-					]);
+					spots.extend([(r.x + 2.0, part), (r.x + r.w / 2.0, part), (r.x + r.w - 2.0, part)]);
 				}
 				if let Kind::Radio(options) = spec.kind {
 					for (choice, option) in options.iter().enumerate() {
@@ -7302,12 +5902,7 @@ mod tests {
 						continue;
 					}
 					let want = d.row_tip(i, d.part_key(i, part)).map(tip_text);
-					assert_eq!(
-						d.hover_tip_dip(x, mid).map(|(tip, _)| tip_text(tip)),
-						want,
-						"{:?} part {part} at x {x}",
-						spec.key
-					);
+					assert_eq!(d.hover_tip_dip(x, mid).map(|(tip, _)| tip_text(tip)), want, "{:?} part {part} at x {x}", spec.key);
 					probed += 1;
 				}
 			}
@@ -7318,9 +5913,7 @@ mod tests {
 		d.tab = d.specs[i].tab;
 		// at its default, so the tip has no value lines (G6)
 		d.revert(Key::BgFit);
-		let Kind::Radio(options) = d.specs[i].kind else {
-			panic!("Fit is a radio row")
-		};
+		let Kind::Radio(options) = d.specs[i].kind else { panic!("Fit is a radio row") };
 		let mid = d.checkbox(i).y + d.checkbox(i).h / 2.0;
 		let mut spots = vec![d.label_x(i) + 2.0];
 		for (choice, option) in options.iter().enumerate() {
@@ -7489,10 +6082,7 @@ mod tests {
 					continue;
 				}
 				d.tab = d.specs[lead].tab;
-				if !d.specs[lead..lead + parts]
-					.iter()
-					.all(|s| matches!(s.kind, Kind::Toggle))
-				{
+				if !d.specs[lead..lead + parts].iter().all(|s| matches!(s.kind, Kind::Toggle)) {
 					split += 1;
 					assert!(!SettingsDialog::packs(d.specs, lead));
 					assert!((d.control_x(lead) - column).abs() < 0.01, "{scale}");
@@ -7504,32 +6094,19 @@ mod tests {
 					kept.push(d.specs[lead].key);
 				}
 				let indent = f32::from(d.specs[lead].indent) * super::lay().indent;
-				assert!(
-					(d.label_x(lead) - (d.content_x() + super::lay().pad + indent)).abs() < 0.01
-				);
+				assert!((d.label_x(lead) - (d.content_x() + super::lay().pad + indent)).abs() < 0.01);
 				for i in lead..lead + parts {
 					let key = d.specs[i].key;
 					let bx = d.checkbox(i);
 					let label_end = d.label_x(i) + chars7(d.specs[i].label);
 					if keeps && i == lead {
-						assert!(
-							(bx.x - column).abs() < 0.01,
-							"{key:?}: box off the column ({scale})"
-						);
+						assert!((bx.x - column).abs() < 0.01, "{key:?}: box off the column ({scale})");
 					} else {
-						assert!(
-							(bx.x - label_end - super::PART_LABEL_GAP).abs() < 0.01,
-							"{key:?}: label to box is {} ({scale})",
-							bx.x - label_end
-						);
+						assert!((bx.x - label_end - super::PART_LABEL_GAP).abs() < 0.01, "{key:?}: label to box is {} ({scale})", bx.x - label_end);
 					}
 					if i > lead {
 						let prev = d.checkbox(i - 1);
-						assert!(
-							(d.label_x(i) - (prev.x + prev.w) - super::PACK_GAP).abs() < 0.01,
-							"{key:?}: gap to the toggle before is {} ({scale})",
-							d.label_x(i) - (prev.x + prev.w)
-						);
+						assert!((d.label_x(i) - (prev.x + prev.w) - super::PACK_GAP).abs() < 0.01, "{key:?}: gap to the toggle before is {} ({scale})", d.label_x(i) - (prev.x + prev.w));
 					}
 					assert_eq!(d.focus_ctl_rect(i, 0), bx, "{key:?}: focus ring");
 					let mid = bx.y + bx.h / 2.0;
@@ -7546,10 +6123,7 @@ mod tests {
 					d.set_toggle(key, was);
 				}
 				let last = d.checkbox(lead + parts - 1);
-				assert!(
-					last.x + last.w < d.revert_box(lead).x,
-					"runs into the arrow"
-				);
+				assert!(last.x + last.w < d.revert_box(lead).x, "runs into the arrow");
 			}
 			// Commented out 20261017: the tab text toggles became one template row,
 			// so the re-test line is the one packed line left.
@@ -7560,11 +6134,7 @@ mod tests {
 			assert_eq!(kept, [Key::PerfCheckHardware], "{scale}");
 			let row = |key: Key| d.specs.iter().position(|s| s.key == key).expect("row");
 			d.tab = d.specs[row(Key::PerfAuto)].tab;
-			assert_eq!(
-				d.checkbox(row(Key::PerfCheckHardware)).x,
-				d.checkbox(row(Key::PerfAuto)).x,
-				"under Choose automatically"
-			);
+			assert_eq!(d.checkbox(row(Key::PerfCheckHardware)).x, d.checkbox(row(Key::PerfAuto)).x, "under Choose automatically");
 			// and only a label in the column is measured for it
 			let in_column = |key: Key| SettingsDialog::in_label_column(d.specs, row(key));
 			assert!(in_column(Key::PerfCheckHardware) && in_column(Key::PerfAuto));
@@ -7590,31 +6160,12 @@ mod tests {
 			let (label_gap, pack_gap) = (PART_LABEL_GAP * grow, PACK_GAP * grow);
 			for scale in [1.0f32, 2.0] {
 				let k = line / 18.0 * scale;
-				let mut d = SettingsDialog::new(
-					0.0,
-					0.0,
-					line * scale,
-					Chrome {
-						label_w: 170.0 * k,
-						btn_w: 80.0 * k,
-						row_btn_w: 90.0 * k,
-						value_w: 0.0,
-						tab_ws: vec![90.0 * k; tab_nodes().len()],
-						label_ws: labels7(k),
-						..Chrome::default()
-					},
-					f32::MAX,
-					4000.0 * scale,
-					scale,
-				);
+				let mut d = SettingsDialog::new(0.0, 0.0, line * scale, Chrome { label_w: 170.0 * k, btn_w: 80.0 * k, row_btn_w: 90.0 * k, value_w: 0.0, tab_ws: vec![90.0 * k; tab_nodes().len()], label_ws: labels7(k), ..Chrome::default() }, f32::MAX, 4000.0 * scale, scale);
 				let (w, h) = d.natural;
 				d.set_size(w * scale, h * scale);
 				let at = format!("line {line}, {scale}x");
 				let near = |got: f32, want: f32, what: &str| {
-					assert!(
-						(got - want).abs() < 0.01,
-						"{what}: {got}, want {want} at {at}"
-					);
+					assert!((got - want).abs() < 0.01, "{what}: {got}, want {want} at {at}");
 				};
 				let mut packed = 0;
 				for i in 0..d.specs.len() {
@@ -7625,11 +6176,7 @@ mod tests {
 					let (lead, _, _) = SettingsDialog::line_of(d.specs, i);
 					let bx = d.checkbox(i);
 					if !(i == lead && SettingsDialog::lead_keeps_column(d.specs, i)) {
-						let mark = if d.specs[i].warning.is_empty() {
-							0.0
-						} else {
-							super::warning_room(d.line_h)
-						};
+						let mark = if d.specs[i].warning.is_empty() { 0.0 } else { super::warning_room(d.line_h) };
 						let label_end = d.label_x(i) + d.label_ws[i] + mark;
 						near(bx.x - label_end, label_gap, d.specs[i].label);
 						packed += 1;
@@ -7650,11 +6197,7 @@ mod tests {
 				let mut after = 0;
 				for i in 0..d.specs.len() {
 					let boxes: Vec<(&str, super::Rect)> = match d.specs[i].kind {
-						Kind::Radio(options) => options
-							.iter()
-							.enumerate()
-							.map(|(c, o)| (*o, d.radio_box(i, c)))
-							.collect(),
+						Kind::Radio(options) => options.iter().enumerate().map(|(c, o)| (*o, d.radio_box(i, c))).collect(),
 						Kind::Dual { labels, .. } => {
 							vec![(labels[0], d.dual_box(i, 0)), (labels[1], d.dual_box(i, 1))]
 						}
@@ -7663,18 +6206,12 @@ mod tests {
 					d.tab = d.specs[i].tab;
 					let texts = d.texts_dip(d.line_h, chars7);
 					for (label, bx) in boxes {
-						let item = texts
-							.iter()
-							.find(|t| t.text == label && t.x > bx.x && t.x < bx.x + 200.0 * k)
-							.unwrap_or_else(|| panic!("{label} is not drawn at {at}"));
+						let item = texts.iter().find(|t| t.text == label && t.x > bx.x && t.x < bx.x + 200.0 * k).unwrap_or_else(|| panic!("{label} is not drawn at {at}"));
 						near(item.x - (bx.x + bx.w), label_gap, label);
 						after += 1;
 					}
 				}
-				assert!(
-					after >= 4,
-					"Fit's two options and the font pair, saw {after} at {at}"
-				);
+				assert!(after >= 4, "Fit's two options and the font pair, saw {after} at {at}");
 			}
 		}
 	}
@@ -7693,23 +6230,7 @@ mod tests {
 			let check = if line < 40.0 { lay.swatch } else { radio };
 			for scale in [1.0f32, 2.0] {
 				let k = line / 18.0 * scale;
-				let mut d = SettingsDialog::new(
-					0.0,
-					0.0,
-					line * scale,
-					Chrome {
-						label_w: 170.0 * k,
-						btn_w: 80.0 * k,
-						row_btn_w: 90.0 * k,
-						value_w: 0.0,
-						tab_ws: vec![90.0 * k; tab_nodes().len()],
-						label_ws: labels7(k),
-						..Chrome::default()
-					},
-					f32::MAX,
-					4000.0 * scale,
-					scale,
-				);
+				let mut d = SettingsDialog::new(0.0, 0.0, line * scale, Chrome { label_w: 170.0 * k, btn_w: 80.0 * k, row_btn_w: 90.0 * k, value_w: 0.0, tab_ws: vec![90.0 * k; tab_nodes().len()], label_ws: labels7(k), ..Chrome::default() }, f32::MAX, 4000.0 * scale, scale);
 				let (w, h) = d.natural;
 				d.set_size(w * scale, h * scale);
 				let at = format!("line {line}, {scale}x");
@@ -7717,33 +6238,18 @@ mod tests {
 				for i in 0..d.specs.len() {
 					d.tab = d.specs[i].tab;
 					let (boxes, want, kind) = match d.specs[i].kind {
-						Kind::Toggle if SettingsDialog::packs(d.specs, i) => {
-							(vec![d.checkbox(i)], check, 0)
-						}
+						Kind::Toggle if SettingsDialog::packs(d.specs, i) => (vec![d.checkbox(i)], check, 0),
 						Kind::Toggle => (vec![d.checkbox(i)], check, 1),
 						Kind::Dual { .. } => (vec![d.dual_box(i, 0), d.dual_box(i, 1)], check, 2),
-						Kind::Radio(opts) => (
-							(0..opts.len()).map(|c| d.radio_box(i, c)).collect(),
-							radio,
-							3,
-						),
+						Kind::Radio(opts) => ((0..opts.len()).map(|c| d.radio_box(i, c)).collect(), radio, 3),
 						_ => continue,
 					};
 					for bx in boxes {
-						assert!(
-							(bx.w - want).abs() < 0.001 && (bx.h - want).abs() < 0.001,
-							"{}: {}x{}, want {want} at {at}",
-							d.specs[i].label,
-							bx.w,
-							bx.h
-						);
+						assert!((bx.w - want).abs() < 0.001 && (bx.h - want).abs() < 0.001, "{}: {}x{}, want {want} at {at}", d.specs[i].label, bx.w, bx.h);
 					}
 					seen[kind] += 1;
 				}
-				assert!(
-					seen.iter().all(|&n| n > 0),
-					"packed, plain, pair, radio: {seen:?} at {at}"
-				);
+				assert!(seen.iter().all(|&n| n > 0), "packed, plain, pair, radio: {seen:?} at {at}");
 			}
 		}
 	}
@@ -7760,32 +6266,15 @@ mod tests {
 		for (big, scale) in [(1.0, 1.0), (1.0, 2.0), (2.0, 1.0), (2.0, 2.0), (2.5, 1.0)] {
 			let mut text = crate::text::TextCtx::new_cpu(big);
 			let chrome = super::chrome_widths(&mut text, scale);
-			let mut d = SettingsDialog::new(
-				0.0,
-				0.0,
-				text.ui_line_h,
-				chrome,
-				f32::MAX,
-				4000.0 * scale,
-				scale,
-			);
+			let mut d = SettingsDialog::new(0.0, 0.0, text.ui_line_h, chrome, f32::MAX, 4000.0 * scale, scale);
 			let (w, h) = d.natural;
 			d.set_size(w * scale, h * scale);
 			let at = format!("{big}x the font, {scale}x");
 			let mut rings = 0;
 			for i in 0..d.specs.len() {
 				let parts: Vec<(u16, Vec<(&str, super::Rect)>)> = match d.specs[i].kind {
-					Kind::Dual { labels, .. } => vec![
-						(0, vec![(labels[0], d.dual_box(i, 0))]),
-						(1, vec![(labels[1], d.dual_box(i, 1))]),
-					],
-					Kind::Radio(opts) => vec![(
-						0,
-						opts.iter()
-							.enumerate()
-							.map(|(c, o)| (*o, d.radio_box(i, c)))
-							.collect(),
-					)],
+					Kind::Dual { labels, .. } => vec![(0, vec![(labels[0], d.dual_box(i, 0))]), (1, vec![(labels[1], d.dual_box(i, 1))])],
+					Kind::Radio(opts) => vec![(0, opts.iter().enumerate().map(|(c, o)| (*o, d.radio_box(i, c))).collect())],
 					_ => continue,
 				};
 				d.tab = d.specs[i].tab;
@@ -7793,31 +6282,12 @@ mod tests {
 				for (part, labels) in parts {
 					assert!(!d.ring_is_the_box(i, part));
 					let r = d.focus_ctl_rect(i, part);
-					let ring = super::Rect {
-						x: r.x - 2.0,
-						y: r.y - 2.0,
-						w: r.w + 4.0,
-						h: r.h + 4.0,
-					};
+					let ring = super::Rect { x: r.x - 2.0, y: r.y - 2.0, w: r.w + 4.0, h: r.h + 4.0 };
 					for (label, bx) in labels {
-						let item = texts
-							.iter()
-							.find(|t| t.text == label && t.x > bx.x && t.x < ring.x + ring.w)
-							.unwrap_or_else(|| panic!("{label} is not drawn at {at}"));
+						let item = texts.iter().find(|t| t.text == label && t.x > bx.x && t.x < ring.x + ring.w).unwrap_or_else(|| panic!("{label} is not drawn at {at}"));
 						let end = item.x + text.measure_ui_text(label, &attrs) / scale;
-						assert!(
-							item.y >= ring.y - 0.01 && item.y + d.line_h <= ring.y + ring.h + 0.01,
-							"{label}: line {}..{}, ring {}..{} at {at}",
-							item.y,
-							item.y + d.line_h,
-							ring.y,
-							ring.y + ring.h
-						);
-						assert!(
-							end <= ring.x + ring.w,
-							"{label} ends at {end}, ring at {} at {at}",
-							ring.x + ring.w
-						);
+						assert!(item.y >= ring.y - 0.01 && item.y + d.line_h <= ring.y + ring.h + 0.01, "{label}: line {}..{}, ring {}..{} at {at}", item.y, item.y + d.line_h, ring.y, ring.y + ring.h);
+						assert!(end <= ring.x + ring.w, "{label} ends at {end}, ring at {} at {at}", ring.x + ring.w);
 					}
 					rings += 1;
 				}
@@ -7835,18 +6305,11 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_governed_half_does_not_silence_its_partner_s_revert() {
 		let mut d = mk_dialog(4000.0);
-		let lead = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::ScrimFunction)
-			.expect("the scrim function row");
+		let lead = d.specs.iter().position(|s| s.key == Key::ScrimFunction).expect("the scrim function row");
 		d.tab = d.specs[lead].tab;
 		let follow = SettingsDialog::paired_with(d.specs, lead, d.tab).expect("a row beside it");
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::Max.index());
-		assert!(
-			d.is_default(Key::ScrimFunction),
-			"the first half shows the profile's"
-		);
+		assert!(d.is_default(Key::ScrimFunction), "the first half shows the profile's");
 
 		// take the ungoverned half off its default
 		let ramp = d.specs[follow].key;
@@ -7855,10 +6318,7 @@ mod tests {
 		assert!(!d.is_default(ramp));
 
 		assert!(d.has_revert(lead) && !d.has_revert(follow));
-		assert!(
-			!d.row_is_default(lead),
-			"the line's one arrow has something to undo"
-		);
+		assert!(!d.row_is_default(lead), "the line's one arrow has something to undo");
 		d.row_revert(lead);
 		assert!(d.is_default(ramp), "and it undid it");
 	}
@@ -7883,14 +6343,7 @@ mod tests {
 					d.hscroll = hscroll;
 					for node in d.active_path() {
 						let r = d.tab_rect(node);
-						assert!(
-							r.w > 0.0
-								&& r.x >= d.rect.x - 0.01
-								&& r.x + r.w <= d.rect.x + d.rect.w + 0.01,
-							"{side:?}: tab {node} at hscroll {hscroll} runs from {} to {}",
-							r.x,
-							r.x + r.w
-						);
+						assert!(r.w > 0.0 && r.x >= d.rect.x - 0.01 && r.x + r.w <= d.rect.x + d.rect.w + 0.01, "{side:?}: tab {node} at hscroll {hscroll} runs from {} to {}", r.x, r.x + r.w);
 					}
 				}
 			}
@@ -7909,12 +6362,8 @@ mod tests {
 			if !paired {
 				continue;
 			}
-			let unpaired: f32 = SettingsDialog::visible(d.specs, tab)
-				.map(|(_, s)| SettingsDialog::row_h_for(&s.kind, d.line_h, shells))
-				.sum();
-			let actual: f32 = SettingsDialog::visible(d.specs, tab)
-				.map(|(i, _)| SettingsDialog::row_advance(d.specs, i, tab, d.line_h, shells))
-				.sum();
+			let unpaired: f32 = SettingsDialog::visible(d.specs, tab).map(|(_, s)| SettingsDialog::row_h_for(&s.kind, d.line_h, shells)).sum();
+			let actual: f32 = SettingsDialog::visible(d.specs, tab).map(|(i, _)| SettingsDialog::row_advance(d.specs, i, tab, d.line_h, shells)).sum();
 			assert!(actual < unpaired, "tab {tab} saved nothing by pairing");
 		}
 	}
@@ -7933,10 +6382,7 @@ mod tests {
 		let tab = d.tab_rect(0);
 		assert!(d.tab_h() < d.btn_h(), "a tab is shorter than a button");
 		assert!(tab.y > gut.y, "the tabs are clear of the panel edge");
-		assert!(
-			(tab.y + tab.h - (gut.y + gut.h)).abs() < 0.01,
-			"and stand on the strip's closing line"
-		);
+		assert!((tab.y + tab.h - (gut.y + gut.h)).abs() < 0.01, "and stand on the strip's closing line");
 		assert!(d.rows_y0() > gut.y + gut.h, "rows begin below that line");
 	}
 
@@ -8002,9 +6448,7 @@ mod tests {
 		let mut seen_indented = false;
 		for tab in 0..tab_titles().len() {
 			d.tab = tab;
-			let rows: Vec<usize> = SettingsDialog::visible(d.specs, tab)
-				.map(|(i, _)| i)
-				.collect();
+			let rows: Vec<usize> = SettingsDialog::visible(d.specs, tab).map(|(i, _)| i).collect();
 			for &i in &rows {
 				// a row drawn beside another has no label column of its own, and
 				// a packed line uses neither column
@@ -8013,23 +6457,11 @@ mod tests {
 				}
 				let indent = f32::from(d.specs[i].indent);
 				seen_indented |= indent > 0.0;
-				assert!(
-					(d.label_x(i)
-						- (d.content_x() + super::lay().pad + indent * super::lay().indent))
-						.abs() < 0.01
-				);
-				assert!(
-					d.label_x(i) >= d.content_x() + super::lay().pad,
-					"a label never steps left of the panel pad"
-				);
+				assert!((d.label_x(i) - (d.content_x() + super::lay().pad + indent * super::lay().indent)).abs() < 0.01);
+				assert!(d.label_x(i) >= d.content_x() + super::lay().pad, "a label never steps left of the panel pad");
 				// every control on the tab starts in the same column
-				assert!(
-					(d.control_x(i) - (d.content_x() + super::lay().pad + d.label_w)).abs() < 0.01
-				);
-				assert!(
-					d.label_x(i) + super::lay().indent <= d.control_x(i),
-					"the label column still clears the deepest indent"
-				);
+				assert!((d.control_x(i) - (d.content_x() + super::lay().pad + d.label_w)).abs() < 0.01);
+				assert!(d.label_x(i) + super::lay().indent <= d.control_x(i), "the label column still clears the deepest indent");
 			}
 			// a member is never deeper than one step below its leader
 			let rows: Vec<usize> = rows.into_iter().filter(|&i| !d.specs[i].beside).collect();
@@ -8050,9 +6482,7 @@ mod tests {
 		let d = mk_dialog(4000.0);
 		let mut leaders = 0;
 		for tab in 0..tab_titles().len() {
-			let rows: Vec<usize> = SettingsDialog::visible(d.specs, tab)
-				.map(|(i, _)| i)
-				.collect();
+			let rows: Vec<usize> = SettingsDialog::visible(d.specs, tab).map(|(i, _)| i).collect();
 			for (n, &i) in rows.iter().enumerate() {
 				let prev = n.checked_sub(1).map(|k| &d.specs[rows[k]]);
 				let gap = SettingsDialog::gap_above(d.specs, i, tab, prev);
@@ -8076,11 +6506,7 @@ mod tests {
 	fn nudge(d: &mut SettingsDialog, i: usize, key: Key) {
 		match d.specs[i].kind {
 			super::Kind::Slider { min, max, int, .. } => {
-				let far = if (d.get_f32(key) - min).abs() < (max - d.get_f32(key)).abs() {
-					max
-				} else {
-					min
-				};
+				let far = if (d.get_f32(key) - min).abs() < (max - d.get_f32(key)).abs() { max } else { min };
 				d.set_f32(key, if int { far.round() } else { far });
 			}
 			super::Kind::Color => {
@@ -8121,14 +6547,8 @@ mod tests {
 			super::Kind::Toggle | super::Kind::Dual { .. } => format!("{}", d.get_toggle(key)),
 			super::Kind::Radio(_) | super::Kind::Dropdown(_) => format!("{}", d.get_radio(key)),
 			// what it answers to, and what the file sets for it
-			super::Kind::Hotkey(hotkey) => format!(
-				"{:?} {:?}",
-				d.edited.keys.chords(hotkey),
-				d.edited.keys.own(hotkey)
-			),
-			super::Kind::Buttons(_) | super::Kind::Header(_) | super::Kind::ShellList => {
-				String::new()
-			}
+			super::Kind::Hotkey(hotkey) => format!("{:?} {:?}", d.edited.keys.chords(hotkey), d.edited.keys.own(hotkey)),
+			super::Kind::Buttons(_) | super::Kind::Header(_) | super::Kind::ShellList => String::new(),
 		}
 	}
 
@@ -8150,10 +6570,7 @@ mod tests {
 		config::reload_from_disk(); // lets backfill lay the template down once
 		// the governed rows show a profile's values until it is Custom, so the
 		// file the rows are read back from says so
-		let pristine = std::fs::read_to_string(&path)
-			.unwrap()
-			.replace("# automatic: true  ## Default", "automatic: false")
-			.replace("# profile: \"max\"  ## Default", "profile: \"custom\"");
+		let pristine = std::fs::read_to_string(&path).unwrap().replace("# automatic: true  ## Default", "automatic: false").replace("# profile: \"max\"  ## Default", "profile: \"custom\"");
 		assert!(pristine.contains("profile: \"custom\""));
 
 		let mut d = mk_dialog(4000.0);
@@ -8177,19 +6594,10 @@ mod tests {
 				nudge(&mut d, i, key);
 				let want = row_value(&d, i, key);
 				assert_ne!(before, want, "{} did not budge", d.specs[i].label);
-				assert!(
-					config::persist(&base, &d.edited),
-					"{} was not written at all",
-					d.specs[i].label
-				);
+				assert!(config::persist(&base, &d.edited), "{} was not written at all", d.specs[i].label);
 				let mut back = mk_dialog(4000.0);
 				back.edited = config::reload_from_disk();
-				assert_eq!(
-					row_value(&back, i, key),
-					want,
-					"{} is lost on relaunch",
-					d.specs[i].label
-				);
+				assert_eq!(row_value(&back, i, key), want, "{} is lost on relaunch", d.specs[i].label);
 				checked += 1;
 			}
 		}
@@ -8212,10 +6620,7 @@ mod tests {
 		let _ = std::fs::write(&path, "");
 		config::set_config_override(path.clone());
 		config::reload_from_disk();
-		let pristine = std::fs::read_to_string(&path)
-			.unwrap()
-			.replace("# automatic: true  ## Default", "automatic: false")
-			.replace("# profile: \"max\"  ## Default", "profile: \"custom\"");
+		let pristine = std::fs::read_to_string(&path).unwrap().replace("# automatic: true  ## Default", "automatic: false").replace("# profile: \"max\"  ## Default", "profile: \"custom\"");
 		assert!(pristine.contains("profile: \"custom\""));
 
 		let mut d = mk_dialog(4000.0);
@@ -8244,12 +6649,7 @@ mod tests {
 				config::revert_keys(&d.take_reverted());
 				let mut back = mk_dialog(4000.0);
 				back.edited = config::reload_from_disk();
-				assert_eq!(
-					row_value(&back, i, key),
-					want,
-					"{} went back to its default on relaunch",
-					d.specs[i].label
-				);
+				assert_eq!(row_value(&back, i, key), want, "{} went back to its default on relaunch", d.specs[i].label);
 				checked += 1;
 			}
 		}
@@ -8354,9 +6754,7 @@ mod tests {
 				super::Kind::Color => (vec![spec.key], "color"),
 				super::Kind::Text => (vec![spec.key], "text"),
 				super::Kind::Hotkey(_) => (vec![spec.key], "hotkey"),
-				super::Kind::Buttons(_) | super::Kind::ShellList | super::Kind::Header(_) => {
-					(vec![spec.key], "other")
-				}
+				super::Kind::Buttons(_) | super::Kind::ShellList | super::Kind::Header(_) => (vec![spec.key], "other"),
 			};
 			for key in keys {
 				assert_eq!(listed(key), want, "{:?} on row {:?}", key, spec.label);
@@ -8383,30 +6781,14 @@ mod tests {
 			with_help += 1;
 			let label = spec.label.trim().trim_end_matches(['%', 's']).trim();
 			let help = spec.help.trim();
-			assert!(
-				help.ends_with('.'),
-				"{:?}: a tip is prose and ends in a period",
-				spec.label
-			);
+			assert!(help.ends_with('.'), "{:?}: a tip is prose and ends in a period", spec.label);
 			// a row with no label of its own (the shells grid, a button strip) has
 			// nothing to restate
 			if label.is_empty() {
 				continue;
 			}
-			let bare = |t: &str| {
-				t.trim()
-					.trim_end_matches('.')
-					.to_ascii_lowercase()
-					.replace(['%', '"'], "")
-					.split_whitespace()
-					.collect::<Vec<_>>()
-					.join(" ")
-			};
-			assert!(
-				bare(help) != bare(label),
-				"{:?}: the tip is the label again",
-				spec.label
-			);
+			let bare = |t: &str| t.trim().trim_end_matches('.').to_ascii_lowercase().replace(['%', '"'], "").split_whitespace().collect::<Vec<_>>().join(" ");
+			assert!(bare(help) != bare(label), "{:?}: the tip is the label again", spec.label);
 		}
 		assert!(with_help > 10, "only {with_help} rows carry a tip");
 	}
@@ -8421,24 +6803,13 @@ mod tests {
 		let d = mk_dialog(4000.0);
 		let spec = |key: Key| d.specs.iter().find(|s| s.key == key).unwrap();
 		let switch = spec(Key::BgHonorXmpLook);
-		assert!(
-			switch.help.contains("Opacity and Blur tags win"),
-			"{}",
-			switch.help
-		);
-		assert!(
-			switch.help.contains("only apply to images without"),
-			"{}",
-			switch.help
-		);
+		assert!(switch.help.contains("Opacity and Blur tags win"), "{}", switch.help);
+		assert!(switch.help.contains("only apply to images without"), "{}", switch.help);
 		for (key, tag) in [(Key::BgOpacity, "Opacity tag"), (Key::BgBlur, "Blur tag")] {
 			let help = spec(key).help;
 			assert!(help.contains(switch.label.trim()), "{key:?}: {help}");
 			assert!(help.contains(tag), "{key:?}: {help}");
-			assert!(
-				help.contains("only applies to images without"),
-				"{key:?}: {help}"
-			);
+			assert!(help.contains("only applies to images without"), "{key:?}: {help}");
 		}
 	}
 
@@ -8473,11 +6844,7 @@ mod tests {
 				continue;
 			}
 			for part in 0..d.parts_of(i) {
-				assert!(
-					!d.part_disabled(i, part) || matches!(d.specs[i].kind, Kind::Buttons(_)),
-					"{:?} part {part} grays with its switch off",
-					d.specs[i].key
-				);
+				assert!(!d.part_disabled(i, part) || matches!(d.specs[i].kind, Kind::Buttons(_)), "{:?} part {part} grays with its switch off", d.specs[i].key);
 			}
 		}
 		// and changing one turns its checkbox on, all the way up
@@ -8497,25 +6864,15 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_switch_s_row_follows_its_rule_and_keeps_a_value_set_by_hand() {
 		let mut d = mk_dialog(4000.0);
-		let fam = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::FontFamily)
-			.unwrap();
+		let fam = d.specs.iter().position(|s| s.key == Key::FontFamily).unwrap();
 		d.tab = d.specs[fam].tab;
 		assert!(d.get_toggle(Key::SystemFont));
 		let rule = d.get_text(Key::FontFamily);
 		let texts = d.texts_dip(d.line_h, chars7);
-		let shown = texts
-			.iter()
-			.find(|t| t.text == rule)
-			.expect("the rule's value");
+		let shown = texts.iter().find(|t| t.text == rule).expect("the rule's value");
 		assert!(!shown.italic, "an automatic value looks like any other");
 		d.set_text(Key::FontFamily, "Iosevka");
-		assert!(
-			!d.get_toggle(Key::SystemFont),
-			"typing turned the switch off"
-		);
+		assert!(!d.get_toggle(Key::SystemFont), "typing turned the switch off");
 		assert_eq!(d.get_text(Key::FontFamily), "Iosevka");
 		d.set_toggle(Key::SystemFont, true);
 		// a desktop that names no font, as on macOS, leaves nothing to follow,
@@ -8541,19 +6898,9 @@ mod tests {
 	fn the_font_switches_are_there_and_an_automatic_value_draws_like_any_other() {
 		let mut m = chars7;
 		let mut d = mk_dialog(4000.0);
-		let pair = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::SystemFont)
-			.unwrap();
+		let pair = d.specs.iter().position(|s| s.key == Key::SystemFont).unwrap();
 		assert_eq!(d.specs[pair].label, "Use system font");
-		assert!(matches!(
-			d.specs[pair].kind,
-			Kind::Dual {
-				keys: [Key::SystemFont, Key::SystemFontSize],
-				..
-			}
-		));
+		assert!(matches!(d.specs[pair].kind, Kind::Dual { keys: [Key::SystemFont, Key::SystemFontSize], .. }));
 		d.tab = d.specs[pair].tab;
 		for (part, key) in [(0, Key::SystemFont), (1, Key::SystemFontSize)] {
 			assert!(d.get_toggle(key), "{key:?} is on by default");
@@ -8565,22 +6912,11 @@ mod tests {
 			assert!(d.get_toggle(key), "{key:?} took no second click");
 		}
 		// everything drawn inside a value's box
-		let inside = |r: &super::Rect, x: f32, y: f32| {
-			x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h
-		};
+		let inside = |r: &super::Rect, x: f32, y: f32| x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 		let drawn = |d: &SettingsDialog, r: super::Rect| {
-			let texts: Vec<String> = d
-				.texts_dip(d.line_h, chars7)
-				.into_iter()
-				.filter(|t| inside(&r, t.x, t.y + d.line_h / 2.0))
-				.map(|t| format!("{} {:?} {} {}", t.text, t.color, t.italic, t.bold))
-				.collect();
+			let texts: Vec<String> = d.texts_dip(d.line_h, chars7).into_iter().filter(|t| inside(&r, t.x, t.y + d.line_h / 2.0)).map(|t| format!("{} {:?} {} {}", t.text, t.color, t.italic, t.bold)).collect();
 			let (_, rows) = d.rects_dip(d.line_h, chars7);
-			let rects: Vec<String> = rows
-				.into_iter()
-				.filter(|q| inside(&r, q.pos[0] + q.size[0] / 2.0, q.pos[1] + q.size[1] / 2.0))
-				.map(|q| format!("{q:?}"))
-				.collect();
+			let rects: Vec<String> = rows.into_iter().filter(|q| inside(&r, q.pos[0] + q.size[0] / 2.0, q.pos[1] + q.size[1] / 2.0)).map(|q| format!("{q:?}")).collect();
 			(texts, rects)
 		};
 		let at = |d: &SettingsDialog, key: Key| d.specs.iter().position(|s| s.key == key).unwrap();
@@ -8591,11 +6927,7 @@ mod tests {
 		assert!(auto.0[0].starts_with(&format!("{shown} {:?} false", super::dlg().text)));
 		d.set_text(Key::FontFamily, &shown);
 		assert!(!d.get_toggle(Key::SystemFont));
-		assert_eq!(
-			drawn(&d, d.textbox(fam)),
-			auto,
-			"set by hand draws the same"
-		);
+		assert_eq!(drawn(&d, d.textbox(fam)), auto, "set by hand draws the same");
 
 		let size = at(&d, Key::FontSize);
 		let shown = d.get_f32(Key::FontSize);
@@ -8603,11 +6935,7 @@ mod tests {
 		assert_eq!(auto.0.len(), 1, "only the value in the box: {:?}", auto.0);
 		d.set_f32(Key::FontSize, shown);
 		assert!(!d.get_toggle(Key::SystemFontSize));
-		assert_eq!(
-			drawn(&d, d.valbox(size)),
-			auto,
-			"set by hand draws the same"
-		);
+		assert_eq!(drawn(&d, d.valbox(size)), auto, "set by hand draws the same");
 	}
 
 	// "Remember last size" is stored like any other switch, with its own revert
@@ -8617,19 +6945,12 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn remember_last_size_is_stored_and_a_size_typed_turns_it_off() {
 		let mut d = mk_dialog(4000.0);
-		let sw = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::RememberSize)
-			.unwrap();
+		let sw = d.specs.iter().position(|s| s.key == Key::RememberSize).unwrap();
 		d.tab = d.specs[sw].tab;
 		assert!(d.has_revert(sw));
 		d.edited.remembered_columns = 150;
 		d.edited.remembered_rows = 45;
-		own(
-			&mut d,
-			&[(Key::RememberPerMonitor, knobs::Value::Bool(false))],
-		);
+		own(&mut d, &[(Key::RememberPerMonitor, knobs::Value::Bool(false))]);
 		assert!(d.get_toggle(Key::RememberSize));
 		assert_eq!(d.get_f32(Key::Columns), 150.0);
 		d.set_f32(Key::Columns, 99.0);
@@ -8639,11 +6960,7 @@ mod tests {
 		d.set_toggle(Key::RememberSize, true);
 		assert_eq!(d.get_f32(Key::Columns), 150.0);
 		d.set_toggle(Key::RememberSize, false);
-		assert_eq!(
-			crate::fields::grid(&d.edited, None),
-			(99, 45),
-			"off brings back what was set"
-		);
+		assert_eq!(crate::fields::grid(&d.edited, None), (99, 45), "off brings back what was set");
 		assert!(!d.disabled(Key::RememberPerMonitor) && !d.disabled(Key::Columns));
 	}
 
@@ -8671,41 +6988,17 @@ mod tests {
 		assert!(tip(&d, Key::Columns).ends_with("Automatic."));
 		d.set_f32(Key::Columns, 99.0);
 		d.set_toggle(Key::RememberSize, true);
-		assert!(
-			tip(&d, Key::Columns).ends_with("Automatic. Your value, 99, is kept for later."),
-			"{}",
-			tip(&d, Key::Columns)
-		);
+		assert!(tip(&d, Key::Columns).ends_with("Automatic. Your value, 99, is kept for later."), "{}", tip(&d, Key::Columns));
 		// the profile's rows, written in the row's own units
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::High.index());
 		assert!(tip(&d, Key::ScrimRadius).ends_with("From the High profile."));
 		let high = d.get_f32(Key::ScrimRadius);
 		d.set_f32(Key::ScrimRadius, high + 3.0);
-		let want = format!(
-			"Changed. The High profile's value is {}.",
-			super::fmt_number(high, true)
-		);
-		assert!(
-			tip(&d, Key::ScrimRadius).ends_with(&want),
-			"{}",
-			tip(&d, Key::ScrimRadius)
-		);
+		let want = format!("Changed. The High profile's value is {}.", super::fmt_number(high, true));
+		assert!(tip(&d, Key::ScrimRadius).ends_with(&want), "{}", tip(&d, Key::ScrimRadius));
 		let profile_tip = tip(&d, Key::PerfProfile);
-		assert!(
-			profile_tip.ends_with(
-				"Changed here: Scrim radius px. Picking another profile drops these changes."
-			),
-			"{profile_tip}"
-		);
-		assert_eq!(
-			d.dd_closed_label(
-				d.specs
-					.iter()
-					.position(|s| s.key == Key::PerfProfile)
-					.unwrap()
-			),
-			"High *"
-		);
+		assert!(profile_tip.ends_with("Changed here: Scrim radius px. Picking another profile drops these changes."), "{profile_tip}");
+		assert_eq!(d.dd_closed_label(d.specs.iter().position(|s| s.key == Key::PerfProfile).unwrap()), "High *");
 	}
 
 	// A theme's colors show the theme's own. A color changed marks the theme
@@ -8736,11 +7029,7 @@ mod tests {
 
 		// the picker writes through, and Cancel puts back what was stored
 		d.pick_open(i);
-		d.pick_set(crate::pick::Hsv {
-			h: 120.0,
-			s: 1.0,
-			v: 1.0,
-		});
+		d.pick_set(crate::pick::Hsv { h: 120.0, s: 1.0, v: 1.0 });
 		assert_ne!(d.edited.bg, matrix);
 		d.pick_cancel();
 		assert_eq!(d.edited.bg, matrix, "Cancel puts it back");
@@ -8769,23 +7058,8 @@ mod tests {
 		use knobs::Value;
 		let mut d = on_theme("Matrix");
 		custom(&mut d);
-		own(
-			&mut d,
-			&[
-				(Key::BgEnabled, Value::Bool(true)),
-				(Key::ColFromWallpaper, Value::Bool(true)),
-			],
-		);
-		d.edited.wallpaper_summary = Some(crate::autotheme::Summary {
-			luma_hi: 0.3,
-			luma_lo: 0.02,
-			luma_mean: 0.13,
-			spread: [[0.13; 3]; crate::autotheme::SPREAD],
-			alpha: 1.0,
-			hue: 250.0,
-			chroma: 0.08,
-			opacity: 0.35,
-		});
+		own(&mut d, &[(Key::BgEnabled, Value::Bool(true)), (Key::ColFromWallpaper, Value::Bool(true))]);
+		d.edited.wallpaper_summary = Some(crate::autotheme::Summary { luma_hi: 0.3, luma_lo: 0.02, luma_mean: 0.13, spread: [[0.13; 3]; crate::autotheme::SPREAD], alpha: 1.0, hue: 250.0, chroma: 0.08, opacity: 0.35 });
 		crate::fields::fill(&mut d.edited, None);
 		let names = crate::theme::all_names(&d.edited.user_themes);
 		let at = |name: &str| names.iter().position(|n| n == name).unwrap();
@@ -8798,26 +7072,17 @@ mod tests {
 		assert!(!d.disabled(Key::ColFg) && !d.disabled(Key::ColCursor));
 
 		d.set_toggle(Key::ColFromWallpaper, false);
-		assert_eq!(
-			(d.edited.fg, d.edited.cursor),
-			(pal("Pastel").fg, pal("Pastel").cursor)
-		);
+		assert_eq!((d.edited.fg, d.edited.cursor), (pal("Pastel").fg, pal("Pastel").cursor));
 		d.set_radio(Key::Theme, at("Matrix"));
 		assert!(!d.get_toggle(Key::ColFromWallpaper), "off stays off");
-		assert_eq!(
-			(d.edited.fg, d.edited.cursor),
-			(pal("Matrix").fg, pal("Matrix").cursor)
-		);
+		assert_eq!((d.edited.fg, d.edited.cursor), (pal("Matrix").fg, pal("Matrix").cursor));
 
 		// with no picture up, on is the theme's colors too
 		d.set_toggle(Key::ColFromWallpaper, true);
 		d.edited.wallpaper_summary = None;
 		crate::fields::fill(&mut d.edited, None);
 		assert!(d.get_toggle(Key::ColFromWallpaper));
-		assert_eq!(
-			(d.edited.fg, d.edited.cursor),
-			(pal("Matrix").fg, pal("Matrix").cursor)
-		);
+		assert_eq!((d.edited.fg, d.edited.cursor), (pal("Matrix").fg, pal("Matrix").cursor));
 	}
 
 	// The open command shows the desktop's opener until one is typed. File or
@@ -8830,19 +7095,13 @@ mod tests {
 		let mut d = mk_dialog(4000.0);
 		d.edited = d.defaults.clone();
 		let row = |d: &SettingsDialog, key| d.specs.iter().position(|s| s.key == key).unwrap();
-		assert_eq!(
-			d.get_text(Key::LinkOpenCommand),
-			crate::links::desktop_opener()
-		);
+		assert_eq!(d.get_text(Key::LinkOpenCommand), crate::links::desktop_opener());
 		assert!(d.is_default(Key::LinkOpenCommand));
 		d.set_text(Key::LinkOpenCommand, "firefox --new-tab");
 		assert!(!d.is_default(Key::LinkOpenCommand));
 		d.set_text(Key::LinkOpenCommand, " ");
 		assert!(d.is_default(Key::LinkOpenCommand));
-		assert_eq!(
-			d.get_text(Key::LinkOpenCommand),
-			crate::links::desktop_opener()
-		);
+		assert_eq!(d.get_text(Key::LinkOpenCommand), crate::links::desktop_opener());
 
 		let w = row(&d, Key::BgImage);
 		d.tab = d.specs[w].tab;
@@ -8864,17 +7123,10 @@ mod tests {
 		assert_eq!(d.get_text(Key::BgImage), "/a.png");
 		d.set_text(Key::BgImage, "");
 		assert_eq!(d.edited.wallpaper_folder_raw, "/pics");
-		assert_eq!(
-			d.get_text(Key::BgImage),
-			"/pics",
-			"the box is the folder again"
-		);
+		assert_eq!(d.get_text(Key::BgImage), "/pics", "the box is the folder again");
 		assert!(!d.is_default(Key::BgImage));
 		d.revert(Key::BgImage);
-		assert!(
-			!crate::fields::by_hand(&d.edited, Key::BgImage)
-				&& !crate::fields::by_hand(&d.edited, Key::BgFolder)
-		);
+		assert!(!crate::fields::by_hand(&d.edited, Key::BgImage) && !crate::fields::by_hand(&d.edited, Key::BgFolder));
 		assert!(d.is_default(Key::BgImage));
 	}
 
@@ -8888,98 +7140,39 @@ mod tests {
 		let mut d = mk_dialog(4000.0);
 		d.edited = d.defaults.clone();
 		// on the custom theme a color changed is the file's own, not a change to a theme
-		own(
-			&mut d,
-			&[
-				(Key::Theme, knobs::Value::Text(knobs::CUSTOM.into())),
-				(Key::ColFromWallpaper, knobs::Value::Bool(false)),
-			],
-		);
+		own(&mut d, &[(Key::Theme, knobs::Value::Text(knobs::CUSTOM.into())), (Key::ColFromWallpaper, knobs::Value::Bool(false))]);
 		let row = |d: &SettingsDialog, key| d.specs.iter().position(|s| s.key == key).unwrap();
 		let tip = |d: &SettingsDialog, i: usize, key| d.row_tip(i, key).map(tip_text);
-		let lines =
-			|now: &str, default: &str| format!("Current value: {now}\nDefault value: {default}");
-		let check = |d: &mut SettingsDialog,
-		             key: Key,
-		             change: &dyn Fn(&mut SettingsDialog),
-		             want: String| {
+		let lines = |now: &str, default: &str| format!("Current value: {now}\nDefault value: {default}");
+		let check = |d: &mut SettingsDialog, key: Key, change: &dyn Fn(&mut SettingsDialog), want: String| {
 			let i = row(d, key);
 			d.revert(key);
 			let help = d.specs[i].help;
-			assert_eq!(
-				tip(d, i, key),
-				(!help.is_empty()).then_some(help),
-				"{key:?} at its default"
-			);
+			assert_eq!(tip(d, i, key), (!help.is_empty()).then_some(help), "{key:?} at its default");
 			change(d);
-			let want = if help.is_empty() {
-				want
-			} else {
-				format!("{help}\n\n{want}")
-			};
+			let want = if help.is_empty() { want } else { format!("{help}\n\n{want}") };
 			assert_eq!(tip(d, i, key), Some(want.as_str()), "{key:?}");
 		};
 		let margin = d.default_f32(Key::Margin);
-		let Kind::Slider { int, .. } = d.specs[row(&d, Key::Margin)].kind else {
-			panic!("Margin is a slider")
-		};
-		check(
-			&mut d,
-			Key::Margin,
-			&|d| d.set_f32(Key::Margin, margin + 4.0),
-			lines(
-				&super::fmt_number(margin + 4.0, int),
-				&super::fmt_number(margin, int),
-			),
-		);
+		let Kind::Slider { int, .. } = d.specs[row(&d, Key::Margin)].kind else { panic!("Margin is a slider") };
+		check(&mut d, Key::Margin, &|d| d.set_f32(Key::Margin, margin + 4.0), lines(&super::fmt_number(margin + 4.0, int), &super::fmt_number(margin, int)));
 		let minimap = d.defaults.minimap;
 		let on_off = |on: bool| if on { "On" } else { "Off" };
-		check(
-			&mut d,
-			Key::Minimap,
-			&|d| d.set_toggle(Key::Minimap, !minimap),
-			lines(on_off(!minimap), on_off(minimap)),
-		);
-		check(
-			&mut d,
-			Key::BgFit,
-			&|d| d.set_radio(Key::BgFit, 1),
-			lines("Zoom", "Stretch"),
-		);
+		check(&mut d, Key::Minimap, &|d| d.set_toggle(Key::Minimap, !minimap), lines(on_off(!minimap), on_off(minimap)));
+		check(&mut d, Key::BgFit, &|d| d.set_radio(Key::BgFit, 1), lines("Zoom", "Stretch"));
 		let fg = config::format_hex(d.default_col(Key::ColFg));
-		check(
-			&mut d,
-			Key::ColFg,
-			&|d| d.set_col(Key::ColFg, [1, 2, 3]),
-			lines("#010203", &fg),
-		);
-		let h = d
-			.specs
-			.iter()
-			.position(|s| matches!(s.kind, Kind::Hotkey(_)))
-			.unwrap();
+		check(&mut d, Key::ColFg, &|d| d.set_col(Key::ColFg, [1, 2, 3]), lines("#010203", &fg));
+		let h = d.specs.iter().position(|s| matches!(s.kind, Kind::Hotkey(_))).unwrap();
 		let key = d.specs[h].key;
 		let hotkey = d.hotkey_of(h).unwrap();
 		let shipped = d.defaults.keys.chords(hotkey);
-		let spoken = shipped
-			.iter()
-			.map(|chord| chord.spoken(d.mac))
-			.collect::<Vec<_>>()
-			.join(" or ");
-		check(
-			&mut d,
-			key,
-			&|d| d.edited.keys = d.edited.keys.with_own(hotkey, Some(Vec::new())),
-			lines("Off", &spoken),
-		);
+		let spoken = shipped.iter().map(|chord| chord.spoken(d.mac)).collect::<Vec<_>>().join(" or ");
+		check(&mut d, key, &|d| d.edited.keys = d.edited.keys.with_own(hotkey, Some(Vec::new())), lines("Off", &spoken));
 
 		// an automatic value says so in its state line instead
 		let size = row(&d, Key::FontSize);
 		let auto = tip(&d, size, Key::FontSize).unwrap();
-		assert!(
-			auto.ends_with("Automatic.") && !auto.contains("Current value"),
-			"{auto}"
-		);
+		assert!(auto.ends_with("Automatic.") && !auto.contains("Current value"), "{auto}");
 		// and a switch is a value like any other
 		d.set_f32(Key::Columns, 99.0);
 		let sw = row(&d, Key::RememberSize);
@@ -8996,17 +7189,7 @@ mod tests {
 		// Nothing grays for a setting above it (the automatic settings design).
 		d.set_sees_hidden(false);
 		// what every row shows, which is as good a snapshot as the values
-		let snapshot = |d: &SettingsDialog| -> Vec<(String, usize, bool)> {
-			(0..d.specs.len())
-				.map(|i| {
-					(
-						d.edit_buf(i),
-						d.get_radio(d.specs[i].key),
-						d.get_toggle(d.specs[i].key),
-					)
-				})
-				.collect()
-		};
+		let snapshot = |d: &SettingsDialog| -> Vec<(String, usize, bool)> { (0..d.specs.len()).map(|i| (d.edit_buf(i), d.get_radio(d.specs[i].key), d.get_toggle(d.specs[i].key))).collect() };
 		let before = snapshot(&d);
 
 		let mut clicked = 0;
@@ -9018,16 +7201,8 @@ mod tests {
 			let r = d.focus_ctl_rect(i, 0);
 			d.mouse_down_dip(r.x + r.w / 2.0, r.y + r.h / 2.0, &mut m);
 			clicked += 1;
-			assert!(
-				d.edit.is_none(),
-				"{:?} opened an edit while grayed",
-				d.specs[i].key
-			);
-			assert!(
-				snapshot(&d) == before,
-				"{:?} changed a setting while grayed",
-				d.specs[i].key
-			);
+			assert!(d.edit.is_none(), "{:?} opened an edit while grayed", d.specs[i].key);
+			assert!(snapshot(&d) == before, "{:?} changed a setting while grayed", d.specs[i].key);
 		}
 		assert!(clicked >= 1, "no grayed row was reachable");
 	}
@@ -9042,30 +7217,13 @@ mod tests {
 		use knobs::Value;
 		let mut d = mk_dialog(4000.0);
 		d.edited = d.defaults.clone();
-		own(
-			&mut d,
-			&[
-				(Key::ScrollEaseIn, Value::Float(300.0)),
-				(Key::BgEnabled, Value::Bool(false)),
-				(Key::Margin, Value::Float(7.0)),
-			],
-		);
+		own(&mut d, &[(Key::ScrollEaseIn, Value::Float(300.0)), (Key::BgEnabled, Value::Bool(false)), (Key::Margin, Value::Float(7.0))]);
 		let mine = super::falling_slider(300.0, EASE_IN_MIN, EASE_IN_MAX);
 
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::Max.index());
-		assert_eq!(
-			d.get_f32(Key::ScrollEaseIn),
-			d.default_f32(Key::ScrollEaseIn)
-		);
-		assert!(
-			d.get_toggle(Key::BgEnabled),
-			"Max shows the shipped default"
-		);
-		assert_eq!(
-			d.get_f32(Key::Margin),
-			7.0,
-			"a row it doesn't set is the file's"
-		);
+		assert_eq!(d.get_f32(Key::ScrollEaseIn), d.default_f32(Key::ScrollEaseIn));
+		assert!(d.get_toggle(Key::BgEnabled), "Max shows the shipped default");
+		assert_eq!(d.get_f32(Key::Margin), 7.0, "a row it doesn't set is the file's");
 		// a profile's rows take input like any other
 		for key in Key::ALL {
 			if super::ui().rel(*key).group == Some(crate::fields::PROFILE) {
@@ -9073,28 +7231,14 @@ mod tests {
 			}
 		}
 		let outline = d.specs.iter().position(|s| s.key == Key::Outline).unwrap();
-		assert!(
-			d.row_is_default(outline),
-			"nothing changed under the profile"
-		);
+		assert!(d.row_is_default(outline), "nothing changed under the profile");
 		// the flyover says where the value comes from, after the row's own help
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::ScrollEaseIn)
-			.unwrap();
-		let tip = d
-			.row_tip(i, Key::ScrollEaseIn)
-			.map(tip_text)
-			.unwrap_or_default();
+		let i = d.specs.iter().position(|s| s.key == Key::ScrollEaseIn).unwrap();
+		let tip = d.row_tip(i, Key::ScrollEaseIn).map(tip_text).unwrap_or_default();
 		assert!(tip.ends_with("\n\nFrom the Max silk profile."), "{tip}");
 
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::Custom.index());
-		assert_eq!(
-			d.get_f32(Key::ScrollEaseIn),
-			mine,
-			"Custom puts the value back"
-		);
+		assert_eq!(d.get_f32(Key::ScrollEaseIn), mine, "Custom puts the value back");
 		assert!(!d.get_toggle(Key::BgEnabled));
 		assert!(!d.disabled(Key::BgImage), "the wallpaper's rows stay live");
 		d.set_toggle(Key::PerfAuto, true);
@@ -9116,30 +7260,19 @@ mod tests {
 		let mut m = chars7;
 		for k in 0..60 {
 			let (x, y) = (d.rect.x + 11.0 * k as f32, d.rect.y + 9.0 * k as f32);
-			assert!(
-				!d.mouse_move_dip(x, y, &mut m),
-				"a move to {x},{y} with nothing held changed something"
-			);
+			assert!(!d.mouse_move_dip(x, y, &mut m), "a move to {x},{y} with nothing held changed something");
 		}
 		// an open dropdown lights the item under the pointer
-		let i = (0..d.specs.len())
-			.find(|&j| matches!(d.specs[j].kind, Kind::Dropdown(_)) && d.dd_options(j).len() >= 2)
-			.unwrap();
+		let i = (0..d.specs.len()).find(|&j| matches!(d.specs[j].kind, Kind::Dropdown(_)) && d.dd_options(j).len() >= 2).unwrap();
 		d.tab = d.specs[i].tab;
 		d.open = Some(i);
 		d.pending = 0;
 		let n = d.dd_options(i).len();
 		let item = d.dd_item_rect(i, n, 1);
 		let (x, y) = (item.x + item.w / 2.0, item.y + item.h / 2.0);
-		assert!(
-			d.mouse_move_dip(x, y, &mut m),
-			"lighting another item drew nothing"
-		);
+		assert!(d.mouse_move_dip(x, y, &mut m), "lighting another item drew nothing");
 		assert_eq!(d.pending, 1);
-		assert!(
-			!d.mouse_move_dip(x + 1.0, y, &mut m),
-			"a move inside the lit item changed something"
-		);
+		assert!(!d.mouse_move_dip(x + 1.0, y, &mut m), "a move inside the lit item changed something");
 		d.open = None;
 		// a dragged slider moves with the pointer, and only when its value does
 		d.set_f32(Key::FontSize, 6.0);
@@ -9148,15 +7281,9 @@ mod tests {
 		d.drag = Some(i);
 		let track = d.track(i);
 		let x = track.x + track.w / 2.0;
-		assert!(
-			d.mouse_move_dip(x, track.y, &mut m),
-			"dragging the slider drew nothing"
-		);
+		assert!(d.mouse_move_dip(x, track.y, &mut m), "dragging the slider drew nothing");
 		assert!(d.get_f32(Key::FontSize) > 6.0);
-		assert!(
-			!d.mouse_move_dip(x, track.y + 1.0, &mut m),
-			"a drag that left the value alone changed something"
-		);
+		assert!(!d.mouse_move_dip(x, track.y + 1.0, &mut m), "a drag that left the value alone changed something");
 	}
 
 	// Every button's caption centers its capitals in the button, the way the
@@ -9175,11 +7302,7 @@ mod tests {
 			for tab in 0..tab_titles().len() {
 				d.tab = tab;
 				let texts = d.texts(line_h, measure);
-				let mut boxes: Vec<(super::Rect, &str)> = d
-					.buttons()
-					.iter()
-					.map(|(_, r, label)| (*r, *label))
-					.collect();
+				let mut boxes: Vec<(super::Rect, &str)> = d.buttons().iter().map(|(_, r, label)| (*r, *label)).collect();
 				for (i, spec) in SettingsDialog::visible(d.specs, tab) {
 					match &spec.kind {
 						Kind::Buttons(captions) => {
@@ -9194,10 +7317,7 @@ mod tests {
 				}
 				for (r, caption) in boxes {
 					let want = Some(d.rect_px(r));
-					assert!(
-						texts.iter().any(|t| t.text == caption && t.band == want),
-						"tab {tab}: \"{caption}\" isn't centered in its button"
-					);
+					assert!(texts.iter().any(|t| t.text == caption && t.band == want), "tab {tab}: \"{caption}\" isn't centered in its button");
 				}
 			}
 			assert!(row_buttons > 0, "no row had buttons");
@@ -9225,13 +7345,7 @@ mod tests {
 			if profile == crate::profile::Profile::Remote {
 				crate::profile::set_remote(&mut d.edited, true);
 			} else {
-				own(
-					&mut d,
-					&[
-						(Key::PerfAuto, knobs::Value::Bool(false)),
-						(Key::PerfProfile, knobs::Value::Text(profile.key().into())),
-					],
-				);
+				own(&mut d, &[(Key::PerfAuto, knobs::Value::Bool(false)), (Key::PerfProfile, knobs::Value::Text(profile.key().into()))]);
 			}
 			for tab in 0..tab_titles().len() {
 				d.tab = tab;
@@ -9239,10 +7353,7 @@ mod tests {
 				let before = crate::config::settings_clones();
 				one_frame(&d, d.rect.x + d.rect.w / 2.0, mid);
 				let copies = crate::config::settings_clones() - before;
-				assert!(
-					copies <= 1,
-					"{profile:?}, tab {tab}: one frame copied the settings {copies} times"
-				);
+				assert!(copies <= 1, "{profile:?}, tab {tab}: one frame copied the settings {copies} times");
 			}
 		}
 	}
@@ -9263,10 +7374,7 @@ mod tests {
 				let before = super::ROW_WALKS.with(std::cell::Cell::get);
 				one_frame(&d, d.rect.x + d.rect.w / 2.0, d.rect.y + d.rect.h / 2.0);
 				let walks = super::ROW_WALKS.with(std::cell::Cell::get) - before;
-				assert!(
-					walks <= 1,
-					"tab {tab}: one frame walked the tab {walks} times"
-				);
+				assert!(walks <= 1, "tab {tab}: one frame walked the tab {walks} times");
 			}
 		}
 	}
@@ -9278,12 +7386,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_kept_row_top_follows_what_it_was_walked_from() {
-		let shell_tab = mk_dialog(300.0)
-			.specs
-			.iter()
-			.find(|spec| matches!(spec.kind, super::Kind::ShellList))
-			.unwrap()
-			.tab;
+		let shell_tab = mk_dialog(300.0).specs.iter().find(|spec| matches!(spec.kind, super::Kind::ShellList)).unwrap().tab;
 		let changes: [(&str, fn(&mut SettingsDialog)); 5] = [
 			("tab", |d| d.tab = (d.tab + 1) % tab_titles().len()),
 			("scroll", |d| d.scroll += 13.5),
@@ -9296,20 +7399,13 @@ mod tests {
 		for tab in 0..tab_titles().len() {
 			for (what, change) in changes {
 				let mut d = mk_dialog(300.0);
-				d.tab = if what == "shell count" {
-					shell_tab
-				} else {
-					tab
-				};
+				d.tab = if what == "shell count" { shell_tab } else { tab };
 				let _ = d.row_y(0);
 				change(&mut d);
 				let kept: Vec<f32> = (0..d.specs.len()).map(|i| d.row_y(i)).collect();
 				*d.row_tops.borrow_mut() = super::RowTops::default();
 				let fresh: Vec<f32> = (0..d.specs.len()).map(|i| d.row_y(i)).collect();
-				assert_eq!(
-					kept, fresh,
-					"tab {tab}: the {what} moved and a row top did not"
-				);
+				assert_eq!(kept, fresh, "tab {tab}: the {what} moved and a row top did not");
 			}
 		}
 	}
@@ -9327,10 +7423,7 @@ mod tests {
 			let before = super::DLG_BUILDS.with(std::cell::Cell::get);
 			one_frame(&d, d.rect.x + d.rect.w / 2.0, d.rect.y + d.rect.h / 2.0);
 			let builds = super::DLG_BUILDS.with(std::cell::Cell::get) - before;
-			assert!(
-				builds <= 3,
-				"tab {tab}: one frame built the colors {builds} times"
-			);
+			assert!(builds <= 3, "tab {tab}: one frame built the colors {builds} times");
 		}
 	}
 
@@ -9350,22 +7443,14 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn changing_a_profile_s_row_marks_it_and_leaves_custom_alone() {
-		let members: Vec<Key> = Key::ALL
-			.iter()
-			.copied()
-			.filter(|k| super::ui().rel(*k).group == Some(crate::fields::PROFILE))
-			.filter(|k| *k != Key::SmoothApps)
-			.collect();
+		let members: Vec<Key> = Key::ALL.iter().copied().filter(|k| super::ui().rel(*k).group == Some(crate::fields::PROFILE)).filter(|k| *k != Key::SmoothApps).collect();
 		for &key in &members {
 			let mut d = mk_dialog(4000.0);
 			d.edited = d.defaults.clone();
 			d.edited.tested_profile = Some(crate::profile::Profile::Low);
 			crate::fields::fill(&mut d.edited, None);
 			assert!(d.get_toggle(Key::PerfAuto));
-			assert_eq!(
-				crate::profile::current(&d.edited),
-				crate::profile::Profile::Low
-			);
+			assert_eq!(crate::profile::current(&d.edited), crate::profile::Profile::Low);
 			let custom_before = d.edited.model.values.own.clone();
 			let i = d.specs.iter().position(|s| s.key == key).unwrap();
 			let above = super::ui().rel(key).gate;
@@ -9381,33 +7466,15 @@ mod tests {
 
 			nudge(&mut d, i, key);
 
-			assert_eq!(
-				crate::profile::current(&d.edited),
-				crate::profile::Profile::Low,
-				"{key:?}"
-			);
-			assert_eq!(
-				crate::fields::shown_choice(&d.edited, Key::PerfProfile),
-				"Low *"
-			);
-			assert!(
-				!d.get_toggle(Key::PerfAuto),
-				"{key:?} should stop the machine choosing"
-			);
-			assert_ne!(
-				shown_of(&d, i, key),
-				before,
-				"{key:?} should hold what was set"
-			);
+			assert_eq!(crate::profile::current(&d.edited), crate::profile::Profile::Low, "{key:?}");
+			assert_eq!(crate::fields::shown_choice(&d.edited, Key::PerfProfile), "Low *");
+			assert!(!d.get_toggle(Key::PerfAuto), "{key:?} should stop the machine choosing");
+			assert_ne!(shown_of(&d, i, key), before, "{key:?} should hold what was set");
 			for (j, k, was) in others {
 				assert_eq!(shown_of(&d, j, k), was, "{k:?} should keep what it showed");
 			}
 			for k in &members {
-				assert_eq!(
-					d.edited.model.values.own.get(k.name()),
-					custom_before.get(k.name()),
-					"{key:?} changed Custom's {k:?}"
-				);
+				assert_eq!(d.edited.model.values.own.get(k.name()), custom_before.get(k.name()), "{key:?} changed Custom's {k:?}");
 			}
 		}
 	}
@@ -9426,14 +7493,8 @@ mod tests {
 
 		d.set_f32(Key::Outline, 3.0);
 		assert!(!crate::profile::remote(&d.edited), "Remote has to go");
-		assert_eq!(
-			crate::profile::current(&d.edited),
-			crate::profile::Profile::High
-		);
-		assert_eq!(
-			crate::fields::shown_choice(&d.edited, Key::PerfProfile),
-			"High *"
-		);
+		assert_eq!(crate::profile::current(&d.edited), crate::profile::Profile::High);
+		assert_eq!(crate::fields::shown_choice(&d.edited, Key::PerfProfile), "High *");
 		assert_eq!(d.get_f32(Key::Outline), 3.0);
 	}
 
@@ -9448,18 +7509,12 @@ mod tests {
 		let mut d = mk_dialog(900.0);
 		d.set_toggle(Key::PerfAuto, true);
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::High.index());
-		assert!(
-			!d.get_toggle(Key::PerfAuto),
-			"a named profile leaves the machine still choosing"
-		);
+		assert!(!d.get_toggle(Key::PerfAuto), "a named profile leaves the machine still choosing");
 		assert_eq!(d.edited.performance_profile, crate::profile::Profile::High);
 
 		d.set_toggle(Key::PerfAuto, true);
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::Remote.index());
-		assert!(
-			d.get_toggle(Key::PerfAuto),
-			"a temporary remote pick should leave the switch alone"
-		);
+		assert!(d.get_toggle(Key::PerfAuto), "a temporary remote pick should leave the switch alone");
 		assert!(crate::profile::remote(&d.edited));
 	}
 
@@ -9471,24 +7526,10 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_fraction_reads_as_a_whole_percent_and_stores_as_a_decimal() {
 		let mut d = mk_dialog(4000.0);
-		for key in [
-			Key::Opacity,
-			Key::BgOpacity,
-			Key::ScrimSoftness,
-			Key::MinContrast,
-			Key::BgContrastSize,
-			Key::BgContrastStrength,
-			Key::BgContrastAuto,
-		] {
+		for key in [Key::Opacity, Key::BgOpacity, Key::ScrimSoftness, Key::MinContrast, Key::BgContrastSize, Key::BgContrastStrength, Key::BgContrastAuto] {
 			let spec = d.specs.iter().find(|s| s.key == key).unwrap();
-			let super::Kind::Slider { min, max, int, .. } = spec.kind else {
-				panic!("{} is not a slider", spec.label)
-			};
-			assert!(
-				min == 0.0 && int && max <= 100.0 && max.fract() == 0.0,
-				"{} must run from 0 to a whole percent, in whole steps",
-				spec.label
-			);
+			let super::Kind::Slider { min, max, int, .. } = spec.kind else { panic!("{} is not a slider", spec.label) };
+			assert!(min == 0.0 && int && max <= 100.0 && max.fract() == 0.0, "{} must run from 0 to a whole percent, in whole steps", spec.label);
 			d.set_f32(key, 35.0);
 			assert_eq!(d.get_f32(key), 35.0, "{}", spec.label);
 			d.revert(key);
@@ -9511,21 +7552,13 @@ mod tests {
 		let mut d = mk_dialog(2000.0);
 		for tab in 0..tab_titles().len() {
 			d.tab = tab;
-			let redundant = d
-				.specs
-				.iter()
-				.enumerate()
-				.find(|(_, spec)| spec.tab == tab && SettingsDialog::header_is_tab_title(spec));
+			let redundant = d.specs.iter().enumerate().find(|(_, spec)| spec.tab == tab && SettingsDialog::header_is_tab_title(spec));
 			if redundant.is_none() {
 				continue;
 			}
 			// the first row that is drawn starts at the top of the viewport,
 			// past only the rows' own padding, so the heading left no gap
-			let first = (0..d.specs.len())
-				.find(|&j| {
-					d.specs[j].tab == tab && !SettingsDialog::header_is_tab_title(&d.specs[j])
-				})
-				.expect("a tab with rows");
+			let first = (0..d.specs.len()).find(|&j| d.specs[j].tab == tab && !SettingsDialog::header_is_tab_title(&d.specs[j])).expect("a tab with rows");
 			// Changed 20261016: the rows have padding inside the viewport now
 			// (2026101419165501).
 			// assert!((d.row_y(first) - (d.rows_y0() - d.scroll)).abs() < 0.01);
@@ -9558,37 +7591,20 @@ mod tests {
 				prev = Some(s);
 			}
 			let counted = SettingsDialog::tab_content_h(d.specs, tab, d.line_h, shells);
-			assert!(
-				(counted - drawn - gaps).abs() < 0.01,
-				"tab {tab}: {counted} != {drawn} rows + {gaps} gaps"
-			);
+			assert!((counted - drawn - gaps).abs() < 0.01, "tab {tab}: {counted} != {drawn} rows + {gaps} gaps");
 		}
 	}
 
 	pub(super) fn shell_entry(title: &str, command: &str) -> crate::shells::ShellEntry {
-		crate::shells::ShellEntry {
-			slug: title.to_lowercase().replace(' ', "_"),
-			title: title.into(),
-			command: command.into(),
-			active: true,
-			comment: String::new(),
-			last_seen: String::new(),
-		}
+		crate::shells::ShellEntry { slug: title.to_lowercase().replace(' ', "_"), title: title.into(), command: command.into(), active: true, comment: String::new(), last_seen: String::new() }
 	}
 
 	// A dialog on the Shell tab, writing to `store`, with row `key` in view.
-	fn mk_assoc_dialog(
-		key: Key,
-		store: Box<dyn crate::fileassoc::Store + Send>,
-	) -> (SettingsDialog, usize) {
+	fn mk_assoc_dialog(key: Key, store: Box<dyn crate::fileassoc::Store + Send>) -> (SettingsDialog, usize) {
 		let mut d = mk_dialog(4000.0);
 		d.assoc = store;
 		d.assoc_refresh();
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == key)
-			.expect("a file-type row");
+		let i = d.specs.iter().position(|s| s.key == key).expect("a file-type row");
 		d.tab = d.specs[i].tab;
 		// the Shell tab isn't what sizes the dialog, so its last rows may need
 		// scrolling to
@@ -9611,19 +7627,12 @@ mod tests {
 	fn a_file_type_registers_at_once_and_its_arrow_puts_it_back() {
 		let store = Box::new(crate::fileassoc::Memory::default());
 		let (mut d, i) = mk_assoc_dialog(Key::OpenBatch, store);
-		assert!(
-			d.has_revert(i) && d.row_is_default(i),
-			"nothing to put back yet"
-		);
+		assert!(d.has_revert(i) && d.row_is_default(i), "nothing to put back yet");
 		assert!(!d.part_disabled(i, 0));
 		let command = r"HKCU\Software\Classes\batfile\shell\open\command";
 		let r = d.row_btn_rect(i, 0);
 		click_on(&mut d, r);
-		assert!(
-			d.assoc
-				.get(command, "")
-				.is_some_and(|v| v.text.contains("--open"))
-		);
+		assert!(d.assoc.get(command, "").is_some_and(|v| v.text.contains("--open")));
 		assert!(!d.row_is_default(i), "the arrow lights");
 		assert!(d.prompt.is_none(), "nothing to say");
 		let r = d.revert_box(i);
@@ -9638,24 +7647,12 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_types_button_and_arrow_have_their_own_tips() {
 		let store = Box::new(crate::fileassoc::Memory::default());
-		for key in [
-			Key::OpenBatch,
-			Key::OpenPowerShell,
-			Key::OpenVbScript,
-			Key::OpenFolder,
-		] {
+		for key in [Key::OpenBatch, Key::OpenPowerShell, Key::OpenVbScript, Key::OpenFolder] {
 			let (d, i) = mk_assoc_dialog(key, store.clone());
-			let tip = |r: crate::pane::Rect| {
-				d.hover_tip(r.x + 2.0, r.y + 2.0)
-					.map(|(tip, _)| tip_text(tip))
-			};
+			let tip = |r: crate::pane::Rect| d.hover_tip(r.x + 2.0, r.y + 2.0).map(|(tip, _)| tip_text(tip));
 			assert!(!d.specs[i].help.is_empty() && !d.specs[i].revert_help.is_empty());
 			assert_eq!(tip(d.row_btn_rect(i, 0)), Some(d.specs[i].help), "{key:?}");
-			assert_eq!(
-				tip(d.revert_box(i)),
-				Some(d.specs[i].revert_help),
-				"{key:?}"
-			);
+			assert_eq!(tip(d.revert_box(i)), Some(d.specs[i].revert_help), "{key:?}");
 		}
 	}
 
@@ -9667,12 +7664,8 @@ mod tests {
 	fn a_type_windows_keeps_elsewhere_is_reported() {
 		use crate::fileassoc::Store;
 		let mut store = crate::fileassoc::Memory::default();
-		let choice =
-			r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.ps1\UserChoice";
-		let picked = crate::fileassoc::Value {
-			kind: crate::fileassoc::REG_SZ,
-			text: "AppXsomething".into(),
-		};
+		let choice = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.ps1\UserChoice";
+		let picked = crate::fileassoc::Value { kind: crate::fileassoc::REG_SZ, text: "AppXsomething".into() };
 		store.set(choice, "ProgId", &picked).unwrap();
 		let (mut d, i) = mk_assoc_dialog(Key::OpenPowerShell, Box::new(store));
 		let r = d.row_btn_rect(i, 0);
@@ -9695,12 +7688,7 @@ mod tests {
 			fn get(&self, _: &str, _: &str) -> Option<crate::fileassoc::Value> {
 				None
 			}
-			fn set(
-				&mut self,
-				key: &str,
-				_: &str,
-				_: &crate::fileassoc::Value,
-			) -> anyhow::Result<()> {
+			fn set(&mut self, key: &str, _: &str, _: &crate::fileassoc::Value) -> anyhow::Result<()> {
 				Err(anyhow::anyhow!("Access is denied.").context(format!("cannot write {key}")))
 			}
 			fn delete(&mut self, _: &str, _: &str) -> anyhow::Result<()> {
@@ -9717,12 +7705,7 @@ mod tests {
 		let r = d.row_btn_rect(i, 0);
 		click_on(&mut d, r);
 		let prompt = d.prompt.as_ref().expect("a notice");
-		assert!(
-			prompt
-				.warn
-				.as_deref()
-				.is_some_and(|w| w.contains("Access is denied"))
-		);
+		assert!(prompt.warn.as_deref().is_some_and(|w| w.contains("Access is denied")));
 		assert!(d.row_is_default(i), "nothing was registered");
 	}
 
@@ -9731,38 +7714,18 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_shells_grid_has_a_tab_to_itself() {
 		let ui = crate::ui_spec::ui();
-		let grid = ui
-			.specs
-			.iter()
-			.find(|s| matches!(s.kind, super::Kind::ShellList))
-			.expect("a shells grid");
+		let grid = ui.specs.iter().find(|s| matches!(s.kind, super::Kind::ShellList)).expect("a shells grid");
 		assert_eq!(tab_titles()[grid.tab], "Shell");
 		// The tab is the grid, its headings, the startup directory the grid's own
 		// default shell starts in, the 2 switches for what SilkTerm sets up in a
 		// shell it starts, and on Windows the script types it opens. Nothing else
 		// belongs beside them.
 		for spec in ui.specs.iter().filter(|s| s.tab == grid.tab) {
-			assert!(
-				matches!(spec.kind, super::Kind::ShellList | super::Kind::Header(_))
-					|| spec.key == Key::StartupDirectory
-					|| spec.key == Key::ShellIntegration
-					|| spec.key == Key::BashPrompt
-					|| super::assoc_of(spec.key).is_some(),
-				"{} does not belong on the Shell tab",
-				spec.label
-			);
+			assert!(matches!(spec.kind, super::Kind::ShellList | super::Kind::Header(_)) || spec.key == Key::StartupDirectory || spec.key == Key::ShellIntegration || spec.key == Key::BashPrompt || super::assoc_of(spec.key).is_some(), "{} does not belong on the Shell tab", spec.label);
 		}
 		// and the directory reads below the list it applies to
-		let dir = ui
-			.specs
-			.iter()
-			.position(|s| s.key == Key::StartupDirectory)
-			.expect("a startup directory row");
-		let at = ui
-			.specs
-			.iter()
-			.position(|s| matches!(s.kind, super::Kind::ShellList))
-			.expect("a shells grid");
+		let dir = ui.specs.iter().position(|s| s.key == Key::StartupDirectory).expect("a startup directory row");
+		let at = ui.specs.iter().position(|s| matches!(s.kind, super::Kind::ShellList)).expect("a shells grid");
 		assert!(dir > at, "the startup directory sits below the shells");
 	}
 
@@ -9773,17 +7736,10 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn copy_on_select_is_the_last_thing_on_the_cursor_tab() {
 		let d = mk_dialog(4000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::CopyOnSelect)
-			.expect("a copy-on-select row");
+		let i = d.specs.iter().position(|s| s.key == Key::CopyOnSelect).expect("a copy-on-select row");
 		let tab = d.specs[i].tab;
 		assert_eq!(tab_titles()[tab], "Cursor");
-		let last = SettingsDialog::visible(d.specs, tab)
-			.map(|(j, _)| j)
-			.last()
-			.expect("the tab draws rows");
+		let last = SettingsDialog::visible(d.specs, tab).map(|(j, _)| j).last().expect("the tab draws rows");
 		assert_eq!(last, i);
 	}
 
@@ -9798,9 +7754,7 @@ mod tests {
 		// Shell tab is left out, since its height is the shell count's.
 		d.tab = SettingsDialog::fixed_tabs(d.specs)
 			.max_by(|a, b| {
-				let h = |t: usize| {
-					SettingsDialog::tab_content_h(d.specs, t, d.line_h, d.edited.shells.len())
-				};
+				let h = |t: usize| SettingsDialog::tab_content_h(d.specs, t, d.line_h, d.edited.shells.len());
 				h(*a).total_cmp(&h(*b))
 			})
 			.expect("at least one tab");
@@ -9818,10 +7772,7 @@ mod tests {
 		assert_eq!(roomy.scroll, 0.0);
 		// a tab that no longer exists leaves the fresh dialog alone
 		let mut d = mk_dialog(400.0);
-		d.restore(super::View {
-			tab: tab_titles().len(),
-			scroll: 50.0,
-		});
+		d.restore(super::View { tab: tab_titles().len(), scroll: 50.0 });
 		assert_eq!(d.tab, 0);
 		assert_eq!(d.scroll, 0.0);
 	}
@@ -9832,11 +7783,7 @@ mod tests {
 	fn keyboard_focus_walks_controls_then_buttons() {
 		use super::Focus;
 		let mut d = mk_dialog(2000.0);
-		let master = d
-			.specs
-			.iter()
-			.position(|s| s.key == super::Key::SmoothScroll)
-			.unwrap();
+		let master = d.specs.iter().position(|s| s.key == super::Key::SmoothScroll).unwrap();
 		d.tab = d.specs[master].tab;
 		let f = d.focusables();
 		let at = f.iter().position(|&i| i == master).unwrap();
@@ -9874,13 +7821,7 @@ mod tests {
 	fn dual_cursor_row_two_stops_toggle_and_revert() {
 		use super::{Focus, Kind};
 		let mut d = mk_dialog(2000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(
-				|s| matches!(s.kind, Kind::Dual { keys, .. } if keys[0] == super::Key::CursorScrim),
-			)
-			.unwrap();
+		let i = d.specs.iter().position(|s| matches!(s.kind, Kind::Dual { keys, .. } if keys[0] == super::Key::CursorScrim)).unwrap();
 		d.tab = d.specs[i].tab;
 		// enabled prerequisites: scrim on, an outline present
 		d.edited.text_scrim = true;
@@ -9958,19 +7899,8 @@ mod tests {
 	fn software_rendering_is_a_plain_switch_beside_the_idle_rows() {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| matches!(s.key, Key::SoftwareRendering))
-			.unwrap();
-		assert_eq!(
-			d.specs[i].tab,
-			d.specs
-				.iter()
-				.find(|s| matches!(s.key, Key::IdleRelease))
-				.unwrap()
-				.tab
-		);
+		let i = d.specs.iter().position(|s| matches!(s.key, Key::SoftwareRendering)).unwrap();
+		assert_eq!(d.specs[i].tab, d.specs.iter().find(|s| matches!(s.key, Key::IdleRelease)).unwrap().tab);
 		assert!(d.specs[i].not_macos);
 		assert!(!d.defaults.software_rendering, "default off");
 		d.tab = d.specs[i].tab;
@@ -10053,23 +7983,7 @@ mod tests {
 		use super::Kind;
 		// base vs a desktop UI font twice the size (a bigger font, same DPI)
 		let base = mk_dialog(4000.0);
-		let big = SettingsDialog::new(
-			0.0,
-			0.0,
-			38.0,
-			Chrome {
-				label_w: 340.0,
-				btn_w: 160.0,
-				row_btn_w: 180.0,
-				value_w: 0.0,
-				tab_ws: vec![180.0; tab_nodes().len()],
-				label_ws: labels7(2.0),
-				..Chrome::default()
-			},
-			f32::MAX,
-			4000.0,
-			1.0,
-		);
+		let big = SettingsDialog::new(0.0, 0.0, 38.0, Chrome { label_w: 340.0, btn_w: 160.0, row_btn_w: 180.0, value_w: 0.0, tab_ws: vec![180.0; tab_nodes().len()], label_ws: labels7(2.0), ..Chrome::default() }, f32::MAX, 4000.0, 1.0);
 		// radio pitch tracks the font so multi-option labels don't collide
 		assert!(big.radio_pitch() > base.radio_pitch() * 1.5);
 		// the widest radio's last option stays inside the panel
@@ -10084,10 +7998,7 @@ mod tests {
 			.max_by_key(|(_, n)| *n)
 			.unwrap();
 		let last = big.radio_box(ri, opts - 1);
-		assert!(
-			last.x + last.w <= big.rect.x + big.rect.w,
-			"last radio option overflows the panel at 2x"
-		);
+		assert!(last.x + last.w <= big.rect.x + big.rect.w, "last radio option overflows the panel at 2x");
 	}
 
 	// The layout is DIP, so a doubled scale factor may only multiply it: same
@@ -10101,26 +8012,15 @@ mod tests {
 		base.tab = tab_named("Background"); // where the Transparency checkbox is
 		hidpi.tab = base.tab;
 		let ((bw, bh), (hw, hh)) = (base.size(), hidpi.size());
-		assert!(
-			(hw - bw * 2.0).abs() < 0.01 && (hh - bh * 2.0).abs() < 0.01,
-			"window {bw}x{bh} at 1x vs {hw}x{hh} at 2x"
-		);
+		assert!((hw - bw * 2.0).abs() < 0.01 && (hh - bh * 2.0).abs() < 0.01, "window {bw}x{bh} at 1x vs {hw}x{hh} at 2x");
 		let (bv, hv) = (base.viewport_px(), hidpi.viewport_px());
 		assert!((hv.y - bv.y * 2.0).abs() < 0.01 && (hv.h - bv.h * 2.0).abs() < 0.01);
 		// a click at the checkbox's physical center still toggles its setting
-		let i = base
-			.specs
-			.iter()
-			.position(|s| s.key == Key::Transparency)
-			.unwrap();
+		let i = base.specs.iter().position(|s| s.key == Key::Transparency).unwrap();
 		let target = base.checkbox(i);
 		let mut d = hidpi;
 		let before = d.edited.transparent_background;
-		d.mouse_down(
-			(target.x + target.w / 2.0) * 2.0,
-			(target.y + target.h / 2.0) * 2.0,
-			&mut |s: &str| s.len() as f32 * 12.0,
-		);
+		d.mouse_down((target.x + target.w / 2.0) * 2.0, (target.y + target.h / 2.0) * 2.0, &mut |s: &str| s.len() as f32 * 12.0);
 		assert_ne!(d.edited.transparent_background, before);
 	}
 
@@ -10132,11 +8032,7 @@ mod tests {
 		let mut d = mk_dialog(2000.0);
 		d.tab = 0;
 		d.edited.text_scrim = true; // not grayed out
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::ScrimFunction)
-			.unwrap();
+		let i = d.specs.iter().position(|s| s.key == Key::ScrimFunction).unwrap();
 		assert!(matches!(d.specs[i].kind, Kind::Dropdown(_)));
 		d.edited.text_scrim_function = crate::scrim::Function::Sdf; // option index 0
 		d.focus = Some(Focus::Row(i, 0));
@@ -10147,11 +8043,7 @@ mod tests {
 		// Down moves the highlight but doesn't commit yet
 		d.key_vertical(true);
 		assert_eq!(d.pending, 1);
-		assert_eq!(
-			d.edited.text_scrim_function,
-			crate::scrim::Function::Sdf,
-			"not committed until Enter"
-		);
+		assert_eq!(d.edited.text_scrim_function, crate::scrim::Function::Sdf, "not committed until Enter");
 		// Enter commits + closes
 		assert!(matches!(d.key_enter(), Action::None));
 		assert_eq!(d.open, None);
@@ -10175,12 +8067,7 @@ mod tests {
 		use crate::pane::CursorAnimation as C;
 		use crate::scrim::{Function as F, Ramp as R};
 		use crate::theme::Mode as M;
-		fn row<T: Copy + PartialEq + std::fmt::Debug>(
-			d: &mut super::SettingsDialog,
-			key: Key,
-			field: fn(&mut Settings) -> &mut T,
-			cases: &[(T, &str)],
-		) {
+		fn row<T: Copy + PartialEq + std::fmt::Debug>(d: &mut super::SettingsDialog, key: Key, field: fn(&mut Settings) -> &mut T, cases: &[(T, &str)]) {
 			let i = d.specs.iter().position(|s| s.key == key).unwrap();
 			let options = d.dd_options(i);
 			assert_eq!(options.len(), cases.len(), "{key:?}");
@@ -10197,50 +8084,10 @@ mod tests {
 		// governed rows show the profile's values unless the profile is Custom
 		d.edited.performance_profile = crate::profile::Profile::Custom;
 		d.edited.performance_automatic = false;
-		row(
-			&mut d,
-			Key::ScrimFunction,
-			|s| &mut s.text_scrim_function,
-			&[
-				(F::Sdf, "Distance field"),
-				(F::Dt, "Distance transform"),
-				(F::Dilate, "Dilate + feather"),
-				(F::Gaussian, "Gaussian [ugly]"),
-			],
-		);
-		row(
-			&mut d,
-			Key::ScrimRamp,
-			|s| &mut s.text_scrim_ramp,
-			&[
-				(R::Exp, "Exponential"),
-				(R::HalfNormal, "Half-normal"),
-				(R::Log, "Logarithmic"),
-				(R::Sigmoid, "Sigmoid"),
-				(R::Linear, "Linear"),
-			],
-		);
-		row(
-			&mut d,
-			Key::CursorAnimation,
-			|s| &mut s.cursor_animation,
-			&[
-				(C::Phase, "Phase"),
-				(C::PulseVertical, "Pulse vertical"),
-				(C::PulseHorizontal, "Pulse horizontal"),
-				(C::PulseBoth, "Pulse both"),
-			],
-		);
-		row(
-			&mut d,
-			Key::ThemeMode,
-			|s| &mut s.theme_mode,
-			&[
-				(M::Dark, "Dark"),
-				(M::Light, "Light"),
-				(M::System, "System"),
-			],
-		);
+		row(&mut d, Key::ScrimFunction, |s| &mut s.text_scrim_function, &[(F::Sdf, "Distance field"), (F::Dt, "Distance transform"), (F::Dilate, "Dilate + feather"), (F::Gaussian, "Gaussian [ugly]")]);
+		row(&mut d, Key::ScrimRamp, |s| &mut s.text_scrim_ramp, &[(R::Exp, "Exponential"), (R::HalfNormal, "Half-normal"), (R::Log, "Logarithmic"), (R::Sigmoid, "Sigmoid"), (R::Linear, "Linear")]);
+		row(&mut d, Key::CursorAnimation, |s| &mut s.cursor_animation, &[(C::Phase, "Phase"), (C::PulseVertical, "Pulse vertical"), (C::PulseHorizontal, "Pulse horizontal"), (C::PulseBoth, "Pulse both")]);
+		row(&mut d, Key::ThemeMode, |s| &mut s.theme_mode, &[(M::Dark, "Dark"), (M::Light, "Light"), (M::System, "System")]);
 	}
 
 	// Test ID: d9p3x
@@ -10250,11 +8097,7 @@ mod tests {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
 		d.edited.text_scrim = true;
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::ScrimRamp)
-			.unwrap();
+		let i = d.specs.iter().position(|s| s.key == Key::ScrimRamp).unwrap();
 		d.tab = d.specs[i].tab;
 		let n = d.dd_options(i).len();
 		let mut m = |_: &str| 8.0;
@@ -10278,28 +8121,7 @@ mod tests {
 		// range or a default edited without its comment would drift silently.
 		let d = config::Settings::default();
 		assert_eq!(tau_to_speed(d.scroll_single_screen_tau_ms), 75.0);
-		for (got, want, what) in [
-			(
-				falling_slider(d.scroll_ease_in_ms, EASE_IN_MIN, EASE_IN_MAX),
-				50.0,
-				"ease-in",
-			),
-			(
-				falling_slider(d.scroll_ramp_up_ms, RAMP_UP_MIN, RAMP_UP_MAX),
-				75.0,
-				"ramp-up",
-			),
-			(
-				falling_slider(d.scroll_ramp_down_ms, RAMP_DOWN_MIN, RAMP_DOWN_MAX),
-				75.0,
-				"ramp-down",
-			),
-			(
-				falling_slider(d.scroll_ease_out_ms, EASE_OUT_MIN, EASE_OUT_MAX),
-				40.0,
-				"ease-out",
-			),
-		] {
+		for (got, want, what) in [(falling_slider(d.scroll_ease_in_ms, EASE_IN_MIN, EASE_IN_MAX), 50.0, "ease-in"), (falling_slider(d.scroll_ramp_up_ms, RAMP_UP_MIN, RAMP_UP_MAX), 75.0, "ramp-up"), (falling_slider(d.scroll_ramp_down_ms, RAMP_DOWN_MIN, RAMP_DOWN_MAX), 75.0, "ramp-down"), (falling_slider(d.scroll_ease_out_ms, EASE_OUT_MIN, EASE_OUT_MAX), 40.0, "ease-out")] {
 			assert_eq!(got, want, "{what} default should read where it claims");
 		}
 	}
@@ -10313,20 +8135,11 @@ mod tests {
 		// feel slider: higher = faster, whichever way each is stored
 		// underneath.
 		let mut d = mk_dialog(4000.0);
-		for (key, label) in [
-			(Key::ScrollEaseIn, "Ease-in"),
-			(Key::ScrollRampUp, "Ramp-up"),
-			(Key::SingleScreenTau, "Single-screen speed"),
-			(Key::ScrollRampDown, "Ramp-down"),
-			(Key::ScrollEaseOut, "Ease-out"),
-		] {
+		for (key, label) in [(Key::ScrollEaseIn, "Ease-in"), (Key::ScrollRampUp, "Ramp-up"), (Key::SingleScreenTau, "Single-screen speed"), (Key::ScrollRampDown, "Ramp-down"), (Key::ScrollEaseOut, "Ease-out")] {
 			for want in [1.0, 25.0, 50.0, 75.0, 100.0] {
 				d.set_f32(key, want);
 				let got = d.get_f32(key);
-				assert!(
-					(got - want).abs() < 1.5,
-					"{label} set to {want} read back as {got}"
-				);
+				assert!((got - want).abs() < 1.5, "{label} set to {want} read back as {got}");
 			}
 		}
 		// higher = crisper on both ends of the ease (stored as a shorter duration)
@@ -10337,10 +8150,7 @@ mod tests {
 		d.set_f32(Key::ScrollEaseOut, 80.0);
 		let crisp_out = d.edited.scroll_ease_out_ms;
 		d.set_f32(Key::ScrollEaseOut, 20.0);
-		assert!(
-			crisp_out < d.edited.scroll_ease_out_ms,
-			"a higher Ease-out must be a SHORTER tail, matching its Ease-in partner"
-		);
+		assert!(crisp_out < d.edited.scroll_ease_out_ms, "a higher Ease-out must be a SHORTER tail, matching its Ease-in partner");
 		// higher = harder on both ramps (stored as a shorter period)
 		d.set_f32(Key::ScrollRampUp, 80.0);
 		let hard_up = d.edited.scroll_ramp_up_ms;
@@ -10420,11 +8230,7 @@ mod tests {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
 		// slider: focus the scroll-speed slider, nudge it both ways
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::SingleScreenTau)
-			.unwrap();
+		let i = d.specs.iter().position(|s| s.key == Key::SingleScreenTau).unwrap();
 		d.tab = d.specs[i].tab;
 		d.focus = Some(super::Focus::Row(i, 0));
 		d.set_f32(Key::SingleScreenTau, 50.0);
@@ -10493,10 +8299,7 @@ mod tests {
 					}
 					_ => continue,
 				}
-				let gate = crate::fields::spec()
-					.get(key.name())
-					.and_then(|s| s.gate.as_deref())
-					.and_then(Key::parse);
+				let gate = crate::fields::spec().get(key.name()).and_then(|s| s.gate.as_deref()).and_then(Key::parse);
 				let end = at_end(&d);
 				if let Some(gate) = gate {
 					d.set_toggle(gate, false);
@@ -10510,12 +8313,7 @@ mod tests {
 				d.tab = d.specs[i].tab;
 				d.focus = Some(Focus::Row(i, 0));
 				d.key_horizontal(dir);
-				assert!(
-					d.edited == before,
-					"{} changed on {} at its end",
-					d.specs[i].label,
-					if dir < 0 { "Left" } else { "Right" }
-				);
+				assert!(d.edited == before, "{} changed on {} at its end", d.specs[i].label, if dir < 0 { "Left" } else { "Right" });
 				covered += 1;
 				gated += usize::from(gate.is_some());
 			}
@@ -10553,11 +8351,7 @@ mod tests {
 		for key in [Key::IdleHiddenMin, Key::IdleMin] {
 			let scale = scale_of(key);
 			assert!(scale.log && scale.int, "{key:?}");
-			assert_eq!(
-				(scale.min, scale.max),
-				(1.0, 1440.0),
-				"{key:?} kept its ends"
-			);
+			assert_eq!((scale.min, scale.max), (1.0, 1440.0), "{key:?} kept its ends");
 			assert_eq!(scale.frac(1.0), 0.0);
 			assert_eq!(scale.frac(1440.0), 1.0);
 			let hour = scale.frac(60.0);
@@ -10583,16 +8377,9 @@ mod tests {
 			assert_eq!(value, 1440.0);
 			assert!(presses > 60, "{key:?} steps too coarse: {presses}");
 			let shifted = scale.stepped(240.0, 1, true);
-			assert!(
-				shifted > 400.0 && shifted < 600.0,
-				"Shift+Up from 240 gave {shifted}"
-			);
+			assert!(shifted > 400.0 && shifted < 600.0, "Shift+Up from 240 gave {shifted}");
 			assert_eq!(scale.stepped(1.0, -1, false), 1.0);
-			assert_eq!(
-				scale.stepped(1440.0, 1, false),
-				1440.0,
-				"Up stops at the end"
-			);
+			assert_eq!(scale.stepped(1440.0, 1, false), 1440.0, "Up stops at the end");
 
 			// past the end, Up keeps the typed number and Down steps down from it
 			assert_eq!(scale.stepped(5000.0, 1, false), 5000.0);
@@ -10683,15 +8470,7 @@ mod tests {
 	fn a_big_decimal_drops_places_to_fit_its_box() {
 		use super::Key;
 		let mut d = mk_dialog(4000.0);
-		for (value, shown) in [
-			(60.0, "60.00"),
-			(0.25, "0.25"),
-			(99.94, "99.94"),
-			(150.5, "150.5"),
-			(999.94, "999.9"),
-			(999.96, "1000"),
-			(3600.0, "3600"),
-		] {
+		for (value, shown) in [(60.0, "60.00"), (0.25, "0.25"), (99.94, "99.94"), (150.5, "150.5"), (999.94, "999.9"), (999.96, "1000"), (3600.0, "3600")] {
 			d.set_f32(Key::CursorResume, value);
 			assert_eq!(d.fmt_val(Key::CursorResume, false), shown, "{value}");
 		}
@@ -10705,12 +8484,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_slider_number_fits_its_box_at_a_large_interface_font() {
 		use super::SliderScale;
-		let texts: Vec<String> = super::ui()
-			.specs
-			.iter()
-			.filter_map(|spec| SliderScale::of(&spec.kind))
-			.flat_map(SliderScale::widest_texts)
-			.collect();
+		let texts: Vec<String> = super::ui().specs.iter().filter_map(|spec| SliderScale::of(&spec.kind)).flat_map(SliderScale::widest_texts).collect();
 		for want in ["10080", "999.9", "20.00", "4.00"] {
 			assert!(texts.iter().any(|t| t == want), "{want} is never measured");
 		}
@@ -10727,11 +8501,7 @@ mod tests {
 				let room = d.valbox(i).w - 2.0 * super::lay().field_pad;
 				for number in slider.widest_texts() {
 					let w = text.measure_ui_text(&number, &attrs) / scale;
-					assert!(
-						w <= room + 0.01,
-						"{} at {big}x the font, {scale}x: {number} is {w} wide, room for {room}",
-						spec.label
-					);
+					assert!(w <= room + 0.01, "{} at {big}x the font, {scale}x: {number} is {w} wide, room for {room}", spec.label);
 				}
 			}
 		}
@@ -10746,25 +8516,13 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_revert_arrow_and_the_pickers_text_fit_at_a_large_interface_font() {
-		let row = super::ui()
-			.specs
-			.iter()
-			.position(|s| matches!(s.kind, Kind::Color))
-			.expect("a color row");
+		let row = super::ui().specs.iter().position(|s| matches!(s.kind, Kind::Color)).expect("a color row");
 		for (big, scale) in [(1.0, 1.0), (1.0, 2.0), (2.2, 1.0), (2.2, 2.0)] {
 			let mut text = crate::text::TextCtx::new_cpu(big);
 			// after the context, which is what picks the family
 			let attrs = crate::text::ui_attrs();
 			let chrome = super::chrome_widths(&mut text, scale);
-			let mut d = SettingsDialog::new(
-				0.0,
-				0.0,
-				text.ui_line_h,
-				chrome,
-				f32::MAX,
-				4000.0 * scale,
-				scale,
-			);
+			let mut d = SettingsDialog::new(0.0, 0.0, text.ui_line_h, chrome, f32::MAX, 4000.0 * scale, scale);
 			let (w, h) = d.natural;
 			d.set_size(w * scale, h * scale);
 			d.tab = d.specs[row].tab;
@@ -10774,11 +8532,7 @@ mod tests {
 			// the arrow ends inside its column, which ends where the content does
 			let arrow = d.revert_box(row);
 			let glyph_end = arrow.x + super::REVERT_INSET + tw(super::ui().icons.revert);
-			assert!(
-				glyph_end <= arrow.x + arrow.w + 0.5,
-				"{at}: the arrow ends at {glyph_end}, its column at {}",
-				arrow.x + arrow.w
-			);
+			assert!(glyph_end <= arrow.x + arrow.w + 0.5, "{at}: the arrow ends at {glyph_end}, its column at {}", arrow.x + arrow.w);
 			assert!(arrow.x + arrow.w <= d.content_x() + d.layout_w() - lay().pad + 0.01);
 
 			d.pick_open(row);
@@ -10786,20 +8540,12 @@ mod tests {
 			let gap = super::font_gap(super::PART_LABEL_GAP, d.line_h);
 			for field in crate::pick::Field::ALL {
 				let end = g.labels_x + tw(field.label());
-				assert!(
-					end + gap <= g.fields[0].x + 1.0,
-					"{at}: {:?} runs to {end}, its box starts at {}",
-					field.label(),
-					g.fields[0].x
-				);
+				assert!(end + gap <= g.fields[0].x + 1.0, "{at}: {:?} runs to {end}, its box starts at {}", field.label(), g.fields[0].x);
 			}
 			let room = g.fields[5].w - 2.0 * lay().field_pad;
 			for value in ["#20202a", "#dddddd", "#888888", "#bbbbbb", "100"] {
 				let w = tw(value);
-				assert!(
-					w <= room + 1.0,
-					"{at}: {value} is {w} wide, room for {room}"
-				);
+				assert!(w <= room + 1.0, "{at}: {value} is {w} wide, room for {room}");
 			}
 		}
 	}
@@ -10811,52 +8557,20 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_wider_number_box_widens_the_panel_and_leaves_the_sliders() {
-		let row = super::ui()
-			.specs
-			.iter()
-			.position(|spec| matches!(spec.kind, Kind::Slider { .. }))
-			.expect("a slider row");
+		let row = super::ui().specs.iter().position(|spec| matches!(spec.kind, Kind::Slider { .. })).expect("a slider row");
 		let floor = super::lay().value_width;
 		for scale in [1.0, 2.0] {
 			let at = |value_w: f32| {
-				let mut d = SettingsDialog::new(
-					0.0,
-					0.0,
-					18.0 * scale,
-					Chrome {
-						label_w: 170.0 * scale,
-						btn_w: 300.0 * scale,
-						row_btn_w: 90.0 * scale,
-						value_w: value_w * scale,
-						tab_ws: vec![40.0 * scale; tab_nodes().len()],
-						label_ws: labels7(scale),
-						..Chrome::default()
-					},
-					f32::MAX,
-					4000.0 * scale,
-					scale,
-				);
+				let mut d = SettingsDialog::new(0.0, 0.0, 18.0 * scale, Chrome { label_w: 170.0 * scale, btn_w: 300.0 * scale, row_btn_w: 90.0 * scale, value_w: value_w * scale, tab_ws: vec![40.0 * scale; tab_nodes().len()], label_ws: labels7(scale), ..Chrome::default() }, f32::MAX, 4000.0 * scale, scale);
 				let (w, h) = d.size();
 				d.set_size(w, h);
 				d
 			};
 			let (narrow, wide) = (at(floor - 20.0), at(floor + 30.0));
 			assert!((narrow.valbox(row).w - floor).abs() < 0.01, "at {scale}x");
-			assert!(
-				(wide.valbox(row).w - (floor + 30.0)).abs() < 0.01,
-				"at {scale}x"
-			);
-			assert!(
-				(wide.natural.0 - narrow.natural.0 - 30.0).abs() < 0.01,
-				"at {scale}x the panel grew {} for a box 30 wider",
-				wide.natural.0 - narrow.natural.0
-			);
-			assert!(
-				(wide.track(row).w - narrow.track(row).w).abs() < 0.01,
-				"at {scale}x the slider went from {} to {}",
-				narrow.track(row).w,
-				wide.track(row).w
-			);
+			assert!((wide.valbox(row).w - (floor + 30.0)).abs() < 0.01, "at {scale}x");
+			assert!((wide.natural.0 - narrow.natural.0 - 30.0).abs() < 0.01, "at {scale}x the panel grew {} for a box 30 wider", wide.natural.0 - narrow.natural.0);
+			assert!((wide.track(row).w - narrow.track(row).w).abs() < 0.01, "at {scale}x the slider went from {} to {}", narrow.track(row).w, wide.track(row).w);
 		}
 	}
 
@@ -10870,17 +8584,13 @@ mod tests {
 		use super::SliderScale;
 		let _guard = config::test_config_lock();
 		let _ = config::settings(); // memoize before the override goes in
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_typedmax_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_typedmax_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let _ = std::fs::write(&path, "");
 		config::set_config_override(path.clone());
 		config::reload_from_disk();
-		let pristine = std::fs::read_to_string(&path)
-			.unwrap()
-			.replace("# automatic: true  ## Default", "automatic: false")
-			.replace("# profile: \"max\"  ## Default", "profile: \"custom\"");
+		let pristine = std::fs::read_to_string(&path).unwrap().replace("# automatic: true  ## Default", "automatic: false").replace("# profile: \"max\"  ## Default", "profile: \"custom\"");
 		assert!(pristine.contains("profile: \"custom\""));
 
 		let mut d = mk_dialog(4000.0);
@@ -10908,11 +8618,7 @@ mod tests {
 			assert!(config::persist(&base, &d.edited), "{label} was not written");
 			let mut back = mk_dialog(4000.0);
 			back.edited = config::reload_from_disk();
-			assert_eq!(
-				back.get_f32(key),
-				scale.typed_max,
-				"{label} came back from the file clamped"
-			);
+			assert_eq!(back.get_f32(key), scale.typed_max, "{label} came back from the file clamped");
 			checked.push(label);
 		}
 		assert_eq!(checked.len(), 11, "{checked:?}");
@@ -10925,11 +8631,7 @@ mod tests {
 	fn up_down_step_focused_slider() {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::SingleScreenTau)
-			.unwrap();
+		let i = d.specs.iter().position(|s| s.key == Key::SingleScreenTau).unwrap();
 		d.tab = d.specs[i].tab;
 		d.focus = Some(super::Focus::Row(i, 0));
 		d.set_f32(Key::SingleScreenTau, 50.0);
@@ -10949,11 +8651,7 @@ mod tests {
 	fn up_down_step_slider_during_edit() {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::SingleScreenTau)
-			.unwrap();
+		let i = d.specs.iter().position(|s| s.key == Key::SingleScreenTau).unwrap();
 		d.tab = d.specs[i].tab;
 		d.focus = Some(super::Focus::Row(i, 0));
 		d.set_f32(Key::SingleScreenTau, 30.0);
@@ -10970,19 +8668,12 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn fresh_click_selects_all_but_drag_keeps_range() {
 		use super::Key;
-		let i0 = mk_dialog(4000.0)
-			.specs
-			.iter()
-			.position(|s| s.key == Key::BgImage)
-			.unwrap();
+		let i0 = mk_dialog(4000.0).specs.iter().position(|s| s.key == Key::BgImage).unwrap();
 		let mut m = |s: &str| s.chars().count() as f32; // 1px per char
 		// fresh single click into a text field: select all on release
 		let mut d = mk_dialog(4000.0);
 		d.tab = d.specs[i0].tab;
-		own(
-			&mut d,
-			&[(Key::BgImage, knobs::Value::Text("foo bar.png".into()))],
-		);
+		own(&mut d, &[(Key::BgImage, knobs::Value::Text("foo bar.png".into()))]);
 		let field = d.textbox(i0);
 		let at = |k: usize| field.x + lay().field_pad + k as f32;
 		let y = field.y + field.h / 2.0;
@@ -10990,26 +8681,15 @@ mod tests {
 		assert!(d.edit.is_some(), "click opens the field");
 		assert!(d.selected_text().is_none(), "not selected until release");
 		d.mouse_up(at(2), y);
-		assert_eq!(
-			d.selected_text().as_deref(),
-			Some("foo bar.png"),
-			"a no-drag click selects all"
-		);
+		assert_eq!(d.selected_text().as_deref(), Some("foo bar.png"), "a no-drag click selects all");
 		// a click that drags selects the dragged range instead
 		let mut d = mk_dialog(4000.0);
 		d.tab = d.specs[i0].tab;
-		own(
-			&mut d,
-			&[(Key::BgImage, knobs::Value::Text("foo bar.png".into()))],
-		);
+		own(&mut d, &[(Key::BgImage, knobs::Value::Text("foo bar.png".into()))]);
 		d.mouse_down(at(2), y, &mut m);
 		d.mouse_move(at(6), y, &mut m);
 		d.mouse_up(at(6), y);
-		assert_eq!(
-			d.selected_text().as_deref(),
-			Some("o ba"),
-			"a drag keeps its range"
-		);
+		assert_eq!(d.selected_text().as_deref(), Some("o ba"), "a drag keeps its range");
 	}
 
 	// All 4 tab chords, in both directions, and the plain keys they must not
@@ -11089,11 +8769,7 @@ mod tests {
 		use super::{Focus, Key};
 		let mut d = mk_dialog(2000.0);
 		// Line height: a slider that's a decimal, so the dot is legal
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::LineHeight)
-			.unwrap();
+		let i = d.specs.iter().position(|s| s.key == Key::LineHeight).unwrap();
 		d.tab = d.specs[i].tab;
 		d.focus = Some(Focus::Row(i, 0));
 		// typing a digit into the focused (unopened) slider starts a fresh number
@@ -11140,10 +8816,7 @@ mod tests {
 
 		d.set_text(Key::BgImage, pics);
 		assert_eq!(d.edited.wallpaper_folder_raw, pics);
-		assert_eq!(
-			d.edited.wallpaper_folder,
-			Some(std::path::PathBuf::from(pics))
-		);
+		assert_eq!(d.edited.wallpaper_folder, Some(std::path::PathBuf::from(pics)));
 		assert!(!d.edited.wallpaper_folder_auto);
 		assert!(!by_hand(&d, Key::BgImage), "the image is untouched");
 		assert!(!d.is_default(Key::BgImage));
@@ -11155,20 +8828,12 @@ mod tests {
 
 		// off, it is the image, which shows its default until named
 		d.set_toggle(Key::BgRotate, false);
-		assert_eq!(
-			d.get_text(Key::BgImage),
-			d.edited.found_picture,
-			"off, it is the image"
-		);
+		assert_eq!(d.get_text(Key::BgImage), d.edited.found_picture, "off, it is the image");
 		d.set_text(Key::BgImage, "/a.png");
 		assert_eq!(d.edited.wallpaper_raw, "/a.png");
 		assert!(!by_hand(&d, Key::BgFolder), "the folder is untouched");
 		d.set_toggle(Key::BgRotate, true);
-		assert_eq!(
-			d.get_text(Key::BgImage),
-			"/a.png",
-			"a named image shows either way"
-		);
+		assert_eq!(d.get_text(Key::BgImage), "/a.png", "a named image shows either way");
 
 		own(&mut d, &[(Key::BgFolder, knobs::Value::Text(pics.into()))]);
 		d.revert(Key::BgImage);
@@ -11180,10 +8845,7 @@ mod tests {
 		// the image, though an empty box with Rotate on would be the folder
 		let i = d.specs.iter().position(|s| s.key == Key::BgImage).unwrap();
 		d.tab = d.specs[i].tab;
-		own(
-			&mut d,
-			&[(Key::BgImage, knobs::Value::Text("/a.png".into()))],
-		);
+		own(&mut d, &[(Key::BgImage, knobs::Value::Text("/a.png".into()))]);
 		d.focus = Some(super::Focus::Row(i, 0));
 		d.set_mods(false, false, false);
 		d.key_space();
@@ -11354,11 +9016,7 @@ mod tests {
 		use super::{Focus, Key, Kind};
 		// color field: hex chars pass, junk drops, '#' only up front
 		let mut d = mk_dialog(4000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| matches!(s.kind, Kind::Color))
-			.unwrap();
+		let i = d.specs.iter().position(|s| matches!(s.kind, Kind::Color)).unwrap();
 		d.tab = d.specs[i].tab;
 		// part 1 is the hex box; part 0 is the chip
 		d.focus = Some(Focus::Row(i, 1));
@@ -11371,11 +9029,7 @@ mod tests {
 		assert_eq!(d.edit.as_ref().unwrap().buf, "#123456");
 		// slider field: digits/dot only, single dot
 		let mut d = mk_dialog(4000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::LineHeight)
-			.unwrap();
+		let i = d.specs.iter().position(|s| s.key == Key::LineHeight).unwrap();
 		d.tab = d.specs[i].tab;
 		d.focus = Some(Focus::Row(i, 0));
 		d.key_space();
@@ -11467,10 +9121,7 @@ mod tests {
 		}
 		settle(&mut d, &mut m);
 		let e = d.edit.as_ref().unwrap();
-		assert!(
-			(n - 200) as f32 - e.view_to >= 27.0,
-			"margin ahead of leftward travel"
-		);
+		assert!((n - 200) as f32 - e.view_to >= 27.0, "margin ahead of leftward travel");
 		// Home scrolls all the way back
 		d.cursor_home();
 		settle(&mut d, &mut m);
@@ -11505,10 +9156,7 @@ mod tests {
 		d.last_click = None;
 		d.mouse_down(field.x + lay().field_pad + 10.0, y, &mut m);
 		let cur = d.edit.as_ref().unwrap().cur;
-		assert!(
-			(cur as f32 - (view + 10.0)).abs() <= 0.5,
-			"cur {cur} vs view {view}"
-		);
+		assert!((cur as f32 - (view + 10.0)).abs() <= 0.5, "cur {cur} vs view {view}");
 		d.mouse_up(field.x + lay().field_pad + 10.0, y);
 		// from the far left, dragging past the right edge keeps selecting while
 		// the view crawls (edge autoscroll)
@@ -11550,10 +9198,7 @@ mod tests {
 		// no selection + empty clipboard: only Select all stays enabled
 		d.cursor_end();
 		d.mouse_right(field.x + lay().field_pad + 3.0, y, false, &mut m);
-		assert!(
-			d.selected_text().is_none(),
-			"right-click outside sel places caret"
-		);
+		assert!(d.selected_text().is_none(), "right-click outside sel places caret");
 		assert!(!d.em_enabled(0) && !d.em_enabled(1) && !d.em_enabled(2) && !d.em_enabled(3));
 		assert!(d.em_enabled(4));
 		// keyboard: walk to Select all, Enter fires it
@@ -11721,29 +9366,17 @@ mod tests {
 		d.set_f32(Key::Columns, columns as f32);
 		save_margin(9.0);
 		d.follow_file(config::reload_from_disk());
-		assert_eq!(
-			crate::fields::grid(&d.edited, None).0,
-			columns,
-			"the edit stays"
-		);
+		assert_eq!(crate::fields::grid(&d.edited, None).0, columns, "the edit stays");
 		assert_eq!(d.edited.margin, loaded.margin + 5.0, "not under the edit");
 		assert!(config::persist(&d.orig, &d.edited));
 		assert!(d.take_behind(), "the Apply reads the file back");
 		d.commit_baseline(None);
 		d.follow_file(config::reload_from_disk());
-		assert_eq!(
-			d.edited.margin,
-			loaded.margin + 9.0,
-			"the dialog shows both"
-		);
+		assert_eq!(d.edited.margin, loaded.margin + 9.0, "the dialog shows both");
 		assert_eq!(crate::fields::grid(&d.edited, None).0, columns);
 		let back = config::reload_from_disk();
 		assert_eq!(back.margin, loaded.margin + 9.0, "the other window's save");
-		assert_eq!(
-			crate::fields::grid(&back, None).0,
-			columns,
-			"and this one's"
-		);
+		assert_eq!(crate::fields::grid(&back, None).0, columns, "and this one's");
 
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -11783,11 +9416,7 @@ mod tests {
 
 		// the file as stdin of a child keeps it open until the child exits
 		let hold = std::fs::File::open(&path).unwrap();
-		let mut child = std::process::Command::new("sleep")
-			.arg("30")
-			.stdin(std::process::Stdio::from(hold))
-			.spawn()
-			.unwrap();
+		let mut child = std::process::Command::new("sleep").arg("30").stdin(std::process::Stdio::from(hold)).spawn().unwrap();
 		let fd0 = format!("/proc/{}/fd/0", child.id());
 		let target = path.canonicalize().unwrap();
 		for _ in 0..50 {
@@ -11808,11 +9437,7 @@ mod tests {
 		assert!(unsaved.is_none(), "the file is free now");
 		d.commit_baseline(unsaved);
 		let back = config::reload_from_disk();
-		assert_eq!(
-			crate::fields::grid(&back, None).0,
-			columns,
-			"OK again writes the edit"
-		);
+		assert_eq!(crate::fields::grid(&back, None).0, columns, "OK again writes the edit");
 		assert_eq!(back.margin, margin_default, "and the revert");
 		assert!(!d.holds_changes());
 
@@ -11829,8 +9454,7 @@ mod tests {
 	fn an_open_dialog_shows_this_windows_view_over_another_windows_save() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_ownview_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_ownview_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let _ = std::fs::write(&path, "");
@@ -11892,28 +9516,14 @@ mod tests {
 		d.edited.text_scrim = true;
 		assert!(!d.disabled(Key::ScrimSoftness));
 		d.edited.text_scrim = false;
-		let i = d
-			.specs
-			.iter()
-			.position(
-				|s| matches!(s.kind, super::Kind::Dual { keys, .. } if keys[0] == Key::CursorScrim),
-			)
-			.unwrap();
+		let i = d.specs.iter().position(|s| matches!(s.kind, super::Kind::Dual { keys, .. } if keys[0] == Key::CursorScrim)).unwrap();
 		assert!(!d.part_disabled(i, 0) && !d.part_disabled(i, 1));
 		// and it sits on its own, unindented, after the scrim's members
 		let outline = d.specs.iter().position(|s| s.key == Key::Outline).unwrap();
-		let contrast = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::MinContrast)
-			.unwrap();
+		let contrast = d.specs.iter().position(|s| s.key == Key::MinContrast).unwrap();
 		assert_eq!(d.specs[outline].indent, 0);
 		assert_eq!(d.specs[contrast].indent, 1);
-		assert_eq!(
-			contrast + 1,
-			outline,
-			"contrast closes the scrim group, the outline follows"
-		);
+		assert_eq!(contrast + 1, outline, "contrast closes the scrim group, the outline follows");
 	}
 
 	// Remote is a profile the file never stores: picking it raises the session
@@ -11927,24 +9537,14 @@ mod tests {
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::Remote.index());
 		assert!(crate::profile::remote(&d.edited));
 		assert_eq!(d.edited.performance_profile, crate::profile::Profile::High);
-		assert_eq!(
-			d.get_radio(Key::PerfProfile),
-			crate::profile::Profile::Remote.index()
-		);
-		assert!(
-			!d.get_toggle(Key::SmoothScroll),
-			"Remote sets the rows like Standard"
-		);
+		assert_eq!(d.get_radio(Key::PerfProfile), crate::profile::Profile::Remote.index());
+		assert!(!d.get_toggle(Key::SmoothScroll), "Remote sets the rows like Standard");
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::Low.index());
 		assert!(!crate::profile::remote(&d.edited));
 		assert_eq!(d.edited.performance_profile, crate::profile::Profile::Low);
 		// the revert arrow drops the override too
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::Remote.index());
-		let row = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::PerfProfile)
-			.unwrap();
+		let row = d.specs.iter().position(|s| s.key == Key::PerfProfile).unwrap();
 		assert!(!d.row_is_default(row));
 		d.row_revert(row);
 		assert!(!crate::profile::remote(&d.edited));
@@ -11964,11 +9564,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
-		std::fs::write(
-			&path,
-			"performance:\n\tautomatic: true\n\tprofile: \"max\"\n",
-		)
-		.unwrap();
+		std::fs::write(&path, "performance:\n\tautomatic: true\n\tprofile: \"max\"\n").unwrap();
 		config::set_config_override(path.clone());
 		let mut stored = config::reload_from_disk();
 		stored.stepped_profile = Some(crate::profile::Profile::Low);
@@ -11977,33 +9573,19 @@ mod tests {
 		let mut d = mk_dialog(4000.0);
 		d.orig = stored.clone();
 		d.edited = stored;
-		let row = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::PerfProfile)
-			.unwrap();
-		assert_eq!(
-			d.get_radio(Key::PerfProfile),
-			crate::profile::Profile::Low.index()
-		);
+		let row = d.specs.iter().position(|s| s.key == Key::PerfProfile).unwrap();
+		assert_eq!(d.get_radio(Key::PerfProfile), crate::profile::Profile::Low.index());
 		assert!(!d.row_is_default(row), "the arrow offers the way back");
 
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::Max.index());
 		assert!(d.edited.stepped_profile.is_none());
-		assert_eq!(
-			d.get_radio(Key::PerfProfile),
-			crate::profile::Profile::Max.index()
-		);
+		assert_eq!(d.get_radio(Key::PerfProfile), crate::profile::Profile::Max.index());
 		assert!(d.row_is_default(row));
 		assert!(config::persist(&d.orig, &d.edited));
 		// The file already had Max, so its profile line is left alone. Until
 		// naming one switched the automatic choice off, nothing was written:
 		//     assert_eq!(read_to_string(&path).unwrap(), before, "...");
-		assert_eq!(
-			std::fs::read_to_string(&path).unwrap(),
-			before.replace("automatic: true", "automatic: false"),
-			"only the automatic switch should have moved"
-		);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), before.replace("automatic: true", "automatic: false"), "only the automatic switch should have moved");
 
 		d.edited.stepped_profile = Some(crate::profile::Profile::Low);
 		d.row_revert(row);
@@ -12014,10 +9596,7 @@ mod tests {
 		own(&mut d, &[(Key::PerfAuto, knobs::Value::Bool(true))]);
 		d.edited.stepped_profile = Some(crate::profile::Profile::Low);
 		d.set_toggle(Key::PerfAuto, false);
-		assert!(
-			d.edited.stepped_profile.is_none(),
-			"and so does switching automatic off"
-		);
+		assert!(d.edited.stepped_profile.is_none(), "and so does switching automatic off");
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -12028,21 +9607,14 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_slider_focus_ring_clears_the_handle_at_both_ends() {
 		let d = mk_dialog(4000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| matches!(s.kind, super::Kind::Slider { .. }))
-			.unwrap();
+		let i = d.specs.iter().position(|s| matches!(s.kind, super::Kind::Slider { .. })).unwrap();
 		let track = d.track(i);
 		// the tight box; the drawn ring sits 2 px outside it
 		let tight = d.focus_ctl_rect(i, 0);
 		let half = super::SLIDER_HANDLE_W / 2.0;
 		assert!(tight.x <= track.x - half, "left end");
 		assert!(tight.x + tight.w >= track.x + track.w + half, "right end");
-		assert!(
-			tight.x + tight.w + 2.0 < d.valbox(i).x,
-			"and clear of the value field"
-		);
+		assert!(tight.x + tight.w + 2.0 < d.valbox(i).x, "and clear of the value field");
 	}
 
 	// press, hold for a few frames, release, with the pointer put there first,
@@ -12081,12 +9653,7 @@ mod tests {
 		// just inside the box's right end, which had an x for an automatic
 		// value until 2026100913394950
 		let f = d.textbox(i);
-		click(
-			&mut d,
-			f.x + f.w - lay().field_pad - 2.0,
-			f.y + f.h / 2.0,
-			&mut m,
-		);
+		click(&mut d, f.x + f.w - lay().field_pad - 2.0, f.y + f.h / 2.0, &mut m);
 		assert_eq!(d.selected_text().as_deref(), Some(want.as_str()));
 	}
 
@@ -12100,10 +9667,7 @@ mod tests {
 		let mut d = mk_dialog(2000.0);
 		let i = d.specs.iter().position(|s| s.key == Key::BgImage).unwrap();
 		d.tab = d.specs[i].tab;
-		own(
-			&mut d,
-			&[(Key::BgImage, knobs::Value::Text("old.png".into()))],
-		);
+		own(&mut d, &[(Key::BgImage, knobs::Value::Text("old.png".into()))]);
 		d.focus = None;
 		for _ in 0..200 {
 			d.key_tab();
@@ -12122,15 +9686,9 @@ mod tests {
 		// a slider's number box opens the same way, and Up/Down still step the
 		// value through it
 		let mut d = mk_dialog(2000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| matches!(s.kind, super::Kind::Slider { .. }) && !d.disabled(s.key))
-			.unwrap();
+		let i = d.specs.iter().position(|s| matches!(s.kind, super::Kind::Slider { .. }) && !d.disabled(s.key)).unwrap();
 		let key = d.specs[i].key;
-		let super::Kind::Slider { min, .. } = d.specs[i].kind else {
-			unreachable!()
-		};
+		let super::Kind::Slider { min, .. } = d.specs[i].kind else { unreachable!() };
 		d.set_f32(key, min); // so there is room to step up
 		d.tab = d.specs[i].tab;
 		d.focus = None;
@@ -12145,11 +9703,7 @@ mod tests {
 		let before = d.get_f32(key);
 		d.key_vertical(false); // Up
 		assert!(d.get_f32(key) > before, "Up did not step the value");
-		assert_ne!(
-			d.selected_text().as_deref(),
-			Some(shown.as_str()),
-			"the box still shows the old number"
-		);
+		assert_ne!(d.selected_text().as_deref(), Some(shown.as_str()), "the box still shows the old number");
 
 		// a hex field the same: it shows its own color, selected, rather than
 		// clearing itself the way a plain text box would. Part 1, since part 0 is
@@ -12171,17 +9725,10 @@ mod tests {
 				break;
 			}
 		}
-		assert_eq!(
-			d.focus,
-			Some(Focus::Row(i, 1)),
-			"never reached the hex field"
-		);
+		assert_eq!(d.focus, Some(Focus::Row(i, 1)), "never reached the hex field");
 		assert_eq!(d.selected_text().as_deref(), Some(want.as_str()));
 		// and the chip on the way past opened no field of its own
-		assert!(
-			d.pick.is_none(),
-			"walking onto the chip must not open the picker"
-		);
+		assert!(d.pick.is_none(), "walking onto the chip must not open the picker");
 	}
 
 	// Esc from inside a field is the dialog's Cancel, not "shut the field".
@@ -12215,11 +9762,7 @@ mod tests {
 		assert_eq!(d.key_enter(), Action::Ok);
 
 		let mut d = mk_dialog(2000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| matches!(s.kind, super::Kind::ShellList))
-			.unwrap();
+		let i = d.specs.iter().position(|s| matches!(s.kind, super::Kind::ShellList)).unwrap();
 		d.tab = d.specs[i].tab;
 		d.open_edit(super::shell_field_row(0, false), true);
 		assert_eq!(d.key_enter(), Action::Ok);
@@ -12238,28 +9781,8 @@ mod tests {
 		let saved = config::settings();
 
 		// Custom, so nothing about the wallpaper is set by a profile
-		let mut live = crate::fields::owning(
-			(*saved).clone(),
-			&[
-				(Key::PerfAuto, Value::Bool(false)),
-				(Key::PerfProfile, Value::Text(knobs::CUSTOM.into())),
-				(Key::Theme, Value::Text(knobs::CUSTOM.into())),
-				(Key::BgEnabled, Value::Bool(true)),
-				(Key::ColFromWallpaper, Value::Bool(true)),
-				(Key::ColFg, Value::Text(config::format_hex(mine.0))),
-				(Key::ColCursor, Value::Text(config::format_hex(mine.1))),
-			],
-		);
-		live.wallpaper_summary = Some(crate::autotheme::Summary {
-			luma_hi: 0.3,
-			luma_lo: 0.02,
-			luma_mean: 0.13,
-			spread: [[0.13; 3]; crate::autotheme::SPREAD],
-			alpha: 1.0,
-			hue: 250.0,
-			chroma: 0.08,
-			opacity: 0.35,
-		});
+		let mut live = crate::fields::owning((*saved).clone(), &[(Key::PerfAuto, Value::Bool(false)), (Key::PerfProfile, Value::Text(knobs::CUSTOM.into())), (Key::Theme, Value::Text(knobs::CUSTOM.into())), (Key::BgEnabled, Value::Bool(true)), (Key::ColFromWallpaper, Value::Bool(true)), (Key::ColFg, Value::Text(config::format_hex(mine.0))), (Key::ColCursor, Value::Text(config::format_hex(mine.1)))]);
+		live.wallpaper_summary = Some(crate::autotheme::Summary { luma_hi: 0.3, luma_lo: 0.02, luma_mean: 0.13, spread: [[0.13; 3]; crate::autotheme::SPREAD], alpha: 1.0, hue: 250.0, chroma: 0.08, opacity: 0.35 });
 		// a new picture is a new answer for the rule, so whoever sets it fills
 		crate::fields::fill(&mut live, None);
 		config::update(live);
@@ -12274,9 +9797,7 @@ mod tests {
 		let tip = d.row_tip(i, Key::ColFg).map(tip_text).unwrap_or_default();
 		// a color row has no description, so the tip is its state line alone
 		assert_eq!(tip, "Automatic.");
-		assert!(crate::fields::lines_of(&d.edited).iter().any(
-			|(p, v)| p == "colors.foreground" && *v == Value::Text(config::format_hex(mine.0))
-		));
+		assert!(crate::fields::lines_of(&d.edited).iter().any(|(p, v)| p == "colors.foreground" && *v == Value::Text(config::format_hex(mine.0))));
 		// off, the own colors are back, and a color changed turns it off again
 		d.set_toggle(Key::ColFromWallpaper, false);
 		assert_eq!((d.edited.fg, d.edited.cursor), mine);
@@ -12291,23 +9812,7 @@ mod tests {
 	// A dialog at a given UI line height, the other chrome measured to match.
 	fn mk_dialog_line(line_h: f32) -> SettingsDialog {
 		let k = line_h / 19.0;
-		let mut d = SettingsDialog::new(
-			0.0,
-			0.0,
-			line_h,
-			Chrome {
-				label_w: 170.0 * k,
-				btn_w: 80.0 * k,
-				row_btn_w: 90.0 * k,
-				value_w: 0.0,
-				tab_ws: vec![90.0 * k; tab_nodes().len()],
-				label_ws: labels7(k),
-				..Chrome::default()
-			},
-			f32::MAX,
-			4000.0,
-			1.0,
-		);
+		let mut d = SettingsDialog::new(0.0, 0.0, line_h, Chrome { label_w: 170.0 * k, btn_w: 80.0 * k, row_btn_w: 90.0 * k, value_w: 0.0, tab_ws: vec![90.0 * k; tab_nodes().len()], label_ws: labels7(k), ..Chrome::default() }, f32::MAX, 4000.0, 1.0);
 		at_defaults(&mut d);
 		d
 	}
@@ -12315,24 +9820,8 @@ mod tests {
 	// The colors of the quads that are exactly one of the 4 edges `border`
 	// draws round `r`, `t` thick.
 	fn edge_colors(quads: &[crate::gfx::RectInstance], r: super::Rect, t: f32) -> Vec<[f32; 4]> {
-		let edges = [
-			[r.x - t, r.y - t, r.w + 2.0 * t, t],
-			[r.x - t, r.y + r.h, r.w + 2.0 * t, t],
-			[r.x - t, r.y, t, r.h],
-			[r.x + r.w, r.y, t, r.h],
-		];
-		quads
-			.iter()
-			.filter(|q| {
-				edges.iter().any(|e| {
-					(q.pos[0] - e[0]).abs() < 0.01
-						&& (q.pos[1] - e[1]).abs() < 0.01
-						&& (q.size[0] - e[2]).abs() < 0.01
-						&& (q.size[1] - e[3]).abs() < 0.01
-				})
-			})
-			.map(|q| q.color)
-			.collect()
+		let edges = [[r.x - t, r.y - t, r.w + 2.0 * t, t], [r.x - t, r.y + r.h, r.w + 2.0 * t, t], [r.x - t, r.y, t, r.h], [r.x + r.w, r.y, t, r.h]];
+		quads.iter().filter(|q| edges.iter().any(|e| (q.pos[0] - e[0]).abs() < 0.01 && (q.pos[1] - e[1]).abs() < 0.01 && (q.size[0] - e[2]).abs() < 0.01 && (q.size[1] - e[3]).abs() < 0.01)).map(|q| q.color).collect()
 	}
 
 	// A second Apply has to diff against what the first one applied, not against
@@ -12348,22 +9837,13 @@ mod tests {
 		assert_eq!(d.edited().wallpaper_default_fit, config::Fit::Zoom);
 		d.commit_baseline(None);
 		d.set_radio(Key::BgFit, 0);
-		assert_ne!(
-			d.orig().wallpaper_default_fit,
-			d.edited().wallpaper_default_fit,
-			"going back to Stretch reads as no change, so nothing is written"
-		);
+		assert_ne!(d.orig().wallpaper_default_fit, d.edited().wallpaper_default_fit, "going back to Stretch reads as no change, so nothing is written");
 		// and the app does move the baseline on every Apply
 		// a Windows checkout has CRLF line ends
 		let app = include_str!("app/dialogs.rs").replace("\r\n", "\n");
-		let at = app
-			.find("fn apply_dialog_settings")
-			.expect("apply_dialog_settings");
+		let at = app.find("fn apply_dialog_settings").expect("apply_dialog_settings");
 		let body = &app[at..at + app[at..].find("\n\t}\n").expect("its end")];
-		assert!(
-			body.contains(".commit_baseline("),
-			"Apply no longer resets the baseline"
-		);
+		assert!(body.contains(".commit_baseline("), "Apply no longer resets the baseline");
 	}
 
 	// Labels center on the row they are in, measured from the real line height,
@@ -12379,19 +9859,12 @@ mod tests {
 				d.tab = tab;
 				let texts = d.texts_dip(d.line_h, |s| s.chars().count() as f32 * 7.0);
 				for (i, spec) in SettingsDialog::visible(d.specs, tab) {
-					if spec.beside || spec.label.is_empty() || matches!(spec.kind, Kind::Header(_))
-					{
+					if spec.beside || spec.label.is_empty() || matches!(spec.kind, Kind::Header(_)) {
 						continue;
 					}
 					let want = d.centered_in_row(i, 0.0);
 					let x = d.label_x(i);
-					assert!(
-						texts.iter().any(|t| t.text == spec.label
-							&& (t.x - x).abs() < 0.01
-							&& (t.y + line_h / 2.0 - want).abs() < 0.5),
-						"{} is off its row's center at line height {line_h}",
-						spec.label
-					);
+					assert!(texts.iter().any(|t| t.text == spec.label && (t.x - x).abs() < 0.01 && (t.y + line_h / 2.0 - want).abs() < 0.5), "{} is off its row's center at line height {line_h}", spec.label);
 					checked += 1;
 				}
 			}
@@ -12420,11 +9893,7 @@ mod tests {
 				.unwrap()
 		};
 		let mut last = 0;
-		for (key, heading) in [
-			(Key::PerfAuto, "Performance"),
-			(Key::Outline, "Text readability"),
-			(Key::SmoothScroll, "Scrolling"),
-		] {
+		for (key, heading) in [(Key::PerfAuto, "Performance"), (Key::Outline, "Text readability"), (Key::SmoothScroll, "Scrolling")] {
 			let i = at(key);
 			assert_eq!(specs[i].tab, silk, "{} left the Silk tab", key.name());
 			assert_eq!(heading_over(i), heading, "{} changed section", key.name());
@@ -12450,19 +9919,10 @@ mod tests {
 					let Kind::Header(label) = spec.kind else {
 						continue;
 					};
-					let text = texts
-						.iter()
-						.find(|t| t.bold && t.text == label)
-						.expect("the heading's text");
+					let text = texts.iter().find(|t| t.bold && t.text == label).expect("the heading's text");
 					let rule = d.header_rule_y(i);
-					assert!(
-						text.y + line_h < rule,
-						"{label} runs into its rule at line height {line_h}"
-					);
-					assert!(
-						rule + 1.0 <= d.row_y(i) + d.row_h(&spec.kind) + 0.01,
-						"{label}'s rule falls out of its row"
-					);
+					assert!(text.y + line_h < rule, "{label} runs into its rule at line height {line_h}");
+					assert!(rule + 1.0 <= d.row_y(i) + d.row_h(&spec.kind) + 0.01, "{label}'s rule falls out of its row");
 					checked += 1;
 				}
 			}
@@ -12484,14 +9944,9 @@ mod tests {
 				_ => help.ok,
 			};
 			assert!(!want.is_empty(), "{label} has no tip declared");
-			let (tip, anchor) = d
-				.hover_tip_dip(r.x + r.w / 2.0, r.y + r.h / 2.0)
-				.unwrap_or_else(|| panic!("{label} shows no tip"));
+			let (tip, anchor) = d.hover_tip_dip(r.x + r.w / 2.0, r.y + r.h / 2.0).unwrap_or_else(|| panic!("{label} shows no tip"));
 			assert_eq!(tip, want, "{label} shows the wrong tip");
-			assert!(
-				(anchor.x - r.x).abs() < 0.01,
-				"{label}'s tip hangs elsewhere"
-			);
+			assert!((anchor.x - r.x).abs() < 0.01, "{label}'s tip hangs elsewhere");
 		}
 		let (c, a, o) = (help.cancel, help.apply, help.ok);
 		assert!(c != a && a != o && c != o, "two buttons share a tip");
@@ -12508,9 +9963,7 @@ mod tests {
 		let mut probed = 0;
 		for tab in 0..tab_titles().len() {
 			d.tab = tab;
-			let drops: Vec<usize> = (0..d.specs.len())
-				.filter(|&i| d.specs[i].tab == tab && matches!(d.specs[i].kind, Kind::Dropdown(_)))
-				.collect();
+			let drops: Vec<usize> = (0..d.specs.len()).filter(|&i| d.specs[i].tab == tab && matches!(d.specs[i].kind, Kind::Dropdown(_))).collect();
 			for i in drops {
 				d.dd_open(i);
 				let n = d.dd_options(i).len();
@@ -12524,11 +9977,7 @@ mod tests {
 				points.push((bx.x + 2.0, bx.y + bx.h / 2.0));
 				points.push((d.label_x(i) + 2.0, bx.y + bx.h / 2.0));
 				for (x, y) in points {
-					assert!(
-						d.hover_tip_dip(x, y).is_none(),
-						"{:?}'s open list shows a tip at ({x}, {y})",
-						d.specs[i].key
-					);
+					assert!(d.hover_tip_dip(x, y).is_none(), "{:?}'s open list shows a tip at ({x}, {y})", d.specs[i].key);
 					probed += 1;
 				}
 				d.open = None;
@@ -12540,10 +9989,7 @@ mod tests {
 		let mut m = |s: &str| s.chars().count() as f32;
 		let field = d.textbox(i);
 		let y = field.y + field.h / 2.0;
-		assert!(
-			d.hover_tip_dip(field.x + 2.0, y).is_some(),
-			"the field has no tip"
-		);
+		assert!(d.hover_tip_dip(field.x + 2.0, y).is_some(), "the field has no tip");
 		d.mouse_right(field.x + lay().field_pad + 3.0, y, true, &mut m);
 		assert!(d.emenu.is_some());
 		let item = d.em_item_rect(0);
@@ -12557,44 +10003,15 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_sub_group_stands_without_a_heading() {
-		let row = |key: Key, indent: u8| super::Spec {
-			label: "",
-			key,
-			kind: Kind::Toggle,
-			tab: 0,
-			help: "",
-			indent,
-			beside: false,
-			revert_help: "",
-			windows: false,
-			macos: false,
-			not_macos: false,
-			warning: "",
-			windows_warning: "",
-			aliases: &[],
-		};
-		let specs = [
-			row(Key::PerfCheckHardware, 0),
-			row(Key::Transparency, 0),
-			row(Key::Opacity, 1),
-			row(Key::BackdropBlur, 1),
-		];
+		let row = |key: Key, indent: u8| super::Spec { label: "", key, kind: Kind::Toggle, tab: 0, help: "", indent, beside: false, revert_help: "", windows: false, macos: false, not_macos: false, warning: "", windows_warning: "", aliases: &[] };
+		let specs = [row(Key::PerfCheckHardware, 0), row(Key::Transparency, 0), row(Key::Opacity, 1), row(Key::BackdropBlur, 1)];
 		assert!(!SettingsDialog::leads_subgroup(&specs, 0, 0));
 		assert!(SettingsDialog::leads_subgroup(&specs, 1, 0));
 		assert_eq!(SettingsDialog::gap_above(&specs, 0, 0, None), 0.0);
-		assert_eq!(
-			SettingsDialog::gap_above(&specs, 1, 0, Some(&specs[0])),
-			lay().subgroup_gap
-		);
+		assert_eq!(SettingsDialog::gap_above(&specs, 1, 0, Some(&specs[0])), lay().subgroup_gap);
 		assert!(lay().subgroup_gap > 0.0);
-		assert_eq!(
-			SettingsDialog::gap_above(&specs, 2, 0, Some(&specs[1])),
-			0.0
-		);
-		assert_eq!(
-			SettingsDialog::gap_above(&specs, 3, 0, Some(&specs[2])),
-			0.0
-		);
+		assert_eq!(SettingsDialog::gap_above(&specs, 2, 0, Some(&specs[1])), 0.0);
+		assert_eq!(SettingsDialog::gap_above(&specs, 3, 0, Some(&specs[2])), 0.0);
 	}
 
 	// Which tab a row is on and which sub-group it belongs to is the design. The
@@ -12605,12 +10022,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn each_tab_has_its_designed_sub_groups() {
 		let specs = &super::ui().specs;
-		let at = |key: Key| {
-			specs
-				.iter()
-				.position(|s| s.key == key)
-				.unwrap_or_else(|| panic!("no {} row", key.name()))
-		};
+		let at = |key: Key| specs.iter().position(|s| s.key == key).unwrap_or_else(|| panic!("no {} row", key.name()));
 		// the rows one step under a leader, down to the first one back at its
 		// depth; half a line's indent means nothing, so those are stepped over.
 		// A row deeper still belongs to a group of its own, listed below.
@@ -12628,112 +10040,13 @@ mod tests {
 				})
 				.collect()
 		};
-		let groups: &[(&str, Key, &[Key])] = &[
-			(
-				"Silk",
-				Key::TextScrim,
-				&[
-					Key::ScrimStrength,
-					Key::ScrimRadius,
-					Key::ScrimSoftness,
-					Key::ScrimFunction,
-					Key::MinContrast,
-				],
-			),
-			(
-				"Silk",
-				Key::SmoothScroll,
-				&[
-					Key::ScrollEaseIn,
-					Key::ScrollRampUp,
-					Key::SingleScreenTau,
-					Key::ScrollRampDown,
-					Key::ScrollEaseOut,
-				],
-			),
-			(
-				"Background",
-				Key::Transparency,
-				&[Key::Opacity, Key::BackdropBlur],
-			),
-			(
-				"Background",
-				Key::BgEnabled,
-				&[
-					Key::BgImage,
-					Key::BgFit,
-					Key::BgHonorXmp,
-					Key::BgRotate,
-					Key::BgOpacity,
-					Key::BgBlur,
-					Key::BgHonorXmpLook,
-					Key::BgContrastMask,
-				],
-			),
-			(
-				"Background",
-				Key::BgContrastMask,
-				&[
-					Key::BgContrastSize,
-					Key::BgContrastStrength,
-					Key::BgContrastAuto,
-				],
-			),
-			(
-				"Cursor",
-				Key::CursorBlinking,
-				&[
-					Key::CursorBlinkRate,
-					Key::CursorAnimation,
-					Key::CursorResume,
-				],
-			),
-			(
-				"Movement",
-				Key::Scrollbar,
-				&[Key::ScrollbarThickness, Key::ScrollbarAutoHide],
-			),
-			("Movement", Key::Minimap, &[Key::MinimapWidth]),
-			("Themes", Key::ColBg, &[Key::ColFromWallpaper]),
-			(
-				"Themes",
-				Key::ColFromWallpaper,
-				&[Key::ColFg, Key::ColCursor],
-			),
-			(
-				"Themes",
-				Key::ColDialogBg,
-				&[
-					Key::ColDialogFg,
-					Key::ColMenuBg,
-					Key::ColMenuFg,
-					Key::ColGutter,
-					Key::ColHighlight,
-					Key::ColFocus,
-				],
-			),
-			(
-				"Window",
-				Key::RememberSize,
-				&[Key::RememberPerMonitor, Key::Columns, Key::Rows],
-			),
-		];
+		let groups: &[(&str, Key, &[Key])] = &[("Silk", Key::TextScrim, &[Key::ScrimStrength, Key::ScrimRadius, Key::ScrimSoftness, Key::ScrimFunction, Key::MinContrast]), ("Silk", Key::SmoothScroll, &[Key::ScrollEaseIn, Key::ScrollRampUp, Key::SingleScreenTau, Key::ScrollRampDown, Key::ScrollEaseOut]), ("Background", Key::Transparency, &[Key::Opacity, Key::BackdropBlur]), ("Background", Key::BgEnabled, &[Key::BgImage, Key::BgFit, Key::BgHonorXmp, Key::BgRotate, Key::BgOpacity, Key::BgBlur, Key::BgHonorXmpLook, Key::BgContrastMask]), ("Background", Key::BgContrastMask, &[Key::BgContrastSize, Key::BgContrastStrength, Key::BgContrastAuto]), ("Cursor", Key::CursorBlinking, &[Key::CursorBlinkRate, Key::CursorAnimation, Key::CursorResume]), ("Movement", Key::Scrollbar, &[Key::ScrollbarThickness, Key::ScrollbarAutoHide]), ("Movement", Key::Minimap, &[Key::MinimapWidth]), ("Themes", Key::ColBg, &[Key::ColFromWallpaper]), ("Themes", Key::ColFromWallpaper, &[Key::ColFg, Key::ColCursor]), ("Themes", Key::ColDialogBg, &[Key::ColDialogFg, Key::ColMenuBg, Key::ColMenuFg, Key::ColGutter, Key::ColHighlight, Key::ColFocus]), ("Window", Key::RememberSize, &[Key::RememberPerMonitor, Key::Columns, Key::Rows])];
 		for &(tab, lead, want) in groups {
 			let i = at(lead);
-			assert_eq!(
-				tab_titles()[specs[i].tab],
-				tab,
-				"{} left its tab",
-				lead.name()
-			);
+			assert_eq!(tab_titles()[specs[i].tab], tab, "{} left its tab", lead.name());
 			let got = members(i);
 			let names = |keys: &[Key]| keys.iter().map(|k| k.name()).collect::<Vec<_>>();
-			assert_eq!(
-				names(&got),
-				names(want),
-				"{}'s sub-group changed",
-				lead.name()
-			);
+			assert_eq!(names(&got), names(want), "{}'s sub-group changed", lead.name());
 		}
 		// the whole Cursor tab, in order; the scrim and outline pair has no key
 		// of its own, so it goes by its first part
@@ -12747,19 +10060,7 @@ mod tests {
 				_ => s.key.name(),
 			})
 			.collect();
-		assert_eq!(
-			rows,
-			[
-				"CursorHeight",
-				"CursorWidth",
-				"CursorBlinking",
-				"CursorBlinkRate",
-				"CursorAnimation",
-				"CursorResume",
-				"CursorScrim",
-				"CopyOnSelect",
-			]
-		);
+		assert_eq!(rows, ["CursorHeight", "CursorWidth", "CursorBlinking", "CursorBlinkRate", "CursorAnimation", "CursorResume", "CursorScrim", "CopyOnSelect",]);
 		// the margin stands on its own after the size group
 		let margin = &specs[at(Key::Margin)];
 		assert_eq!(tab_titles()[margin.tab], "Window");
@@ -12773,15 +10074,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_slider_names_its_unit_and_pixels_step_whole() {
 		// counts and sizes whose label already says what they are
-		let unitless = [
-			Key::FontSize,
-			Key::LineHeight,
-			Key::WheelLines,
-			Key::Columns,
-			Key::Rows,
-			Key::IdleHiddenMin,
-			Key::IdleMin,
-		];
+		let unitless = [Key::FontSize, Key::LineHeight, Key::WheelLines, Key::Columns, Key::Rows, Key::IdleHiddenMin, Key::IdleMin];
 		let specs = &super::ui().specs;
 		for s in specs {
 			let Kind::Slider { int, .. } = s.kind else {
@@ -12790,29 +10083,11 @@ mod tests {
 			if s.label.ends_with(" px") {
 				assert!(int, "{} steps in fractions of a pixel", s.label);
 			}
-			assert!(
-				[" %", " px", " ms", " s"]
-					.iter()
-					.any(|unit| s.label.ends_with(unit))
-					|| unitless.contains(&s.key),
-				"{} names no unit",
-				s.label
-			);
+			assert!([" %", " px", " ms", " s"].iter().any(|unit| s.label.ends_with(unit)) || unitless.contains(&s.key), "{} names no unit", s.label);
 		}
 		let label = |key: Key| specs.iter().find(|s| s.key == key).unwrap().label;
-		for (key, unit) in [
-			(Key::BgBlur, " px"),
-			(Key::ScrollbarThickness, " px"),
-			(Key::ScrimRadius, " px"),
-			(Key::Outline, " px"),
-			(Key::CursorBlinkRate, " s"),
-			(Key::CursorResume, " s"),
-		] {
-			assert!(
-				label(key).ends_with(unit),
-				"{} should end in{unit}",
-				label(key)
-			);
+		for (key, unit) in [(Key::BgBlur, " px"), (Key::ScrollbarThickness, " px"), (Key::ScrimRadius, " px"), (Key::Outline, " px"), (Key::CursorBlinkRate, " s"), (Key::CursorResume, " s")] {
+			assert!(label(key).ends_with(unit), "{} should end in{unit}", label(key));
 		}
 	}
 
@@ -12841,11 +10116,7 @@ mod tests {
 						_ => continue,
 					};
 					let mid = d.row_y(i) + d.row_screen_h(i) / 2.0;
-					assert!(
-						(r.y + r.h / 2.0 - mid).abs() < 0.5,
-						"{} rides off its row's center at line height {line_h}",
-						spec.label
-					);
+					assert!((r.y + r.h / 2.0 - mid).abs() < 0.5, "{} rides off its row's center at line height {line_h}", spec.label);
 					checked += 1;
 				}
 			}
@@ -12883,11 +10154,7 @@ mod tests {
 		let gray = super::config::srgb_f32(super::dlg().panel_border);
 		assert_ne!(hl, gray);
 		for (action, r, label) in d.buttons() {
-			let want = if action == super::Action::Ok {
-				hl
-			} else {
-				gray
-			};
+			let want = if action == super::Action::Ok { hl } else { gray };
 			let edges = edge_colors(&fixed, r, 1.0);
 			assert_eq!(edges.len(), 4, "{label} has no outline");
 			assert!(edges.iter().all(|&c| c == want), "{label}'s outline");
@@ -12902,14 +10169,8 @@ mod tests {
 		let measure = |s: &str| s.chars().count() as f32 * 7.0;
 		let texts = d.texts_dip(d.line_h, measure);
 		for (_, r, label) in d.buttons() {
-			let t = texts
-				.iter()
-				.find(|t| t.text == label && r.contains(t.x, t.y + d.line_h / 2.0))
-				.unwrap_or_else(|| panic!("{label} has no caption"));
-			assert!(
-				(t.x + measure(label) / 2.0 - (r.x + r.w / 2.0)).abs() < 0.5,
-				"{label} is off center"
-			);
+			let t = texts.iter().find(|t| t.text == label && r.contains(t.x, t.y + d.line_h / 2.0)).unwrap_or_else(|| panic!("{label} has no caption"));
+			assert!((t.x + measure(label) / 2.0 - (r.x + r.w / 2.0)).abs() < 0.5, "{label} is off center");
 		}
 	}
 
@@ -12927,10 +10188,7 @@ mod tests {
 			for (i, spec) in SettingsDialog::visible(d.specs, tab) {
 				if let (Kind::Header(label), Some(p)) = (&spec.kind, prev) {
 					let gap = d.row_y(i) - (d.row_y(p) + d.row_screen_h(p));
-					assert!(
-						(gap - lay().header_gap).abs() < 0.01,
-						"{label} is {gap} below the section above it"
-					);
+					assert!((gap - lay().header_gap).abs() < 0.01, "{label} is {gap} below the section above it");
 					checked += 1;
 				}
 				prev = Some(i);
@@ -12954,23 +10212,10 @@ mod tests {
 		let text = super::config::srgb_f32(super::dlg().text);
 		let underlines = |d: &SettingsDialog| {
 			let (fixed, _) = d.rects_dip(d.line_h, |s: &str| s.chars().count() as f32 * 7.0);
-			d.buttons()
-				.iter()
-				.filter(|(_, r, _)| {
-					fixed.iter().any(|q| {
-						q.color == text
-							&& (q.size[1] - 1.5).abs() < 0.01
-							&& r.contains(q.pos[0], q.pos[1])
-					})
-				})
-				.count()
+			d.buttons().iter().filter(|(_, r, _)| fixed.iter().any(|q| q.color == text && (q.size[1] - 1.5).abs() < 0.01 && r.contains(q.pos[0], q.pos[1]))).count()
 		};
 		d.set_mods(true, false, false);
-		assert_eq!(
-			underlines(&d),
-			3,
-			"Alt held, and not every button underlined"
-		);
+		assert_eq!(underlines(&d), 3, "Alt held, and not every button underlined");
 		d.set_mods(false, false, false);
 		assert_eq!(underlines(&d), 0, "underlined with Alt up");
 	}
@@ -12994,20 +10239,9 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn transparency_is_the_last_group_on_the_background_tab() {
 		let specs = &super::ui().specs;
-		let background = tab_titles()
-			.iter()
-			.position(|t| *t == "Background")
-			.expect("a Background tab");
-		let keys: Vec<Key> = specs
-			.iter()
-			.filter(|s| s.tab == background && !matches!(s.kind, Kind::Header(_)))
-			.map(|s| s.key)
-			.collect();
-		assert_eq!(
-			keys[keys.len() - 3..],
-			[Key::Transparency, Key::Opacity, Key::BackdropBlur],
-			"{keys:?}"
-		);
+		let background = tab_titles().iter().position(|t| *t == "Background").expect("a Background tab");
+		let keys: Vec<Key> = specs.iter().filter(|s| s.tab == background && !matches!(s.kind, Kind::Header(_))).map(|s| s.key).collect();
+		assert_eq!(keys[keys.len() - 3..], [Key::Transparency, Key::Opacity, Key::BackdropBlur], "{keys:?}");
 	}
 
 	// Commented out 20261006: "Free resources when idle" has a warning mark too
@@ -13179,10 +10413,7 @@ mod tests {
 
 	// How many rows on `tab` draw a warning mark.
 	fn warned_on(d: &SettingsDialog, tab: usize) -> usize {
-		d.specs
-			.iter()
-			.filter(|s| s.tab == tab && !s.warning.is_empty())
-			.count()
+		d.specs.iter().filter(|s| s.tab == tab && !s.warning.is_empty()).count()
 	}
 
 	// A warning mark is on 4 rows: Transparency on the Background tab, Per
@@ -13200,38 +10431,13 @@ mod tests {
 			.specs
 			.iter()
 			.map(|s| {
-				let mark = if s.warning.is_empty() {
-					0.0
-				} else {
-					super::warning_room(line_h)
-				};
+				let mark = if s.warning.is_empty() { 0.0 } else { super::warning_room(line_h) };
 				chars7(s.label) + f32::from(s.indent) * lay().indent + mark
 			})
 			.fold(0.0f32, f32::max)
 			+ lay().label_gap;
-		let mut d = SettingsDialog::new(
-			0.0,
-			0.0,
-			line_h,
-			Chrome {
-				label_w,
-				btn_w: 80.0,
-				row_btn_w: 90.0,
-				value_w: 0.0,
-				tab_ws: vec![90.0; tab_nodes().len()],
-				label_ws: labels7(1.0),
-				..Chrome::default()
-			},
-			f32::MAX,
-			4000.0,
-			1.0,
-		);
-		let warned: Vec<Key> = d
-			.specs
-			.iter()
-			.filter(|s| !s.warning.is_empty())
-			.map(|s| s.key)
-			.collect();
+		let mut d = SettingsDialog::new(0.0, 0.0, line_h, Chrome { label_w, btn_w: 80.0, row_btn_w: 90.0, value_w: 0.0, tab_ws: vec![90.0; tab_nodes().len()], label_ws: labels7(1.0), ..Chrome::default() }, f32::MAX, 4000.0, 1.0);
+		let warned: Vec<Key> = d.specs.iter().filter(|s| !s.warning.is_empty()).map(|s| s.key).collect();
 		// Changed 20261017: the tmux switch warns too, above Resource use on the
 		// Program tab, so that tab has 2 marks.
 		// assert_eq!(warned, [Key::Transparency, Key::IdleRelease]);
@@ -13241,15 +10447,7 @@ mod tests {
 		// 	warned,
 		// 	[Key::Transparency, Key::TmuxNewSession, Key::IdleRelease]
 		// );
-		assert_eq!(
-			warned,
-			[
-				Key::Transparency,
-				Key::RememberPerMonitor,
-				Key::TmuxNewSession,
-				Key::IdleRelease
-			]
-		);
+		assert_eq!(warned, [Key::Transparency, Key::RememberPerMonitor, Key::TmuxNewSession, Key::IdleRelease]);
 		let mut marked = Vec::new();
 		for key in warned {
 			let i = d.specs.iter().position(|s| s.key == key).unwrap();
@@ -13257,47 +10455,22 @@ mod tests {
 			marked.push(d.tab);
 			let mark = d.warning_box(i, &mut chars7);
 			assert!(mark.x > d.label_x(i) + chars7(d.specs[i].label));
-			assert!(
-				mark.x + mark.w <= d.checkbox(i).x,
-				"{}'s mark runs into the checkbox",
-				key.name()
-			);
+			assert!(mark.x + mark.w <= d.checkbox(i).x, "{}'s mark runs into the checkbox", key.name());
 			let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
-			let triangles: Vec<_> = rows
-				.iter()
-				.filter(|r| r.mode() == QuadMode::Triangle)
-				.collect();
+			let triangles: Vec<_> = rows.iter().filter(|r| r.mode() == QuadMode::Triangle).collect();
 			// assert_eq!(triangles.len(), 1, "one mark on {}'s tab", key.name());
 			// assert!((triangles[0].pos[0] - mark.x).abs() < 0.01);
 			let on_tab = warned_on(&d, d.tab);
-			assert_eq!(
-				triangles.len(),
-				on_tab,
-				"a mark per warned row on {}'s tab",
-				key.name()
-			);
-			assert!(
-				triangles.iter().any(|t| (t.pos[0] - mark.x).abs() < 0.01),
-				"{}'s mark",
-				key.name()
-			);
+			assert_eq!(triangles.len(), on_tab, "a mark per warned row on {}'s tab", key.name());
+			assert!(triangles.iter().any(|t| (t.pos[0] - mark.x).abs() < 0.01), "{}'s mark", key.name());
 			let help = d.specs[i].help;
-			assert!(
-				help.ends_with(d.specs[i].warning) && help.len() > d.specs[i].warning.len(),
-				"{}: {help}",
-				key.name()
-			);
+			assert!(help.ends_with(d.specs[i].warning) && help.len() > d.specs[i].warning.len(), "{}: {help}", key.name());
 			let bx = d.checkbox(i);
 			let cy = mark.y + mark.h / 2.0;
 			// at its default, so the tip has no value lines (G6)
 			d.revert(key);
 			for x in [d.label_x(i) + 2.0, mark.x + mark.w / 2.0, bx.x + bx.w / 2.0] {
-				assert_eq!(
-					d.hover_tip_dip(x, cy).map(|(tip, _)| tip_text(tip)),
-					Some(help),
-					"{} at x {x}",
-					key.name()
-				);
+				assert_eq!(d.hover_tip_dip(x, cy).map(|(tip, _)| tip_text(tip)), Some(help), "{} at x {x}", key.name());
 			}
 		}
 		assert_eq!(tab_titles()[marked[0]], "Background");
@@ -13312,19 +10485,11 @@ mod tests {
 		assert!(at(Key::RememberPerMonitor).contains("window manager"));
 		assert!(at(Key::IdleRelease).contains("driver"));
 		// the memory half is Windows' alone
-		assert_eq!(
-			at(Key::Transparency).contains("memory"),
-			cfg!(windows),
-			"{}",
-			at(Key::Transparency)
-		);
+		assert_eq!(at(Key::Transparency).contains("memory"), cfg!(windows), "{}", at(Key::Transparency));
 		for tab in (0..tab_titles().len()).filter(|t| !marked.contains(t)) {
 			d.tab = tab;
 			let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
-			assert!(
-				!rows.iter().any(|r| r.mode() == QuadMode::Triangle),
-				"a triangle on tab {tab}"
-			);
+			assert!(!rows.iter().any(|r| r.mode() == QuadMode::Triangle), "a triangle on tab {tab}");
 		}
 	}
 
@@ -13367,26 +10532,10 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_resource_use_group_ends_the_program_tab() {
 		let specs = &super::ui().specs;
-		let head = specs
-			.iter()
-			.position(|s| matches!(s.kind, Kind::Header(label) if label == "Resource use"))
-			.expect("a Resource use heading");
+		let head = specs.iter().position(|s| matches!(s.kind, Kind::Header(label) if label == "Resource use")).expect("a Resource use heading");
 		assert_eq!(tab_titles()[specs[head].tab], "Program");
-		let rest: Vec<(Key, u8)> = specs[head + 1..]
-			.iter()
-			.take_while(|s| s.tab == specs[head].tab)
-			.map(|s| (s.key, s.indent))
-			.collect();
-		assert_eq!(
-			rest,
-			[
-				(Key::IdleRelease, 0),
-				(Key::IdleHiddenMin, 1),
-				(Key::IdleMin, 1),
-				(Key::SoftwareRendering, 0),
-			],
-			"nothing else in the group, and nothing after it on the tab"
-		);
+		let rest: Vec<(Key, u8)> = specs[head + 1..].iter().take_while(|s| s.tab == specs[head].tab).map(|s| (s.key, s.indent)).collect();
+		assert_eq!(rest, [(Key::IdleRelease, 0), (Key::IdleHiddenMin, 1), (Key::IdleMin, 1), (Key::SoftwareRendering, 0),], "nothing else in the group, and nothing after it on the tab");
 	}
 
 	// The tmux group opens the Program tab, above Resource use: the switch, then
@@ -13397,37 +10546,19 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_tmux_group_opens_the_program_tab_with_its_two_rows_under_the_switch() {
 		let specs = &super::ui().specs;
-		let head = specs
-			.iter()
-			.position(|s| matches!(s.kind, Kind::Header(label) if label == "Tmux"))
-			.expect("a Tmux heading");
+		let head = specs.iter().position(|s| matches!(s.kind, Kind::Header(label) if label == "Tmux")).expect("a Tmux heading");
 		assert_eq!(tab_titles()[specs[head].tab], "Program");
 		let first = specs.iter().position(|s| s.tab == specs[head].tab).unwrap();
 		assert_eq!(first, head, "the first group on the tab");
-		let rows: Vec<(Key, u8)> = specs[head + 1..head + 4]
-			.iter()
-			.map(|s| (s.key, s.indent))
-			.collect();
-		assert_eq!(
-			rows,
-			[
-				(Key::TmuxNewSession, 0),
-				(Key::TmuxSessionName, 1),
-				(Key::TmuxOnClose, 1),
-			]
-		);
+		let rows: Vec<(Key, u8)> = specs[head + 1..head + 4].iter().map(|s| (s.key, s.indent)).collect();
+		assert_eq!(rows, [(Key::TmuxNewSession, 0), (Key::TmuxSessionName, 1), (Key::TmuxOnClose, 1),]);
 		assert!(matches!(specs[head + 4].kind, Kind::Header(label) if label == "Resource use"));
 		for spec in &specs[head + 2..head + 4] {
 			assert!(super::ui().rel(spec.key).gate.is_none(), "{:?}", spec.key);
 		}
 		let close = &specs[head + 3];
-		assert!(
-			matches!(&close.kind, Kind::Radio(options) if options[..] == ["Detach", "End", "Prompt"])
-		);
-		assert!(
-			!specs[head + 1].warning.is_empty(),
-			"the switch has a warning mark"
-		);
+		assert!(matches!(&close.kind, Kind::Radio(options) if options[..] == ["Detach", "End", "Prompt"]));
+		assert!(!specs[head + 1].warning.is_empty(), "the switch has a warning mark");
 	}
 
 	// The Option key group comes first on the Keys tab, and its choice is saved
@@ -13438,30 +10569,14 @@ mod tests {
 	fn the_option_as_alt_pick_is_the_setting_under_keys() {
 		use crate::input::OptionAlt;
 		let mut d = mk_dialog(4000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::OptionAsAlt)
-			.unwrap();
+		let i = d.specs.iter().position(|s| s.key == Key::OptionAsAlt).unwrap();
 		assert!(matches!(d.specs[i - 1].kind, Kind::Header(label) if label == "Keyboard"));
 		assert!(d.specs[..i - 1].iter().all(|s| s.tab != d.specs[i].tab));
-		let choices = [
-			"Types special characters",
-			"Left acts as Alt",
-			"Right acts as Alt",
-			"Both act as Alt",
-		];
+		let choices = ["Types special characters", "Left acts as Alt", "Right acts as Alt", "Both act as Alt"];
 		assert!(matches!(&d.specs[i].kind, Kind::Dropdown(options) if options[..] == choices));
-		assert_eq!(
-			super::ui().settings_of(Key::OptionAsAlt),
-			["keys.option_as_alt"]
-		);
+		assert_eq!(super::ui().settings_of(Key::OptionAsAlt), ["keys.option_as_alt"]);
 		assert_eq!(d.get_radio(Key::OptionAsAlt), 0, "off by default");
-		for (idx, want) in [
-			(1, OptionAlt::Left),
-			(3, OptionAlt::Both),
-			(0, OptionAlt::Off),
-		] {
+		for (idx, want) in [(1, OptionAlt::Left), (3, OptionAlt::Both), (0, OptionAlt::Off)] {
 			d.set_radio(Key::OptionAsAlt, idx);
 			assert_eq!(d.edited.option_as_alt, want);
 			assert_eq!(d.get_radio(Key::OptionAsAlt), idx);
@@ -13477,29 +10592,18 @@ mod tests {
 		assert_eq!(super::no_tmux_tip(true), None);
 		assert!(super::no_tmux_tip(false).is_some_and(|tip| tip.starts_with("tmux ")));
 		let mut d = mk_dialog(4000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::TmuxNewSession)
-			.unwrap();
+		let i = d.specs.iter().position(|s| s.key == Key::TmuxNewSession).unwrap();
 		d.tab = d.specs[i].tab;
 		let keys = [Key::TmuxNewSession, Key::TmuxSessionName, Key::TmuxOnClose];
 		assert!(keys.iter().all(|&key| !d.disabled(key)));
 		let bx = d.checkbox(i);
 		let y = bx.y + bx.h / 2.0;
-		let tip = |d: &SettingsDialog| {
-			d.hover_tip_dip(d.label_x(i) + 2.0, y)
-				.map(|(tip, _)| tip_text(tip).to_string())
-		};
+		let tip = |d: &SettingsDialog| d.hover_tip_dip(d.label_x(i) + 2.0, y).map(|(tip, _)| tip_text(tip).to_string());
 		assert!(tip(&d).is_some_and(|t| t.contains("Pros:") && t.contains("Cons:")));
 		let mut measure = |s: &str| s.len() as f32;
 		let before = d.get_toggle(Key::TmuxNewSession);
 		d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
-		assert_ne!(
-			d.get_toggle(Key::TmuxNewSession),
-			before,
-			"a click switches it"
-		);
+		assert_ne!(d.get_toggle(Key::TmuxNewSession), before, "a click switches it");
 		d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
 		assert_eq!(d.get_toggle(Key::TmuxNewSession), before);
 		d.set_tmux_found(false);
@@ -13507,11 +10611,7 @@ mod tests {
 		assert!(!d.disabled(Key::IdleRelease));
 		assert_eq!(tip(&d).as_deref(), super::no_tmux_tip(false));
 		d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
-		assert_eq!(
-			d.get_toggle(Key::TmuxNewSession),
-			before,
-			"a grayed one doesn't"
-		);
+		assert_eq!(d.get_toggle(Key::TmuxNewSession), before, "a grayed one doesn't");
 	}
 
 	// A desktop that never says a window is hidden grays "Minutes when hidden"
@@ -13525,11 +10625,7 @@ mod tests {
 		assert!(super::hidden_wait_tip(false).is_some_and(|tip| tip.contains("Wayland")));
 		let mut d = mk_dialog(4000.0);
 		d.edited.idle_release = true;
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::IdleHiddenMin)
-			.unwrap();
+		let i = d.specs.iter().position(|s| s.key == Key::IdleHiddenMin).unwrap();
 		d.tab = d.specs[i].tab;
 		assert!(!d.disabled(Key::IdleHiddenMin));
 		d.set_sees_hidden(false);
@@ -13538,11 +10634,7 @@ mod tests {
 		assert!(!d.disabled(Key::IdleRelease));
 		let track = d.track(i);
 		let y = track.y + track.h / 2.0;
-		assert_eq!(
-			d.hover_tip_dip(d.label_x(i) + 2.0, y)
-				.map(|(tip, _)| tip_text(tip)),
-			super::hidden_wait_tip(false)
-		);
+		assert_eq!(d.hover_tip_dip(d.label_x(i) + 2.0, y).map(|(tip, _)| tip_text(tip)), super::hidden_wait_tip(false));
 	}
 
 	// A triangle's params.y is a count of quarter-turns, not a length, so the
@@ -13553,18 +10645,10 @@ mod tests {
 	fn a_triangle_keeps_its_direction_at_any_scale() {
 		for scale in [1.0, 1.25, 1.5, 2.0] {
 			let mut d = mk_dialog_at(4000.0, scale);
-			let i = d
-				.specs
-				.iter()
-				.position(|s| s.key == Key::Transparency)
-				.unwrap();
+			let i = d.specs.iter().position(|s| s.key == Key::Transparency).unwrap();
 			d.tab = d.specs[i].tab;
 			let (_, rows) = d.rects(18.0 * scale, |s| chars7(s) * scale);
-			let turns: Vec<f32> = rows
-				.iter()
-				.filter(|r| r.mode() == QuadMode::Triangle)
-				.map(|r| r.params[1])
-				.collect();
+			let turns: Vec<f32> = rows.iter().filter(|r| r.mode() == QuadMode::Triangle).map(|r| r.params[1]).collect();
 			assert_eq!(turns, [3.0], "at {scale}x");
 		}
 	}
@@ -13576,18 +10660,12 @@ mod tests {
 		d.mac = mac;
 		d.orig.keys = crate::keys::Bindings::defaults(mac);
 		d.edited.keys = crate::keys::Bindings::defaults(mac);
-		let tab = tab_titles()
-			.iter()
-			.position(|title| *title == "Keys")
-			.expect("a Keys tab");
+		let tab = tab_titles().iter().position(|title| *title == "Keys").expect("a Keys tab");
 		d.tab = tab;
 		(d, tab)
 	}
 	fn row_of(d: &SettingsDialog, key: Key) -> usize {
-		d.specs
-			.iter()
-			.position(|spec| spec.key == key)
-			.unwrap_or_else(|| panic!("no row for {}", key.name()))
+		d.specs.iter().position(|spec| spec.key == key).unwrap_or_else(|| panic!("no row for {}", key.name()))
 	}
 	fn shown_on(d: &SettingsDialog, i: usize) -> String {
 		let (chords, _, note) = d.hotkey_text(i);
@@ -13623,15 +10701,9 @@ mod tests {
 		assert_eq!(d.capture, Some(i), "a bare letter is refused");
 		assert!(shown_on(&d, i).contains("R needs Ctrl, Alt, or Super held"));
 		assert!(d.capture_key(&Pressed::Named(NamedKey::Tab), ModifiersState::CONTROL));
-		assert_eq!(
-			d.capture, None,
-			"Ctrl+Tab is a chord here, not a tab switch"
-		);
+		assert_eq!(d.capture, None, "Ctrl+Tab is a chord here, not a tab switch");
 		assert_eq!(shown_on(&d, i), "Ctrl+Tab | ");
-		assert_eq!(
-			d.tab,
-			tab_titles().iter().position(|t| *t == "Keys").unwrap()
-		);
+		assert_eq!(d.tab, tab_titles().iter().position(|t| *t == "Keys").unwrap());
 
 		// Enter starts it as well, and Escape leaves the row as it was
 		assert_eq!(d.key_enter(), super::Action::None);
@@ -13645,10 +10717,7 @@ mod tests {
 		assert!(!d.is_default(Key::HotkeySplitRight));
 		// Backspace turns it off, which is set too, and "Off" says so
 		d.key_space();
-		assert!(d.capture_key(
-			&Pressed::Named(NamedKey::Backspace),
-			ModifiersState::empty()
-		));
+		assert!(d.capture_key(&Pressed::Named(NamedKey::Backspace), ModifiersState::empty()));
 		assert!(d.edited.keys.chords(Hotkey::SplitRight).is_empty());
 		assert_eq!(d.edited.keys.own(Hotkey::SplitRight), Some(&[][..]));
 		let (shown, off, _) = d.hotkey_text(i);
@@ -13685,18 +10754,9 @@ mod tests {
 		let ctrl_shift = ModifiersState::CONTROL.union(ModifiersState::SHIFT);
 		d.capture_start(close_pane);
 		assert!(d.capture_key(&Pressed::Character("W".into()), ctrl_shift));
-		assert_eq!(
-			shown_on(&d, close_tab),
-			"Ctrl+F4 | Ctrl+Shift+W is set for Close pane"
-		);
-		assert_eq!(
-			shown_on(&d, close_pane),
-			"Ctrl+Shift+W | took Ctrl+Shift+W from Close tab"
-		);
-		assert!(
-			d.is_default(Key::HotkeyCloseTab),
-			"close_tab itself was not set"
-		);
+		assert_eq!(shown_on(&d, close_tab), "Ctrl+F4 | Ctrl+Shift+W is set for Close pane");
+		assert_eq!(shown_on(&d, close_pane), "Ctrl+Shift+W | took Ctrl+Shift+W from Close tab");
+		assert!(d.is_default(Key::HotkeyCloseTab), "close_tab itself was not set");
 
 		// set for one, then pressed for another: the latest press has it
 		let right = row_of(&d, Key::HotkeySplitRight);
@@ -13707,10 +10767,7 @@ mod tests {
 		d.capture_start(down);
 		assert!(d.capture_key(&alt_d, ModifiersState::ALT));
 		assert_eq!(shown_on(&d, down), "Alt+D | ");
-		assert_eq!(
-			shown_on(&d, right),
-			"Off | Alt+D is set for Split horizontal"
-		);
+		assert_eq!(shown_on(&d, right), "Off | Alt+D is set for Split horizontal");
 		assert_eq!(d.edited.keys.own(Hotkey::SplitRight), Some(&[][..]));
 		assert!(d.edited.keys.taken().iter().all(|t| !t.both_set));
 		// once the chord moves on again there is nothing left to say
@@ -13719,25 +10776,9 @@ mod tests {
 		assert_eq!(shown_on(&d, right), "Off | ");
 
 		// a pair set the same way in the file are both named
-		d.edited.keys = crate::keys::Bindings::with(
-			false,
-			&[
-				(
-					Hotkey::SplitDown,
-					vec![crate::keys::Chord::parse("Alt+D").unwrap()],
-				),
-				(
-					Hotkey::SplitRight,
-					vec![crate::keys::Chord::parse("Alt+D").unwrap()],
-				),
-			],
-		)
-		.0;
+		d.edited.keys = crate::keys::Bindings::with(false, &[(Hotkey::SplitDown, vec![crate::keys::Chord::parse("Alt+D").unwrap()]), (Hotkey::SplitRight, vec![crate::keys::Chord::parse("Alt+D").unwrap()])]).0;
 		d.moved.clear();
-		assert_eq!(
-			shown_on(&d, right),
-			"Alt+D | Alt+D is also set for Split horizontal"
-		);
+		assert_eq!(shown_on(&d, right), "Alt+D | Alt+D is also set for Split horizontal");
 		assert_eq!(shown_on(&d, down), "Off | Alt+D is set for Split vertical");
 	}
 
@@ -13755,10 +10796,7 @@ mod tests {
 		assert_eq!(shown_on(&d, prev), "Shift+Command+[ or Command+PageUp | ");
 		// Close pane had no Mac chord until 20261003
 		// assert_eq!(shown_on(&d, row_of(&d, Key::HotkeyClosePane)), "Off | ");
-		assert_eq!(
-			shown_on(&d, row_of(&d, Key::HotkeyClosePane)),
-			"Option+Command+W | "
-		);
+		assert_eq!(shown_on(&d, row_of(&d, Key::HotkeyClosePane)), "Option+Command+W | ");
 		d.capture_start(right);
 		assert!(d.capture_key(&Pressed::Character("r".into()), ModifiersState::empty()));
 		assert!(shown_on(&d, right).contains("R needs Control, Option, or Command held"));
@@ -13782,10 +10820,7 @@ mod tests {
 		assert!(d.capture_key(&Pressed::Character("W".into()), ctrl_shift));
 		let texts = d.texts_dip(d.line_h, chars7);
 		let r = d.textbox(close_tab);
-		let in_box: Vec<&super::TextItem> = texts
-			.iter()
-			.filter(|t| t.x >= r.x && t.x < r.x + r.w && t.y >= r.y - 1.0 && t.y < r.y + r.h)
-			.collect();
+		let in_box: Vec<&super::TextItem> = texts.iter().filter(|t| t.x >= r.x && t.x < r.x + r.w && t.y >= r.y - 1.0 && t.y < r.y + r.h).collect();
 		assert_eq!(in_box.len(), 2, "chords and note");
 		assert_eq!(in_box[0].text, "Ctrl+F4");
 		assert_eq!(in_box[0].color, super::dlg().text);
@@ -13806,21 +10841,14 @@ mod tests {
 		let _guard = config::test_config_lock();
 		let _ = config::settings(); // memoize before the override goes in
 		let mac = cfg!(target_os = "macos");
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_keystab_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_keystab_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let _ = std::fs::write(&path, "");
 		config::set_config_override(path.clone());
 		config::reload_from_disk(); // lays the template down
 		let pristine = std::fs::read_to_string(&path).unwrap();
-		let shipped = format!(
-			"# close_pane: \"{}\"  ## Default",
-			crate::keys::value_text(
-				crate::keys::Bindings::defaults(mac).chords(crate::input::Hotkey::ClosePane),
-				mac
-			)
-		);
+		let shipped = format!("# close_pane: \"{}\"  ## Default", crate::keys::value_text(crate::keys::Bindings::defaults(mac).chords(crate::input::Hotkey::ClosePane), mac));
 		assert!(pristine.contains(&shipped), "{pristine}");
 
 		let (mut d, _) = keys_dialog(mac);
@@ -13829,35 +10857,18 @@ mod tests {
 		let i = row_of(&d, Key::HotkeyClosePane);
 		d.capture_start(i);
 		// a chord other than the default, which on a Mac is Option+Command+W
-		let (key, mods) = if mac {
-			("W", ModifiersState::SUPER.union(ModifiersState::SHIFT))
-		} else {
-			("W", ModifiersState::CONTROL.union(ModifiersState::SHIFT))
-		};
+		let (key, mods) = if mac { ("W", ModifiersState::SUPER.union(ModifiersState::SHIFT)) } else { ("W", ModifiersState::CONTROL.union(ModifiersState::SHIFT)) };
 		assert!(d.capture_key(&Pressed::Character(key.into()), mods));
-		let value =
-			crate::keys::value_text(d.edited.keys.chords(crate::input::Hotkey::ClosePane), mac);
+		let value = crate::keys::value_text(d.edited.keys.chords(crate::input::Hotkey::ClosePane), mac);
 		assert!(config::persist(&d.orig, &d.edited));
 		config::revert_keys(&d.take_reverted());
 		let saved = std::fs::read_to_string(&path).unwrap();
 		// only the hotkey that was set is in the file; the one that lost a
 		// chord to it isn't
-		let active = |text: &str| -> Vec<String> {
-			text.lines()
-				.map(str::trim)
-				.filter(|line| {
-					crate::keys::config_paths()
-						.any(|(_, p)| line.starts_with(&format!("{}:", &p["keys.".len()..])))
-				})
-				.map(String::from)
-				.collect()
-		};
+		let active = |text: &str| -> Vec<String> { text.lines().map(str::trim).filter(|line| crate::keys::config_paths().any(|(_, p)| line.starts_with(&format!("{}:", &p["keys.".len()..])))).map(String::from).collect() };
 		let lines = active(&saved);
 		assert_eq!(lines.len(), 1, "{saved}");
-		let written = lines[0]
-			.trim_start_matches("close_pane:")
-			.trim()
-			.trim_matches('"');
+		let written = lines[0].trim_start_matches("close_pane:").trim().trim_matches('"');
 		assert_eq!(written, value);
 
 		// the same as uncommenting the line and typing the chord in
@@ -13889,11 +10900,7 @@ mod tests {
 			d.set_hotkey(crate::input::Hotkey::Quit, vec![chord]);
 			assert!(config::persist(&d.orig, &d.edited), "{sign}");
 			let back = config::reload_from_disk();
-			assert_eq!(
-				back.keys.own(crate::input::Hotkey::Quit),
-				Some(&[chord][..]),
-				"{sign}"
-			);
+			assert_eq!(back.keys.own(crate::input::Hotkey::Quit), Some(&[chord][..]), "{sign}");
 			let _ = std::fs::write(&path, &pristine);
 			config::reload_from_disk();
 		}
@@ -13902,31 +10909,13 @@ mod tests {
 
 	// A tree of the test's own over the real leaves, on the side asked for; both
 	// go back when the guard drops. It has 2 parents, where SilkTerm's own has one.
-	const NESTED: &[&str] = &[
-		"Silk",
-		"Look",
-		"Look/Themes",
-		"Look/Background",
-		"Look/Text",
-		"Look/Cursor",
-		"Movement",
-		"Window",
-		"Program",
-		"More",
-		"More/Shell",
-		"More/Keys",
-	];
+	const NESTED: &[&str] = &["Silk", "Look", "Look/Themes", "Look/Background", "Look/Text", "Look/Cursor", "Movement", "Window", "Program", "More", "More/Shell", "More/Keys"];
 	struct TabsStandIn;
 	fn stand_in_tabs(paths: &[&str], side: TabsSide) -> TabsStandIn {
 		// one copy per distinct tree, kept where a leak check can still find it
-		static TREES: std::sync::Mutex<Vec<&'static [super::TabNode]>> =
-			std::sync::Mutex::new(Vec::new());
+		static TREES: std::sync::Mutex<Vec<&'static [super::TabNode]>> = std::sync::Mutex::new(Vec::new());
 		let (nodes, leaves) = crate::ui_spec::tab_tree(paths).expect("a valid tree");
-		assert_eq!(
-			leaves.as_slice(),
-			tab_titles(),
-			"the stand-in's leaves are the real tabs"
-		);
+		assert_eq!(leaves.as_slice(), tab_titles(), "the stand-in's leaves are the real tabs");
 		let mut trees = crate::locks::lock(&TREES);
 		let tree = if let Some(&have) = trees.iter().find(|have| **have == nodes.as_slice()) {
 			have
@@ -13948,10 +10937,7 @@ mod tests {
 	// A node in whichever tree is up, by its title, so moving a tab moves no
 	// number in a test.
 	fn node_named(title: &str) -> usize {
-		tab_nodes()
-			.iter()
-			.position(|n| n.title == title)
-			.unwrap_or_else(|| panic!("no {title} node"))
+		tab_nodes().iter().position(|n| n.title == title).unwrap_or_else(|| panic!("no {title} node"))
 	}
 	fn tap(d: &mut SettingsDialog, node: usize) {
 		let r = d.tab_rect(node);
@@ -13971,48 +10957,23 @@ mod tests {
 		let one_row = SettingsDialog::gutter_h_for(d.line_h, 1);
 		assert!((d.gutter_rect().h - one_row).abs() < 0.01);
 		for title in ["Themes", "Background", "Text", "Cursor", "Shell", "Keys"] {
-			assert_eq!(
-				d.tab_rect(node_named(title)).w,
-				0.0,
-				"sub-tab {title} is not on show"
-			);
+			assert_eq!(d.tab_rect(node_named(title)).w, 0.0, "sub-tab {title} is not on show");
 		}
 		let look = d.tab_rect(node_named("Look"));
 		assert!(look.w > 0.0, "its parent is");
 		tap(&mut d, node_named("Look"));
 		assert_eq!(d.tab, tab_named("Themes"), "Look opens Themes, its first");
-		assert_eq!(
-			d.active_path(),
-			vec![node_named("Look"), node_named("Themes")]
-		);
+		assert_eq!(d.active_path(), vec![node_named("Look"), node_named("Themes")]);
 		assert!((d.gutter_rect().h - SettingsDialog::gutter_h_for(d.line_h, 2)).abs() < 0.01);
 		let themes = d.tab_rect(node_named("Themes"));
-		assert!(
-			themes.w > 0.0 && themes.y > look.y + look.h - 0.01,
-			"the sub-tabs sit in a row under the first"
-		);
-		assert!(
-			d.rows_y0() > themes.y + themes.h,
-			"and the rows begin below them"
-		);
-		assert_eq!(
-			d.tab_rect(node_named("Shell")).w,
-			0.0,
-			"another tab's sub-tabs stay hidden"
-		);
+		assert!(themes.w > 0.0 && themes.y > look.y + look.h - 0.01, "the sub-tabs sit in a row under the first");
+		assert!(d.rows_y0() > themes.y + themes.h, "and the rows begin below them");
+		assert_eq!(d.tab_rect(node_named("Shell")).w, 0.0, "another tab's sub-tabs stay hidden");
 		tap(&mut d, node_named("Look"));
-		assert_eq!(
-			d.tab,
-			tab_named("Themes"),
-			"a click on the parent already open changes nothing"
-		);
+		assert_eq!(d.tab, tab_named("Themes"), "a click on the parent already open changes nothing");
 		d.tab = tab_named("Keys");
 		tap(&mut d, node_named("More"));
-		assert_eq!(
-			d.tab,
-			tab_named("Keys"),
-			"Keys stays when More is clicked from under it"
-		);
+		assert_eq!(d.tab, tab_named("Keys"), "Keys stays when More is clicked from under it");
 		d.tab = 0;
 		tap(&mut d, node_named("More"));
 		assert_eq!(d.tab, tab_named("Shell"), "from outside, More opens Shell");
@@ -14040,11 +11001,7 @@ mod tests {
 		assert_eq!(d.tab, tab_named("Themes"), "Silk steps into Look at Themes");
 		d.tab = tab_named("Keys");
 		d.switch_tab(true);
-		assert_eq!(
-			d.tab,
-			tab_named("Silk"),
-			"Keys, the last under More, wraps to Silk"
-		);
+		assert_eq!(d.tab, tab_named("Silk"), "Keys, the last under More, wraps to Silk");
 		d.switch_tab(false);
 		assert_eq!(d.tab, tab_named("Keys"));
 	}
@@ -14058,15 +11015,9 @@ mod tests {
 		let _tabs = stand_in_tabs(NESTED, TabsSide::Left);
 		let mut d = mk_dialog(2000.0);
 		let list = d.gutter_rect();
-		assert!(
-			(list.h - d.rect.h).abs() < 0.01,
-			"the list runs the panel's height"
-		);
+		assert!((list.h - d.rect.h).abs() < 0.01, "the list runs the panel's height");
 		let vp = d.viewport();
-		assert!(
-			vp.x >= list.x + list.w + 1.0 - 0.01,
-			"rows start past the list and its rule"
-		);
+		assert!(vp.x >= list.x + list.w + 1.0 - 0.01, "rows start past the list and its rule");
 		// The search box's band sits over the rows now (2026101419165501).
 		// assert!((d.rows_y0() - (d.rect.y + lay().pad)).abs() < 0.01);
 		let band = SettingsDialog::search_band_h_for(d.line_h);
@@ -14074,31 +11025,18 @@ mod tests {
 		let mut last_bottom = d.rect.y;
 		for (node, n) in tab_nodes().iter().enumerate() {
 			let r = d.tab_rect(node);
-			assert!(
-				r.w > 0.0 && r.y >= last_bottom - 0.01,
-				"tab {node} is listed, in order"
-			);
+			assert!(r.w > 0.0 && r.y >= last_bottom - 0.01, "tab {node} is listed, in order");
 			assert!(r.x + r.w <= list.x + list.w + 0.01, "and fits the list");
 			let step = f32::from(n.depth) * lay().tab_indent;
-			assert!(
-				(r.x - (list.x + lay().tab_gap + step)).abs() < 0.01,
-				"stepped in by depth"
-			);
+			assert!((r.x - (list.x + lay().tab_gap + step)).abs() < 0.01, "stepped in by depth");
 			last_bottom = r.y + r.h;
 		}
-		assert!(
-			d.natural.0 > list.w + lay().width,
-			"the panel is wider by the list"
-		);
+		assert!(d.natural.0 > list.w + lay().width, "the panel is wider by the list");
 		for (i, _) in SettingsDialog::visible(d.specs, 0) {
 			assert!(d.label_x(i) >= vp.x, "row {i} is clear of the list");
 		}
 		d.tab = tab_named("Background");
-		assert_eq!(
-			d.active_path(),
-			vec![node_named("Look"), node_named("Background")],
-			"Background and Look both read as current"
-		);
+		assert_eq!(d.active_path(), vec![node_named("Look"), node_named("Background")], "Background and Look both read as current");
 		// a short window slides the list only far enough to keep the current tab in it
 		d.tab = tab_named("Keys");
 		d.set_size(d.size().0, 200.0);
@@ -14136,21 +11074,9 @@ mod tests {
 							if r.w <= 0.0 || r.y < strip.y || r.y + r.h > strip.y + strip.h {
 								continue;
 							}
-							let boxed = fixed.iter().any(|q| {
-								(q.pos[0] - r.x).abs() < 0.01
-									&& (q.pos[1] - r.y).abs() < 0.01
-									&& (q.size[1] - r.h).abs() < 0.01
-							});
-							assert!(
-								boxed,
-								"{side:?} at {scale}, {h} high: tab {node} has its box"
-							);
-							let title = texts
-								.iter()
-								.find(|t| t.text == n.title && t.x > r.x && t.x < r.x + r.w)
-								.unwrap_or_else(|| {
-									panic!("{side:?} at {scale}: tab {node} has its title")
-								});
+							let boxed = fixed.iter().any(|q| (q.pos[0] - r.x).abs() < 0.01 && (q.pos[1] - r.y).abs() < 0.01 && (q.size[1] - r.h).abs() < 0.01);
+							assert!(boxed, "{side:?} at {scale}, {h} high: tab {node} has its box");
+							let title = texts.iter().find(|t| t.text == n.title && t.x > r.x && t.x < r.x + r.w).unwrap_or_else(|| panic!("{side:?} at {scale}: tab {node} has its title"));
 							drops.push((node, title.y - r.y));
 						}
 						let (_, first) = drops[0];
@@ -14193,11 +11119,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn silkterms_tabs_go_down_the_left_with_appearance_over_four() {
 		assert_eq!(super::ui().tabs_side, TabsSide::Left);
-		let tree: Vec<(&str, u8)> = super::ui()
-			.tab_tree
-			.iter()
-			.map(|n| (n.title, n.depth))
-			.collect();
+		let tree: Vec<(&str, u8)> = super::ui().tab_tree.iter().map(|n| (n.title, n.depth)).collect();
 		assert_eq!(
 			tree,
 			[
@@ -14224,10 +11146,7 @@ mod tests {
 		d.tab = tab_named("Cursor");
 		tap(&mut d, 1);
 		assert_eq!(d.tab, tab_named("Cursor"));
-		assert_eq!(
-			d.active_path(),
-			vec![node_named("Appearance"), node_named("Cursor")]
-		);
+		assert_eq!(d.active_path(), vec![node_named("Appearance"), node_named("Cursor")]);
 	}
 
 	// The search box's band and the footer's hold still while the rows scroll,
@@ -14245,68 +11164,28 @@ mod tests {
 			assert_eq!(d.max_scroll() > 0.0, scrolls, "at {max_h}");
 			let vp = d.viewport();
 			let [top, foot] = d.fixed_bands();
-			assert!(
-				near(top.y + top.h, vp.y),
-				"the top band ends where the rows start"
-			);
-			assert!(
-				foot.y >= vp.y + vp.h - 0.01,
-				"the footer's starts under them"
-			);
-			assert!(
-				near(top.x, vp.x) && near(foot.x, vp.x),
-				"both clear of the tab list"
-			);
+			assert!(near(top.y + top.h, vp.y), "the top band ends where the rows start");
+			assert!(foot.y >= vp.y + vp.h - 0.01, "the footer's starts under them");
+			assert!(near(top.x, vp.x) && near(foot.x, vp.x), "both clear of the tab list");
 			let field = d.search_box();
 			assert!(field.y >= top.y, "the box is in the top band");
 			assert!(field.y + field.h + lay().search_gap + 1.0 <= vp.y + 0.01);
 			for (_, b, _) in d.buttons() {
-				assert!(
-					b.y >= foot.y + 1.0 + lay().buttons_gap - 0.01,
-					"a button is in the footer's"
-				);
+				assert!(b.y >= foot.y + 1.0 + lay().buttons_gap - 0.01, "a button is in the footer's");
 				assert!(b.y + b.h <= foot.y + foot.h + 0.01);
 			}
 			let (fixed, _) = d.rects_dip(d.line_h, |s: &str| s.len() as f32 * 7.0);
-			let at = |r: super::Rect| {
-				fixed
-					.iter()
-					.find(|q| {
-						near(q.pos[0], r.x)
-							&& near(q.pos[1], r.y)
-							&& near(q.size[0], r.w)
-							&& near(q.size[1], r.h)
-					})
-					.map(|q| q.color)
-			};
+			let at = |r: super::Rect| fixed.iter().find(|q| near(q.pos[0], r.x) && near(q.pos[1], r.y) && near(q.size[0], r.w) && near(q.size[1], r.h)).map(|q| q.color);
 			let panel = fixed[0].color;
 			let rows_y = top.y + top.h;
-			let rows_bg = at(super::Rect {
-				x: top.x,
-				y: rows_y,
-				w: top.w,
-				h: foot.y - rows_y,
-			})
-			.expect("the rows have a shade of their own");
-			assert_ne!(
-				rows_bg, panel,
-				"set off from the bands, which are the panel's"
-			);
-			let line = |y: f32| {
-				at(super::Rect {
-					x: top.x,
-					y,
-					w: top.w,
-					h: 1.0,
-				})
-			};
+			let rows_bg = at(super::Rect { x: top.x, y: rows_y, w: top.w, h: foot.y - rows_y }).expect("the rows have a shade of their own");
+			assert_ne!(rows_bg, panel, "set off from the bands, which are the panel's");
+			let line = |y: f32| at(super::Rect { x: top.x, y, w: top.w, h: 1.0 });
 			let top_line = line(vp.y - 1.0).expect("a line over the rows");
 			let foot_line = line(foot.y).expect("and one under them");
 			assert!(top_line != rows_bg && top_line != panel && foot_line == top_line);
 			// the rows start clear of the line, and end clear of the other one
-			let rows: Vec<usize> = SettingsDialog::visible(d.specs, d.tab)
-				.map(|(i, _)| i)
-				.collect();
+			let rows: Vec<usize> = SettingsDialog::visible(d.specs, d.tab).map(|(i, _)| i).collect();
 			assert!(near(d.row_y(rows[0]), vp.y + lay().rows_pad));
 			d.wheel(0.0, -1e9);
 			let last = *rows.last().unwrap();
@@ -14325,19 +11204,9 @@ mod tests {
 	#[test]
 	fn the_rows_sit_darker_than_the_still_bands_in_every_theme() {
 		for (name, t) in crate::theme::THEMES {
-			for (mode, pal, base) in [
-				("dark", &t.dark, super::DARK_DLG),
-				("light", &t.light, super::LIGHT_DLG),
-			] {
-				let colors = super::Dlg {
-					panel_bg: pal.dialog_bg,
-					gutter: pal.gutter,
-					..base
-				};
-				assert!(
-					config::luma(colors.rows_bg()) < config::luma(colors.panel_bg),
-					"{name} {mode}"
-				);
+			for (mode, pal, base) in [("dark", &t.dark, super::DARK_DLG), ("light", &t.light, super::LIGHT_DLG)] {
+				let colors = super::Dlg { panel_bg: pal.dialog_bg, gutter: pal.gutter, ..base };
+				assert!(config::luma(colors.rows_bg()) < config::luma(colors.panel_bg), "{name} {mode}");
 			}
 		}
 	}
@@ -14349,24 +11218,13 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_frame_borrows_the_fixed_words() {
 		let d = mk_dialog(700.0);
-		let fixed: Vec<&str> = d
-			.specs
-			.iter()
-			.map(|spec| spec.label)
-			.chain(tab_titles().iter().copied())
-			.chain([super::ui().icons.revert])
-			.filter(|t| !t.is_empty())
-			.collect();
+		let fixed: Vec<&str> = d.specs.iter().map(|spec| spec.label).chain(tab_titles().iter().copied()).chain([super::ui().icons.revert]).filter(|t| !t.is_empty()).collect();
 		let texts = d.texts_dip(d.line_h, chars7);
 		let mut seen = 0;
 		for item in &texts {
 			if fixed.contains(&item.text.as_ref()) {
 				seen += 1;
-				assert!(
-					matches!(item.text, std::borrow::Cow::Borrowed(_)),
-					"{:?} was copied",
-					item.text
-				);
+				assert!(matches!(item.text, std::borrow::Cow::Borrowed(_)), "{:?} was copied", item.text);
 			}
 		}
 		assert!(seen >= 10, "only {seen} fixed words drawn");
@@ -14377,22 +11235,11 @@ mod tests {
 	// Test ID: dfh8y
 	#[test]
 	fn another_rotation_folder_reloads_the_wallpaper() {
-		let on = config::Settings {
-			wallpaper_enabled: true,
-			wallpaper_rotate_enabled: true,
-			wallpaper_folder: Some("/w/a".into()),
-			..config::Settings::default()
-		};
-		let moved = config::Settings {
-			wallpaper_folder: Some("/w/b".into()),
-			..on.clone()
-		};
+		let on = config::Settings { wallpaper_enabled: true, wallpaper_rotate_enabled: true, wallpaper_folder: Some("/w/a".into()), ..config::Settings::default() };
+		let moved = config::Settings { wallpaper_folder: Some("/w/b".into()), ..on.clone() };
 		assert!(super::wallpaper_changed(&on, &moved));
 		// with rotation off the folder isn't what shows
-		let off = |s: &config::Settings| config::Settings {
-			wallpaper_rotate_enabled: false,
-			..s.clone()
-		};
+		let off = |s: &config::Settings| config::Settings { wallpaper_rotate_enabled: false, ..s.clone() };
 		assert!(!super::wallpaper_changed(&off(&on), &off(&moved)));
 	}
 }

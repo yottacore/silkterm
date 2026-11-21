@@ -43,12 +43,7 @@ pub struct Tags {
 }
 
 pub fn read(path: &Path) -> Tags {
-	packet(path).map_or_else(Tags::default, |xmp| Tags {
-		fit: property(&xmp, "Fit").as_deref().and_then(parse_fit),
-		anchor: property(&xmp, "Anchor").as_deref().and_then(parse_anchor),
-		opacity: property(&xmp, "Opacity").as_deref().and_then(parse_percent),
-		blur: property(&xmp, "Blur").as_deref().and_then(parse_blur),
-	})
+	packet(path).map_or_else(Tags::default, |xmp| Tags { fit: property(&xmp, "Fit").as_deref().and_then(parse_fit), anchor: property(&xmp, "Anchor").as_deref().and_then(parse_anchor), opacity: property(&xmp, "Opacity").as_deref().and_then(parse_percent), blur: property(&xmp, "Blur").as_deref().and_then(parse_blur) })
 }
 
 fn packet(path: &Path) -> Option<String> {
@@ -75,9 +70,7 @@ fn png(file: &mut File) -> Option<Vec<u8>> {
 	loop {
 		let mut header = [0u8; 8];
 		file.read_exact(&mut header).ok()?;
-		let len = u64::from(u32::from_be_bytes([
-			header[0], header[1], header[2], header[3],
-		]));
+		let len = u64::from(u32::from_be_bytes([header[0], header[1], header[2], header[3]]));
 		let kind = &header[4..8];
 		// pixel data has started; any XMP would have come first
 		if kind == b"IDAT" || kind == b"IEND" {
@@ -96,8 +89,7 @@ fn png(file: &mut File) -> Option<Vec<u8>> {
 				return fields.next().map(<[u8]>::to_vec);
 			}
 		} else {
-			file.seek(SeekFrom::Current(i64::try_from(len).ok()?))
-				.ok()?;
+			file.seek(SeekFrom::Current(i64::try_from(len).ok()?)).ok()?;
 		}
 		file.seek(SeekFrom::Current(4)).ok()?; // crc
 		if file.stream_position().ok()? > MAX_SCAN {
@@ -139,8 +131,7 @@ fn jpeg(file: &mut File) -> Option<Vec<u8>> {
 				return Some(rest.to_vec());
 			}
 		} else {
-			file.seek(SeekFrom::Current(i64::try_from(body).ok()?))
-				.ok()?;
+			file.seek(SeekFrom::Current(i64::try_from(body).ok()?)).ok()?;
 		}
 		if file.stream_position().ok()? > MAX_SCAN {
 			return None;
@@ -193,13 +184,7 @@ fn parse_percent(value: &str) -> Option<f32> {
 // that a value is a typo, and a runaway sigma would stall the decode.
 fn parse_blur(value: &str) -> Option<f32> {
 	// a subnormal sigma is no blur, and the blur itself refuses one
-	number(value, "px").map(|v| {
-		if v.is_normal() {
-			v.clamp(0.0, 100.0)
-		} else {
-			0.0
-		}
-	})
+	number(value, "px").map(|v| if v.is_normal() { v.clamp(0.0, 100.0) } else { 0.0 })
 }
 
 fn number(value: &str, unit: &str) -> Option<f32> {
@@ -234,11 +219,7 @@ mod tests {
 		let mut text = b"XML:com.adobe.xmp\0\0\0\0\0".to_vec();
 		text.extend_from_slice(packet.as_bytes());
 		let mut out = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
-		for (kind, body) in [
-			(b"IHDR".as_slice(), vec![0u8; 13]),
-			(b"iTXt".as_slice(), text),
-			(b"IDAT".as_slice(), vec![0u8; 4]),
-		] {
+		for (kind, body) in [(b"IHDR".as_slice(), vec![0u8; 13]), (b"iTXt".as_slice(), text), (b"IDAT".as_slice(), vec![0u8; 4])] {
 			out.extend_from_slice(&u32::try_from(body.len()).unwrap().to_be_bytes());
 			out.extend_from_slice(kind);
 			out.extend_from_slice(&body);
@@ -307,10 +288,7 @@ mod tests {
 		assert_eq!(parse_fit("ZOOM"), Some(Fit::Zoom));
 		assert_eq!(parse_fit(" stretch "), Some(Fit::Stretch));
 		assert_eq!(parse_fit("cover"), None);
-		assert_eq!(
-			read(Path::new("/nonexistent/wallpaper-test.png")),
-			Tags::default()
-		);
+		assert_eq!(read(Path::new("/nonexistent/wallpaper-test.png")), Tags::default());
 	}
 
 	// Test ID: dbz36
@@ -369,11 +347,7 @@ mod tests {
 				}
 			}
 			write!(packet, ">{elements}</rdf:Description>").unwrap();
-			if rng.chance(2) {
-				super::png_file(&packet)
-			} else {
-				super::jpeg_file(&packet)
-			}
+			if rng.chance(2) { super::png_file(&packet) } else { super::jpeg_file(&packet) }
 		}
 
 		fn image(rng: &mut fuzz::Rng) -> Vec<u8> {
@@ -421,16 +395,13 @@ mod tests {
 		// Test ID: dcdjm
 		#[test]
 		fn a_corrupt_image_cannot_take_the_wallpaper_worker_down() {
-			let path =
-				crate::testdir::run_dir().join(format!("silkfuzz-xmp-{}.bin", std::process::id()));
+			let path = crate::testdir::run_dir().join(format!("silkfuzz-xmp-{}.bin", std::process::id()));
 			let corpus = fuzz::corpus("xmp");
 			for case in &corpus {
 				check(case, &path);
 			}
 			// A generator whose packets never read asserts nothing, and still passes.
-			let read_some = (0..64)
-				.filter(|&seed| check(&tagged(&mut fuzz::Rng::new(seed)), &path) != Tags::default())
-				.count();
+			let read_some = (0..64).filter(|&seed| check(&tagged(&mut fuzz::Rng::new(seed)), &path) != Tags::default()).count();
 			assert!(read_some > 0, "no generated packet read as tags");
 			fuzz::soak("xmp", |seed| {
 				let mut rng = fuzz::Rng::new(seed);

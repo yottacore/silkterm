@@ -44,11 +44,7 @@ struct Seq {
 enum Item {
 	Text(String),
 	Macro(usize),
-	Group {
-		brackets: bool,
-		choices: Vec<Seq>,
-		has_macro: bool,
-	},
+	Group { brackets: bool, choices: Vec<Seq>, has_macro: bool },
 }
 
 /// What's wrong with a template. `at` counts characters from 1, the way a
@@ -70,24 +66,13 @@ impl fmt::Display for Error {
 			}
 			Self::UnknownMacro { name } => write!(f, "%{name}% isn't a macro."),
 			Self::Unclosed { open, at } => {
-				write!(
-					f,
-					"The {open} at character {at} has no closing {}.",
-					closer(*open)
-				)
+				write!(f, "The {open} at character {at} has no closing {}.", closer(*open))
 			}
 			Self::Unopened { close, at } => {
-				write!(
-					f,
-					"The {close} at character {at} has no opening {}.",
-					opener(*close)
-				)
+				write!(f, "The {close} at character {at} has no opening {}.", opener(*close))
 			}
 			Self::TooDeep { at } => {
-				write!(
-					f,
-					"Groups are nested more than {MAX_DEPTH} deep at character {at}."
-				)
+				write!(f, "Groups are nested more than {MAX_DEPTH} deep at character {at}.")
 			}
 		}
 	}
@@ -107,11 +92,7 @@ impl Template {
 	/// Read `text`, knowing the macros named in `names`. A macro's index in
 	/// `names` is where `expand` looks for its value.
 	pub fn parse(text: &str, names: &[&str]) -> Result<Self, Error> {
-		let mut parser = Parser {
-			chars: text.chars().collect(),
-			pos: 0,
-			names,
-		};
+		let mut parser = Parser { chars: text.chars().collect(), pos: 0, names };
 		let root = parser.choices(None, 0)?;
 		Ok(Self { root })
 	}
@@ -177,11 +158,7 @@ impl Parser<'_> {
 					};
 					let name: String = self.chars[self.pos..self.pos + len].iter().collect();
 					self.pos += len + 1;
-					let Some(index) = self
-						.names
-						.iter()
-						.position(|known| known.eq_ignore_ascii_case(name.trim()))
-					else {
+					let Some(index) = self.names.iter().position(|known| known.eq_ignore_ascii_case(name.trim())) else {
 						return Err(Error::UnknownMacro { name });
 					};
 					flush(&mut items, &mut text);
@@ -194,11 +171,7 @@ impl Parser<'_> {
 					let choices = self.choices(Some((c, at)), depth + 1)?;
 					let has_macro = choices.iter().any(|seq| seq.has_macro);
 					flush(&mut items, &mut text);
-					items.push(Item::Group {
-						brackets: c == '[',
-						choices,
-						has_macro,
-					});
+					items.push(Item::Group { brackets: c == '[', choices, has_macro });
 				}
 				'}' | ']' => match open {
 					Some((open, _)) if closer(open) == c => {
@@ -271,25 +244,14 @@ fn choose(choices: &[Seq], values: &[&str]) -> Out {
 			out => return out,
 		}
 	}
-	if choices.iter().any(|choice| choice.has_macro) {
-		Out::Gone
-	} else {
-		Out::Text(String::new())
-	}
+	if choices.iter().any(|choice| choice.has_macro) { Out::Gone } else { Out::Text(String::new()) }
 }
 
 fn expand_seq(seq: &Seq, values: &[&str]) -> Out {
-	let outs: Vec<Out> = seq
-		.items
-		.iter()
-		.map(|item| expand_item(item, values))
-		.collect();
+	let outs: Vec<Out> = seq.items.iter().map(|item| expand_item(item, values)).collect();
 	// Text with a missing part on one side and no value at all on that side is
 	// a separator with nothing to separate.
-	let side_ok = |side: &[Out]| {
-		side.iter().any(|out| matches!(out, Out::Value(_)))
-			|| !side.iter().any(|out| matches!(out, Out::Gone))
-	};
+	let side_ok = |side: &[Out]| side.iter().any(|out| matches!(out, Out::Value(_))) || !side.iter().any(|out| matches!(out, Out::Gone));
 	let mut text = String::new();
 	let mut valued = false;
 	let mut ends_in_text = false;
@@ -301,11 +263,7 @@ fn expand_seq(seq: &Seq, values: &[&str]) -> Out {
 				ends_in_text = false;
 			}
 			Out::Text(piece) if side_ok(&outs[..i]) && side_ok(&outs[i + 1..]) => {
-				let piece = if text.is_empty() || text.ends_with(' ') {
-					piece.trim_start()
-				} else {
-					piece
-				};
+				let piece = if text.is_empty() || text.ends_with(' ') { piece.trim_start() } else { piece };
 				text.push_str(piece);
 				ends_in_text |= !piece.is_empty();
 			}
@@ -331,9 +289,7 @@ fn expand_item(item: &Item, values: &[&str]) -> Out {
 			Some(value) if !value.trim().is_empty() => Out::Value((*value).to_string()),
 			_ => Out::Gone,
 		},
-		Item::Group {
-			brackets, choices, ..
-		} => {
+		Item::Group { brackets, choices, .. } => {
 			let wrap = |text: String| {
 				if *brackets { format!("[{text}]") } else { text }
 			};
@@ -390,10 +346,7 @@ mod tests {
 		assert_eq!(run("a\tb\nc\r\n d", ["", "", ""]), "abc d");
 		assert_eq!(run("a\u{1b}b\u{0}c", ["", "", ""]), "abc");
 		assert_eq!(run("", ["x", "", ""]), "");
-		assert_eq!(
-			run("100\\% \\{x\\} \\[y\\] a\\|\\|b c|d", ["", "", ""]),
-			"100% {x} [y] a||b c|d"
-		);
+		assert_eq!(run("100\\% \\{x\\} \\[y\\] a\\|\\|b c|d", ["", "", ""]), "100% {x} [y] a||b c|d");
 		assert_eq!(run("end\\", ["", "", ""]), "end\\");
 	}
 
@@ -429,10 +382,7 @@ mod tests {
 		assert_eq!(run("%A% || %B% || %C%", ["", "", "c"]), "c");
 		assert_eq!(run("%A% || %B% || %C%", ["", "", ""]), "");
 		assert_eq!(run("%A% || none", ["", "", ""]), "none");
-		assert_eq!(
-			run("[{ %A% || last: %B% }]", ["", "vim", ""]),
-			"[last: vim]"
-		);
+		assert_eq!(run("[{ %A% || last: %B% }]", ["", "vim", ""]), "[last: vim]");
 		assert_eq!(run("[{ %A% || last: %B% }]", ["", "", ""]), "");
 		// an empty choice is skipped like an empty macro
 		assert_eq!(run("|| %A% ||", ["a", "", ""]), "a");
@@ -467,12 +417,7 @@ mod tests {
 	fn a_malformed_template_says_what_is_wrong_and_where() {
 		assert_eq!(err("ab %A"), Error::UnclosedMacro { at: 4 });
 		assert_eq!(err("%D%"), Error::UnknownMacro { name: "D".into() });
-		assert_eq!(
-			err("%%"),
-			Error::UnknownMacro {
-				name: String::new()
-			}
-		);
+		assert_eq!(err("%%"), Error::UnknownMacro { name: String::new() });
 		assert_eq!(err("x { %A%"), Error::Unclosed { open: '{', at: 3 });
 		assert_eq!(err("[[%A%]"), Error::Unclosed { open: '[', at: 1 });
 		assert_eq!(err("%A% }"), Error::Unopened { close: '}', at: 5 });
@@ -481,10 +426,7 @@ mod tests {
 		assert_eq!(err(&deep), Error::TooDeep { at: MAX_DEPTH + 1 });
 		// only the depth is limited, not the count
 		assert!(Template::parse(&"{}".repeat(5000), &NAMES).is_ok());
-		assert_eq!(
-			err("x { %A%").to_string(),
-			"The { at character 3 has no closing }."
-		);
+		assert_eq!(err("x { %A%").to_string(), "The { at character 3 has no closing }.");
 		assert_eq!(err("%Dir%").to_string(), "%Dir% isn't a macro.");
 		// a name may have spaces round it, as a person might type it
 		assert_eq!(run("% a %", ["x", "", ""]), "x");
@@ -518,10 +460,7 @@ mod tests {
 			let values = [*rng.pick(&VALUES), *rng.pick(&VALUES), *rng.pick(&VALUES)];
 			let out = template.expand(&values);
 			assert!(!out.chars().any(char::is_control), "{text:?} gave {out:?}");
-			assert!(
-				!out.starts_with(' ') && !out.ends_with(' '),
-				"{text:?} gave {out:?}"
-			);
+			assert!(!out.starts_with(' ') && !out.ends_with(' '), "{text:?} gave {out:?}");
 		}
 
 		// Test ID: de2zx

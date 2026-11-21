@@ -208,12 +208,12 @@ A window opens on its first tab, and each tab on its first pane, however many th
 These apply to whatever came last on the line: the window, a tab, or a pane. A tab takes what the window set, a pane takes what its tab set, and the closest one wins.
 
 | Option                                                     | What it does
-| :--------------------------------------------------------- | :-----------------------------------------------------------------------------------------
+| :--------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------
 | `--title TEXT`                                             | Window or tab title. A pane doesn't use it yet.
 | `--shell COMMAND`                                          | The command to run, such as `fish` or `'bash --norc'`.
 | `--directory PATH`, `--dir PATH`                           | Where that shell starts. `~` and `$VARS` work.
 | `--keep-open[=BOOL]`                                       | Keep the pane after its command exits, showing how it ended.
-| `--open FILE [ARGS...]`                                    | Run FILE from its own folder. The rest of the line is its arguments.
+| `--open FILE [ARGS...]`                                    | Run FILE from its own folder. The rest of the line is its arguments. A split or new tab from its pane starts the default shell.
 | `--font-name NAME`, `--font-size N`                        | Font family and size.
 | `--background-color #rrggbb`, `--foreground-color #rrggbb` | Background and text color.
 | `--wallpaper-file PATH`                                    | The wallpaper. With no path, none. Also `--background-image`.

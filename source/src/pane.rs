@@ -4,9 +4,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use alacritty_terminal::grid::{
-	BidirectionalIterator, Dimensions, Grid, Row, Scroll as GridScroll,
-};
+use alacritty_terminal::grid::{BidirectionalIterator, Dimensions, Grid, Row, Scroll as GridScroll};
 use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::sync::FairMutex;
@@ -16,10 +14,7 @@ use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::vte::ansi::CursorShape;
 use glyphon::cosmic_text::{LineEnding, Scroll as TextScroll};
-use glyphon::{
-	AttrsList, Buffer, BufferLine, Color as GColor, CustomGlyph, Shaping, Style, TextArea,
-	TextBounds, Weight,
-};
+use glyphon::{AttrsList, Buffer, BufferLine, Color as GColor, CustomGlyph, Shaping, Style, TextArea, TextBounds, Weight};
 use winit::event_loop::EventLoopProxy;
 
 use crate::config;
@@ -163,46 +158,21 @@ struct CellRules {
 
 // The engine keeps one underline style at a time, and SGR 24 or 4:0 clears it.
 fn underline_style(flags: Flags) -> Option<Rule> {
-	[
-		(Flags::UNDERCURL, Rule::Curly),
-		(Flags::DOUBLE_UNDERLINE, Rule::Double),
-		(Flags::DOTTED_UNDERLINE, Rule::Dotted),
-		(Flags::DASHED_UNDERLINE, Rule::Dashed),
-		(Flags::UNDERLINE, Rule::Single),
-	]
-	.into_iter()
-	.find(|(flag, _)| flags.contains(*flag))
-	.map(|(_, rule)| rule)
+	[(Flags::UNDERCURL, Rule::Curly), (Flags::DOUBLE_UNDERLINE, Rule::Double), (Flags::DOTTED_UNDERLINE, Rule::Dotted), (Flags::DASHED_UNDERLINE, Rule::Dashed), (Flags::UNDERLINE, Rule::Single)].into_iter().find(|(flag, _)| flags.contains(*flag)).map(|(_, rule)| rule)
 }
 
 // `fg` is the text color as drawn, lifted off `behind` already. An underline
 // color the program set (SGR 58) gets the same lift, or a red squiggle on a
 // red-ish background would vanish. Concealed text hides its lines too.
-fn cell_rules(
-	cell: &Cell,
-	fg: [u8; 3],
-	behind: [u8; 3],
-	colors: &Colors,
-	settings: &config::Settings,
-	readable: &mut palette::Readable,
-) -> CellRules {
+fn cell_rules(cell: &Cell, fg: [u8; 3], behind: [u8; 3], colors: &Colors, settings: &config::Settings, readable: &mut palette::Readable) -> CellRules {
 	if cell.flags.contains(Flags::HIDDEN) {
 		return CellRules::default();
 	}
 	let under = underline_style(cell.flags).map(|rule| {
-		let color = cell.underline_color().map_or(fg, |color| {
-			readable.get(
-				palette::resolve(color, colors, settings),
-				behind,
-				settings.min_contrast(),
-			)
-		});
+		let color = cell.underline_color().map_or(fg, |color| readable.get(palette::resolve(color, colors, settings), behind, settings.min_contrast()));
 		(rule, color)
 	});
-	CellRules {
-		under,
-		strike: cell.flags.contains(Flags::STRIKEOUT).then_some(fg),
-	}
+	CellRules { under, strike: cell.flags.contains(Flags::STRIKEOUT).then_some(fg) }
 }
 
 /// Thickness of an underline, and how far its top sits below the cell's top.
@@ -226,15 +196,7 @@ struct RuleSpan {
 	end: usize,
 }
 
-fn push_rule(
-	spans: &mut Vec<RuleSpan>,
-	rule: Rule,
-	color: [u8; 3],
-	row: i32,
-	y: f32,
-	column: usize,
-	cells: usize,
-) {
+fn push_rule(spans: &mut Vec<RuleSpan>, rule: Rule, color: [u8; 3], row: i32, y: f32, column: usize, cells: usize) {
 	if let Some(last) = spans.last_mut()
 		&& last.row == row
 		&& last.end == column
@@ -243,24 +205,10 @@ fn push_rule(
 		last.end = column + cells;
 		return;
 	}
-	spans.push(RuleSpan {
-		rule,
-		color,
-		row,
-		y,
-		first: column,
-		end: column + cells,
-	});
+	spans.push(RuleSpan { rule, color, row, y, first: column, end: column + cells });
 }
 
-fn push_cell_rules(
-	rules: CellRules,
-	(unders, strikes): (&mut Vec<RuleSpan>, &mut Vec<RuleSpan>),
-	row: i32,
-	y: f32,
-	column: usize,
-	cells: usize,
-) {
+fn push_cell_rules(rules: CellRules, (unders, strikes): (&mut Vec<RuleSpan>, &mut Vec<RuleSpan>), row: i32, y: f32, column: usize, cells: usize) {
 	if let Some((rule, color)) = rules.under {
 		push_rule(unders, rule, color, row, y, column, cells);
 	}
@@ -272,13 +220,7 @@ fn push_cell_rules(
 /// The quads for one span, `x0` the left edge of column 0. A quad that would
 /// cross `clip` is left out rather than cut, since a cut curl or dash would
 /// redraw squashed into what is left.
-fn span_quads(
-	span: &RuleSpan,
-	x0: f32,
-	(cell_w, cell_h): (f32, f32),
-	clip: Option<(f32, f32)>,
-	out: &mut Vec<RectInstance>,
-) {
+fn span_quads(span: &RuleSpan, x0: f32, (cell_w, cell_h): (f32, f32), clip: Option<(f32, f32)>, out: &mut Vec<RectInstance>) {
 	use crate::gfx::QuadMode;
 	let (thick, drop) = underline_metrics(cell_h);
 	let line_y = span.y + drop;
@@ -289,12 +231,7 @@ fn span_quads(
 		if clip.is_some_and(|(clip_t, clip_b)| top < clip_t || top + h > clip_b) {
 			return;
 		}
-		out.push(RectInstance {
-			pos: [x, top],
-			size: [w, h],
-			color: config::srgb_f32(span.color),
-			params: [mode.code(), period],
-		});
+		out.push(RectInstance { pos: [x, top], size: [w, h], color: config::srgb_f32(span.color), params: [mode.code(), period] });
 	};
 	match span.rule {
 		Rule::Single => quad(line_y, thick, QuadMode::Solid, 0.0),
@@ -307,21 +244,11 @@ fn span_quads(
 		}
 		Rule::Curly => {
 			let h = 4.0 * thick;
-			quad(
-				(line_y - 1.5 * thick).min(bottom - h),
-				h,
-				QuadMode::Curl,
-				cell_w,
-			);
+			quad((line_y - 1.5 * thick).min(bottom - h), h, QuadMode::Curl, cell_w);
 		}
 		Rule::Dotted => quad(line_y, thick, QuadMode::Dashes, 2.0 * thick),
 		Rule::Dashed => quad(line_y, thick, QuadMode::Dashes, cell_w),
-		Rule::Strike => quad(
-			(span.y + cell_h * 0.55 - thick * 0.5).round(),
-			thick,
-			QuadMode::Solid,
-			0.0,
-		),
+		Rule::Strike => quad((span.y + cell_h * 0.55 - thick * 0.5).round(), thick, QuadMode::Solid, 0.0),
 	}
 }
 
@@ -352,14 +279,7 @@ impl OffStrip {
 	const CAP: usize = crate::scroll::SLIDE_ROWS;
 
 	fn new(buf: Buffer) -> Self {
-		Self {
-			rows: std::collections::VecDeque::new(),
-			built: std::collections::VecDeque::new(),
-			buf,
-			dir: 0,
-			region: (0, 0),
-			shaped: 0..0,
-		}
+		Self { rows: std::collections::VecDeque::new(), built: std::collections::VecDeque::new(), buf, dir: 0, region: (0, 0), shaped: 0..0 }
 	}
 
 	fn len(&self) -> usize {
@@ -376,12 +296,7 @@ impl OffStrip {
 
 	// a stand-in until the row is built; never drawn, so it needs no font
 	fn blank_line() -> BufferLine {
-		BufferLine::new(
-			"",
-			LineEnding::default(),
-			AttrsList::new(&glyphon::Attrs::new()),
-			Shaping::Advanced,
-		)
+		BufferLine::new("", LineEnding::default(), AttrsList::new(&glyphon::Attrs::new()), Shaping::Advanced)
 	}
 
 	// Append the rows a step pushed off `region` (`chunk` in visual order). A
@@ -403,9 +318,7 @@ impl OffStrip {
 			// chunk nearest the content = at the strip's bottom
 			self.rows.extend(chunk);
 			self.built.extend(std::iter::repeat_n(false, added));
-			self.buf
-				.lines
-				.extend(std::iter::repeat_with(Self::blank_line).take(added));
+			self.buf.lines.extend(std::iter::repeat_with(Self::blank_line).take(added));
 			let excess = self.rows.len().saturating_sub(Self::CAP);
 			self.rows.drain(..excess);
 			self.built.drain(..excess);
@@ -417,9 +330,7 @@ impl OffStrip {
 				self.rows.push_front(row);
 				self.built.push_front(false);
 			}
-			self.buf
-				.lines
-				.splice(0..0, std::iter::repeat_with(Self::blank_line).take(added));
+			self.buf.lines.splice(0..0, std::iter::repeat_with(Self::blank_line).take(added));
 			self.rows.truncate(Self::CAP);
 			self.built.truncate(Self::CAP);
 			self.buf.lines.truncate(Self::CAP);
@@ -437,14 +348,8 @@ impl OffStrip {
 		let off = app_off.abs().min(len as f32);
 		let far = (off.ceil() as usize + 1).min(len);
 		let height = self.region.1.saturating_sub(self.region.0) as f32;
-		let near = ((off - height).max(0.0).floor() as usize)
-			.saturating_sub(1)
-			.min(far);
-		if app_off > 0.0 {
-			len - far..len - near
-		} else {
-			near..far
-		}
+		let near = ((off - height).max(0.0).floor() as usize).saturating_sub(1).min(far);
+		if app_off > 0.0 { len - far..len - near } else { near..far }
 	}
 
 	// Scroll the buffer to `window` and shape it. A row gets its text the first
@@ -454,22 +359,12 @@ impl OffStrip {
 	// line again. Lines past the window are left to the clip. Each line is laid
 	// out here rather than through shape_until_scroll, which would pull the
 	// scroll back to fill the height from lines that may not be built.
-	fn shape(
-		&mut self,
-		ctx: &mut TextCtx,
-		fg: [u8; 3],
-		width: f32,
-		window: std::ops::Range<usize>,
-	) -> usize {
+	fn shape(&mut self, ctx: &mut TextCtx, fg: [u8; 3], width: f32, window: std::ops::Range<usize>) -> usize {
 		self.shaped = window.clone();
 		if window.is_empty() {
 			return 0;
 		}
-		ctx.resize_buffer(
-			&mut self.buf,
-			width.max(1.0),
-			(Self::CAP as f32 + 1.0) * ctx.cell_h,
-		);
+		ctx.resize_buffer(&mut self.buf, width.max(1.0), (Self::CAP as f32 + 1.0) * ctx.cell_h);
 		self.buf.set_scroll(TextScroll::new(window.start, 0.0, 0.0));
 		let mut fresh = 0;
 		for j in window {
@@ -486,10 +381,7 @@ impl OffStrip {
 
 // The term for this frame, or None to reuse the last one: an unfair try while
 // the misses stay under LOCK_WAIT_AFTER, then the fair lock (see build).
-fn lock_for_frame<'a, T>(
-	term: &'a FairMutex<T>,
-	misses: &mut u32,
-) -> Option<impl std::ops::DerefMut<Target = T> + use<'a, T>> {
+fn lock_for_frame<'a, T>(term: &'a FairMutex<T>, misses: &mut u32) -> Option<impl std::ops::DerefMut<Target = T> + use<'a, T>> {
 	let guard = if *misses >= LOCK_WAIT_AFTER {
 		term.lock()
 	} else if let Some(guard) = term.try_lock_unfair() {
@@ -509,11 +401,7 @@ fn lock_for_frame<'a, T>(
 // count alone can't distinguish a clear-and-refill that ends on the same depth,
 // which is why this is sampled per PTY read cycle rather than per frame.
 fn pushed_since(history: usize, baseline: usize) -> usize {
-	if history < baseline {
-		history
-	} else {
-		history - baseline
-	}
+	if history < baseline { history } else { history - baseline }
 }
 
 // The scrollback depth as the PTY wakeups and the builds both sample it, against
@@ -558,23 +446,14 @@ fn vanished_range(shift: i32, st: usize, sb: usize, lines: usize) -> std::ops::R
 	let region_top = st.min(lines);
 	let region_bot = lines.saturating_sub(sb).max(region_top);
 	let k = (shift.unsigned_abs() as usize).min(region_bot - region_top);
-	if shift > 0 {
-		region_top..region_top + k
-	} else {
-		region_bot - k..region_bot
-	}
+	if shift > 0 { region_top..region_top + k } else { region_bot - k..region_bot }
 }
 
 // The slide's region clip: band boundaries tightened to the shifted content's
 // extent. The gap between a band and the content edge belongs to the strip;
 // without the weld, band rows translated by voff render inside the band clip
 // as ghost copies (see the Slide doc).
-fn weld_region_clip(
-	top_split_y: f32,
-	split_y: f32,
-	content_top_y: f32,
-	content_bot_y: f32,
-) -> (f32, f32) {
+fn weld_region_clip(top_split_y: f32, split_y: f32, content_top_y: f32, content_bot_y: f32) -> (f32, f32) {
 	(top_split_y.max(content_top_y), split_y.min(content_bot_y))
 }
 
@@ -585,35 +464,14 @@ fn weld_region_clip(
 // caller's row allocations and its contrast memo. One entry per column; a
 // wide-char spacer stays as a wide=0 placeholder so indexes keep matching columns.
 #[cfg(test)]
-fn snapshot_rows(
-	grid: &Grid<Cell>,
-	lines: usize,
-	cols: usize,
-	styled: Option<(
-		&Colors,
-		&config::Settings,
-		&mut Vec<Vec<StripCell>>,
-		&mut palette::Readable,
-	)>,
-) -> Vec<u64> {
+fn snapshot_rows(grid: &Grid<Cell>, lines: usize, cols: usize, styled: Option<(&Colors, &config::Settings, &mut Vec<Vec<StripCell>>, &mut palette::Readable)>) -> Vec<u64> {
 	let mut rows = Vec::with_capacity(lines);
 	snapshot_rows_into(grid, lines, cols, styled, &mut rows);
 	rows
 }
 
 // `snapshot_rows` into the caller's list, so a rebuild reuses last time's.
-fn snapshot_rows_into(
-	grid: &Grid<Cell>,
-	lines: usize,
-	cols: usize,
-	styled: Option<(
-		&Colors,
-		&config::Settings,
-		&mut Vec<Vec<StripCell>>,
-		&mut palette::Readable,
-	)>,
-	rows: &mut Vec<u64>,
-) {
+fn snapshot_rows_into(grid: &Grid<Cell>, lines: usize, cols: usize, styled: Option<(&Colors, &config::Settings, &mut Vec<Vec<StripCell>>, &mut palette::Readable)>, rows: &mut Vec<u64>) {
 	rows.clear();
 	let mut styled = styled;
 	if let Some((_, _, out, _)) = &mut styled {
@@ -625,8 +483,7 @@ fn snapshot_rows_into(
 		if let Some((colors, settings, out, readable)) = &mut styled {
 			let out_row = &mut out[i as usize];
 			out_row.clear();
-			out_row
-				.extend((0..cols).map(|c| strip_cell(&row[Column(c)], colors, settings, readable)));
+			out_row.extend((0..cols).map(|c| strip_cell(&row[Column(c)], colors, settings, readable)));
 		}
 	}
 }
@@ -652,23 +509,10 @@ fn skel_rows(grid: &Grid<Cell>, lines: usize, cols: usize, out: &mut Vec<u64>) {
 // One styled cell for the strip. Colors resolve the way build()'s cell loop
 // does, minus the transient bell flash and selection, which don't belong in a
 // retained row.
-fn strip_cell(
-	cell: &Cell,
-	colors: &Colors,
-	settings: &config::Settings,
-	readable: &mut palette::Readable,
-) -> StripCell {
+fn strip_cell(cell: &Cell, colors: &Colors, settings: &config::Settings, readable: &mut palette::Readable) -> StripCell {
 	let flags = cell.flags;
 	if flags.contains(Flags::WIDE_CHAR_SPACER) {
-		return StripCell {
-			c: ' ',
-			fg: [0; 3],
-			bg: None,
-			bold: false,
-			italic: false,
-			wide: 0,
-			rules: CellRules::default(),
-		};
+		return StripCell { c: ' ', fg: [0; 3], bg: None, bold: false, italic: false, wide: 0, rules: CellRules::default() };
 	}
 	let mut fg = palette::resolve(cell.fg, colors, settings);
 	let mut cell_bg = palette::resolve(cell.bg, colors, settings);
@@ -679,47 +523,17 @@ fn strip_cell(
 		fg = cell_bg;
 	}
 	if flags.contains(Flags::DIM) {
-		fg = [
-			fg[0] / 2 + fg[0] / 4,
-			fg[1] / 2 + fg[1] / 4,
-			fg[2] / 2 + fg[2] / 4,
-		];
+		fg = [fg[0] / 2 + fg[0] / 4, fg[1] / 2 + fg[1] / 4, fg[2] / 2 + fg[2] / 4];
 	}
 	fg = readable.get(fg, cell_bg, settings.min_contrast());
 	let rules = cell_rules(cell, fg, cell_bg, colors, settings, readable);
-	StripCell {
-		c: cell.c,
-		fg,
-		rules,
-		bg: (cell_bg != settings.bg).then_some(cell_bg),
-		bold: flags.contains(Flags::BOLD)
-			|| (settings.embolden_inverse && flags.contains(Flags::INVERSE)),
-		italic: flags.contains(Flags::ITALIC),
-		wide: if flags.contains(Flags::WIDE_CHAR) {
-			2
-		} else {
-			1
-		},
-	}
+	StripCell { c: cell.c, fg, rules, bg: (cell_bg != settings.bg).then_some(cell_bg), bold: flags.contains(Flags::BOLD) || (settings.embolden_inverse && flags.contains(Flags::INVERSE)), italic: flags.contains(Flags::ITALIC), wide: if flags.contains(Flags::WIDE_CHAR) { 2 } else { 1 } }
 }
 
 // The engine's record of the rows a scroll pushed off its region, styled for
 // the strip. A row of another width (a resize in between) is left out.
-fn strip_rows(
-	rows: &std::collections::VecDeque<Row<Cell>>,
-	cols: usize,
-	colors: &Colors,
-	settings: &config::Settings,
-	readable: &mut palette::Readable,
-) -> Vec<Vec<StripCell>> {
-	rows.iter()
-		.filter(|row| row.len() == cols)
-		.map(|row| {
-			(0..cols)
-				.map(|c| strip_cell(&row[Column(c)], colors, settings, readable))
-				.collect()
-		})
-		.collect()
+fn strip_rows(rows: &std::collections::VecDeque<Row<Cell>>, cols: usize, colors: &Colors, settings: &config::Settings, readable: &mut palette::Readable) -> Vec<Vec<StripCell>> {
+	rows.iter().filter(|row| row.len() == cols).map(|row| (0..cols).map(|c| strip_cell(&row[Column(c)], colors, settings, readable)).collect()).collect()
 }
 
 // Whether to draw a cursor at all, and as what. DECTCEM (CSI ?25 l/h) is in
@@ -728,28 +542,20 @@ fn strip_rows(
 // engine's own renderable content does. Without it a TUI that hides the cursor
 // to repaint still gets one painted wherever the paint left it.
 fn shown_cursor_shape(mode: TermMode, shape: CursorShape) -> CursorShape {
-	if mode.contains(TermMode::SHOW_CURSOR) {
-		shape
-	} else {
-		CursorShape::Hidden
-	}
+	if mode.contains(TermMode::SHOW_CURSOR) { shape } else { CursorShape::Hidden }
 }
 
 // The rendered cursor geometry as (width, height) fractions of the cell. An
 // app-set Beam or Underline (DECSCUSR) maps to a thin bar or underline. A plain
 // Block uses the configured cursor_size_*, except on the alt screen, where the
 // app (vim, less) gets a full block.
-fn cursor_geometry(
-	shape: CursorShape,
-	alt_screen: bool,
-	settings: &config::Settings,
-) -> (f32, f32) {
+fn cursor_geometry(shape: CursorShape, alt_screen: bool, settings: &config::Settings) -> (f32, f32) {
 	match shape {
 		CursorShape::Beam => (0.15, 1.0),      // thin vertical bar
 		CursorShape::Underline => (1.0, 0.15), // thin bottom strip
 		_ if alt_screen => (1.0, 1.0),         // alt-screen app owns its block cursor
 		_ => (
-			(settings.cursor_size_width / 100.0).clamp(0.02, 1.0), // width, from left
+			(settings.cursor_size_width / 100.0).clamp(0.02, 1.0),  // width, from left
 			(settings.cursor_size_height / 100.0).clamp(0.02, 1.0), // height, from bottom
 		),
 	}
@@ -805,11 +611,7 @@ pub(crate) fn cursor_alpha(fg: [u8; 3], bg: [u8; 3], cursor: [u8; 3], floor: f32
 /// The plate a cursor draws at `alpha` over `bg`, blended in linear light as the
 /// sRGB surface does.
 pub(crate) fn cursor_plate(cursor: [u8; 3], bg: [u8; 3], alpha: f32) -> [u8; 3] {
-	let mix = |k: usize| {
-		config::from_linear_u8(
-			config::to_linear(cursor[k]) * alpha + config::to_linear(bg[k]) * (1.0 - alpha),
-		)
-	};
+	let mix = |k: usize| config::from_linear_u8(config::to_linear(cursor[k]) * alpha + config::to_linear(bg[k]) * (1.0 - alpha));
 	[mix(0), mix(1), mix(2)]
 }
 
@@ -824,12 +626,7 @@ pub enum CursorAnimation {
 }
 
 impl config::Choice for CursorAnimation {
-	const ALL: &'static [Self] = &[
-		Self::Phase,
-		Self::PulseVertical,
-		Self::PulseHorizontal,
-		Self::PulseBoth,
-	];
+	const ALL: &'static [Self] = &[Self::Phase, Self::PulseVertical, Self::PulseHorizontal, Self::PulseBoth];
 
 	fn key(self) -> &'static str {
 		match self {
@@ -845,12 +642,7 @@ impl config::Choice for CursorAnimation {
 // height) fractions, the alpha, and whether each axis pulses. Phase fades
 // `full`, the plate's own alpha, on a cosine; the pulses scale an axis by
 // `pulse_env`; None, a cursor that doesn't blink, is left as it is.
-fn cursor_envelope(
-	anim: Option<CursorAnimation>,
-	phase: f32,
-	geom: (f32, f32),
-	full: f32,
-) -> (f32, f32, f32, bool, bool) {
+fn cursor_envelope(anim: Option<CursorAnimation>, phase: f32, geom: (f32, f32), full: f32) -> (f32, f32, f32, bool, bool) {
 	let (mut w_frac, mut h_frac) = geom;
 	let mut alpha = full;
 	let (pulsing_w, pulsing_h) = match anim {
@@ -897,11 +689,7 @@ const CAPTURE_RETRY: std::time::Duration = std::time::Duration::from_millis(250)
 // a floor a busy poll pushes forward. Without the floor the deadline sat in the
 // past for the whole life of a command that printed nothing, and the event loop
 // woke on it every pass.
-fn next_capture_poll(
-	last_output: std::time::Instant,
-	settle: std::time::Duration,
-	retry_at: std::time::Instant,
-) -> std::time::Instant {
+fn next_capture_poll(last_output: std::time::Instant, settle: std::time::Duration, retry_at: std::time::Instant) -> std::time::Instant {
 	(last_output + settle).max(retry_at)
 }
 
@@ -1042,22 +830,9 @@ fn link_at(
 	let cell = &grid[start_pt.line][start_pt.column];
 	// Underline in the link's own color, so a colored URL keeps its color,
 	// including the minimum-contrast lift, or the rule would sit off the text.
-	let (fg, bg) = if cell.flags.contains(Flags::INVERSE) {
-		(cell.bg, cell.fg)
-	} else {
-		(cell.fg, cell.bg)
-	};
-	let fg = palette::readable(
-		palette::resolve(fg, colors, settings),
-		palette::resolve(bg, colors, settings),
-		settings.min_contrast(),
-	);
-	Some(LinkHit {
-		url,
-		start: start_pt,
-		end: point_of(end - 1),
-		fg,
-	})
+	let (fg, bg) = if cell.flags.contains(Flags::INVERSE) { (cell.bg, cell.fg) } else { (cell.fg, cell.bg) };
+	let fg = palette::readable(palette::resolve(fg, colors, settings), palette::resolve(bg, colors, settings), settings.min_contrast());
+	Some(LinkHit { url, start: start_pt, end: point_of(end - 1), fg })
 }
 
 // The same spans at a single weight, for the scrim's de-bolded buffer. Derived
@@ -1077,12 +852,7 @@ fn debold_attrs(src: &AttrsList, weight: Weight) -> AttrsList {
 // screen row: runs merged by (color, bold, italic). A character the primary
 // mono face lacks is a space placeholder of its width.
 fn strip_line(ctx: &mut TextCtx, fg: [u8; 3], row: &[StripCell]) -> BufferLine {
-	fn add_run(
-		attrs: &mut AttrsList,
-		(base, bold_weight): (&glyphon::Attrs<'static>, Weight),
-		range: std::ops::Range<usize>,
-		style: ([u8; 3], bool, bool),
-	) {
+	fn add_run(attrs: &mut AttrsList, (base, bold_weight): (&glyphon::Attrs<'static>, Weight), range: std::ops::Range<usize>, style: ([u8; 3], bool, bool)) {
 		if range.is_empty() {
 			return;
 		}
@@ -1129,21 +899,13 @@ fn strip_line(ctx: &mut TextCtx, fg: [u8; 3], row: &[StripCell]) -> BufferLine {
 // already has and only drops its cached shaping when something differs, so an
 // unchanged row costs a string compare instead of a re-shape. Mirrors what
 // set_rich_text does around the lines themselves (reset scroll, no alignment).
-fn set_buffer_rows<'a>(
-	buf: &mut Buffer,
-	rows: impl ExactSizeIterator<Item = (&'a str, AttrsList)>,
-) {
+fn set_buffer_rows<'a>(buf: &mut Buffer, rows: impl ExactSizeIterator<Item = (&'a str, AttrsList)>) {
 	let count = rows.len();
 	for (i, (text, attrs)) in rows.enumerate() {
 		if let Some(line) = buf.lines.get_mut(i) {
 			line.set_text(text, LineEnding::default(), attrs);
 		} else {
-			buf.lines.push(BufferLine::new(
-				text,
-				LineEnding::default(),
-				attrs,
-				Shaping::Advanced,
-			));
+			buf.lines.push(BufferLine::new(text, LineEnding::default(), attrs, Shaping::Advanced));
 		}
 	}
 	buf.lines.truncate(count);
@@ -1178,11 +940,7 @@ fn glide_to_full(blink_t: f32, dt: f32, period: f32, full_phase: f32) -> (f32, b
 	} else {
 		full_phase >= prev || full_phase <= now // wrapped past 1.0 this step
 	};
-	if crossed {
-		(full_phase * period, true)
-	} else {
-		(next, false)
-	}
+	if crossed { (full_phase * period, true) } else { (next, false) }
 }
 
 // One animation cycle: (period seconds, the phase where the cursor is at its
@@ -1194,9 +952,7 @@ fn cursor_cycle(anim: CursorAnimation, blink_rate_s: f32) -> (f32, f32) {
 	let period = blink_rate_s.max(0.05);
 	let full_phase = match anim {
 		CursorAnimation::Phase => 0.0,
-		CursorAnimation::PulseVertical
-		| CursorAnimation::PulseHorizontal
-		| CursorAnimation::PulseBoth => 0.5,
+		CursorAnimation::PulseVertical | CursorAnimation::PulseHorizontal | CursorAnimation::PulseBoth => 0.5,
 	};
 	(period, full_phase)
 }
@@ -1213,26 +969,14 @@ fn move_is_input(typed_at: Option<std::time::Instant>, now: std::time::Instant) 
 // almost none, since a command scrolling the screen isn't the user doing
 // anything. Once it stops and the prompt is back, the cursor starts again at once.
 fn resume_delay(by_input: bool, configured_s: f32) -> f32 {
-	if by_input {
-		configured_s
-	} else {
-		OUTPUT_RESUME_S
-	}
+	if by_input { configured_s } else { OUTPUT_RESUME_S }
 }
 
 // Seconds until a parked cursor resumes on its own, or None when no timer may
 // end the park: a long-idle stop or a pane that isn't the active one waits for
 // activity or focus instead, and a cursor that isn't parked needs no wake.
-fn cursor_wake_after(
-	parked: bool,
-	idle_stopped: bool,
-	blocked: bool,
-	resume_s: f32,
-	idle_t: f32,
-	hold_t: f32,
-) -> Option<f32> {
-	(parked && !idle_stopped && !blocked)
-		.then(|| (resume_s - idle_t).max(resume_s - hold_t).max(0.0) + 0.02)
+fn cursor_wake_after(parked: bool, idle_stopped: bool, blocked: bool, resume_s: f32, idle_t: f32, hold_t: f32) -> Option<f32> {
+	(parked && !idle_stopped && !blocked).then(|| (resume_s - idle_t).max(resume_s - hold_t).max(0.0) + 0.02)
 }
 
 // Cursor animation pause. On input or a long idle the cycle runs at its normal
@@ -1249,24 +993,8 @@ struct PauseState {
 }
 
 impl PauseState {
-	#[allow(
-		clippy::too_many_arguments,
-		reason = "private helper; the inputs are the whole story"
-	)]
-	fn advance(
-		&mut self,
-		blink_t: f32,
-		dt: f32,
-		wall_dt: f32,
-		period: f32,
-		full_phase: f32,
-		resume_s: f32,
-		idle_stop_s: f32,
-		moved: bool,
-		idle_t: f32,
-		input_idle_t: f32,
-		blocked: bool,
-	) -> f32 {
+	#[allow(clippy::too_many_arguments, reason = "private helper; the inputs are the whole story")]
+	fn advance(&mut self, blink_t: f32, dt: f32, wall_dt: f32, period: f32, full_phase: f32, resume_s: f32, idle_stop_s: f32, moved: bool, idle_t: f32, input_idle_t: f32, blocked: bool) -> f32 {
 		// past the long-idle threshold the animation stops outright: park (via
 		// the same glide, so it stops at full) and stay parked until activity.
 		// A blocked pane, one that isn't the focused pane of the focused window,
@@ -1365,12 +1093,7 @@ pub enum Toward {
 /// side that shares some of its edge. Of several the same distance off, the one
 /// the last move came from, so a move and its opposite go back and forth, then
 /// the top or left one. None at the window's edge; a move doesn't wrap around.
-pub fn neighbor_toward(
-	from: (PaneId, Rect),
-	panes: &[(PaneId, Rect)],
-	toward: Toward,
-	came_from: Option<PaneId>,
-) -> Option<PaneId> {
+pub fn neighbor_toward(from: (PaneId, Rect), panes: &[(PaneId, Rect)], toward: Toward, came_from: Option<PaneId>) -> Option<PaneId> {
 	// panes laid out side by side can touch, or sit a divider apart; a pixel of
 	// slack keeps a rounding error from hiding a neighbor
 	const SLACK: f32 = 1.0;
@@ -1438,12 +1161,7 @@ fn bar_applies_to(cfg: &config::Settings, alt: bool, max_lines: f32) -> bool {
 // The bar's track: the far right edge of the pane's whole area, so past the
 // minimap column when there is one, the height of the text's content area.
 fn bar_track(full: Rect, rect: Rect, thickness: f32, margin: f32) -> Rect {
-	Rect {
-		x: full.x + full.w - thickness,
-		y: rect.y + margin,
-		w: thickness,
-		h: (rect.h - 2.0 * margin).max(0.0),
-	}
+	Rect { x: full.x + full.w - thickness, y: rect.y + margin, w: thickness, h: (rect.h - 2.0 * margin).max(0.0) }
 }
 
 // Thumb length and position for a scroll state. Split out from the pane so the
@@ -1455,14 +1173,8 @@ fn bar_track(full: Rect, rect: Rect, thickness: f32, margin: f32) -> Rect {
 fn bar_thumb_span(track_h: f32, thickness: f32, rows: f32, max: f32, pos_lines: f32) -> (f32, f32) {
 	// the viewport's share of everything there is to look at
 	let visible = (rows / (rows + max)).clamp(0.0, 1.0);
-	let thumb_h = (track_h * visible)
-		.max(thickness * BAR_MIN_THUMB)
-		.min(track_h);
-	let pos = if max > 0.0 {
-		(pos_lines / max).clamp(0.0, 1.0)
-	} else {
-		0.0
-	};
+	let thumb_h = (track_h * visible).max(thickness * BAR_MIN_THUMB).min(track_h);
+	let pos = if max > 0.0 { (pos_lines / max).clamp(0.0, 1.0) } else { 0.0 };
 	// y is measured down the track, so pos 1 (oldest) sits at the top
 	let y = (track_h - thumb_h) * (1.0 - pos);
 	(y, thumb_h)
@@ -1498,6 +1210,42 @@ fn bar_pos_to_lines(track_h: f32, thumb_h: f32, max: f32, thumb_y: f32) -> f32 {
 		return 0.0;
 	}
 	(1.0 - (thumb_y / span).clamp(0.0, 1.0)) * max
+}
+
+// A thumb drag `moved` px down the track from where the thumb showed
+// `from_lines`, back to a scroll position. Measured from the grab rather than
+// from the track, since a scrollback that grows mid-drag rescales the track:
+// the same pointer y over a deeper scrollback is a different line, and the
+// text jumped by the difference at the next move.
+fn bar_drag_lines(track_h: f32, thumb_h: f32, max: f32, from_lines: f32, moved: f32) -> f32 {
+	if max <= 0.0 {
+		return 0.0;
+	}
+	let from_y = (track_h - thumb_h) * (1.0 - from_lines / max);
+	bar_pos_to_lines(track_h, thumb_h, max, from_y + moved)
+}
+
+/// Where a handle drag started: the pointer y, the place in lines the handle
+/// showed then, and `Scroll::kept` then. Output that arrives while the view is
+/// parked carries the view up with the text, and a drag that went on from the
+/// old place undid that at the next pointer move, so the text jumped back.
+#[derive(Debug, Clone, Copy)]
+pub struct HandleGrab {
+	y: f32,
+	lines: f32,
+	kept: f64,
+}
+
+impl HandleGrab {
+	fn new(y: f32, lines: f32, scroll: &Scroll) -> Self {
+		Self { y, lines, kept: scroll.kept() }
+	}
+
+	// The pointer y and the place at the grab, the place moved with the text
+	// since. The difference of two running totals is small, so f32 holds it.
+	fn from(&self, scroll: &Scroll) -> (f32, f32) {
+		(self.y, self.lines + (scroll.kept() - self.kept) as f32)
+	}
 }
 
 enum Node {
@@ -1624,6 +1372,9 @@ pub struct Pane {
 	// runs the same shell as the one it forked off (see design.md). A pane in
 	// tmux keeps the shell here, not tmux, so it is named and inherited alike.
 	command: Option<Vec<String>>,
+	/// `command` is a file `--open` ran. It still names the pane, but a split
+	/// or new tab from here starts the default shell rather than run it again.
+	pub opened_file: bool,
 	/// The tmux session SilkTerm started this pane in, which is the one closing
 	/// it may end (tmux.rs).
 	pub tmux: Option<crate::tmux::Session>,
@@ -1711,18 +1462,17 @@ pub struct Pane {
 	/// no timed resume.
 	pub cursor_wake: Option<std::time::Instant>,
 	// Scrollbar fade: `bar_alpha` eases toward 0 or 1, `bar_hold` keeps it up for
-	// a moment after the last user scroll. `bar_drag` is the grab offset from the
-	// thumb's top edge while the handle is being dragged (Some = dragging).
+	// a moment after the last user scroll. `bar_drag` is where a thumb drag
+	// started (Some = dragging).
 	bar_alpha: f32,
 	bar_hold: f32,
 	pub bar_hover: bool,
-	pub bar_drag: Option<f32>,
+	pub bar_drag: Option<HandleGrab>,
 	pub bar_animating: bool,
 	// Minimap column: the rasterized buffer and the image composed from it, plus
-	// where a drag of the viewport marker started, as the pointer y and the
-	// scroll position then.
+	// where a drag of the viewport marker started.
 	map: Minimap,
-	pub map_drag: Option<(f32, f32)>,
+	pub map_drag: Option<HandleGrab>,
 	// Where the target sat when a handle drag ended, while the text is still
 	// easing up to it. None once both agree. See `handle_lines`.
 	handle_drop_at: Option<f32>,
@@ -1798,10 +1548,7 @@ pub struct Pane {
 // The terminal and the text buffers are far too big to print.
 impl std::fmt::Debug for Pane {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("Pane")
-			.field("id", &self.id)
-			.field("rect", &self.rect)
-			.finish_non_exhaustive()
+		f.debug_struct("Pane").field("id", &self.id).field("rect", &self.rect).finish_non_exhaustive()
 	}
 }
 
@@ -1809,10 +1556,7 @@ impl Pane {
 	/// Where a split, new tab, or new window made from this pane starts. A pane
 	/// in tmux asks tmux, since the client it runs stays where it started.
 	pub fn inherit_cwd(&self) -> Option<std::path::PathBuf> {
-		self.tmux
-			.as_ref()
-			.and_then(crate::tmux::current_path)
-			.or_else(|| self.term.cwd())
+		self.tmux.as_ref().and_then(crate::tmux::current_path).or_else(|| self.term.cwd())
 	}
 
 	/// `SILK_MEMDBG`: the grid's cells (screen plus scrollback, both screens) and
@@ -1826,18 +1570,16 @@ impl Pane {
 		};
 		let cell = std::mem::size_of::<Cell>();
 		let grid_bytes = (hist + 2 * screen) * cols * cell;
-		format!(
-			"pane {}: {hist} history lines x {cols} cols, cells {:.1} MiB at {cell} B; minimap {:.1} MiB; fallback glyphs {}",
-			self.id,
-			crate::memdbg::mib(grid_bytes),
-			crate::memdbg::mib(self.map.heap_bytes()),
-			self.glyph_cache.len()
-		)
+		format!("pane {}: {hist} history lines x {cols} cols, cells {:.1} MiB at {cell} B; minimap {:.1} MiB; fallback glyphs {}", self.id, crate::memdbg::mib(grid_bytes), crate::memdbg::mib(self.map.heap_bytes()), self.glyph_cache.len())
 	}
 
 	/// The program this pane was started with, so a title naming it can be known.
 	pub fn launched(&self) -> Option<&str> {
 		self.command.as_deref()?.first().map(String::as_str)
+	}
+
+	fn passed_on(&self) -> Option<Vec<String>> {
+		passed_on(self.command.as_deref(), self.opened_file)
 	}
 
 	pub fn build(
@@ -1918,12 +1660,7 @@ impl Pane {
 			let ledger = guard.scroll_ledger();
 			let clamp = |line: Line| (line.0.max(0) as usize).min(lines);
 			let r = ledger.region();
-			(
-				clamp(r.start)..clamp(r.end),
-				ledger.lines(),
-				ledger.pushed(),
-				ledger.since_clear(),
-			)
+			(clamp(r.start)..clamp(r.end), ledger.lines(), ledger.pushed(), ledger.since_clear())
 		};
 		if cut {
 			// cut straight to the screen swap or freeze catch-up: drop any in-flight
@@ -1934,18 +1671,7 @@ impl Pane {
 			let mut rows = std::mem::take(&mut self.prints_scratch);
 			if settings.smooth_apps() {
 				let mut cur_cells = std::mem::take(&mut self.cells_scratch);
-				snapshot_rows_into(
-					guard.grid(),
-					lines,
-					cols,
-					Some((
-						guard.colors(),
-						&settings,
-						&mut cur_cells,
-						&mut self.readable,
-					)),
-					&mut rows,
-				);
+				snapshot_rows_into(guard.grid(), lines, cols, Some((guard.colors(), &settings, &mut cur_cells, &mut self.readable)), &mut rows);
 				self.cells_scratch = std::mem::replace(&mut self.last_cells, cur_cells);
 			} else {
 				snapshot_rows_into(guard.grid(), lines, cols, None, &mut rows);
@@ -1955,12 +1681,7 @@ impl Pane {
 		}
 		let whole_screen = region == (0..lines);
 		let blank = fnv_row(std::iter::repeat_n(' ', cols));
-		let output = Output {
-			grew,
-			pushed,
-			since_clear,
-			was_blank: self.last_rows.iter().all(|&row| row == blank),
-		};
+		let output = Output { grew, pushed, since_clear, was_blank: self.last_rows.iter().all(|&row| row == blank) };
 		let (follow, advanced, was_chasing) = ease_output(
 			&mut self.scroll,
 			alt,
@@ -1969,14 +1690,7 @@ impl Pane {
 			lines,
 			|k| {
 				// a scrollback clear took the rows that would show the old screen moved
-				let shift = repaint_shift(
-					guard.grid(),
-					&self.last_rows,
-					&self.last_skel,
-					k,
-					cols,
-					blank,
-				);
+				let shift = repaint_shift(guard.grid(), &self.last_rows, &self.last_skel, k, cols, blank);
 				shift.filter(|_| !cleared)
 			},
 			|k| blank_went_up(guard.grid(), k, cols, blank),
@@ -1990,41 +1704,14 @@ impl Pane {
 		// changes nothing it shows, so it is skipped there, and so is a frame
 		// for a moved selection: a drag draws one every frame, and once the
 		// throttle's gap was up each one composed the map again.
-		if settings.minimap
-			&& (map_rebuild || !self.text_built || advanced > 0 || self.map.pending())
-		{
+		if settings.minimap && (map_rebuild || !self.text_built || advanced > 0 || self.map.pending()) {
 			// Where the map has to stop: the output ease is leaving the text this
 			// far above the newest line. `Scroll` owns the rule, because a user
 			// gesture aimed at the bottom reads exactly like a lag from out here
 			// (F150/F153).
 			let lag = self.scroll.unshown_lines().round() as usize;
-			if let Some(g) = minimap::geom(
-				self.full,
-				margin,
-				ctx.scale,
-				&settings,
-				history + lines,
-				self.map.shown_lines(history, lines),
-				lines,
-				self.scroll.visual_lines(),
-				alt,
-				self.map_on,
-			) {
-				self.map.update(
-					guard.grid(),
-					guard.colors(),
-					&settings,
-					g.preview.w.round() as usize,
-					g.preview.h.round() as usize,
-					ctx.scale,
-					lines,
-					cols,
-					advanced,
-					lag,
-					self.scroll.unshown_draining(),
-					cut,
-					std::time::Instant::now(),
-				);
+			if let Some(g) = minimap::geom(self.full, margin, ctx.scale, &settings, history + lines, self.map.shown_lines(history, lines), lines, self.scroll.visual_lines(), alt, self.map_on) {
+				self.map.update(guard.grid(), guard.colors(), &settings, g.preview.w.round() as usize, g.preview.h.round() as usize, ctx.scale, lines, cols, advanced, lag, self.scroll.unshown_draining(), cut, std::time::Instant::now());
 			}
 		}
 
@@ -2043,23 +1730,10 @@ impl Pane {
 		// design doc, "Full-screen programs".
 		let mut shift_dbg = 0i32;
 		let step = ledger_step(alt, follow, advanced, whole_screen, scrolled);
-		let chunk = step.map(|_| {
-			strip_rows(
-				guard.scroll_ledger().rows(),
-				cols,
-				guard.colors(),
-				&settings,
-				&mut self.readable,
-			)
-		});
+		let chunk = step.map(|_| strip_rows(guard.scroll_ledger().rows(), cols, guard.colors(), &settings, &mut self.readable));
 		// A clear inside tmux shows at once, like one outside it, and takes the
 		// Enter that ran it with it.
-		let wiped = self.scroll.app_offset().abs() < WIPE_MAX_SLIDE
-			&& step.is_some_and(|step| {
-				region_wiped(step, &region, |i| {
-					row_print(&guard.grid()[Line(i as i32)], cols) != blank
-				})
-			});
+		let wiped = self.scroll.app_offset().abs() < WIPE_MAX_SLIDE && step.is_some_and(|step| region_wiped(step, &region, |i| row_print(&guard.grid()[Line(i as i32)], cols) != blank));
 		if wiped {
 			self.scroll.cancel_app_scroll();
 			// the rows above the clear are gone, so no later slide may show them
@@ -2075,44 +1749,26 @@ impl Pane {
 		}
 		let step = step.filter(|&step| {
 			let chunk = chunk.as_deref().unwrap_or_default();
-			let room = !SLIDE_DOWN_INTO_ROOM
-				&& ledger_makes_room(step, &region, lines, &self.last_cells, chunk);
+			let room = !SLIDE_DOWN_INTO_ROOM && ledger_makes_room(step, &region, lines, &self.last_cells, chunk);
 			if room {
 				// still traced, so the harness can tell a pop from no scroll at all
 				shift_dbg = step;
 			}
-			let arrived = |from: usize, to: usize| {
-				self.last_rows.len() == lines
-					&& row_print(&guard.grid()[Line(to as i32)], cols) == self.last_rows[from]
-			};
+			let arrived = |from: usize, to: usize| self.last_rows.len() == lines && row_print(&guard.grid()[Line(to as i32)], cols) == self.last_rows[from];
 			// A relayout drops the snapshot until the next build takes one. A
 			// region scroll on the normal screen that nothing can check against is
 			// most likely a shell redrawing its prompt for the new width, so it
 			// shows in place. The alt screen still slides on the record alone.
 			let unknown = !alt && self.last_cells.len() != lines;
-			!unknown
-				&& !wiped && slide_is_visible(step, &region, &self.last_cells, chunk, arrived)
-				&& !room
+			!unknown && !wiped && slide_is_visible(step, &region, &self.last_cells, chunk, arrived) && !room
 		});
 		// The fingerprints also feed the output band, which belongs to the output
 		// ease and so works with app easing off. The styled cells stay app-only.
 		let apps = settings.smooth_apps();
-		if (apps || (settings.scroll_smooth && !alt)) && !cut && (force_rebuild || !self.text_built)
-		{
+		if (apps || (settings.scroll_smooth && !alt)) && !cut && (force_rebuild || !self.text_built) {
 			let mut cur_cells = std::mem::take(&mut self.cells_scratch);
 			let mut rows = std::mem::take(&mut self.prints_scratch);
-			snapshot_rows_into(
-				guard.grid(),
-				lines,
-				cols,
-				apps.then_some((
-					guard.colors(),
-					&settings,
-					&mut cur_cells,
-					&mut self.readable,
-				)),
-				&mut rows,
-			);
+			snapshot_rows_into(guard.grid(), lines, cols, apps.then_some((guard.colors(), &settings, &mut cur_cells, &mut self.readable)), &mut rows);
 			if let (true, Some(step)) = (apps, step) {
 				shift_dbg = step;
 				// The bands are the region's edges, except that a row at the edge away
@@ -2125,11 +1781,7 @@ impl Pane {
 				// as tmux flushes, and holding the row then makes its new line pop in
 				// while the rest slides.
 				if !gesture_active || self.strip.region != (region.start, region.end) {
-					let same = |i: usize| {
-						self.last_rows.len() == lines
-							&& rows[i] == self.last_rows[i]
-							&& rows[i] != blank
-					};
+					let same = |i: usize| self.last_rows.len() == lines && rows[i] == self.last_rows[i] && rows[i] != blank;
 					let (mut top, mut bottom) = (region.start, region.end);
 					if step > 0 {
 						while bottom > top + 1 && same(bottom - 1) {
@@ -2159,21 +1811,14 @@ impl Pane {
 				// second time in the reveal, so a held edge takes last frame's cells.
 				let chunk = if !held {
 					chunk.unwrap_or_default()
-				} else if self.last_cells.len() == lines
-					&& self.last_cells.first().is_none_or(|r| r.len() == cols)
-				{
-					let range =
-						vanished_range(step, self.slide_static_top, self.slide_static, lines);
-					self.last_cells[range]
-						.iter_mut()
-						.map(std::mem::take)
-						.collect()
+				} else if self.last_cells.len() == lines && self.last_cells.first().is_none_or(|r| r.len() == cols) {
+					let range = vanished_range(step, self.slide_static_top, self.slide_static, lines);
+					self.last_cells[range].iter_mut().map(std::mem::take).collect()
 				} else {
 					Vec::new()
 				};
 				if !chunk.is_empty() {
-					self.strip
-						.push_step(step.signum() as i8, (region.start, region.end), chunk);
+					self.strip.push_step(step.signum() as i8, (region.start, region.end), chunk);
 					self.strip_dirty = true;
 				}
 				// the offset may not open a gap the strip can't fill
@@ -2184,13 +1829,7 @@ impl Pane {
 				let shift = if fingerprint_frame(alt, follow, grew, scrolled) {
 					let shift = scroll_shift_signed(&rows, &self.last_rows, APP_SCROLL_MAX);
 					shift_dbg = shift;
-					if SLIDE_DOWN_INTO_ROOM
-						|| !shift_makes_room(&rows, &self.last_rows, shift, blank)
-					{
-						shift
-					} else {
-						0
-					}
+					if SLIDE_DOWN_INTO_ROOM || !shift_makes_room(&rows, &self.last_rows, shift, blank) { shift } else { 0 }
 				} else {
 					0
 				};
@@ -2212,39 +1851,24 @@ impl Pane {
 						// offset opens is always filled. A stale or resized snapshot skips
 						// the fill for that one step.
 						self.slide_sh = shift as f32;
-						if self.last_cells.len() == lines
-							&& self.last_cells.first().is_none_or(|r| r.len() == cols)
-						{
-							let range = vanished_range(
-								shift,
-								self.slide_static_top,
-								self.slide_static,
-								lines,
-							);
+						if self.last_cells.len() == lines && self.last_cells.first().is_none_or(|r| r.len() == cols) {
+							let range = vanished_range(shift, self.slide_static_top, self.slide_static, lines);
 							// move the rows out rather than clone them, since last_cells is
 							// replaced whole below and snapshot_rows recycles emptied slots
-							let chunk: Vec<Vec<StripCell>> = self.last_cells[range]
-								.iter_mut()
-								.map(std::mem::take)
-								.collect();
+							let chunk: Vec<Vec<StripCell>> = self.last_cells[range].iter_mut().map(std::mem::take).collect();
 							if !chunk.is_empty() {
 								let region = (self.slide_static_top, lines - self.slide_static);
 								self.strip.push_step(shift.signum() as i8, region, chunk);
 								self.strip_dirty = true;
 							}
 						}
-						self.scroll
-							.app_scroll(shift as f32, OffStrip::CAP as f32, lines as f32);
+						self.scroll.app_scroll(shift as f32, OffStrip::CAP as f32, lines as f32);
 					}
 				}
 			}
 			if advanced > 0 && follow && !alt && settings.scroll_smooth {
 				// rows outside a recorded scroll region stayed put by definition
-				let hint = if scrolled > 0 && region.start == 0 && region.end < lines {
-					lines - region.end
-				} else {
-					0
-				};
+				let hint = if scrolled > 0 && region.start == 0 && region.end < lines { lines - region.end } else { 0 };
 				let measured = output_band(&rows, &self.last_rows, advanced, hint, blank);
 				self.out_band = adopt_band(self.out_band, measured, was_chasing);
 			}
@@ -2271,70 +1895,37 @@ impl Pane {
 		let app_off = self.scroll.app_offset();
 		let voff = frac + app_off;
 		// an app slide keeps its own bands and wins over the output band
-		let ob = if app_off == 0.0 {
-			self.out_band.min(lines / 2)
-		} else {
-			0
-		};
+		let ob = if app_off == 0.0 { self.out_band.min(lines / 2) } else { 0 };
 		// Dev trace for the alt-screen slide (SILK_SCROLLDBG). Off, it's one cached
 		// bool per frame. The per-frame (sh, app_off, slide_sh, st, sb) sequence
 		// shows whether the slide eases smoothly, with app_off monotonic and no
 		// bounce. `rgn` and `strip` show what a cut-short slide looks like: a region
 		// that differs from the strip's throws the strip away, and the offset is
 		// then capped to what one step can fill.
-		if scroll_dbg()
-			&& ((settings.smooth_apps() && (alt || app_off != 0.0 || shift_dbg != 0))
-				|| (!alt && frac > 0.0))
-		{
+		if scroll_dbg() && ((settings.smooth_apps() && (alt || app_off != 0.0 || shift_dbg != 0)) || (!alt && frac > 0.0)) {
 			let frame = DBG_FRAME.fetch_add(1, Ordering::Relaxed);
-			eprintln!(
-				"SCROLLDBG f={frame} pane={} sh={shift_dbg} app_off={app_off:.4} slide_sh={:.4} st={} sb={} frac={frac:.4} alt={} ob={ob} rgn={}..{} strip={}",
-				self.id,
-				self.slide_sh,
-				self.slide_static_top,
-				self.slide_static,
-				alt as u8,
-				region.start,
-				region.end,
-				self.strip.len(),
-			);
+			eprintln!("SCROLLDBG f={frame} pane={} sh={shift_dbg} app_off={app_off:.4} slide_sh={:.4} st={} sb={} frac={frac:.4} alt={} ob={ob} rgn={}..{} strip={}", self.id, self.slide_sh, self.slide_static_top, self.slide_static, alt as u8, region.start, region.end, self.strip.len());
 		}
 		// Region-aware slide: only the middle scroll region shifts by voff; a static
 		// bottom band (status/input line) and a static top band (title bar) keep their
 		// fractional-only position. `split_row` is the first row of the bottom band;
 		// `top_split_row` is the first row of the scroll region (just below the title).
 		// No bands (or no active slide) => whole pane at voff.
-		let static_rows = if app_off == 0.0 {
-			ob
-		} else {
-			self.slide_static.min(lines)
-		};
-		let static_top = if app_off == 0.0 {
-			0
-		} else {
-			self.slide_static_top.min(lines.saturating_sub(static_rows))
-		};
+		let static_rows = if app_off == 0.0 { ob } else { self.slide_static.min(lines) };
+		let static_top = if app_off == 0.0 { 0 } else { self.slide_static_top.min(lines.saturating_sub(static_rows)) };
 		let split_row = (lines - static_rows) as i32;
 		let top_split_row = static_top as i32;
 		// An app slide redraws its bands at the fractional offset. The output band
 		// is the live bottom of the grid, which is where it already belongs.
 		let band_off = if app_off == 0.0 { 0.0 } else { frac };
 		let voff_of = |screen_row: i32| {
-			if (static_top > 0 && screen_row < top_split_row)
-				|| (static_rows > 0 && screen_row >= split_row)
-			{
-				band_off
-			} else {
-				voff
-			}
+			if (static_top > 0 && screen_row < top_split_row) || (static_rows > 0 && screen_row >= split_row) { band_off } else { voff }
 		};
 		let display_offset = desired as i32;
 		let hist = history as i32;
 		// fractional scroll shifts content down by frac of a cell, so an extra row
 		// is drawn above (screen row -1) to fill the gap.
-		let y_of = |screen_row: i32| {
-			self.rect.y + margin + (screen_row as f32 + voff_of(screen_row)) * cell_h
-		};
+		let y_of = |screen_row: i32| self.rect.y + margin + (screen_row as f32 + voff_of(screen_row)) * cell_h;
 		// The scroll-region draw origin is always the shifted position, independent of
 		// the bands (which are redrawn unshifted at band_top); grid elements use y_of.
 		let top = self.rect.y + margin + (-1.0 + voff) * cell_h;
@@ -2351,57 +1942,21 @@ impl Pane {
 			// The output band: no strip, and the eased text keeps the overscan row
 			// that fills the top, so only the band's own edge clips it.
 			let split_y = self.rect.y + margin + split_row as f32 * cell_h;
-			Some(Slide {
-				strip_top: 0.0,
-				strip_rows: 0..0,
-				strip_text_top: 0.0,
-				top_split_y: f32::MIN,
-				split_y,
-				region_clip_t: f32::MIN,
-				region_clip_b: split_y,
-				band_top: self.rect.y + margin - cell_h,
-				has_band: true,
-				has_top_band: false,
-			})
+			Some(Slide { strip_top: 0.0, strip_rows: 0..0, strip_text_top: 0.0, top_split_y: f32::MIN, split_y, region_clip_t: f32::MIN, region_clip_b: split_y, band_top: self.rect.y + margin - cell_h, has_band: true, has_top_band: false })
 		} else {
 			// split_y bounds the scroll region below; top_split_y bounds it above (a
 			// static top band sits above it; f32::MIN = no band, so the clip is open).
-			let split_y = if static_rows > 0 {
-				self.rect.y + margin + (split_row as f32 + frac) * cell_h
-			} else {
-				self.rect.y + self.rect.h
-			};
-			let top_split_y = if static_top > 0 {
-				self.rect.y + margin + (top_split_row as f32 + frac) * cell_h
-			} else {
-				f32::MIN
-			};
+			let split_y = if static_rows > 0 { self.rect.y + margin + (split_row as f32 + frac) * cell_h } else { self.rect.y + self.rect.h };
+			let top_split_y = if static_top > 0 { self.rect.y + margin + (top_split_row as f32 + frac) * cell_h } else { f32::MIN };
 			let band_top = self.rect.y + margin + (-1.0 + frac) * cell_h;
-			let strip_top = if app_off > 0.0 {
-				self.rect.y
-					+ margin + (top_split_row as f32 + voff - self.strip.len() as f32) * cell_h
-			} else {
-				self.rect.y + margin + (split_row as f32 + voff) * cell_h
-			};
+			let strip_top = if app_off > 0.0 { self.rect.y + margin + (top_split_row as f32 + voff - self.strip.len() as f32) * cell_h } else { self.rect.y + margin + (split_row as f32 + voff) * cell_h };
 			// content extent = first/one-past-last region row at the shifted position
 			let content_top_y = self.rect.y + margin + (top_split_row as f32 + voff) * cell_h;
 			let content_bot_y = self.rect.y + margin + (split_row as f32 + voff) * cell_h;
-			let (region_clip_t, region_clip_b) =
-				weld_region_clip(top_split_y, split_y, content_top_y, content_bot_y);
+			let (region_clip_t, region_clip_b) = weld_region_clip(top_split_y, split_y, content_top_y, content_bot_y);
 			let strip_rows = self.strip.visible(app_off);
 			let strip_text_top = strip_top + strip_rows.start as f32 * cell_h;
-			Some(Slide {
-				strip_top,
-				strip_rows,
-				strip_text_top,
-				top_split_y,
-				split_y,
-				region_clip_t,
-				region_clip_b,
-				band_top,
-				has_band: static_rows > 0,
-				has_top_band: static_top > 0,
-			})
+			Some(Slide { strip_top, strip_rows, strip_text_top, top_split_y, split_y, region_clip_t, region_clip_b, band_top, has_band: static_rows > 0, has_top_band: static_top > 0 })
 		};
 		// Hyperlink under the pointer. The scan wants the grid, which is locked
 		// right here, so it runs on the frame the pointer changed cell and on every
@@ -2409,23 +1964,7 @@ impl Pane {
 		// pointer that never moved. A missed lock leaves the probe pending.
 		if self.link_probe || force_rebuild || !self.text_built {
 			self.link_probe = false;
-			let hit = if settings.hyperlinks {
-				self.hover_px.and_then(|(px, py)| {
-					link_at(
-						guard.grid(),
-						guard.colors(),
-						&settings,
-						self.rect,
-						px,
-						py,
-						(cell_w, cell_h, margin),
-						(cols, lines),
-						display_offset,
-					)
-				})
-			} else {
-				None
-			};
+			let hit = if settings.hyperlinks { self.hover_px.and_then(|(px, py)| link_at(guard.grid(), guard.colors(), &settings, self.rect, px, py, (cell_w, cell_h, margin), (cols, lines), display_offset)) } else { None };
 			if hit != self.link_hover {
 				self.link_hover = hit;
 			}
@@ -2438,40 +1977,17 @@ impl Pane {
 			let (thick, drop) = underline_metrics(cell_h);
 			let color = config::srgb_f32(link.fg);
 			for grid_line in link.start.line.0..=link.end.line.0 {
-				let screen_row = if ob > 0 && grid_line >= split_row {
-					grid_line
-				} else {
-					grid_line + display_offset
-				};
+				let screen_row = if ob > 0 && grid_line >= split_row { grid_line } else { grid_line + display_offset };
 				// a scrolled-view line that sits under the band is hidden by it
-				if screen_row < 0
-					|| screen_row >= lines as i32
-					|| (ob > 0 && grid_line < split_row && screen_row >= split_row)
-				{
+				if screen_row < 0 || screen_row >= lines as i32 || (ob > 0 && grid_line < split_row && screen_row >= split_row) {
 					continue;
 				}
-				let first_col = if grid_line == link.start.line.0 {
-					link.start.column.0
-				} else {
-					0
-				};
-				let last_col = if grid_line == link.end.line.0 {
-					link.end.column.0
-				} else {
-					cols.saturating_sub(1)
-				};
+				let first_col = if grid_line == link.start.line.0 { link.start.column.0 } else { 0 };
+				let last_col = if grid_line == link.end.line.0 { link.end.column.0 } else { cols.saturating_sub(1) };
 				if last_col < first_col {
 					continue;
 				}
-				link_rects.push(RectInstance {
-					pos: [
-						content_x + first_col as f32 * cell_w,
-						y_of(screen_row) + drop,
-					],
-					size: [(last_col - first_col + 1) as f32 * cell_w, thick],
-					color,
-					..Default::default()
-				});
+				link_rects.push(RectInstance { pos: [content_x + first_col as f32 * cell_w, y_of(screen_row) + drop], size: [(last_col - first_col + 1) as f32 * cell_w, thick], color, ..Default::default() });
 			}
 		}
 
@@ -2485,11 +2001,7 @@ impl Pane {
 		};
 		// Alt-screen apps own their cursor shape; on the primary screen it's the
 		// configured geometry (or the app's DECSCUSR). See cursor_geometry.
-		let cursor_geom = cursor_geometry(
-			cursor_shape,
-			guard.mode().contains(TermMode::ALT_SCREEN),
-			&settings,
-		);
+		let cursor_geom = cursor_geometry(cursor_shape, guard.mode().contains(TermMode::ALT_SCREEN), &settings);
 		let following = desired == 0;
 
 		// Fast path: a frame that only animates the cursor, with no content,
@@ -2504,22 +2016,7 @@ impl Pane {
 		// that wasn't shaped again, so text drew a row off its own backgrounds.
 		if !force_rebuild && self.text_built && delta == 0 {
 			drop(guard);
-			let cursor = self.cursor_quad(
-				cursor_pt,
-				cursor_shape,
-				cursor_geom,
-				display_offset,
-				lines,
-				following,
-				content_x,
-				cell_w,
-				cell_h,
-				margin,
-				voff,
-				dt,
-				&settings,
-				active,
-			);
+			let cursor = self.cursor_quad(cursor_pt, cursor_shape, cursor_geom, display_offset, lines, following, content_x, cell_w, cell_h, margin, voff, dt, &settings, active);
 			// the fast path only animates the cursor and is never taken while a
 			// slide eases, since that forces a rebuild, so there's never a slide here
 			self.last_draw.top = top;
@@ -2558,11 +2055,7 @@ impl Pane {
 				} else {
 					self.rect.y + margin
 				},
-				if sl.has_band {
-					sl.split_y
-				} else {
-					self.rect.y + self.rect.h - margin
-				},
+				if sl.has_band { sl.split_y } else { self.rect.y + self.rect.h - margin },
 			)
 		});
 
@@ -2652,25 +2145,15 @@ impl Pane {
 					fg = cell_bg;
 				}
 				if flags.contains(Flags::DIM) {
-					fg = [
-						fg[0] / 2 + fg[0] / 4,
-						fg[1] / 2 + fg[1] / 4,
-						fg[2] / 2 + fg[2] / 4,
-					];
+					fg = [fg[0] / 2 + fg[0] / 4, fg[1] / 2 + fg[1] / 4, fg[2] / 2 + fg[2] / 4];
 				}
-				let selected = sel_range
-					.is_some_and(|r| r.contains(Point::new(Line(grid_line), Column(column))));
+				let selected = sel_range.is_some_and(|r| r.contains(Point::new(Line(grid_line), Column(column))));
 				// What is painted behind the glyph, which is the selection quad
 				// where there is one. The bell flash rides on top of the result, so
 				// a flash can brighten but never undoes the lift.
-				let behind = if selected {
-					config::SELECTION_BG
-				} else {
-					cell_bg
-				};
+				let behind = if selected { config::SELECTION_BG } else { cell_bg };
 				fg = self.readable.get(fg, behind, settings.min_contrast());
-				let mut cell_lines =
-					cell_rules(cell, fg, behind, colors, &settings, &mut self.readable);
+				let mut cell_lines = cell_rules(cell, fg, behind, colors, &settings, &mut self.readable);
 				if bell > 0.0 {
 					fg = bell_brighten(fg, bell); // visual-bell flash
 					if let Some((_, color)) = &mut cell_lines.under {
@@ -2696,20 +2179,14 @@ impl Pane {
 						rect_bot = rect_bot.min(clip_b);
 					}
 					if rect_bot > rect_top {
-						bg.push(RectInstance {
-							pos: [content_x + column as f32 * cell_w, rect_top],
-							size: [cell_w, rect_bot - rect_top],
-							color: config::srgb_f32(col),
-							..Default::default()
-						});
+						bg.push(RectInstance { pos: [content_x + column as f32 * cell_w, rect_top], size: [cell_w, rect_bot - rect_top], color: config::srgb_f32(col), ..Default::default() });
 					}
 				}
 
 				// reverse-video (dark-on-light) text renders visually thinner than the
 				// same weight light-on-dark. Embolden it so inverse chrome, such as nano's
 				// and vim's title and status bars, reads as strongly as normal text.
-				let bold = flags.contains(Flags::BOLD)
-					|| (settings.embolden_inverse && flags.contains(Flags::INVERSE));
+				let bold = flags.contains(Flags::BOLD) || (settings.embolden_inverse && flags.contains(Flags::INVERSE));
 				let italic = flags.contains(Flags::ITALIC);
 				saw_bold |= bold;
 				// A glyph the primary mono font lacks renders via a fallback font
@@ -2718,19 +2195,8 @@ impl Pane {
 				// Same for one the font does have but advances by the wrong number
 				// of cells, since a mono face often has a double-width char at its
 				// ordinary single advance.
-				let w = if flags.contains(Flags::WIDE_CHAR) {
-					2
-				} else {
-					1
-				};
-				push_cell_rules(
-					cell_lines,
-					(&mut unders, &mut strikes),
-					screen_row,
-					y,
-					column,
-					usize::from(w),
-				);
+				let w = if flags.contains(Flags::WIDE_CHAR) { 2 } else { 1 };
+				push_cell_rules(cell_lines, (&mut unders, &mut strikes), screen_row, y, column, usize::from(w));
 				if !cell.c.is_ascii() && !ctx.covered_at(cell.c, w) {
 					for _ in 0..w {
 						run.push(' ');
@@ -2750,28 +2216,12 @@ impl Pane {
 		}
 		rows_out.truncate(rows_used); // drop stale slots from a taller prior frame
 		for span in unders.iter().chain(&strikes) {
-			let clip =
-				region_rect_clip.filter(|_| span.row >= top_split_row && span.row < split_row);
+			let clip = region_rect_clip.filter(|_| span.row >= top_split_row && span.row < split_row);
 			span_quads(span, content_x, (cell_w, cell_h), clip, &mut rules);
 		}
 
 		drop(guard);
-		let mut cursor = self.cursor_quad(
-			cursor_pt,
-			cursor_shape,
-			cursor_geom,
-			display_offset,
-			lines,
-			following,
-			content_x,
-			cell_w,
-			cell_h,
-			margin,
-			voff_of(cursor_pt.line.0 + display_offset),
-			dt,
-			&settings,
-			active,
-		);
+		let mut cursor = self.cursor_quad(cursor_pt, cursor_shape, cursor_geom, display_offset, lines, following, content_x, cell_w, cell_h, margin, voff_of(cursor_pt.line.0 + display_offset), dt, &settings, active);
 		// the cursor moves with the sliding region too, so clamp it like the
 		// background rects, only when it's a region row, since nano parks it in
 		// the status band on ^W
@@ -2805,11 +2255,7 @@ impl Pane {
 		// the Windows default faces, whose bold advance differs from cell_w, where
 		// the de-bolded buffer drifts from the display buffer along the line. This
 		// runs first because it reads the rows the display buffer then takes.
-		self.scrim_debold = settings.text_scrim
-			&& settings.text_scrim_radius > 0.0
-			&& settings.text_scrim_regular_weight
-			&& ctx.debold_safe
-			&& saw_bold;
+		self.scrim_debold = settings.text_scrim && settings.text_scrim_radius > 0.0 && settings.text_scrim_regular_weight && ctx.debold_safe && saw_bold;
 		if self.scrim_debold {
 			let (buf_w, buf_h) = self.buffer.size();
 			let scrim_buffer = self.scrim_buf.get_or_insert_with(|| {
@@ -2821,23 +2267,10 @@ impl Pane {
 			scrim_buffer.set_metrics(&mut ctx.font_system, ctx.metrics);
 			scrim_buffer.set_size(&mut ctx.font_system, buf_w, buf_h);
 			// borrow the row text; only the attrs differ (bold stripped)
-			set_buffer_rows(
-				scrim_buffer,
-				rows_out.iter().map(|(text, attrs)| {
-					(text.as_str(), debold_attrs(attrs, default_attrs.weight))
-				}),
-			);
+			set_buffer_rows(scrim_buffer, rows_out.iter().map(|(text, attrs)| (text.as_str(), debold_attrs(attrs, default_attrs.weight))));
 			scrim_buffer.shape_until_scroll(&mut ctx.font_system, false);
 		}
-		set_buffer_rows(
-			&mut self.buffer,
-			rows_out.iter_mut().map(|(text, attrs)| {
-				(
-					text.as_str(),
-					std::mem::replace(attrs, AttrsList::new(&default_attrs)),
-				)
-			}),
-		);
+		set_buffer_rows(&mut self.buffer, rows_out.iter_mut().map(|(text, attrs)| (text.as_str(), std::mem::replace(attrs, AttrsList::new(&default_attrs)))));
 		self.buffer.shape_until_scroll(&mut ctx.font_system, false);
 		self.rows_scratch = rows_out; // keep the row Strings for the next frame
 
@@ -2849,8 +2282,7 @@ impl Pane {
 			&& (self.strip_dirty || self.strip.shaped != sl.strip_rows)
 		{
 			self.strip_dirty = false;
-			self.strip
-				.shape(ctx, settings.fg, self.rect.w, sl.strip_rows.clone());
+			self.strip.shape(ctx, settings.fg, self.rect.w, sl.strip_rows.clone());
 		}
 		// Strip cells with their own background (inverse video, colored bg) keep it
 		// while revealed: emit their rects at the strip's slide position, clamped to
@@ -2870,21 +2302,9 @@ impl Pane {
 					if cell.wide == 0 {
 						continue;
 					}
-					push_cell_rules(
-						cell.rules,
-						(&mut unders, &mut strikes),
-						j as i32,
-						y,
-						c,
-						usize::from(cell.wide),
-					);
+					push_cell_rules(cell.rules, (&mut unders, &mut strikes), j as i32, y, c, usize::from(cell.wide));
 					if let Some(col) = cell.bg {
-						bg.push(RectInstance {
-							pos: [content_x + c as f32 * cell_w, rect_top],
-							size: [cell_w, rect_bot - rect_top],
-							color: config::srgb_f32(col),
-							..Default::default()
-						});
+						bg.push(RectInstance { pos: [content_x + c as f32 * cell_w, rect_top], size: [cell_w, rect_bot - rect_top], color: config::srgb_f32(col), ..Default::default() });
 					}
 				}
 				for span in unders.iter().chain(&strikes) {
@@ -2905,11 +2325,7 @@ impl Pane {
 			let row_y = rect_y + margin + (screen_row as f32 + voff_of(screen_row)) * cell_h;
 			// A color glyph is a self-contained image, so it goes to the color
 			// atlas whole rather than through the monochrome fallback face below.
-			let color_glyph = if settings.color_emoji {
-				ctx.color_metrics(ch)
-			} else {
-				None
-			};
+			let color_glyph = if settings.color_emoji { ctx.color_metrics(ch) } else { None };
 			if let Some(metrics) = color_glyph {
 				// Fit the design box inside the cell box, keeping its aspect, and
 				// center it there. Color glyphs are drawn rather than typeset, and
@@ -2944,39 +2360,22 @@ impl Pane {
 				}
 				let mut buf = ctx.new_plain_buffer();
 				let (ink_w, ink_off, base_dy) = ctx.fill_glyph(&mut buf, ch, &attrs);
-				FallbackGlyph {
-					buf,
-					ink_w,
-					ink_off,
-					base_dy,
-				}
+				FallbackGlyph { buf, ink_w, ink_off, base_dy }
 			});
 			// Fit the ink inside its cell box (cells * cell_w wide), only ever
 			// shrinking, and center it there, or a fallback face's ink that's wider
 			// than a cell would spill over the next cell's text. Back out the ink
 			// offset so centering is on the ink rather than the pen.
 			let target = cells as f32 * cell_w;
-			let scale = if glyph.ink_w > target {
-				target / glyph.ink_w
-			} else {
-				1.0
-			};
+			let scale = if glyph.ink_w > target { target / glyph.ink_w } else { 1.0 };
 			let x = cell_x + (target - glyph.ink_w * scale) / 2.0 - glyph.ink_off * scale;
 			// plus the shift that puts a fallback face's glyph on the same baseline
 			// as the text beside it
 			let y = row_y + cell_h * (1.0 - scale) / 2.0 + glyph.base_dy * scale;
-			self.glyphs
-				.push((key, x, y, GColor::rgb(color[0], color[1], color[2]), scale));
+			self.glyphs.push((key, x, y, GColor::rgb(color[0], color[1], color[2]), scale));
 		}
 
-		self.last_draw = PaneDraw {
-			top,
-			bg,
-			links: link_rects,
-			rules,
-			cursor,
-			slide,
-		};
+		self.last_draw = PaneDraw { top, bg, links: link_rects, rules, cursor, slide };
 	}
 
 	/// The frame `build()` just produced (or the retained one on a lock miss).
@@ -2988,12 +2387,7 @@ impl Pane {
 	/// re-scan when the cell changed, so sweeping across a row costs one scan per
 	/// cell rather than one per pixel; the scan itself happens in `build()`.
 	pub fn set_hover(&mut self, px: Option<(f32, f32)>, ctx: &TextCtx) {
-		let cell_of = |(x, y): (f32, f32)| {
-			(
-				((x - self.rect.x - ctx.margin) / ctx.cell_w).floor() as i32,
-				((y - self.rect.y - ctx.margin) / ctx.cell_h).floor() as i32,
-			)
-		};
+		let cell_of = |(x, y): (f32, f32)| (((x - self.rect.x - ctx.margin) / ctx.cell_w).floor() as i32, ((y - self.rect.y - ctx.margin) / ctx.cell_h).floor() as i32);
 		if self.hover_px.map(cell_of) != px.map(cell_of) {
 			self.link_probe = true;
 		}
@@ -3020,17 +2414,7 @@ impl Pane {
 		}
 		let guard = self.term.term.lock_unfair();
 		let display_offset = guard.grid().display_offset() as i32;
-		link_at(
-			guard.grid(),
-			guard.colors(),
-			&settings,
-			self.rect,
-			x,
-			y,
-			(ctx.cell_w, ctx.cell_h, ctx.margin),
-			(self.term.cols, self.term.lines),
-			display_offset,
-		)
+		link_at(guard.grid(), guard.colors(), &settings, self.rect, x, y, (ctx.cell_w, ctx.cell_h, ctx.margin), (self.term.cols, self.term.lines), display_offset)
 	}
 
 	/// The user sent input here (a keystroke, a paste). Stamps the moment so the
@@ -3050,18 +2434,13 @@ impl Pane {
 		self.cursor_step_at = Some(now);
 		self.cursor_active_at = now;
 		let settings = config::settings();
-		let (period, full_phase) =
-			cursor_cycle(settings.cursor_animation, settings.cursor_blink_rate_s);
+		let (period, full_phase) = cursor_cycle(settings.cursor_animation, settings.cursor_blink_rate_s);
 		self.blink_t = full_phase * period;
 		self.cursor_pause.resume();
 	}
 
 	fn bar_applies(&self, cfg: &config::Settings) -> bool {
-		bar_applies_to(
-			cfg,
-			self.mode.contains(TermMode::ALT_SCREEN),
-			self.scroll.max_lines(),
-		)
+		bar_applies_to(cfg, self.mode.contains(TermMode::ALT_SCREEN), self.scroll.max_lines())
 	}
 
 	/// The user scrolled this pane: show the bar, and hold it up briefly afterwards
@@ -3086,21 +2465,12 @@ impl Pane {
 		// scrollback, where the position is what matters.
 		let want = if !self.bar_applies(cfg) {
 			0.0
-		} else if !cfg.scrollbar_auto_hide
-			|| self.bar_drag.is_some()
-			|| self.bar_hover
-			|| self.bar_hold > 0.0
-			|| !self.scroll.following()
-		{
+		} else if !cfg.scrollbar_auto_hide || self.bar_drag.is_some() || self.bar_hover || self.bar_hold > 0.0 || !self.scroll.following() {
 			1.0
 		} else {
 			0.0
 		};
-		let tau = if want > self.bar_alpha {
-			BAR_IN_TAU_S
-		} else {
-			BAR_OUT_TAU_S
-		};
+		let tau = if want > self.bar_alpha { BAR_IN_TAU_S } else { BAR_OUT_TAU_S };
 		self.bar_alpha += (want - self.bar_alpha) * (1.0 - (-dt / tau).exp());
 		if (want - self.bar_alpha).abs() < BAR_VISIBLE_EPS {
 			self.bar_alpha = want;
@@ -3129,22 +2499,8 @@ impl Pane {
 			return None;
 		}
 		let pos_lines = self.handle_lines();
-		let (thumb_y, thumb_h) = bar_thumb_span(
-			track.h,
-			thickness,
-			rows as f32,
-			self.scroll.max_lines(),
-			pos_lines,
-		);
-		Some(Bar {
-			track,
-			thumb: Rect {
-				x: track.x,
-				y: track.y + thumb_y,
-				w: track.w,
-				h: thumb_h,
-			},
-		})
+		let (thumb_y, thumb_h) = bar_thumb_span(track.h, thickness, rows as f32, self.scroll.max_lines(), pos_lines);
+		Some(Bar { track, thumb: Rect { x: track.x, y: track.y + thumb_y, w: track.w, h: thumb_h } })
 	}
 
 	/// Would a press at (x, y) hit the bar, and where? None when the bar is
@@ -3172,37 +2528,28 @@ impl Pane {
 		}
 		let thickness = ctx.dip(cfg.scrollbar_thickness).min(self.full.w);
 		let slop = ctx.dip(BAR_HOVER_SLOP);
-		let strip = Rect {
-			x: self.full.x + self.full.w - thickness - slop,
-			y: self.rect.y,
-			w: thickness + slop,
-			h: self.rect.h,
-		};
+		let strip = Rect { x: self.full.x + self.full.w - thickness - slop, y: self.rect.y, w: thickness + slop, h: self.rect.h };
 		strip.contains(x, y)
 	}
 
-	/// Start a thumb drag, remembering where inside the handle it was grabbed so
-	/// the thumb doesn't jump under the pointer.
+	/// Start a thumb drag, remembering the pointer and the place the thumb
+	/// showed, so the thumb doesn't jump under the pointer.
 	pub fn bar_grab(&mut self, y: f32, ctx: &TextCtx, cfg: &config::Settings) {
-		if let Some(bar) = self.scrollbar(ctx, cfg) {
-			self.bar_drag = Some(y - bar.thumb.y);
+		if self.scrollbar(ctx, cfg).is_some() {
+			self.bar_drag = Some(HandleGrab::new(y, self.handle_lines(), &self.scroll));
 			self.poke_scrollbar();
 		}
 	}
 
-	/// Continue a thumb drag: put the thumb's top where the pointer says, and map
-	/// that back to a scroll position.
+	/// Continue a thumb drag: move the thumb as far as the pointer has moved, and
+	/// map that back to a scroll position.
 	pub fn bar_drag_to(&mut self, y: f32, ctx: &TextCtx, cfg: &config::Settings) {
 		let Some(grab) = self.bar_drag else { return };
 		let Some(bar) = self.scrollbar(ctx, cfg) else {
 			return;
 		};
-		let lines = bar_pos_to_lines(
-			bar.track.h,
-			bar.thumb.h,
-			self.scroll.max_lines(),
-			y - grab - bar.track.y,
-		);
+		let (from_y, from_lines) = grab.from(&self.scroll);
+		let lines = bar_drag_lines(bar.track.h, bar.thumb.h, self.scroll.max_lines(), from_lines, y - from_y);
 		self.scroll.scroll_to(lines);
 		self.poke_scrollbar();
 	}
@@ -3221,12 +2568,7 @@ impl Pane {
 	// tracks it exactly and the other stays level with it. Off a drag they ride
 	// `visual`, so they move with the content they describe.
 	fn handle_lines(&self) -> f32 {
-		handle_pos(
-			handle_is_dragged(self.bar_drag.is_some(), self.map_drag.is_some()),
-			self.handle_drop_at.is_some(),
-			self.scroll.target_lines(),
-			self.scroll.visual_lines(),
-		)
+		handle_pos(handle_is_dragged(self.bar_drag.is_some(), self.map_drag.is_some()), self.handle_drop_at.is_some(), self.scroll.target_lines(), self.scroll.visual_lines())
 	}
 
 	/// End a handle drag. The handle stays where it was let go and the text eases
@@ -3243,18 +2585,7 @@ impl Pane {
 		let rows = self.term.lines;
 		let pos = self.handle_lines();
 		let (total, shown) = self.map_span();
-		minimap::geom(
-			self.full,
-			ctx.margin,
-			ctx.scale,
-			cfg,
-			total,
-			shown,
-			rows,
-			pos,
-			self.mode.contains(TermMode::ALT_SCREEN),
-			self.map_on,
-		)
+		minimap::geom(self.full, ctx.margin, ctx.scale, cfg, total, shown, rows, pos, self.mode.contains(TermMode::ALT_SCREEN), self.map_on)
 	}
 
 	// The whole buffer and the part of it the map draws. The second stops where
@@ -3274,10 +2605,7 @@ impl Pane {
 	/// When a compose the throttle deferred comes due, the column's hold runs
 	/// out, or tmux's answer about what it shows wants reading.
 	pub fn map_wake(&self) -> Option<std::time::Instant> {
-		[self.map.wake(), self.map_hold.wake(), self.term.tmux_wake()]
-			.into_iter()
-			.flatten()
-			.min()
+		[self.map.wake(), self.map_hold.wake(), self.term.tmux_wake()].into_iter().flatten().min()
 	}
 
 	/// Start a marker drag, remembering the pointer and what the view sat at.
@@ -3285,7 +2613,7 @@ impl Pane {
 	/// a press with no movement from scrolling anything.
 	pub fn map_grab(&mut self, y: f32, ctx: &TextCtx, cfg: &config::Settings) {
 		if self.minimap(ctx, cfg).and_then(|g| g.handle).is_some() {
-			self.map_drag = Some((y, self.scroll.visual_lines()));
+			self.map_drag = Some(HandleGrab::new(y, self.scroll.visual_lines(), &self.scroll));
 			self.poke_scrollbar();
 		}
 	}
@@ -3297,8 +2625,8 @@ impl Pane {
 		};
 		let rows = self.term.lines;
 		let (total, shown) = self.map_span();
-		self.scroll
-			.scroll_to(minimap::drag_to(&g, total, shown, rows, grab, y, ctx.scale));
+		let from = grab.from(&self.scroll);
+		self.scroll.scroll_to(minimap::drag_to(&g, total, shown, rows, from, y, ctx.scale));
 		self.poke_scrollbar();
 	}
 
@@ -3309,8 +2637,7 @@ impl Pane {
 		};
 		let rows = self.term.lines;
 		let (total, shown) = self.map_span();
-		self.scroll
-			.scroll_to(minimap::center_on(&g, total, shown, rows, y, ctx.scale));
+		self.scroll.scroll_to(minimap::center_on(&g, total, shown, rows, y, ctx.scale));
 		self.poke_scrollbar();
 	}
 
@@ -3337,8 +2664,7 @@ impl Pane {
 	/// rather than let the next sample read it as a clear. Resizes are rare and
 	/// this is bounded to one read cycle, so it takes the fair lock.
 	pub fn rebaseline_history(&mut self) {
-		self.depth
-			.rebaseline(self.term.term.lock().grid().history_size());
+		self.depth.rebaseline(self.term.term.lock().grid().history_size());
 	}
 
 	/// Samples the history depth for the output ease, and skips it when the term lock is busy.
@@ -3357,28 +2683,9 @@ impl Pane {
 	// cursor-only fast path included. Runs after the term lock is dropped, since
 	// it takes &mut self.
 	#[allow(clippy::too_many_arguments)]
-	fn cursor_quad(
-		&mut self,
-		cursor_pt: Point,
-		cursor_shape: CursorShape,
-		cursor_geom: (f32, f32),
-		display_offset: i32,
-		lines: usize,
-		following: bool,
-		content_x: f32,
-		cell_w: f32,
-		cell_h: f32,
-		margin: f32,
-		voff: f32,
-		dt: f32,
-		settings: &config::Settings,
-		active: bool,
-	) -> Option<RectInstance> {
+	fn cursor_quad(&mut self, cursor_pt: Point, cursor_shape: CursorShape, cursor_geom: (f32, f32), display_offset: i32, lines: usize, following: bool, content_x: f32, cell_w: f32, cell_h: f32, margin: f32, voff: f32, dt: f32, settings: &config::Settings, active: bool) -> Option<RectInstance> {
 		let cursor_screen_row = cursor_pt.line.0 + display_offset;
-		let shown = following
-			&& cursor_shape != CursorShape::Hidden
-			&& cursor_screen_row >= 0
-			&& (cursor_screen_row as usize) < lines;
+		let shown = following && cursor_shape != CursorShape::Hidden && cursor_screen_row >= 0 && (cursor_screen_row as usize) < lines;
 		self.cursor_animating = false;
 		if !shown {
 			self.cursor_wake = None;
@@ -3387,9 +2694,7 @@ impl Pane {
 		// wall-clock dt for the pause timers: while parked no frames are drawn, so the
 		// one wake/event frame after a sleep must account for the whole gap
 		let step_now = std::time::Instant::now();
-		let wall_dt = self
-			.cursor_step_at
-			.map_or(dt, |at| (step_now - at).as_secs_f32());
+		let wall_dt = self.cursor_step_at.map_or(dt, |at| (step_now - at).as_secs_f32());
 		self.cursor_step_at = Some(step_now);
 		let target_col = cursor_pt.column.0 as f32;
 		let row_jump = !self.cursor_init || cursor_screen_row != self.cursor_row;
@@ -3429,8 +2734,7 @@ impl Pane {
 		// resume comes from cursor_wake, and a refocus ends the park (poke_cursor).
 		let cursor_rgb = settings.cursor;
 		let anim = settings.cursor_blink.then_some(settings.cursor_animation);
-		let (period, full_phase) =
-			cursor_cycle(settings.cursor_animation, settings.cursor_blink_rate_s);
+		let (period, full_phase) = cursor_cycle(settings.cursor_animation, settings.cursor_blink_rate_s);
 		let anim_on = anim.is_some();
 		let mut parked = false;
 		self.cursor_wake = None;
@@ -3441,43 +2745,18 @@ impl Pane {
 			// pane parks at full and stays there until it's the active pane again
 			let blocked = FREEZE_UNFOCUSED_BLINK && !active;
 			let input_idle_t = (step_now - self.cursor_active_at).as_secs_f32();
-			self.blink_t = self.cursor_pause.advance(
-				self.blink_t,
-				dt,
-				wall_dt,
-				period,
-				full_phase,
-				resume_s,
-				idle_stop_s,
-				moved,
-				self.cursor_idle_t,
-				input_idle_t,
-				blocked,
-			);
+			self.blink_t = self.cursor_pause.advance(self.blink_t, dt, wall_dt, period, full_phase, resume_s, idle_stop_s, moved, self.cursor_idle_t, input_idle_t, blocked);
 			parked = self.cursor_pause.active && self.cursor_pause.parked;
 			let idle_stopped = idle_stop_s > 0.0 && input_idle_t >= idle_stop_s;
-			if let Some(wait) = cursor_wake_after(
-				parked,
-				idle_stopped,
-				blocked,
-				resume_s,
-				self.cursor_idle_t,
-				self.cursor_pause.hold_t,
-			) {
+			if let Some(wait) = cursor_wake_after(parked, idle_stopped, blocked, resume_s, self.cursor_idle_t, self.cursor_pause.hold_t) {
 				self.cursor_wake = Some(step_now + std::time::Duration::from_secs_f32(wait));
 			}
 		} else {
 			self.blink_t += dt;
 		}
 		let phase = (self.blink_t / period).fract();
-		let full = cursor_alpha(
-			settings.fg,
-			settings.bg,
-			cursor_rgb,
-			settings.min_contrast(),
-		);
-		let (w_frac, h_frac, alpha, pulsing_w, pulsing_h) =
-			cursor_envelope(anim, phase, cursor_geom, full);
+		let full = cursor_alpha(settings.fg, settings.bg, cursor_rgb, settings.min_contrast());
+		let (w_frac, h_frac, alpha, pulsing_w, pulsing_h) = cursor_envelope(anim, phase, cursor_geom, full);
 		// keep frames coming while the cursor slides or the cycle runs. A parked
 		// cursor is still at full size, so it needs no frames, which is where idle
 		// CPU is saved. The timed resume comes from cursor_wake.
@@ -3489,32 +2768,11 @@ impl Pane {
 		// Width grows from the left and height from the bottom, but a pulsing
 		// dimension grows from the cell center and may shrink to nothing for the
 		// brief disappear, so it skips the 2px floor.
-		let w = if pulsing_w {
-			cell_w * w_frac
-		} else {
-			(cell_w * w_frac).max(2.0)
-		};
-		let h = if pulsing_h {
-			cell_h * h_frac
-		} else {
-			(cell_h * h_frac).max(2.0)
-		};
-		let x = if pulsing_w {
-			cell_x + (cell_w - w) / 2.0
-		} else {
-			cell_x
-		};
-		let y = if pulsing_h {
-			cell_y + (cell_h - h) / 2.0
-		} else {
-			cell_y + cell_h - h
-		};
-		Some(RectInstance {
-			pos: [x, y],
-			size: [w, h],
-			color: cursor_color,
-			..Default::default()
-		})
+		let w = if pulsing_w { cell_w * w_frac } else { (cell_w * w_frac).max(2.0) };
+		let h = if pulsing_h { cell_h * h_frac } else { (cell_h * h_frac).max(2.0) };
+		let x = if pulsing_w { cell_x + (cell_w - w) / 2.0 } else { cell_x };
+		let y = if pulsing_h { cell_y + (cell_h - h) / 2.0 } else { cell_y + cell_h - h };
+		Some(RectInstance { pos: [x, y], size: [w, h], color: cursor_color, ..Default::default() })
 	}
 
 	/// Same as `text_area` but for the scrim source pass: uses the de-bolded buffer
@@ -3531,13 +2789,7 @@ impl Pane {
 	}
 
 	/// `scrim_text_area` with the band clip of `text_area_band` (see there).
-	pub fn scrim_text_area_band(
-		&self,
-		top: f32,
-		margin: f32,
-		clip_top: f32,
-		clip_bottom: f32,
-	) -> TextArea<'_> {
+	pub fn scrim_text_area_band(&self, top: f32, margin: f32, clip_top: f32, clip_bottom: f32) -> TextArea<'_> {
 		let mut area = self.scrim_text_area(top, margin);
 		area.bounds.top = area.bounds.top.max(clip_top as i32);
 		area.bounds.bottom = area.bounds.bottom.min(clip_bottom as i32);
@@ -3551,12 +2803,7 @@ impl Pane {
 			top,
 			scale: 1.0,
 			// clip to the content area (pane inset by the margin)
-			bounds: TextBounds {
-				left: (self.rect.x + margin) as i32,
-				top: (self.rect.y + margin) as i32,
-				right: (self.rect.x + self.rect.w - margin) as i32,
-				bottom: (self.rect.y + self.rect.h - margin) as i32,
-			},
+			bounds: TextBounds { left: (self.rect.x + margin) as i32, top: (self.rect.y + margin) as i32, right: (self.rect.x + self.rect.w - margin) as i32, bottom: (self.rect.y + self.rect.h - margin) as i32 },
 			default_color: {
 				// one settings() (RwLock read + Arc clone), not 3
 				let fg = config::settings().fg;
@@ -3573,13 +2820,7 @@ impl Pane {
 	/// Same buffer as `text_area`, positioned at `top`, but with its vertical clip
 	/// narrowed to [`clip_top`, `clip_bottom`]. Used by the app-scroll slide to draw the
 	/// current buffer clipped to the scroll region and the static band separately.
-	pub fn text_area_band(
-		&self,
-		top: f32,
-		margin: f32,
-		clip_top: f32,
-		clip_bottom: f32,
-	) -> TextArea<'_> {
+	pub fn text_area_band(&self, top: f32, margin: f32, clip_top: f32, clip_bottom: f32) -> TextArea<'_> {
 		let mut area = self.text_area(top, margin);
 		area.bounds.top = area.bounds.top.max(clip_top as i32);
 		area.bounds.bottom = area.bounds.bottom.min(clip_bottom as i32);
@@ -3609,25 +2850,8 @@ impl Pane {
 		// content clip, same as buf_area: an edge row's fallback glyph (ink
 		// taller than its cell, or shifted by a scroll fraction) mustn't paint
 		// the margin, as the main buffer's text never can
-		let bounds = TextBounds {
-			left: (self.rect.x + margin) as i32,
-			top: (self.rect.y + margin) as i32,
-			right: (self.rect.x + self.rect.w - margin) as i32,
-			bottom: (self.rect.y + self.rect.h - margin) as i32,
-		};
-		self.glyphs
-			.iter()
-			.filter_map(move |&(key, x, y, color, scale)| {
-				Some(TextArea {
-					buffer: &self.glyph_cache.get(&key)?.buf,
-					left: x,
-					top: y,
-					scale,
-					bounds,
-					default_color: color,
-					custom_glyphs: &[],
-				})
-			})
+		let bounds = TextBounds { left: (self.rect.x + margin) as i32, top: (self.rect.y + margin) as i32, right: (self.rect.x + self.rect.w - margin) as i32, bottom: (self.rect.y + self.rect.h - margin) as i32 };
+		self.glyphs.iter().filter_map(move |&(key, x, y, color, scale)| Some(TextArea { buffer: &self.glyph_cache.get(&key)?.buf, left: x, top: y, scale, bounds, default_color: color, custom_glyphs: &[] }))
 	}
 
 	/// This frame's color glyphs (see `Pane::build`). One text area has them all:
@@ -3643,12 +2867,7 @@ impl Pane {
 			top: 0.0,
 			scale: 1.0,
 			// content clip, same as glyph_areas
-			bounds: TextBounds {
-				left: (self.rect.x + margin) as i32,
-				top: (self.rect.y + margin) as i32,
-				right: (self.rect.x + self.rect.w - margin) as i32,
-				bottom: (self.rect.y + self.rect.h - margin) as i32,
-			},
+			bounds: TextBounds { left: (self.rect.x + margin) as i32, top: (self.rect.y + margin) as i32, right: (self.rect.x + self.rect.w - margin) as i32, bottom: (self.rect.y + self.rect.h - margin) as i32 },
 			// unused: a color glyph has its own pixels
 			default_color: GColor::rgb(255, 255, 255),
 			custom_glyphs: &self.emoji,
@@ -3689,11 +2908,7 @@ impl Pane {
 			})
 			.collect();
 		drop(guard);
-		let confirmed = above
-			.iter()
-			.zip(&self.prompt_above)
-			.take_while(|(cur, prev)| cur == prev)
-			.count();
+		let confirmed = above.iter().zip(&self.prompt_above).take_while(|(cur, prev)| cur == prev).count();
 		self.prompt_block = above[..confirmed].to_vec();
 		self.prompt_above = above;
 		self.capture_armed = true;
@@ -3720,8 +2935,7 @@ impl Pane {
 	/// While armed, the instant the settle timer would fire, so the loop can wake
 	/// to check. None when nothing is pending.
 	pub fn capture_deadline(&self, settle: std::time::Duration) -> Option<std::time::Instant> {
-		self.capture_armed
-			.then(|| next_capture_poll(self.last_output, settle, self.capture_retry_at))
+		self.capture_armed.then(|| next_capture_poll(self.last_output, settle, self.capture_retry_at))
 	}
 
 	/// If armed and the terminal has settled (no output for `settle`) back at the
@@ -3764,18 +2978,14 @@ impl Pane {
 		let lines = self.term.lines as i32;
 		let rel_x = (x - self.rect.x - ctx.margin).max(0.0);
 		let col = ((rel_x / ctx.cell_w).floor() as i32).clamp(0, cols - 1);
-		let row = ((y - self.rect.y - ctx.margin) / ctx.cell_h)
-			.floor()
-			.clamp(0.0, (lines - 1) as f32) as i32;
+		let row = ((y - self.rect.y - ctx.margin) / ctx.cell_h).floor().clamp(0.0, (lines - 1) as f32) as i32;
 		Some((col as usize, row as usize))
 	}
 
 	/// Map a window pixel to a grid point + which half of the cell, for selection.
 	/// Returns None if the pixel is outside this pane.
 	pub fn point_at(&self, x: f32, y: f32, ctx: &TextCtx) -> Option<(Point, Side)> {
-		self.rect
-			.contains(x, y)
-			.then(|| self.point_clamped(x, y, ctx))
+		self.rect.contains(x, y).then(|| self.point_clamped(x, y, ctx))
 	}
 
 	/// Same, but a pixel outside the pane is pulled to the nearest edge cell. This
@@ -3784,15 +2994,7 @@ impl Pane {
 	/// neighboring pane still belongs to the one it started in.
 	pub fn point_clamped(&self, x: f32, y: f32, ctx: &TextCtx) -> (Point, Side) {
 		let display_offset = self.term.term.lock_unfair().grid().display_offset() as i32;
-		grid_point(
-			x,
-			y,
-			self.rect,
-			ctx.margin,
-			(ctx.cell_w, ctx.cell_h),
-			(self.term.cols, self.term.lines),
-			display_offset,
-		)
+		grid_point(x, y, self.rect, ctx.margin, (ctx.cell_w, ctx.cell_h), (self.term.cols, self.term.lines), display_offset)
 	}
 
 	/// If a double-click `point` sits inside a matched pair on its line, return
@@ -3811,10 +3013,7 @@ impl Pane {
 			(0..cols).map(|c| grid[point.line][Column(c)].c).collect()
 		};
 		let (start, end) = pair_inside(&row, col, pairs)?;
-		Some((
-			Point::new(point.line, Column(start)),
-			Point::new(point.line, Column(end)),
-		))
+		Some((Point::new(point.line, Column(start)), Point::new(point.line, Column(end))))
 	}
 
 	/// A double-click on a bracket, when neither a shape nor a pair took it
@@ -3843,10 +3042,7 @@ impl Pane {
 		let bot = self.term.lines as i32 - 1;
 		let wrapped = |l: i32| cols > 0 && grid[Line(l)][last_col].flags.contains(Flags::WRAPLINE);
 		let (start, end) = logical_line_bounds(point.line.0, top, bot, wrapped);
-		(
-			Point::new(Line(start), Column(0)),
-			Point::new(Line(end), last_col),
-		)
+		(Point::new(Line(start), Column(0)), Point::new(Line(end), last_col))
 	}
 
 	pub fn begin_selection(&self, point: Point, side: Side, ty: SelectionType) {
@@ -3865,15 +3061,7 @@ impl Pane {
 	/// takes the lock once per move rather than twice.
 	pub fn drag_selection_to(&self, x: f32, y: f32, ctx: &TextCtx) {
 		let mut guard = self.term.term.lock_unfair();
-		let (point, side) = grid_point(
-			x,
-			y,
-			self.rect,
-			ctx.margin,
-			(ctx.cell_w, ctx.cell_h),
-			(self.term.cols, self.term.lines),
-			guard.grid().display_offset() as i32,
-		);
+		let (point, side) = grid_point(x, y, self.rect, ctx.margin, (ctx.cell_w, ctx.cell_h), (self.term.cols, self.term.lines), guard.grid().display_offset() as i32);
 		if let Some(sel) = guard.selection.as_mut() {
 			sel.update(point, side);
 		}
@@ -3898,11 +3086,7 @@ impl Pane {
 	}
 
 	pub fn selection_text(&self) -> Option<String> {
-		self.term
-			.term
-			.lock_unfair()
-			.selection_to_string()
-			.filter(|s| !s.is_empty())
+		self.term.term.lock_unfair().selection_to_string().filter(|s| !s.is_empty())
 	}
 
 	/// Anything the user's own hands sent: typing, a mouse report, or the wheel
@@ -3963,14 +3147,7 @@ pub struct TabFacts<'a> {
 
 impl TabFacts<'_> {
 	/// A tab without a pane says nothing.
-	pub const NONE: TabFacts<'static> = TabFacts {
-		title_override: None,
-		said: "",
-		launched: None,
-		command: None,
-		task: &crate::term::Task::Idle,
-		cwd: None,
-	};
+	pub const NONE: TabFacts<'static> = TabFacts { title_override: None, said: "", launched: None, command: None, task: &crate::term::Task::Idle, cwd: None };
 }
 
 pub struct PaneManager {
@@ -3988,82 +3165,40 @@ pub struct PaneManager {
 
 impl std::fmt::Debug for PaneManager {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("PaneManager")
-			.field("panes", &self.panes.len())
-			.field("focused", &self.focused)
-			.finish_non_exhaustive()
+		f.debug_struct("PaneManager").field("panes", &self.panes.len()).field("focused", &self.focused).finish_non_exhaustive()
 	}
 }
 
 impl PaneManager {
-	pub fn new(
-		ctx: &mut TextCtx,
-		proxy: &EventLoopProxy<UserEvent>,
-		area: Rect,
-		command: Option<Vec<String>>,
-		cwd: Option<std::path::PathBuf>,
-		in_tmux: bool,
-	) -> anyhow::Result<Self> {
+	pub fn new(ctx: &mut TextCtx, proxy: &EventLoopProxy<UserEvent>, area: Rect, command: Option<Vec<String>>, cwd: Option<std::path::PathBuf>, in_tmux: bool) -> anyhow::Result<Self> {
 		let id = alloc_pane_id();
 		let pane = spawn_pane(ctx, proxy, id, area, command, cwd, in_tmux)?;
 		let mut panes = HashMap::new();
 		panes.insert(id, pane);
-		Ok(Self {
-			panes,
-			root: Node::Leaf(id),
-			focused: id,
-			came_from: None,
-			title_override: None,
-			created: std::time::Instant::now(),
-		})
+		Ok(Self { panes, root: Node::Leaf(id), focused: id, came_from: None, title_override: None, created: std::time::Instant::now() })
 	}
 
 	/// Interactive split from the menu or keyboard: even ratio, new pane after. It inherits the
 	/// source pane's command and current directory, so the new pane runs the same
-	/// shell it forked off, starting where that shell is now.
-	pub fn split(
-		&mut self,
-		ctx: &mut TextCtx,
-		proxy: &EventLoopProxy<UserEvent>,
-		id: PaneId,
-		dir: Dir,
-		area: Rect,
-	) {
-		let cmd = self.panes.get(&id).and_then(|p| p.command.clone());
+	/// shell it forked off, starting where that shell is now. See `passed_on`.
+	pub fn split(&mut self, ctx: &mut TextCtx, proxy: &EventLoopProxy<UserEvent>, id: PaneId, dir: Dir, area: Rect) {
+		let cmd = self.panes.get(&id).and_then(Pane::passed_on);
 		self.split_cmd(ctx, proxy, id, dir, cmd, area);
 	}
 
 	/// The same split, but the new pane runs `command`, a shell picked off the
 	/// menu, and still starts where the source pane's shell is.
-	pub fn split_with(
-		&mut self,
-		ctx: &mut TextCtx,
-		proxy: &EventLoopProxy<UserEvent>,
-		id: PaneId,
-		dir: Dir,
-		command: Vec<String>,
-		area: Rect,
-	) {
+	pub fn split_with(&mut self, ctx: &mut TextCtx, proxy: &EventLoopProxy<UserEvent>, id: PaneId, dir: Dir, command: Vec<String>, area: Rect) {
 		self.split_cmd(ctx, proxy, id, dir, Some(command), area);
 	}
 
-	fn split_cmd(
-		&mut self,
-		ctx: &mut TextCtx,
-		proxy: &EventLoopProxy<UserEvent>,
-		id: PaneId,
-		dir: Dir,
-		command: Option<Vec<String>>,
-		area: Rect,
-	) {
+	fn split_cmd(&mut self, ctx: &mut TextCtx, proxy: &EventLoopProxy<UserEvent>, id: PaneId, dir: Dir, command: Option<Vec<String>>, area: Rect) {
 		let cwd = self.panes.get(&id).and_then(Pane::inherit_cwd);
 		// only a split made here gets tmux, never one the command line lays out
 		let in_tmux = config::settings().tmux_new_session;
 		// interactive splits even-distribute the same-direction run (unless a divider
 		// in it was hand-dragged)
-		self.split_at(
-			ctx, proxy, id, dir, false, None, command, cwd, area, in_tmux,
-		);
+		self.split_at(ctx, proxy, id, dir, false, None, command, cwd, area, in_tmux);
 	}
 
 	/// What the tab has to say about itself, lent from the tab and its focused
@@ -4072,29 +3207,18 @@ impl PaneManager {
 	pub fn tab_facts(&mut self) -> TabFacts<'_> {
 		let title_override = self.title_override.as_deref();
 		let Some(pane) = self.panes.get_mut(&self.focused) else {
-			return TabFacts {
-				title_override,
-				..TabFacts::NONE
-			};
+			return TabFacts { title_override, ..TabFacts::NONE };
 		};
 		let (task, cwd) = pane.term.task_and_cwd();
 		let command = pane.command.as_deref();
-		TabFacts {
-			title_override,
-			said: &pane.title,
-			launched: command.and_then(<[String]>::first).map(String::as_str),
-			command,
-			task,
-			cwd,
-		}
+		TabFacts { title_override, said: &pane.title, launched: command.and_then(<[String]>::first).map(String::as_str), command, task, cwd }
 	}
 
 	/// What a new tab or window made from the focused pane should inherit:
-	/// its launch command (None = default shell) and the shell's current dir.
+	/// its launch command (None = default shell, see `passed_on`) and the shell's
+	/// current dir.
 	pub fn inherit_spawn(&self) -> (Option<Vec<String>>, Option<std::path::PathBuf>) {
-		self.panes.get(&self.focused).map_or((None, None), |pane| {
-			(pane.command.clone(), pane.inherit_cwd())
-		})
+		self.panes.get(&self.focused).map_or((None, None), |pane| (pane.passed_on(), pane.inherit_cwd()))
 	}
 
 	/// The tmux sessions SilkTerm started in this tab's panes.
@@ -4106,19 +3230,7 @@ impl PaneManager {
 	/// `before` side (a) or after (b); runs `command`. Returns the new pane id (None
 	/// if `id` wasn't a leaf). `new_ratio` is the new pane's share, kept as given;
 	/// None evens out the same-direction run it joined, see `place_split`.
-	pub fn split_at(
-		&mut self,
-		ctx: &mut TextCtx,
-		proxy: &EventLoopProxy<UserEvent>,
-		id: PaneId,
-		dir: Dir,
-		before: bool,
-		new_ratio: Option<f32>,
-		command: Option<Vec<String>>,
-		cwd: Option<std::path::PathBuf>,
-		area: Rect,
-		in_tmux: bool,
-	) -> Option<PaneId> {
+	pub fn split_at(&mut self, ctx: &mut TextCtx, proxy: &EventLoopProxy<UserEvent>, id: PaneId, dir: Dir, before: bool, new_ratio: Option<f32>, command: Option<Vec<String>>, cwd: Option<std::path::PathBuf>, area: Rect, in_tmux: bool) -> Option<PaneId> {
 		// leaves mirror `panes`, so this also checks that id is a leaf, up front,
 		// so a doomed insert can't spawn and then kill a shell
 		if !self.panes.contains_key(&id) {
@@ -4128,10 +3240,7 @@ impl PaneManager {
 		// a new pane inherits the auto-copy flags of the pane it split off, which
 		// is the "tab setting" the user sees. A new tab or window starts from the
 		// copy_on_select default, with output always off.
-		let (inherit_select, inherit_output) = self
-			.panes
-			.get(&id)
-			.map_or((false, false), |src| (src.copy_select, src.copy_output));
+		let (inherit_select, inherit_output) = self.panes.get(&id).map_or((false, false), |src| (src.copy_select, src.copy_output));
 		// spawn before touching the tree: a failed spawn must not leave a
 		// phantom leaf that reserves layout space with no pane behind it
 		let mut pane = match spawn_pane(ctx, proxy, new_id, area, command, cwd, in_tmux) {
@@ -4198,11 +3307,7 @@ impl PaneManager {
 			// The mode the last build saw is a frame old, and a program that
 			// switches screens and then sits still, as a dialog with the cursor
 			// hidden does, gives no later frame to catch up in.
-			let mode = pane
-				.term
-				.term
-				.try_lock_unfair()
-				.map_or(pane.mode, |term| *term.mode());
+			let mode = pane.term.term.try_lock_unfair().map_or(pane.mode, |term| *term.mode());
 			// and the program behind it may be newer than the cached answer, which
 			// took the column from tmux for a moment as it started
 			let screen = minimap::screen_modes(mode);
@@ -4216,11 +3321,7 @@ impl PaneManager {
 				crate::term::Task::Last(_) | crate::term::Task::Idle => None,
 			};
 			let now = std::time::Instant::now();
-			let own = pane.map_hold.update(
-				minimap::draws_own_screen(screen, running.is_some()),
-				running,
-				now,
-			);
+			let own = pane.map_hold.update(minimap::draws_own_screen(screen, running.is_some()), running, now);
 			let mut want = minimap::wanted(cfg, own, running);
 			// tmux is listed for what it draws itself, not for what runs in it
 			if want && cfg.minimap && running == Some("tmux") {
@@ -4301,10 +3402,7 @@ impl PaneManager {
 	}
 
 	pub fn pane_at(&self, x: f32, y: f32) -> Option<PaneId> {
-		self.panes
-			.iter()
-			.find(|(_, p)| p.full.contains(x, y))
-			.map(|(id, _)| *id)
+		self.panes.iter().find(|(_, p)| p.full.contains(x, y)).map(|(id, _)| *id)
 	}
 
 	/// A grabbable divider under the cursor: its path in the split-tree and
@@ -4339,11 +3437,7 @@ fn swap_leaves(node: &mut Node, a: PaneId, b: PaneId) {
 				*id = a;
 			}
 		}
-		Node::Split {
-			first: first_child,
-			second: second_child,
-			..
-		} => {
+		Node::Split { first: first_child, second: second_child, .. } => {
 			swap_leaves(first_child, a, b);
 			swap_leaves(second_child, a, b);
 		}
@@ -4353,15 +3447,7 @@ fn swap_leaves(node: &mut Node, a: PaneId, b: PaneId) {
 // The grid point and cell half under a window pixel, pulled to the nearest edge
 // cell from outside the pane. `cell` is (width, height) and `grid` (cols,
 // lines). A view scrolled back gives a history line, which is negative.
-fn grid_point(
-	x: f32,
-	y: f32,
-	rect: Rect,
-	margin: f32,
-	cell: (f32, f32),
-	grid: (usize, usize),
-	display_offset: i32,
-) -> (Point, Side) {
+fn grid_point(x: f32, y: f32, rect: Rect, margin: f32, cell: (f32, f32), grid: (usize, usize), display_offset: i32) -> (Point, Side) {
 	let (cell_w, cell_h) = cell;
 	let cols = grid.0 as i32;
 	let lines = grid.1 as i32;
@@ -4370,18 +3456,9 @@ fn grid_point(
 	// edge reads as the far half of the last cell and takes it whole
 	let colf = (rel_x / cell_w).floor().clamp(0.0, (cols - 1) as f32);
 	let col = colf as i32;
-	let side = if rel_x - colf * cell_w < cell_w / 2.0 {
-		Side::Left
-	} else {
-		Side::Right
-	};
-	let screen_row = ((y - rect.y - margin) / cell_h)
-		.floor()
-		.clamp(0.0, (lines - 1) as f32) as i32;
-	(
-		Point::new(Line(screen_row - display_offset), Column(col as usize)),
-		side,
-	)
+	let side = if rel_x - colf * cell_w < cell_w / 2.0 { Side::Left } else { Side::Right };
+	let screen_row = ((y - rect.y - margin) / cell_h).floor().clamp(0.0, (lines - 1) as f32) as i32;
+	(Point::new(Line(screen_row - display_offset), Column(col as usize)), side)
 }
 
 // The height a pane's text buffer is given: the content plus 2 rows of slack.
@@ -4402,15 +3479,14 @@ fn content_dims(rect: Rect, ctx: &TextCtx) -> (f32, f32, usize, usize) {
 	(cw, ch, cols, lines)
 }
 
-fn spawn_pane(
-	ctx: &mut TextCtx,
-	proxy: &EventLoopProxy<UserEvent>,
-	id: PaneId,
-	rect: Rect,
-	command: Option<Vec<String>>,
-	cwd: Option<std::path::PathBuf>,
-	in_tmux: bool,
-) -> anyhow::Result<Pane> {
+/// What a split, new tab or command-line pane made from a pane runs, None being
+/// the default shell. A file `--open` ran is the exception, since running it
+/// again would redo whatever it did.
+pub(crate) fn passed_on(command: Option<&[String]>, opened_file: bool) -> Option<Vec<String>> {
+	command.filter(|_| !opened_file).map(<[String]>::to_vec)
+}
+
+fn spawn_pane(ctx: &mut TextCtx, proxy: &EventLoopProxy<UserEvent>, id: PaneId, rect: Rect, command: Option<Vec<String>>, cwd: Option<std::path::PathBuf>, in_tmux: bool) -> anyhow::Result<Pane> {
 	// A pane with no command of its own runs the default shell, resolved here
 	// and then remembered rather than left as "whatever the default is". The
 	// list can change under a running pane: the background scan fills it a few
@@ -4424,12 +3500,7 @@ fn spawn_pane(
 	// With no tmux to be had the pane gets the plain shell, as it would anyway.
 	let started = if in_tmux {
 		let env = crate::integration::pane_env(command.as_deref());
-		crate::tmux::start(
-			&settings.tmux_session_name,
-			command.as_deref(),
-			cwd.as_deref(),
-			&env,
-		)
+		crate::tmux::start(&settings.tmux_session_name, command.as_deref(), cwd.as_deref(), &env)
 	} else {
 		None
 	};
@@ -4440,17 +3511,7 @@ fn spawn_pane(
 	let text = minimap::text_rect(rect, &settings, ctx.scale, true);
 	let (cw, ch, cols, lines) = content_dims(text, ctx);
 	let (cell_w, cell_h) = ctx.cell_told();
-	let term = TermInstance::spawn(
-		id,
-		cols,
-		lines,
-		cell_w,
-		cell_h,
-		proxy.clone(),
-		argv,
-		cwd,
-		tmux.is_some(),
-	)?;
+	let term = TermInstance::spawn(id, cols, lines, cell_w, cell_h, proxy.clone(), argv, cwd, tmux.is_some())?;
 	let buffer = ctx.new_buffer(cw, text_buffer_h(ch, ctx.cell_h));
 	let empty_buf = ctx.new_plain_buffer(); // never given text - see emoji_area
 	Ok(Pane {
@@ -4468,17 +3529,11 @@ fn spawn_pane(
 		title: String::new(), // what the running program asked the window be called
 		read_only: false,
 		keep_open: false,
+		opened_file: false,
 		held: false,
 		command,
 		tmux,
-		last_draw: PaneDraw {
-			top: rect.y,
-			bg: Vec::new(),
-			links: Vec::new(),
-			rules: Vec::new(),
-			cursor: None,
-			slide: None,
-		},
+		last_draw: PaneDraw { top: rect.y, bg: Vec::new(), links: Vec::new(), rules: Vec::new(), cursor: None, slide: None },
 		lock_misses: 0,
 		depth: DepthSampler::default(),
 		last_rows: Vec::new(),
@@ -4549,12 +3604,7 @@ fn spawn_pane(
 // nearest match is the prompt unless the output repeats that exact row. Falls
 // back to `cmd_start` with no anchor or no match: a blank prompt row, an
 // evicted row, or a shell that redrew it on Enter.
-fn capture_start<T: alacritty_terminal::event::EventListener>(
-	term: &Term<T>,
-	cmd_start: usize,
-	anchor: Option<u64>,
-	end_abs: usize,
-) -> usize {
+fn capture_start<T: alacritty_terminal::event::EventListener>(term: &Term<T>, cmd_start: usize, anchor: Option<u64>, end_abs: usize) -> usize {
 	let Some(anchor) = anchor else {
 		return cmd_start;
 	};
@@ -4577,12 +3627,7 @@ fn capture_start<T: alacritty_terminal::event::EventListener>(
 // when its content (cwd, clock) changed since the arm. A row whose structure
 // doesn't match, with nothing learned yet or a different row, stops the strip
 // and stays in the copy.
-fn prompt_strip<T: alacritty_terminal::event::EventListener>(
-	term: &Term<T>,
-	start_abs: usize,
-	end_abs: usize,
-	block: &[u64],
-) -> usize {
+fn prompt_strip<T: alacritty_terminal::event::EventListener>(term: &Term<T>, start_abs: usize, end_abs: usize, block: &[u64]) -> usize {
 	let grid = term.grid();
 	let hist = grid.history_size() as i64;
 	let cols = grid.columns();
@@ -4606,11 +3651,7 @@ fn prompt_strip<T: alacritty_terminal::event::EventListener>(
 // newline is emitted per grid row, except rows flagged WRAPLINE (a soft-wrapped
 // long line) which join to the next. Lines evicted from scrollback (only when a
 // command's output exceeds the scrollback limit) are skipped.
-fn capture_grid_text<T: alacritty_terminal::event::EventListener>(
-	term: &Term<T>,
-	start_abs: usize,
-	end_abs: usize,
-) -> String {
+fn capture_grid_text<T: alacritty_terminal::event::EventListener>(term: &Term<T>, start_abs: usize, end_abs: usize) -> String {
 	let grid = term.grid();
 	let hist = grid.history_size() as i64;
 	let cols = grid.columns();
@@ -4656,11 +3697,7 @@ fn capture_grid_text<T: alacritty_terminal::event::EventListener>(
 // keystrokes rather than data, which is how a paste runs a command nobody
 // typed. Dropping ESC makes the bracket a real boundary.
 fn paste_payload(text: &str, bracket: bool) -> String {
-	if bracket {
-		text.replace('\x1b', "")
-	} else {
-		text.replace("\r\n", "\r").replace('\n', "\r")
-	}
+	if bracket { text.replace('\x1b', "") } else { text.replace("\r\n", "\r").replace('\n', "\r") }
 }
 
 // The shape (URL, path, scp target) under `point`, as (first, last) cells. The
@@ -4673,10 +3710,7 @@ fn shape_reach(grid: &Grid<Cell>, point: Point) -> Option<(Point, Point)> {
 	if cols == 0 || point.column.0 >= cols {
 		return None;
 	}
-	let (top, bot) = (
-		-(grid.history_size() as i32),
-		grid.screen_lines() as i32 - 1,
-	);
+	let (top, bot) = (-(grid.history_size() as i32), grid.screen_lines() as i32 - 1);
 	let line = point.line.0;
 	if line < top || line > bot {
 		return None;
@@ -4754,11 +3788,7 @@ fn bracket_reach(grid: &Grid<Cell>, point: Point) -> Option<(Point, Point)> {
 		};
 		if cell.c == partner {
 			if nested == 0 {
-				return Some(if forward {
-					(point, cell.point)
-				} else {
-					(cell.point, point)
-				});
+				return Some(if forward { (point, cell.point) } else { (cell.point, point) });
 			}
 			nested -= 1;
 		} else if cell.c == here {
@@ -4774,11 +3804,7 @@ fn bracket_reach(grid: &Grid<Cell>, point: Point) -> Option<(Point, Point)> {
 // even with a lower-precedence `[]` nested in it. None -> no pair.
 fn pair_inside(row: &[char], col: usize, pairs: &[(char, char)]) -> Option<(usize, usize)> {
 	for &(open, close) in pairs {
-		let found = if open == close {
-			same_char_pair(row, col, open)
-		} else {
-			distinct_pair(row, col, open, close)
-		};
+		let found = if open == close { same_char_pair(row, col, open) } else { distinct_pair(row, col, open, close) };
 		if let Some((open_idx, close_idx)) = found
 			&& close_idx > open_idx + 1
 		{
@@ -4792,11 +3818,7 @@ fn pair_inside(row: &[char], col: usize, pairs: &[(char, char)]) -> Option<(usiz
 				end -= 1;
 			}
 			// all-spaces inside: fall back to the full inside span
-			return Some(if row[start] == ' ' {
-				(open_idx + 1, close_idx - 1)
-			} else {
-				(start, end)
-			});
+			return Some(if row[start] == ' ' { (open_idx + 1, close_idx - 1) } else { (start, end) });
 		}
 	}
 	None
@@ -4836,12 +3858,7 @@ fn distinct_pair(row: &[char], col: usize, open: char, close: char) -> Option<(u
 // Pair of identical chars (quotes) enclosing `col`: occurrences pair off
 // left-to-right; `col` is inside the pair strictly between 2 of them.
 fn same_char_pair(row: &[char], col: usize, ch: char) -> Option<(usize, usize)> {
-	let pos: Vec<usize> = row
-		.iter()
-		.enumerate()
-		.filter(|&(i, &c)| c == ch && !is_apostrophe(row, i))
-		.map(|(i, _)| i)
-		.collect();
+	let pos: Vec<usize> = row.iter().enumerate().filter(|&(i, &c)| c == ch && !is_apostrophe(row, i)).map(|(i, _)| i).collect();
 	let mut i = 0;
 	while i + 1 < pos.len() {
 		if pos[i] < col && col < pos[i + 1] {
@@ -4861,32 +3878,16 @@ fn is_apostrophe(row: &[char], i: usize) -> bool {
 
 // Split the leaf `id` into a `dir` Split. `before` puts the new pane on the
 // a-side (left/top); `ratio_a` is child-a's fraction of the split.
-fn insert_split_at(
-	node: &mut Node,
-	id: PaneId,
-	dir: Dir,
-	new_id: PaneId,
-	before: bool,
-	ratio_a: f32,
-) -> bool {
+fn insert_split_at(node: &mut Node, id: PaneId, dir: Dir, new_id: PaneId, before: bool, ratio_a: f32) -> bool {
 	match node {
 		Node::Leaf(i) if *i == id => {
 			let old = *i;
 			let (first, second) = if before { (new_id, old) } else { (old, new_id) };
-			*node = Node::Split {
-				dir,
-				ratio: ratio_a,
-				manual: false,
-				first: Box::new(Node::Leaf(first)),
-				second: Box::new(Node::Leaf(second)),
-			};
+			*node = Node::Split { dir, ratio: ratio_a, manual: false, first: Box::new(Node::Leaf(first)), second: Box::new(Node::Leaf(second)) };
 			true
 		}
 		Node::Leaf(_) => false,
-		Node::Split { first, second, .. } => {
-			insert_split_at(first, id, dir, new_id, before, ratio_a)
-				|| insert_split_at(second, id, dir, new_id, before, ratio_a)
-		}
+		Node::Split { first, second, .. } => insert_split_at(first, id, dir, new_id, before, ratio_a) || insert_split_at(second, id, dir, new_id, before, ratio_a),
 	}
 }
 
@@ -4894,14 +3895,7 @@ fn insert_split_at(
 // sized by hand, so no later split in its run evens it out. With none the new
 // pane takes half, then the same-direction run it joined is evened out, unless a
 // divider in it was sized by hand (then successive splits stay 50/50).
-fn place_split(
-	root: &mut Node,
-	id: PaneId,
-	dir: Dir,
-	new_id: PaneId,
-	before: bool,
-	new_ratio: Option<f32>,
-) -> bool {
+fn place_split(root: &mut Node, id: PaneId, dir: Dir, new_id: PaneId, before: bool, new_ratio: Option<f32>) -> bool {
 	let share = new_ratio.unwrap_or(0.5);
 	// the first child's ratio: if the new pane is first (before) it takes the share, else
 	// the first is the old pane and keeps the remainder
@@ -4965,12 +3959,7 @@ fn is_dir_split(root: &Node, path: &[bool], dir: Dir) -> bool {
 // internal layout is separate).
 fn group_leaf_count(node: &Node, dir: Dir) -> usize {
 	match node {
-		Node::Split {
-			dir: node_dir,
-			first,
-			second,
-			..
-		} if *node_dir == dir => group_leaf_count(first, dir) + group_leaf_count(second, dir),
+		Node::Split { dir: node_dir, first, second, .. } if *node_dir == dir => group_leaf_count(first, dir) + group_leaf_count(second, dir),
 		_ => 1,
 	}
 }
@@ -4978,13 +3967,7 @@ fn group_leaf_count(node: &Node, dir: Dir) -> usize {
 // Has any divider in the same-direction run been hand-dragged?
 fn group_has_manual(node: &Node, dir: Dir) -> bool {
 	match node {
-		Node::Split {
-			dir: node_dir,
-			manual,
-			first,
-			second,
-			..
-		} if *node_dir == dir => *manual || group_has_manual(first, dir) || group_has_manual(second, dir),
+		Node::Split { dir: node_dir, manual, first, second, .. } if *node_dir == dir => *manual || group_has_manual(first, dir) || group_has_manual(second, dir),
 		_ => false,
 	}
 }
@@ -4992,13 +3975,7 @@ fn group_has_manual(node: &Node, dir: Dir) -> bool {
 // Set every ratio in the same-direction run so all its member leaves are equal:
 // a split gives its first child a share proportional to the leaves under it.
 fn equalize(node: &mut Node, dir: Dir) {
-	if let Node::Split {
-		dir: node_dir,
-		ratio,
-		first,
-		second,
-		..
-	} = node
+	if let Node::Split { dir: node_dir, ratio, first, second, .. } = node
 		&& *node_dir == dir
 	{
 		let leaves_a = group_leaf_count(first, dir);
@@ -5035,23 +4012,11 @@ fn prune(node: Node, id: PaneId) -> Option<Node> {
 	match node {
 		Node::Leaf(i) if i == id => None,
 		Node::Leaf(i) => Some(Node::Leaf(i)),
-		Node::Split {
-			dir,
-			ratio,
-			manual,
-			first,
-			second,
-		} => {
+		Node::Split { dir, ratio, manual, first, second } => {
 			let pruned_a = prune(*first, id);
 			let pruned_b = prune(*second, id);
 			match (pruned_a, pruned_b) {
-				(Some(first), Some(second)) => Some(Node::Split {
-					dir,
-					ratio,
-					manual,
-					first: Box::new(first),
-					second: Box::new(second),
-				}),
+				(Some(first), Some(second)) => Some(Node::Split { dir, ratio, manual, first: Box::new(first), second: Box::new(second) }),
 				(Some(survivor), None) | (None, Some(survivor)) => Some(survivor),
 				(None, None) => None,
 			}
@@ -5069,13 +4034,7 @@ fn first_leaf(node: &Node) -> PaneId {
 fn layout(node: &Node, area: Rect, scale: f32, out: &mut Vec<(PaneId, Rect)>) {
 	match node {
 		Node::Leaf(id) => out.push((*id, area)),
-		Node::Split {
-			dir,
-			ratio,
-			first,
-			second,
-			..
-		} => {
+		Node::Split { dir, ratio, first, second, .. } => {
 			let (a_area, b_area) = child_areas(area, *dir, *ratio, scale);
 			layout(first, a_area, scale, out);
 			layout(second, b_area, scale, out);
@@ -5090,37 +4049,11 @@ fn child_areas(area: Rect, dir: Dir, ratio: f32, scale: f32) -> (Rect, Rect) {
 	match dir {
 		Dir::Vertical => {
 			let a_width = ((area.w - gap) * ratio).floor();
-			(
-				Rect {
-					x: area.x,
-					y: area.y,
-					w: a_width,
-					h: area.h,
-				},
-				Rect {
-					x: area.x + a_width + gap,
-					y: area.y,
-					w: area.w - gap - a_width,
-					h: area.h,
-				},
-			)
+			(Rect { x: area.x, y: area.y, w: a_width, h: area.h }, Rect { x: area.x + a_width + gap, y: area.y, w: area.w - gap - a_width, h: area.h })
 		}
 		Dir::Horizontal => {
 			let a_height = ((area.h - gap) * ratio).floor();
-			(
-				Rect {
-					x: area.x,
-					y: area.y,
-					w: area.w,
-					h: a_height,
-				},
-				Rect {
-					x: area.x,
-					y: area.y + a_height + gap,
-					w: area.w,
-					h: area.h - gap - a_height,
-				},
-			)
+			(Rect { x: area.x, y: area.y, w: area.w, h: a_height }, Rect { x: area.x, y: area.y + a_height + gap, w: area.w, h: area.h - gap - a_height })
 		}
 	}
 }
@@ -5128,39 +4061,16 @@ fn child_areas(area: Rect, dir: Dir, ratio: f32, scale: f32) -> (Rect, Rect) {
 // Find the split whose divider is under (x, y), within a grab tolerance.
 // Returns a path of child choices (false = first, true = second) from the root to that
 // split, plus its orientation (for the resize cursor).
-fn divider_at(
-	node: &Node,
-	area: Rect,
-	x: f32,
-	y: f32,
-	scale: f32,
-	path: &mut Vec<bool>,
-) -> Option<Dir> {
-	let Node::Split {
-		dir,
-		ratio,
-		first,
-		second,
-		..
-	} = node
-	else {
+fn divider_at(node: &Node, area: Rect, x: f32, y: f32, scale: f32, path: &mut Vec<bool>) -> Option<Dir> {
+	let Node::Split { dir, ratio, first, second, .. } = node else {
 		return None;
 	};
 	let (a_area, b_area) = child_areas(area, *dir, *ratio, scale);
 	let tol = config::dip(config::DIVIDER_GRAB_PX, scale);
-	let on_divider =
-		match dir {
-			Dir::Vertical => {
-				x >= a_area.x + a_area.w - tol
-					&& x <= b_area.x + tol
-					&& y >= area.y && y <= area.y + area.h
-			}
-			Dir::Horizontal => {
-				y >= a_area.y + a_area.h - tol
-					&& y <= b_area.y + tol
-					&& x >= area.x && x <= area.x + area.w
-			}
-		};
+	let on_divider = match dir {
+		Dir::Vertical => x >= a_area.x + a_area.w - tol && x <= b_area.x + tol && y >= area.y && y <= area.y + area.h,
+		Dir::Horizontal => y >= a_area.y + a_area.h - tol && y <= b_area.y + tol && x >= area.x && x <= area.x + area.w,
+	};
 	if on_divider {
 		return Some(*dir);
 	}
@@ -5183,14 +4093,7 @@ fn divider_at(
 
 // Walk `path` to a split node and set its ratio from the mouse position.
 fn set_ratio(node: &mut Node, area: Rect, path: &[bool], x: f32, y: f32, scale: f32) {
-	let Node::Split {
-		dir,
-		ratio,
-		manual,
-		first,
-		second,
-	} = node
-	else {
+	let Node::Split { dir, ratio, manual, first, second } = node else {
 		return;
 	};
 	if let [take_second, rest @ ..] = path {
@@ -5214,11 +4117,7 @@ fn set_ratio(node: &mut Node, area: Rect, path: &[bool], x: f32, y: f32, scale: 
 // Lines the output ease has to cover this frame: the scrollback's growth, or
 // with the scrollback full, the engine's own count of whole-screen scrolls.
 fn output_advance(alt: bool, follow: bool, grew: usize, pushed: usize) -> usize {
-	if follow && !alt {
-		grew.max(pushed)
-	} else {
-		grew
-	}
+	if follow && !alt { grew.max(pushed) } else { grew }
 }
 
 // Lines went to history, yet the screen came back as it was and none of what
@@ -5228,14 +4127,7 @@ fn output_advance(alt: bool, follow: bool, grew: usize, pushed: usize) -> usize 
 // the picture moved, now and then a row. A cell that widens a column respaces
 // every row, so rows also match by skeleton, in place only. A row that dropped
 // off the history counts for neither side.
-fn repaint_shift(
-	grid: &Grid<Cell>,
-	last: &[u64],
-	last_skel: &[u64],
-	k: usize,
-	cols: usize,
-	blank: u64,
-) -> Option<usize> {
+fn repaint_shift(grid: &Grid<Cell>, last: &[u64], last_skel: &[u64], k: usize, cols: usize, blank: u64) -> Option<usize> {
 	let n = last.len();
 	if k == 0 || n != grid.screen_lines() {
 		return None;
@@ -5261,28 +4153,15 @@ fn repaint_shift(
 	}
 	// every shift below compares against the same screen rows, so print them once
 	let now: Vec<u64> = (0..n as i32).map(print).collect();
-	let same = |shift: usize| {
-		last.iter()
-			.enumerate()
-			.skip(shift)
-			.filter(|&(i, &was)| was != blank && now[i - shift] == was)
-			.count()
-	};
-	let (shift, held) = (0..k.min(APP_SCROLL_MAX + 1).min(n))
-		.map(|shift| (shift, same(shift)))
-		.fold(
-			(0, 0),
-			|best, next| if next.1 > best.1 { next } else { best },
-		);
+	let same = |shift: usize| last.iter().enumerate().skip(shift).filter(|&(i, &was)| was != blank && now[i - shift] == was).count();
+	let (shift, held) = (0..k.min(APP_SCROLL_MAX + 1).min(n)).map(|shift| (shift, same(shift))).fold((0, 0), |best, next| if next.1 > best.1 { next } else { best });
 	if held * 2 >= inked {
 		return Some(shift);
 	}
 	if last_skel.len() != n {
 		return None;
 	}
-	let respaced = (0..n)
-		.filter(|&i| last[i] != blank && row_skel(&grid[Line(i as i32)], cols) == last_skel[i])
-		.count();
+	let respaced = (0..n).filter(|&i| last[i] != blank && row_skel(&grid[Line(i as i32)], cols) == last_skel[i]).count();
 	(respaced * 2 >= inked).then_some(0)
 }
 
@@ -5317,16 +4196,17 @@ fn blank_went_up(grid: &Grid<Cell>, k: usize, cols: usize, blank: u64) -> bool {
 // saw, so a view at rest stays put. ble.sh draws a prompt that wraps at the top
 // of the screen with insert- and delete-line, and the delete at the top row
 // sends 2 blank lines up, which made `clear` ease (2026101310563297).
-fn ease_output(
-	scroll: &mut Scroll,
-	alt: bool,
-	cut: bool,
-	output: Output,
-	lines: usize,
-	repaint: impl FnOnce(usize) -> Option<usize>,
-	blank_up: impl Fn(usize) -> bool,
-) -> (bool, usize, bool) {
+fn ease_output(scroll: &mut Scroll, alt: bool, cut: bool, output: Output, lines: usize, repaint: impl FnOnce(usize) -> Option<usize>, blank_up: impl Fn(usize) -> bool) -> (bool, usize, bool) {
 	let follow = scroll.following();
+	// Lines that went up while the view is parked in the scrollback carry the
+	// text being read with them. The engine raises its display offset to match,
+	// and the build snaps the grid back to `desired_offset`, so without this the
+	// text slid away a line per line printed (2026112016030002). With the
+	// scrollback full the depth stays flat, so the engine's count is the one
+	// that sees them.
+	if !follow && !alt {
+		scroll.keep_place(output.grew.max(output.pushed) as f32);
+	}
 	let advanced = output_advance(alt, follow, output.grew, output.pushed);
 	// read before the nudge: a band is measured fresh when the ease was at rest
 	let was_chasing = scroll.chasing_output();
@@ -5336,11 +4216,7 @@ fn ease_output(
 		if after > 0 && !blank_up(after) {
 			scroll.nudge_output_within(after as f32, lines as f32);
 		}
-	} else if advanced > 0
-		&& follow
-		&& !cut
-		&& !(output.was_blank && !was_chasing && blank_up(advanced))
-	{
+	} else if advanced > 0 && follow && !cut && !(output.was_blank && !was_chasing && blank_up(advanced)) {
 		match repaint(advanced).filter(|_| !alt) {
 			Some(shift) => {
 				scroll.snap();
@@ -5357,13 +4233,7 @@ fn ease_output(
 // What the engine's scroll record means for this frame's slide: the signed
 // step, or None when the output ease owns the motion (`advanced` > 0) or
 // nothing on screen can show it (a region scroll while scrolled back).
-fn ledger_step(
-	alt: bool,
-	follow: bool,
-	advanced: usize,
-	whole_screen: bool,
-	scrolled: i32,
-) -> Option<i32> {
+fn ledger_step(alt: bool, follow: bool, advanced: usize, whole_screen: bool, scrolled: i32) -> Option<i32> {
 	if scrolled == 0 || advanced > 0 {
 		return None;
 	}
@@ -5381,23 +4251,13 @@ fn ledger_step(
 // (2026101415085143). A turnover past the region's height is a scroll whatever
 // was there (a burst into a fresh tmux pane), and a snapshot of another shape
 // can't say.
-fn slide_is_visible(
-	step: i32,
-	region: &std::ops::Range<usize>,
-	last: &[Vec<StripCell>],
-	chunk: &[Vec<StripCell>],
-	arrived: impl Fn(usize, usize) -> bool,
-) -> bool {
+fn slide_is_visible(step: i32, region: &std::ops::Range<usize>, last: &[Vec<StripCell>], chunk: &[Vec<StripCell>], arrived: impl Fn(usize, usize) -> bool) -> bool {
 	let height = region.end.saturating_sub(region.start);
 	let moved = step.unsigned_abs() as usize;
 	if moved > height || last.len() < region.end {
 		return true;
 	}
-	let sources = if step > 0 {
-		region.start + moved..region.end
-	} else {
-		region.start..region.end - moved
-	};
+	let sources = if step > 0 { region.start + moved..region.end } else { region.start..region.end - moved };
 	chunk.iter().any(|r| has_ink(r))
 		|| sources.into_iter().any(|from| {
 			let to = if step > 0 { from - moved } else { from + moved };
@@ -5430,20 +4290,9 @@ fn has_ink(row: &[StripCell]) -> bool {
 // so the kept row alone reads as room. The region has to reach the bottom of the
 // screen: vim and nano scroll back inside a region above their own status rows,
 // and a blank file line leaving it isn't room.
-fn ledger_makes_room(
-	step: i32,
-	region: &std::ops::Range<usize>,
-	lines: usize,
-	last: &[Vec<StripCell>],
-	chunk: &[Vec<StripCell>],
-) -> bool {
+fn ledger_makes_room(step: i32, region: &std::ops::Range<usize>, lines: usize, last: &[Vec<StripCell>], chunk: &[Vec<StripCell>]) -> bool {
 	let k = (step.unsigned_abs() as usize).min(region.len());
-	step < 0
-		&& region.end == lines
-		&& last.len() == lines
-		&& !last[region.end - k..].iter().any(|r| has_ink(r))
-		&& !chunk.is_empty()
-		&& !chunk.iter().any(|r| has_ink(r))
+	step < 0 && region.end == lines && last.len() == lines && !last[region.end - k..].iter().any(|r| has_ink(r)) && !chunk.is_empty() && !chunk.iter().any(|r| has_ink(r))
 }
 
 // The same rule for a shift read off the row fingerprints, which is how an app
@@ -5603,11 +4452,7 @@ fn translate_span(cur: &[u64], last: &[u64], shift: i32) -> Option<(usize, usize
 	// space: forward (shift > 0) moves content up, so dest == i; backward moves it
 	// down, so dest == i + k.
 	let matches = |dest: usize| {
-		if shift > 0 {
-			dest < n - k && cur[dest] == last[dest + k]
-		} else {
-			dest >= k && cur[dest] == last[dest - k]
-		}
+		if shift > 0 { dest < n - k && cur[dest] == last[dest + k] } else { dest >= k && cur[dest] == last[dest - k] }
 	};
 	let (mut lo, mut hi) = (usize::MAX, 0usize);
 	for i in 0..n - k {
@@ -5628,11 +4473,7 @@ fn translate_span(cur: &[u64], last: &[u64], shift: i32) -> Option<(usize, usize
 	while hi + 1 < n && matches(hi + 1) {
 		hi += 1;
 	}
-	if shift > 0 {
-		Some((lo, (hi + k).min(n - 1)))
-	} else {
-		Some((lo.saturating_sub(k), hi))
-	}
+	if shift > 0 { Some((lo, (hi + k).min(n - 1))) } else { Some((lo.saturating_sub(k), hi)) }
 }
 
 // The rows a slide must not translate. `static_bands` finds them by "didn't
@@ -5650,11 +4491,7 @@ fn slide_bands(cur: &[u64], last: &[u64], shift: i32) -> (usize, usize) {
 	let n = cur.len();
 	let (mut st, mut sb) = static_bands(cur, last);
 	if let Some((top, bot)) = translate_span(cur, last, shift) {
-		let (top, bot) = if shift > 0 {
-			(top, bot + moved_further(cur, last, shift, bot))
-		} else {
-			(top - moved_further(cur, last, shift, top), bot)
-		};
+		let (top, bot) = if shift > 0 { (top, bot + moved_further(cur, last, shift, bot)) } else { (top - moved_further(cur, last, shift, top), bot) };
 		st = st.max(top);
 		sb = sb.max(n - 1 - bot);
 	}
@@ -5717,21 +4554,13 @@ fn output_band(cur: &[u64], last: &[u64], k: usize, region_hint: usize, blank: u
 // band frozen at its first step stays 0 for the whole run when that step caught a
 // half-drawn frame, and shrinking would drop a held row back into the eased text.
 fn adopt_band(current: usize, measured: usize, easing: bool) -> usize {
-	if easing {
-		current.max(measured)
-	} else {
-		measured
-	}
+	if easing { current.max(measured) } else { measured }
 }
 
 // Grid line drawn at `screen_row`. The output band shows the live bottom of the
 // grid, which the scrolled view doesn't reach while the ease runs.
 fn band_row_line(screen_row: i32, display_offset: i32, split_row: i32, ob: usize) -> i32 {
-	if ob > 0 && screen_row >= split_row {
-		screen_row
-	} else {
-		screen_row - display_offset
-	}
+	if ob > 0 && screen_row >= split_row { screen_row } else { screen_row - display_offset }
 }
 
 #[cfg(test)]
@@ -5741,26 +4570,7 @@ mod vhist_probe;
 
 #[cfg(test)]
 mod tests {
-	use super::{
-		APP_SCROLL_MAX, AttrsList, BAR_MIN_THUMB, BRACKET_REACH_ROWS, CURSOR_ALPHA,
-		CURSOR_ALPHA_LIGHT, CURSOR_MAX_LAG, CellRules, CursorAnimation, DepthSampler, Dir, GColor,
-		LinkHit, Node, OffStrip, Output, PROMPT_SKEL_MIN, PauseState, Rect, Rule, RuleSpan,
-		SLIDE_TOP_BAND_APPS, StripCell, Style, Weight, adopt_band, alloc_pane_id, band_row_line,
-		bar_applies_to, bar_pos_to_lines, bar_thumb_span, bar_track, bell_brighten, blank_went_up,
-		bracket_reach, capture_grid_text, capture_start, cell_rules, child_areas, cursor_alpha,
-		cursor_cycle, cursor_envelope, cursor_geometry, cursor_plate, cursor_slide_step,
-		cursor_wake_after, debold_attrs, distinct_pair, divider_at, drop_hold_over, ease_output,
-		edge_scroll_rate, equalize_dir_run, fingerprint_frame, fnv_row, fnv_row_skel,
-		glide_to_full, grid_point, handle_is_dragged, handle_pos, has_ink, layout,
-		ledger_makes_room, ledger_step, link_at, lock_for_frame, logical_line_bounds, minimap,
-		mono_attrs, move_is_input, next_capture_poll, output_advance, output_band, pair_inside,
-		paste_payload, place_split, prompt_strip, pulse_env, push_cell_rules, pushed_since,
-		render_char, repaint_shift, repainted_edge, resume_delay, same_char_pair,
-		scroll_shift_signed, set_buffer_rows, set_ratio, shape_reach, shift_makes_room,
-		shown_cursor_shape, skel_rows, slide_bands, slide_is_visible, snapshot_rows, span_quads,
-		static_bands, strip_cell, strip_rows, swap_leaves, text_buffer_h, translate_span,
-		underline_metrics, vanished_range, weld_region_clip,
-	};
+	use super::{APP_SCROLL_MAX, AttrsList, BAR_MIN_THUMB, BRACKET_REACH_ROWS, CURSOR_ALPHA, CURSOR_ALPHA_LIGHT, CURSOR_MAX_LAG, CellRules, CursorAnimation, DepthSampler, Dir, GColor, HandleGrab, LinkHit, Node, OffStrip, Output, PROMPT_SKEL_MIN, PauseState, Rect, Rule, RuleSpan, SLIDE_TOP_BAND_APPS, StripCell, Style, Weight, adopt_band, alloc_pane_id, band_row_line, bar_applies_to, bar_drag_lines, bar_pos_to_lines, bar_thumb_span, bar_track, bell_brighten, blank_went_up, bracket_reach, capture_grid_text, capture_start, cell_rules, child_areas, cursor_alpha, cursor_cycle, cursor_envelope, cursor_geometry, cursor_plate, cursor_slide_step, cursor_wake_after, debold_attrs, distinct_pair, divider_at, drop_hold_over, ease_output, edge_scroll_rate, equalize_dir_run, fingerprint_frame, fnv_row, fnv_row_skel, glide_to_full, grid_point, handle_is_dragged, handle_pos, has_ink, layout, ledger_makes_room, ledger_step, link_at, lock_for_frame, logical_line_bounds, minimap, mono_attrs, move_is_input, next_capture_poll, output_advance, output_band, pair_inside, paste_payload, place_split, prompt_strip, pulse_env, push_cell_rules, pushed_since, render_char, repaint_shift, repainted_edge, resume_delay, same_char_pair, scroll_shift_signed, set_buffer_rows, set_ratio, shape_reach, shift_makes_room, shown_cursor_shape, skel_rows, slide_bands, slide_is_visible, snapshot_rows, span_quads, static_bands, strip_cell, strip_rows, swap_leaves, text_buffer_h, translate_span, underline_metrics, vanished_range, weld_region_clip};
 	use crate::{config, palette};
 	use alacritty_terminal::event::{Event, EventListener};
 	use alacritty_terminal::grid::Dimensions;
@@ -5780,14 +4590,8 @@ mod tests {
 	// Test ID: dcbdh
 	#[test]
 	fn a_glyph_whose_raster_went_away_is_skipped_not_indexed() {
-		let body = include_str!("pane.rs")
-			.split("\nmod tests {")
-			.next()
-			.expect("the file above its own tests");
-		assert!(
-			!body.contains("glyph_cache[&"),
-			"indexing aborts on a key the clear took out"
-		);
+		let body = include_str!("pane.rs").split("\nmod tests {").next().expect("the file above its own tests");
+		assert!(!body.contains("glyph_cache[&"), "indexing aborts on a key the clear took out");
 		assert!(body.contains("glyph_cache.get(&"), "the draw asks instead");
 	}
 
@@ -5799,9 +4603,7 @@ mod tests {
 	fn a_command_that_prints_nothing_does_not_spin_the_loop() {
 		let settle = std::time::Duration::from_millis(300);
 		let now = std::time::Instant::now();
-		let long_ago = now
-			.checked_sub(std::time::Duration::from_mins(1))
-			.expect("a minute ago");
+		let long_ago = now.checked_sub(std::time::Duration::from_mins(1)).expect("a minute ago");
 		// nothing printed for a minute, and a poll just found the shell still busy
 		let next = next_capture_poll(long_ago, settle, now + super::CAPTURE_RETRY);
 		assert!(next > now, "the next poll is in the future");
@@ -5815,18 +4617,9 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_scrollbar_without_scrollback_or_on_the_alt_screen() {
-		let mut cfg = crate::config::Settings {
-			scrollbar: true,
-			..Default::default()
-		};
-		assert!(
-			bar_applies_to(&cfg, false, 500.0),
-			"normal screen with history"
-		);
-		assert!(
-			!bar_applies_to(&cfg, true, 500.0),
-			"alt screen owns its screen"
-		);
+		let mut cfg = crate::config::Settings { scrollbar: true, ..Default::default() };
+		assert!(bar_applies_to(&cfg, false, 500.0), "normal screen with history");
+		assert!(!bar_applies_to(&cfg, true, 500.0), "alt screen owns its screen");
 		assert!(!bar_applies_to(&cfg, false, 0.0), "nothing to scroll");
 		cfg.scrollbar = false;
 		assert!(!bar_applies_to(&cfg, false, 500.0), "turned off");
@@ -5841,16 +4634,72 @@ mod tests {
 		for lines in [0.0, 1.0, 250.0, 999.0, 1000.0] {
 			let (y, thumb_h) = bar_thumb_span(track_h, thickness, rows, max, lines);
 			let back = bar_pos_to_lines(track_h, thumb_h, max, y);
-			assert!(
-				(back - lines).abs() < 0.01,
-				"{lines} lines -> y {y} -> {back} lines"
-			);
+			assert!((back - lines).abs() < 0.01, "{lines} lines -> y {y} -> {back} lines");
 		}
 		// bottom of the track is the bottom of the scrollback, top is the oldest line
 		let (bottom, _) = bar_thumb_span(track_h, thickness, rows, max, 0.0);
 		let (top, _) = bar_thumb_span(track_h, thickness, rows, max, max);
 		assert!(top < bottom, "the oldest line sits at the top of the track");
 		assert_eq!(top, 0.0);
+	}
+
+	// A thumb or marker drag while output arrives keeps the text under the view.
+	// A parked view moves up with the lines that go up, and the drag goes on
+	// from there. Before the fix the next pointer move set the place from the
+	// pointer alone, which put the marker back by every line that went up, and
+	// the thumb, over a deeper scrollback, by most of them (2026112017124593).
+	// Test ID: dfjwf
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_handle_drag_keeps_the_text_still_while_output_arrives() {
+		let _g = config::test_store_lock();
+		let cfg = config::Settings { minimap: true, ..config::Settings::default() };
+		config::update(cfg.clone());
+		let (track_h, thickness, rows) = (400.0, 16.0, 40.0);
+		let map_geom = |max: f32| {
+			let total = max as usize + rows as usize;
+			let full = Rect { x: 0.0, y: 0.0, w: 400.0, h: track_h };
+			let g = minimap::geom(full, 0.0, 1.0, &cfg, total, total, rows as usize, 0.0, false, true);
+			(g.expect("a minimap"), total)
+		};
+		for full in [false, true] {
+			let at = if full { "full" } else { "growing" };
+			let mut s = crate::scroll::Scroll::new();
+			s.set_max(1000.0);
+			s.scroll_to(300.0);
+			s.snap();
+			let (thumb_y, _) = bar_thumb_span(track_h, thickness, rows, 1000.0, 300.0);
+			let y = thumb_y + 5.0;
+			let bar = HandleGrab::new(y, s.target_lines(), &s);
+			let map = HandleGrab::new(y, s.visual_lines(), &s);
+			// 5 lines go up: the scrollback grows by them, or stays full and drops 5
+			let max = if full { 1000.0 } else { 1005.0 };
+			s.set_max(max);
+			s.keep_place(5.0);
+			assert_eq!(s.target_lines(), 305.0, "{at}");
+			let (_, thumb_h) = bar_thumb_span(track_h, thickness, rows, max, 305.0);
+			let (from_y, from) = bar.from(&s);
+			let still = bar_drag_lines(track_h, thumb_h, max, from, y - from_y);
+			assert!((still - 305.0).abs() < 1e-3, "{at}: the thumb put the view at {still}");
+			// 10 px up the track is 10 px' worth of the deeper scrollback back
+			let up = bar_drag_lines(track_h, thumb_h, max, from, y - 10.0 - from_y);
+			let want = 305.0 + 10.0 * max / (track_h - thumb_h);
+			assert!((up - want).abs() < 1e-2, "{at}: {up}, wanted {want}");
+			let (g, total) = map_geom(max);
+			let still = minimap::drag_to(&g, total, total, rows as usize, map.from(&s), y, 1.0);
+			assert!((still - 305.0).abs() < 1e-3, "{at}: the marker put the view at {still}");
+		}
+		// a view held at the top of a full scrollback doesn't move, so a drag
+		// down from there moves it at once rather than after a dead stretch
+		let mut s = crate::scroll::Scroll::new();
+		s.set_max(1000.0);
+		s.scroll_to(1000.0);
+		s.snap();
+		let bar = HandleGrab::new(0.0, 1000.0, &s);
+		s.keep_place(5.0);
+		assert_eq!(bar.from(&s), (0.0, 1000.0));
+		let (_, thumb_h) = bar_thumb_span(track_h, thickness, rows, 1000.0, 1000.0);
+		assert!(bar_drag_lines(track_h, thumb_h, 1000.0, 1000.0, 1.0) < 1000.0);
 	}
 
 	// Dragging either handle has to pin the other to it. The thumb and the marker
@@ -5885,10 +4734,7 @@ mod tests {
 		assert!(drop_hold_over(false, 600.0, 600.0), "text has arrived");
 		// a wheel, a jump, or output moved the target: the drop is stale
 		assert!(drop_hold_over(true, 600.0, 540.0), "target moved away");
-		assert!(
-			!drop_hold_over(true, 600.0, 600.0 + config::SETTLE_EPS / 2.0),
-			"a settled-size wobble is not a new gesture"
-		);
+		assert!(!drop_hold_over(true, 600.0, 600.0 + config::SETTLE_EPS / 2.0), "a settled-size wobble is not a new gesture");
 	}
 
 	// A huge scrollback would grind the thumb down to an ungrabbable sliver.
@@ -5911,16 +4757,10 @@ mod tests {
 		// one step covers more ground, proportionally, from a big lag than a small one
 		let near = cursor_slide_step(0.0, 1.0, dt) / 1.0; // fraction of a 1-cell move
 		let far = (cursor_slide_step(0.0, 20.0, dt) - 0.0) / 20.0; // fraction of a 20-cell move
-		assert!(
-			far > near,
-			"a farther-behind cursor should close a larger fraction per step: near={near} far={far}"
-		);
+		assert!(far > near, "a farther-behind cursor should close a larger fraction per step: near={near} far={far}");
 		// monotone approach, never overshoots
 		let next = cursor_slide_step(2.0, 5.0, dt);
-		assert!(
-			next > 2.0 && next < 5.0,
-			"eases toward target without overshoot: {next}"
-		);
+		assert!(next > 2.0 && next < 5.0, "eases toward target without overshoot: {next}");
 	}
 
 	// Test ID: d9vtn
@@ -5930,17 +4770,10 @@ mod tests {
 		// engages: whatever the frame rate, the cursor sits at most CURSOR_MAX_LAG behind.
 		let tiny = 0.001;
 		let next = cursor_slide_step(0.0, 40.0, tiny);
-		assert!(
-			(40.0 - next) <= CURSOR_MAX_LAG + 0.001,
-			"lag capped at {CURSOR_MAX_LAG}, got {}",
-			40.0 - next
-		);
+		assert!((40.0 - next) <= CURSOR_MAX_LAG + 0.001, "lag capped at {CURSOR_MAX_LAG}, got {}", 40.0 - next);
 		// symmetric for a leftward jump
 		let back = cursor_slide_step(40.0, 0.0, tiny);
-		assert!(
-			back <= CURSOR_MAX_LAG + 0.001,
-			"leftward lag capped too: {back}"
-		);
+		assert!(back <= CURSOR_MAX_LAG + 0.001, "leftward lag capped too: {back}");
 	}
 
 	// A TUI hides the cursor to repaint (CSI ?25l) and parks it wherever the paint
@@ -5952,36 +4785,20 @@ mod tests {
 	fn a_hidden_cursor_is_not_drawn_where_the_app_parked_it() {
 		let shape = |t: &Term<VoidListener>| shown_cursor_shape(*t.mode(), t.cursor_style().shape);
 		let mut term = term_fed(20, 6, 0, "");
-		assert_ne!(
-			shape(&term),
-			CursorShape::Hidden,
-			"shown until an app says otherwise"
-		);
+		assert_ne!(shape(&term), CursorShape::Hidden, "shown until an app says otherwise");
 
 		// hide, then park at the bottom-right the way a repaint leaves it
 		feed(&mut term, "[?25l[6;20H");
-		assert_eq!(
-			shape(&term),
-			CursorShape::Hidden,
-			"hidden while the app repaints"
-		);
+		assert_eq!(shape(&term), CursorShape::Hidden, "hidden while the app repaints");
 		feed(&mut term, "[?25h");
-		assert_ne!(
-			shape(&term),
-			CursorShape::Hidden,
-			"back when the app shows it again"
-		);
+		assert_ne!(shape(&term), CursorShape::Hidden, "back when the app shows it again");
 
 		// a shape the app set (DECSCUSR) survives while shown and is still hidden
 		// while the cursor is, since the 2 are independent
 		feed(&mut term, "[5 q");
 		assert_eq!(shape(&term), CursorShape::Beam, "DECSCUSR beam");
 		feed(&mut term, "[?25l");
-		assert_eq!(
-			shape(&term),
-			CursorShape::Hidden,
-			"hidden outranks the shape"
-		);
+		assert_eq!(shape(&term), CursorShape::Hidden, "hidden outranks the shape");
 	}
 
 	// Combining marks all go on the one cell before them, and nothing that trims
@@ -5992,17 +4809,11 @@ mod tests {
 	fn combining_marks_on_one_cell_are_capped() {
 		let flood = format!("a{}", "\u{301}".repeat(10_000));
 		let term = term_fed(10, 2, 0, &flood);
-		let kept = term.grid()[Line(0)][Column(0)]
-			.zerowidth()
-			.map_or(0, <[char]>::len);
+		let kept = term.grid()[Line(0)][Column(0)].zerowidth().map_or(0, <[char]>::len);
 		assert!(kept <= 16, "one cell kept {kept} combining marks");
 
 		let accented = term_fed(10, 2, 0, "e\u{301}");
-		assert_eq!(
-			accented.grid()[Line(0)][Column(0)].zerowidth(),
-			Some(&['\u{301}'][..]),
-			"an ordinary accent is kept"
-		);
+		assert_eq!(accented.grid()[Line(0)][Column(0)].zerowidth(), Some(&['\u{301}'][..]), "an ordinary accent is kept");
 	}
 
 	// A double-click on an unmatched bracket had the engine look through the
@@ -6016,14 +4827,8 @@ mod tests {
 		let at = |line: i32, col: usize| Point::new(Line(line), Column(col));
 		let top = -(grid.history_size() as i32);
 		// across a line break, from either end
-		assert_eq!(
-			bracket_reach(grid, at(top, 2)),
-			Some((at(top, 2), at(top + 1, 1)))
-		);
-		assert_eq!(
-			bracket_reach(grid, at(top + 1, 1)),
-			Some((at(top, 2), at(top + 1, 1)))
-		);
+		assert_eq!(bracket_reach(grid, at(top, 2)), Some((at(top, 2), at(top + 1, 1))));
+		assert_eq!(bracket_reach(grid, at(top + 1, 1)), Some((at(top, 2), at(top + 1, 1))));
 		assert_eq!(bracket_reach(grid, at(top, 0)), None, "not a bracket");
 
 		// a partner past the reach isn't looked for, so the bracket stands alone
@@ -6036,10 +4841,7 @@ mod tests {
 		let close = Point::new(Line(2), Column(0));
 		assert_eq!(grid[close].c, ')');
 		assert_eq!(bracket_reach(grid, close), Some((close, close)));
-		assert!(
-			term.bracket_search(close).is_some(),
-			"the engine would have found it"
-		);
+		assert!(term.bracket_search(close).is_some(), "the engine would have found it");
 	}
 
 	// The second half of a wide character has a space in the grid, so a path
@@ -6073,31 +4875,15 @@ mod tests {
 		// one that wraps, with the wide character pushed to the next row
 		let term = term_fed(10, 3, 0, "ab /srv/x数据/y\r\n");
 		let grid = term.grid();
-		assert!(
-			grid[Point::new(Line(0), Column(9))]
-				.flags
-				.contains(Flags::LEADING_WIDE_CHAR_SPACER)
-		);
+		assert!(grid[Point::new(Line(0), Column(9))].flags.contains(Flags::LEADING_WIDE_CHAR_SPACER));
 		let (a, b) = shape_reach(grid, Point::new(Line(0), Column(4))).unwrap();
-		assert_eq!(
-			(a, b),
-			(
-				Point::new(Line(0), Column(3)),
-				Point::new(Line(1), Column(5))
-			)
-		);
+		assert_eq!((a, b), (Point::new(Line(0), Column(3)), Point::new(Line(1), Column(5))));
 	}
 
 	// A small live Term fed via the real parser, for the copy-output tests.
 	fn term_fed(cols: usize, lines: usize, scrollback: usize, input: &str) -> Term<VoidListener> {
-		let cfg = TermConfig {
-			scrolling_history: scrollback,
-			..Default::default()
-		};
-		let dims = crate::term::TermDimensions {
-			columns: cols,
-			screen_lines: lines,
-		};
+		let cfg = TermConfig { scrolling_history: scrollback, ..Default::default() };
+		let dims = crate::term::TermDimensions { columns: cols, screen_lines: lines };
 		let mut term = Term::new(cfg, &dims, VoidListener);
 		let mut parser: Processor = Processor::new();
 		parser.advance(&mut term, input.as_bytes());
@@ -6122,13 +4908,7 @@ mod tests {
 		Node::Leaf(id)
 	}
 	fn split(dir: Dir, ratio: f32, manual: bool, first: Node, second: Node) -> Node {
-		Node::Split {
-			dir,
-			ratio,
-			manual,
-			first: Box::new(first),
-			second: Box::new(second),
-		}
+		Node::Split { dir, ratio, manual, first: Box::new(first), second: Box::new(second) }
 	}
 	// A focus move goes to the pane beside the focused one, across the divider
 	// the real layout leaves, and goes nowhere at the window's edge. Where 2
@@ -6147,21 +4927,10 @@ mod tests {
 	fn a_focus_move_goes_to_the_pane_beside_it() {
 		use super::{Toward, neighbor_toward};
 		let middle = split(Dir::Horizontal, 0.5, false, leaf(2), leaf(3));
-		let top = split(
-			Dir::Vertical,
-			1.0 / 3.0,
-			false,
-			leaf(1),
-			split(Dir::Vertical, 0.5, false, middle, leaf(4)),
-		);
+		let top = split(Dir::Vertical, 1.0 / 3.0, false, leaf(1), split(Dir::Vertical, 0.5, false, middle, leaf(4)));
 		let root = split(Dir::Horizontal, 0.75, false, top, leaf(5));
 		let mut rects = Vec::new();
-		let area = Rect {
-			x: 0.0,
-			y: 0.0,
-			w: 300.0,
-			h: 200.0,
-		};
+		let area = Rect { x: 0.0, y: 0.0, w: 300.0, h: 200.0 };
 		for scale in [1.0, 2.0] {
 			rects.clear();
 			layout(&root, area, scale, &mut rects);
@@ -6202,17 +4971,7 @@ mod tests {
 
 	fn widths(root: &Node, w: f32) -> Vec<(u64, f32)> {
 		let mut out = Vec::new();
-		layout(
-			root,
-			Rect {
-				x: 0.0,
-				y: 0.0,
-				w,
-				h: 100.0,
-			},
-			1.0,
-			&mut out,
-		);
+		layout(root, Rect { x: 0.0, y: 0.0, w, h: 100.0 }, 1.0, &mut out);
 		out.sort_by_key(|(id, _)| *id);
 		out.into_iter().map(|(id, r)| (id, r.w)).collect()
 	}
@@ -6224,12 +4983,7 @@ mod tests {
 	// Test ID: dbenj
 	#[test]
 	fn the_pane_gap_and_its_grab_zone_scale_with_the_display() {
-		let area = Rect {
-			x: 0.0,
-			y: 0.0,
-			w: 400.0,
-			h: 200.0,
-		};
+		let area = Rect { x: 0.0, y: 0.0, w: 400.0, h: 200.0 };
 		let gap_at = |scale: f32| {
 			let (a, b) = child_areas(area, Dir::Vertical, 0.5, scale);
 			b.x - (a.x + a.w)
@@ -6250,19 +5004,10 @@ mod tests {
 		};
 		let reach = config::dip(config::DIVIDER_GRAB_PX, 2.0);
 		let mut path = Vec::new();
-		assert!(
-			matches!(
-				divider_at(&root, area, seam - reach + 0.5, 100.0, 2.0, &mut path),
-				Some(Dir::Vertical)
-			),
-			"the grab zone must widen with the gap it catches"
-		);
+		assert!(matches!(divider_at(&root, area, seam - reach + 0.5, 100.0, 2.0, &mut path), Some(Dir::Vertical)), "the grab zone must widen with the gap it catches");
 		// and one that falls well clear of it doesn't
 		path.clear();
-		assert!(
-			divider_at(&root, area, seam - reach * 3.0, 100.0, 2.0, &mut path).is_none(),
-			"a press clear of the seam is not a divider grab"
-		);
+		assert!(divider_at(&root, area, seam - reach * 3.0, 100.0, 2.0, &mut path).is_none(), "a press clear of the seam is not a divider grab");
 	}
 
 	// Test ID: d9jr2
@@ -6319,18 +5064,14 @@ mod tests {
 		let mut st = PauseState::default();
 		// input mid-shrink: the cycle keeps running forward at normal speed, so the
 		// next frame is a plain +dt rather than a jump to full
-		let mut t = st.advance(
-			0.7, 0.01, 0.01, period, 0.5, timeout, 0.0, true, 0.0, 0.0, false,
-		);
+		let mut t = st.advance(0.7, 0.01, 0.01, period, 0.5, timeout, 0.0, true, 0.0, 0.0, false);
 		assert!((t - 0.71).abs() < 1e-6);
 		assert!(st.active && !st.parked);
 		// runs on around the cycle and parks exactly at the full-size phase, even
 		// though the idle timeout expires long before it gets there
 		let mut idle = 0.01;
 		for _ in 0..200 {
-			t = st.advance(
-				t, 0.01, 0.01, period, 0.5, timeout, 0.0, false, idle, idle, false,
-			);
+			t = st.advance(t, 0.01, 0.01, period, 0.5, timeout, 0.0, false, idle, idle, false);
 			idle += 0.01;
 			if st.parked {
 				break;
@@ -6339,18 +5080,14 @@ mod tests {
 		assert!(st.parked);
 		assert!(((t / period).fract() - 0.5).abs() < 1e-6);
 		// typing while parked keeps it parked at full
-		t = st.advance(
-			t, 0.01, 0.01, period, 0.5, timeout, 0.0, true, 0.0, 0.0, false,
-		);
+		t = st.advance(t, 0.01, 0.01, period, 0.5, timeout, 0.0, true, 0.0, 0.0, false);
 		assert!(st.parked && ((t / period).fract() - 0.5).abs() < 1e-6);
 		// stays through the timeout after the last input, then resumes from full:
 		// the first resumed frame is full_phase + dt, so the size is continuous
 		idle = 0.01;
 		let mut resumed = None;
 		for _ in 0..200 {
-			t = st.advance(
-				t, 0.01, 0.01, period, 0.5, timeout, 0.0, false, idle, idle, false,
-			);
+			t = st.advance(t, 0.01, 0.01, period, 0.5, timeout, 0.0, false, idle, idle, false);
 			idle += 0.01;
 			if !st.active {
 				resumed = Some(t);
@@ -6360,9 +5097,7 @@ mod tests {
 		let t = resumed.expect("should resume");
 		assert!((t - (0.5 * period + 0.01)).abs() < 1e-6);
 		// and once resumed it accumulates
-		let t2 = st.advance(
-			t, 0.01, 0.01, period, 0.5, timeout, 0.0, false, 1.0, 1.0, false,
-		);
+		let t2 = st.advance(t, 0.01, 0.01, period, 0.5, timeout, 0.0, false, 1.0, 1.0, false);
 		assert!((t2 - (t + 0.01)).abs() < 1e-6);
 	}
 
@@ -6373,21 +5108,15 @@ mod tests {
 		let timeout = 0.35;
 		let mut st = PauseState::default();
 		// start already near full so it parks on the first step
-		let mut t = st.advance(
-			0.49, 0.02, 0.02, period, 0.5, timeout, 0.0, true, 0.0, 0.0, false,
-		);
+		let mut t = st.advance(0.49, 0.02, 0.02, period, 0.5, timeout, 0.0, true, 0.0, 0.0, false);
 		assert!(st.parked);
 		// idle long past the timeout, but the hold itself must also last it: a
 		// glide that ate the idle window still gets a real pause at full
-		t = st.advance(
-			t, 0.01, 0.01, period, 0.5, timeout, 0.0, false, 10.0, 10.0, false,
-		);
+		t = st.advance(t, 0.01, 0.01, period, 0.5, timeout, 0.0, false, 10.0, 10.0, false);
 		assert!(st.active && ((t / period).fract() - 0.5).abs() < 1e-6);
 		// conversely, held long enough but input still recent keeps it parked
 		for _ in 0..100 {
-			t = st.advance(
-				t, 0.01, 0.01, period, 0.5, timeout, 0.0, false, 0.1, 0.1, false,
-			);
+			t = st.advance(t, 0.01, 0.01, period, 0.5, timeout, 0.0, false, 0.1, 0.1, false);
 		}
 		assert!(st.active && ((t / period).fract() - 0.5).abs() < 1e-6);
 	}
@@ -6400,15 +5129,11 @@ mod tests {
 		let mut st = PauseState::default();
 		// running free, idle crosses the stop threshold with no input: an episode
 		// starts anyway and the glide takes it to the full-size phase
-		let mut t = st.advance(
-			0.7, 0.01, 0.01, period, 0.5, resume, stop, false, 0.0, stop, false,
-		);
+		let mut t = st.advance(0.7, 0.01, 0.01, period, 0.5, resume, stop, false, 0.0, stop, false);
 		assert!(st.active && !st.parked);
 		let mut idle = stop;
 		for _ in 0..200 {
-			t = st.advance(
-				t, 0.01, 0.01, period, 0.5, resume, stop, false, idle, idle, false,
-			);
+			t = st.advance(t, 0.01, 0.01, period, 0.5, resume, stop, false, idle, idle, false);
 			idle += 0.01;
 			if st.parked {
 				break;
@@ -6417,32 +5142,16 @@ mod tests {
 		assert!(st.parked && ((t / period).fract() - 0.5).abs() < 1e-6);
 		// stays parked for good: a big wall-clock gap from the sleeping loop
 		// catching up satisfies the hold, but input idle past the stop pins it
-		t = st.advance(
-			t,
-			0.01,
-			300.0,
-			period,
-			0.5,
-			resume,
-			stop,
-			false,
-			idle + 300.0,
-			idle + 300.0,
-			false,
-		);
+		t = st.advance(t, 0.01, 300.0, period, 0.5, resume, stop, false, idle + 300.0, idle + 300.0, false);
 		assert!(st.active && ((t / period).fract() - 0.5).abs() < 1e-6);
 		// activity (a keystroke or refocus poke) resets idle_t: still parked for
 		// the resume delay, then the cycle resumes from full, never mid-cycle
-		t = st.advance(
-			t, 0.01, 0.01, period, 0.5, resume, stop, false, 0.0, 0.0, false,
-		);
+		t = st.advance(t, 0.01, 0.01, period, 0.5, resume, stop, false, 0.0, 0.0, false);
 		assert!(st.active && ((t / period).fract() - 0.5).abs() < 1e-6);
 		let mut idle = 0.01;
 		let mut resumed = None;
 		for _ in 0..200 {
-			t = st.advance(
-				t, 0.01, 0.01, period, 0.5, resume, stop, false, idle, idle, false,
-			);
+			t = st.advance(t, 0.01, 0.01, period, 0.5, resume, stop, false, idle, idle, false);
 			idle += 0.01;
 			if !st.active {
 				resumed = Some(t);
@@ -6471,26 +5180,11 @@ mod tests {
 		for step in 0..2000 {
 			let moved = step % 200 == 0;
 			cursor_idle = if moved { 0.0 } else { cursor_idle + 0.01 };
-			t = st.advance(
-				t,
-				0.01,
-				0.01,
-				period,
-				0.5,
-				resume,
-				stop,
-				moved,
-				cursor_idle,
-				input_idle,
-				false,
-			);
+			t = st.advance(t, 0.01, 0.01, period, 0.5, resume, stop, moved, cursor_idle, input_idle, false);
 			input_idle += 0.01;
 		}
 		assert!(cursor_idle < stop, "the cursor's own idle must stay short");
-		assert!(
-			st.active && st.parked && ((t / period).fract() - 0.5).abs() < 1e-6,
-			"parked at full after the stop, whatever the program is doing"
-		);
+		assert!(st.active && st.parked && ((t / period).fract() - 0.5).abs() < 1e-6, "parked at full after the stop, whatever the program is doing");
 	}
 
 	// Test ID: damyb
@@ -6501,14 +5195,10 @@ mod tests {
 		let mut st = PauseState::default();
 		// pane loses active status mid-cycle: an episode starts with no input and
 		// the glide takes it to the full-size phase (never a snap)
-		let mut t = st.advance(
-			0.7, 0.01, 0.01, period, 0.5, resume, stop, false, 0.0, 0.0, true,
-		);
+		let mut t = st.advance(0.7, 0.01, 0.01, period, 0.5, resume, stop, false, 0.0, 0.0, true);
 		assert!(st.active && !st.parked);
 		for _ in 0..200 {
-			t = st.advance(
-				t, 0.01, 0.01, period, 0.5, resume, stop, false, 0.0, 0.0, true,
-			);
+			t = st.advance(t, 0.01, 0.01, period, 0.5, resume, stop, false, 0.0, 0.0, true);
 			if st.parked {
 				break;
 			}
@@ -6517,9 +5207,7 @@ mod tests {
 		// held for good while blocked: output moving the cursor (moved) and long
 		// holds satisfy nothing, and only becoming active again can end it
 		for _ in 0..300 {
-			t = st.advance(
-				t, 0.01, 0.01, period, 0.5, resume, stop, true, 5.0, 5.0, true,
-			);
+			t = st.advance(t, 0.01, 0.01, period, 0.5, resume, stop, true, 5.0, 5.0, true);
 		}
 		assert!(st.active && st.parked && ((t / period).fract() - 0.5).abs() < 1e-6);
 		// unblocked with only idle_t reset: waits out the resume delay, then the
@@ -6528,9 +5216,7 @@ mod tests {
 		let mut idle = 0.0;
 		let mut resumed = None;
 		for _ in 0..200 {
-			t = st.advance(
-				t, 0.01, 0.01, period, 0.5, resume, stop, false, idle, idle, false,
-			);
+			t = st.advance(t, 0.01, 0.01, period, 0.5, resume, stop, false, idle, idle, false);
 			idle += 0.01;
 			if !st.active {
 				resumed = Some(t);
@@ -6549,39 +5235,21 @@ mod tests {
 		let period = 1.0;
 		let (resume_s, stop) = (1.0, 60.0);
 		let mut st = PauseState::default();
-		let mut t = st.advance(
-			0.7, 0.01, 0.01, period, 0.5, resume_s, stop, true, 0.0, 0.0, false,
-		);
+		let mut t = st.advance(0.7, 0.01, 0.01, period, 0.5, resume_s, stop, true, 0.0, 0.0, false);
 		for _ in 0..200 {
-			t = st.advance(
-				t, 0.01, 0.01, period, 0.5, resume_s, stop, false, 0.0, 0.0, false,
-			);
+			t = st.advance(t, 0.01, 0.01, period, 0.5, resume_s, stop, false, 0.0, 0.0, false);
 			if st.parked {
 				break;
 			}
 		}
 		assert!(st.parked, "typing should park the cycle at full");
 		// a fraction of the delay in, the timed path is still holding
-		st.advance(
-			t, 0.01, 0.01, period, 0.5, resume_s, stop, false, 0.1, 0.1, false,
-		);
+		st.advance(t, 0.01, 0.01, period, 0.5, resume_s, stop, false, 0.1, 0.1, false);
 		assert!(st.active && st.parked);
 		st.resume();
 		assert!(!st.active && !st.parked);
 		// poke_cursor puts blink_t at the full-size phase; the cycle runs on from there
-		let t = st.advance(
-			0.5 * period,
-			0.01,
-			0.01,
-			period,
-			0.5,
-			resume_s,
-			stop,
-			false,
-			0.0,
-			0.0,
-			false,
-		);
+		let t = st.advance(0.5 * period, 0.01, 0.01, period, 0.5, resume_s, stop, false, 0.0, 0.0, false);
 		assert!((t - (0.5 * period + 0.01)).abs() < 1e-6);
 	}
 
@@ -6594,19 +5262,13 @@ mod tests {
 	fn the_blink_rate_is_one_whole_cycle_peak_to_peak() {
 		let shipped = crate::config::Settings::default();
 		assert_eq!(shipped.cursor_blink_rate_s, 1.0);
-		let anims = [
-			CursorAnimation::Phase,
-			CursorAnimation::PulseVertical,
-			CursorAnimation::PulseHorizontal,
-			CursorAnimation::PulseBoth,
-		];
+		let anims = [CursorAnimation::Phase, CursorAnimation::PulseVertical, CursorAnimation::PulseHorizontal, CursorAnimation::PulseBoth];
 		for rate in [shipped.cursor_blink_rate_s, 0.4, 2.5] {
 			for anim in anims {
 				let (period, _) = cursor_cycle(anim, rate);
 				// how much of the cursor shows: size for a pulse, alpha for the fade
 				let shows = |t: f32| {
-					let (w, h, alpha, ..) =
-						cursor_envelope(Some(anim), (t / period).fract(), (1.0, 1.0), 1.0);
+					let (w, h, alpha, ..) = cursor_envelope(Some(anim), (t / period).fract(), (1.0, 1.0), 1.0);
 					w * h * alpha
 				};
 				let step = 0.0005;
@@ -6634,10 +5296,7 @@ mod tests {
 	// Test ID: dan5c
 	#[test]
 	fn cursor_cycle_full_phase_matches_the_animation() {
-		assert_eq!(
-			cursor_cycle(CursorAnimation::PulseVertical, 1.0),
-			(1.0, 0.5)
-		);
+		assert_eq!(cursor_cycle(CursorAnimation::PulseVertical, 1.0), (1.0, 0.5));
 		assert_eq!(cursor_cycle(CursorAnimation::Phase, 1.0), (1.0, 0.0));
 		assert_eq!(cursor_cycle(CursorAnimation::PulseBoth, 0.5).0, 0.5);
 		assert_eq!(cursor_cycle(CursorAnimation::Phase, 0.0).0, 0.05); // period is never 0
@@ -6673,9 +5332,7 @@ mod tests {
 		// a command writing: the cursor keeps moving, so the cycle glides to full
 		// and stays parked there for as long as the output lasts
 		for _ in 0..300 {
-			blink = st.advance(
-				blink, dt, dt, period, full, delay, 0.0, true, 0.0, 0.0, false,
-			);
+			blink = st.advance(blink, dt, dt, period, full, delay, 0.0, true, 0.0, 0.0, false);
 		}
 		assert!(st.parked, "output parks the cursor at full size");
 		assert!((blink - full * period).abs() < 1e-6);
@@ -6684,20 +5341,12 @@ mod tests {
 		let mut frames = 0;
 		while st.active && frames < 60 {
 			idle += dt;
-			blink = st.advance(
-				blink, dt, dt, period, full, delay, 0.0, false, idle, idle, false,
-			);
+			blink = st.advance(blink, dt, dt, period, full, delay, 0.0, false, idle, idle, false);
 			frames += 1;
 		}
 		assert!(!st.active, "the animation resumed");
-		assert!(
-			idle < 0.2,
-			"resumed at once, not after the typing delay: {idle}"
-		);
-		assert!(
-			(blink - (full * period + dt)).abs() < 1e-6,
-			"resumed from full size"
-		);
+		assert!(idle < 0.2, "resumed at once, not after the typing delay: {idle}");
+		assert!((blink - (full * period + dt)).abs() < 1e-6, "resumed from full size");
 	}
 
 	// Test ID: d9kcd
@@ -6719,11 +5368,7 @@ mod tests {
 		// the anchor recovers the true start; the stale index alone drops lines
 		let start = capture_start(&term, cmd_start, anchor, end);
 		assert_eq!(capture_grid_text(&term, start, end), "O1\nO2\nO3\nO4\n");
-		assert_ne!(
-			capture_grid_text(&term, cmd_start, end),
-			"O1\nO2\nO3\nO4\n",
-			"the stale index should demonstrate the bug this guards against"
-		);
+		assert_ne!(capture_grid_text(&term, cmd_start, end), "O1\nO2\nO3\nO4\n", "the stale index should demonstrate the bug this guards against");
 		// no anchor (blank prompt row) or no match (row evicted/redrawn): the
 		// recorded index is the fallback, never a panic
 		assert_eq!(capture_start(&term, cmd_start, None, end), cmd_start);
@@ -6759,20 +5404,13 @@ mod tests {
 		let grid = term.grid();
 		let cmd_start = grid.history_size() + grid.cursor.point.line.0.max(0) as usize + 1;
 		let block = vec![row_skel(&term, grid.cursor.point.line.0 - 1)];
-		feed(
-			&mut term,
-			"\r\nA\r\nB\r\n[~/other git:fixup 10:47]\r\nuser$ ",
-		);
+		feed(&mut term, "\r\nA\r\nB\r\n[~/other git:fixup 10:47]\r\nuser$ ");
 		let grid = term.grid();
 		let end = grid.history_size() + grid.cursor.point.line.0.max(0) as usize;
 		let stripped = prompt_strip(&term, cmd_start, end, &block);
 		assert_eq!(capture_grid_text(&term, cmd_start, stripped), "A\nB\n");
 		// an output row with different structure must not match the block
-		assert_ne!(
-			row_skel(&term, grid.cursor.point.line.0 - 2),
-			block[0],
-			"plain output must not skeleton-match the prompt decoration"
-		);
+		assert_ne!(row_skel(&term, grid.cursor.point.line.0 - 2), block[0], "plain output must not skeleton-match the prompt decoration");
 	}
 
 	// Test ID: dbeem
@@ -6797,15 +5435,9 @@ mod tests {
 		// flavor of line break has to reduce to the lone CR the Enter key sends. A
 		// Windows clipboard is CRLF, so this is the ordinary case there: sending the
 		// LF too leaves the shell on a continuation line after every row.
-		assert_eq!(
-			paste_payload("one\r\ntwo\r\nthree", false),
-			"one\rtwo\rthree"
-		);
+		assert_eq!(paste_payload("one\r\ntwo\r\nthree", false), "one\rtwo\rthree");
 		assert_eq!(paste_payload("one\ntwo", false), "one\rtwo");
-		assert_eq!(
-			paste_payload("one\r\ntwo\nthree\r", false),
-			"one\rtwo\rthree\r"
-		);
+		assert_eq!(paste_payload("one\r\ntwo\nthree\r", false), "one\rtwo\rthree\r");
 		// nothing to do without a line break
 		assert_eq!(paste_payload("plain text", false), "plain text");
 		// and not one LF may survive to get to the shell
@@ -6820,10 +5452,7 @@ mod tests {
 		// which is how a paste runs a command nobody typed. The ESC has to go.
 		let attack = "safe\x1b[201~rm -rf ~\r";
 		let out = paste_payload(attack, true);
-		assert!(
-			!out.contains('\x1b'),
-			"no ESC may survive into a bracketed paste"
-		);
+		assert!(!out.contains('\x1b'), "no ESC may survive into a bracketed paste");
 		assert_eq!(out, "safe[201~rm -rf ~\r");
 		// Bracketed, the application asked for the text itself, so line breaks pass
 		// through untouched, and only ESC is taken out.
@@ -6843,10 +5472,7 @@ mod tests {
 		assert_eq!(c, d);
 		// different punctuation structure = different
 		assert_ne!(fnv_row_skel("[a/b]".chars()), fnv_row_skel("(a/b)".chars()));
-		assert_ne!(
-			fnv_row_skel("hello world".chars()),
-			fnv_row_skel("   ".chars())
-		);
+		assert_ne!(fnv_row_skel("hello world".chars()), fnv_row_skel("   ".chars()));
 	}
 
 	// Test ID: d9kce
@@ -6883,13 +5509,7 @@ mod tests {
 	#[test]
 	fn equalize_three_in_a_row() {
 		// split A vertically then split the new pane again: 50/25/25 -> equalize
-		let mut root = split(
-			Dir::Vertical,
-			0.5,
-			false,
-			leaf(1),
-			split(Dir::Vertical, 0.5, false, leaf(2), leaf(3)),
-		);
+		let mut root = split(Dir::Vertical, 0.5, false, leaf(1), split(Dir::Vertical, 0.5, false, leaf(2), leaf(3)));
 		equalize_dir_run(&mut root, 3, Dir::Vertical);
 		let ws = widths(&root, 900.0);
 		for (_, w) in &ws {
@@ -6900,19 +5520,7 @@ mod tests {
 	// Test ID: d9cnj
 	#[test]
 	fn equalize_four_in_a_row() {
-		let mut root = split(
-			Dir::Vertical,
-			0.5,
-			false,
-			leaf(1),
-			split(
-				Dir::Vertical,
-				0.5,
-				false,
-				leaf(2),
-				split(Dir::Vertical, 0.5, false, leaf(3), leaf(4)),
-			),
-		);
+		let mut root = split(Dir::Vertical, 0.5, false, leaf(1), split(Dir::Vertical, 0.5, false, leaf(2), split(Dir::Vertical, 0.5, false, leaf(3), leaf(4))));
 		equalize_dir_run(&mut root, 4, Dir::Vertical);
 		let ws = widths(&root, 1200.0);
 		for (_, w) in &ws {
@@ -6930,10 +5538,7 @@ mod tests {
 		assert!(place_split(&mut root, 2, Dir::Vertical, 3, false, None));
 		assert!(place_split(&mut root, 3, Dir::Vertical, 4, false, None));
 		for (id, w) in widths(&root, 1200.0) {
-			assert!(
-				(w - 300.0).abs() <= 3.0,
-				"pane {id} is {w} wide, not a quarter"
-			);
+			assert!((w - 300.0).abs() <= 3.0, "pane {id} is {w} wide, not a quarter");
 		}
 	}
 
@@ -6941,34 +5546,14 @@ mod tests {
 	#[test]
 	fn a_command_line_split_with_a_size_keeps_it() {
 		let mut root = leaf(1);
-		assert!(place_split(
-			&mut root,
-			1,
-			Dir::Vertical,
-			2,
-			false,
-			Some(0.3)
-		));
+		assert!(place_split(&mut root, 1, Dir::Vertical, 2, false, Some(0.3)));
 		assert!(place_split(&mut root, 2, Dir::Vertical, 3, false, None));
 		let ws = widths(&root, 1000.0);
-		assert!(
-			(ws[0].1 - 700.0).abs() <= 3.0,
-			"the sized split was evened out: {ws:?}"
-		);
-		assert!(
-			(ws[1].1 - ws[2].1).abs() <= 3.0,
-			"the next one halves what it split: {ws:?}"
-		);
+		assert!((ws[0].1 - 700.0).abs() <= 3.0, "the sized split was evened out: {ws:?}");
+		assert!((ws[1].1 - ws[2].1).abs() <= 3.0, "the next one halves what it split: {ws:?}");
 		// a pane put before the one it splits takes its share on that side
 		let mut before = leaf(1);
-		assert!(place_split(
-			&mut before,
-			1,
-			Dir::Vertical,
-			2,
-			true,
-			Some(0.25)
-		));
+		assert!(place_split(&mut before, 1, Dir::Vertical, 2, true, Some(0.25)));
 		let ws = widths(&before, 1000.0);
 		assert!((ws[1].1 - 250.0).abs() <= 3.0, "{ws:?}");
 	}
@@ -6978,17 +5563,9 @@ mod tests {
 	fn manual_divider_stops_equalization() {
 		// the outer divider was dragged by hand (manual), so a later split doesn't
 		// even it out again and the 0.7 ratio stays
-		let mut root = split(
-			Dir::Vertical,
-			0.7,
-			true,
-			leaf(1),
-			split(Dir::Vertical, 0.5, false, leaf(2), leaf(3)),
-		);
+		let mut root = split(Dir::Vertical, 0.7, true, leaf(1), split(Dir::Vertical, 0.5, false, leaf(2), leaf(3)));
 		equalize_dir_run(&mut root, 3, Dir::Vertical);
-		let Node::Split { ratio, .. } = &root else {
-			panic!()
-		};
+		let Node::Split { ratio, .. } = &root else { panic!() };
 		assert_eq!(*ratio, 0.7, "manual run must keep its sizes");
 	}
 
@@ -6997,34 +5574,16 @@ mod tests {
 	fn different_direction_counts_as_one_unit() {
 		// a vertical run whose second member is a horizontal split: 2 units -> 50/50,
 		// and the inner horizontal ratio is left untouched
-		let mut root = split(
-			Dir::Vertical,
-			0.3,
-			false,
-			leaf(1),
-			split(Dir::Horizontal, 0.4, false, leaf(2), leaf(3)),
-		);
+		let mut root = split(Dir::Vertical, 0.3, false, leaf(1), split(Dir::Horizontal, 0.4, false, leaf(2), leaf(3)));
 		equalize_dir_run(&mut root, 1, Dir::Vertical);
-		let Node::Split { ratio, second, .. } = &root else {
-			panic!()
-		};
+		let Node::Split { ratio, second, .. } = &root else { panic!() };
 		assert!((ratio - 0.5).abs() < 0.01, "two units -> half each");
-		let Node::Split { ratio: hr, .. } = second.as_ref() else {
-			panic!()
-		};
+		let Node::Split { ratio: hr, .. } = second.as_ref() else { panic!() };
 		assert_eq!(*hr, 0.4, "nested other-direction split is untouched");
 	}
 
 	// default pairs in precedence order: backtick, ", ', {}, (), [], <>
-	const PAIRS: &[(char, char)] = &[
-		('`', '`'),
-		('"', '"'),
-		('\'', '\''),
-		('{', '}'),
-		('(', ')'),
-		('[', ']'),
-		('<', '>'),
-	];
+	const PAIRS: &[(char, char)] = &[('`', '`'), ('"', '"'), ('\'', '\''), ('{', '}'), ('(', ')'), ('[', ']'), ('<', '>')];
 
 	fn row(s: &str) -> Vec<char> {
 		s.chars().collect()
@@ -7079,19 +5638,10 @@ mod tests {
 		let bytes = "b'https://example.invalid/silk1007 CLIPMARK'";
 		assert_eq!(text(bytes, "CLIPMARK"), None);
 		assert_eq!(text("don't click 'here' now", "click"), None);
-		assert_eq!(
-			text("it's 'a phrase' ok", "phrase").as_deref(),
-			Some("a phrase")
-		);
-		assert_eq!(
-			text("O'Brien said 'hi there'", "there").as_deref(),
-			Some("hi there")
-		);
+		assert_eq!(text("it's 'a phrase' ok", "phrase").as_deref(), Some("a phrase"));
+		assert_eq!(text("O'Brien said 'hi there'", "there").as_deref(), Some("hi there"));
 		// a quote with a space on one side is still a quote
-		assert_eq!(
-			text("say 'two words' now", "two").as_deref(),
-			Some("two words")
-		);
+		assert_eq!(text("say 'two words' now", "two").as_deref(), Some("two words"));
 		assert_eq!(text("'x' and 'y z'", "z").as_deref(), Some("y z"));
 	}
 
@@ -7383,10 +5933,7 @@ mod tests {
 		// the pill's text changes every step (it is composited over scrolling content)
 		let (cur, last) = muffer_pill_frames(700, 701);
 		let shift = scroll_shift_signed(&cur, &last, APP_SCROLL_MAX);
-		assert_eq!(
-			shift, -1,
-			"a wheel notch back is still a clean one-row scroll"
-		);
+		assert_eq!(shift, -1, "a wheel notch back is still a clean one-row scroll");
 		// what the old unchanged-suffix walk saw: the pill row inside the region
 		assert_eq!(static_bands(&cur, &last), (0, 5));
 		// the shift's own extent stops at row 23, so the pill row is band
@@ -7402,11 +5949,7 @@ mod tests {
 		let (cur, last) = muffer_pill_frames(700, 701);
 		let (st, sb) = slide_bands(&cur, &last, -1);
 		let range = vanished_range(-1, st, sb, 30);
-		assert_eq!(
-			range,
-			23..24,
-			"the region's own last row leaves, not the pill's"
-		);
+		assert_eq!(range, 23..24, "the region's own last row leaves, not the pill's");
 		assert!(!range.contains(&24));
 		// with the unchanged-suffix walk alone the pill's own row was retired into
 		// the strip, which is what drew it a second time inside the reveal
@@ -7427,11 +5970,7 @@ mod tests {
 		let shift = scroll_shift_signed(&cur, &last, APP_SCROLL_MAX);
 		assert_eq!(shift, -1);
 		let (st, sb) = slide_bands(&cur, &last, shift);
-		assert_eq!(
-			(st, sb),
-			(0, 6),
-			"the mid-region overlay does not collapse the region"
-		);
+		assert_eq!((st, sb), (0, 6), "the mid-region overlay does not collapse the region");
 		assert!(30 - sb > 13, "rows below the stranded overlay still slide");
 	}
 
@@ -7475,11 +6014,7 @@ mod tests {
 		assert_eq!(translate_span(&cur, &last, 3), Some((0, 39)));
 		// the message ends on row 41: every line of it slides, the hint under it stays
 		assert_eq!(slide_bands(&cur, &last, 3), (0, 8));
-		assert_eq!(
-			vanished_range(3, 0, 8, 50),
-			0..3,
-			"the strip is still the top rows"
-		);
+		assert_eq!(vanished_range(3, 0, 8, 50), 0..3, "the strip is still the top rows");
 		// the same frames upside down: a step back takes rows above the span
 		let (mut rc, mut rl) = (cur.clone(), last.clone());
 		rc.reverse();
@@ -7517,10 +6052,7 @@ mod tests {
 				let (last, cur) = app_frames(24, top, bot, shift);
 				let (sst, ssb) = static_bands(&cur, &last);
 				let (st, sb) = slide_bands(&cur, &last, shift);
-				assert!(
-					st >= sst && sb >= ssb,
-					"top={top} bot={bot} shift={shift}: bands shrank {sst},{ssb} -> {st},{sb}"
-				);
+				assert!(st >= sst && sb >= ssb, "top={top} bot={bot} shift={shift}: bands shrank {sst},{ssb} -> {st},{sb}");
 				// and the settled app shapes are unchanged by the addition
 				assert_eq!((st, sb), (top, bot), "top={top} bot={bot} shift={shift}");
 			}
@@ -7636,11 +6168,7 @@ mod tests {
 		let (st, sb) = static_bands(&cur, &last);
 		assert_eq!(st, 1, "nano keeps a title bar (static top band)");
 		assert_eq!(sb, 2, "nano keeps a 2-row help band");
-		assert_eq!(
-			slide_engages(st),
-			SLIDE_TOP_BAND_APPS,
-			"top-band app slides per the toggle"
-		);
+		assert_eq!(slide_engages(st), SLIDE_TOP_BAND_APPS, "top-band app slides per the toggle");
 	}
 
 	// Test ID: d9kmj
@@ -7652,11 +6180,7 @@ mod tests {
 		assert_eq!(scroll_shift_signed(&cur, &last, APP_SCROLL_MAX), 1);
 		let (st, _sb) = static_bands(&cur, &last);
 		assert_eq!(st, 2, "muffer keeps a static header (top band)");
-		assert_eq!(
-			slide_engages(st),
-			SLIDE_TOP_BAND_APPS,
-			"top-band app slides per the toggle"
-		);
+		assert_eq!(slide_engages(st), SLIDE_TOP_BAND_APPS, "top-band app slides per the toggle");
 	}
 
 	// Test ID: d9j4b
@@ -7681,47 +6205,17 @@ mod tests {
 		let (cols, lines) = (8usize, 4usize);
 		let mut term = term_fed(cols, lines, 1000, "");
 		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
-		feed(
-			&mut term,
-			"\x1b[?1049h\x1b[31mred\x1b[0m\r\nnext\r\nthird\r\nlast",
-		);
+		feed(&mut term, "\x1b[?1049h\x1b[31mred\x1b[0m\r\nnext\r\nthird\r\nlast");
 		feed(&mut term, "\r\n\r\n");
 		assert_eq!(term.scroll_ledger().lines(), 2);
 		let settings = config::Settings::default();
-		let rows = strip_rows(
-			term.scroll_ledger().rows(),
-			cols,
-			term.colors(),
-			&settings,
-			&mut palette::Readable::default(),
-		);
-		let text: Vec<String> = rows
-			.iter()
-			.map(|r| {
-				r.iter()
-					.map(|c| c.c)
-					.collect::<String>()
-					.trim_end()
-					.to_string()
-			})
-			.collect();
+		let rows = strip_rows(term.scroll_ledger().rows(), cols, term.colors(), &settings, &mut palette::Readable::default());
+		let text: Vec<String> = rows.iter().map(|r| r.iter().map(|c| c.c).collect::<String>().trim_end().to_string()).collect();
 		assert_eq!(text, ["red", "next"]);
 		assert_ne!(rows[0][0].fg, rows[1][0].fg);
 		// a resize forgets them: nothing of another width may get into the strip
-		term.resize(crate::term::TermDimensions {
-			columns: cols + 1,
-			screen_lines: lines,
-		});
-		assert!(
-			strip_rows(
-				term.scroll_ledger().rows(),
-				cols,
-				term.colors(),
-				&settings,
-				&mut palette::Readable::default()
-			)
-			.is_empty()
-		);
+		term.resize(crate::term::TermDimensions { columns: cols + 1, screen_lines: lines });
+		assert!(strip_rows(term.scroll_ledger().rows(), cols, term.colors(), &settings, &mut palette::Readable::default()).is_empty());
 	}
 
 	// Test ID: dcrmk
@@ -7754,13 +6248,7 @@ mod tests {
 			let ledger = term.scroll_ledger();
 			let region = ledger.region().start.0 as usize..ledger.region().end.0 as usize;
 			let step = ledger.lines();
-			let chunk = strip_rows(
-				ledger.rows(),
-				cols,
-				term.colors(),
-				&settings,
-				&mut palette::Readable::default(),
-			);
+			let chunk = strip_rows(ledger.rows(), cols, term.colors(), &settings, &mut palette::Readable::default());
 			term.scroll_ledger_mut().drain(); // a slide is in flight from here on
 			assert_eq!(step, -1);
 			let want = if offsets.is_empty() { end } else { 45 };
@@ -7776,24 +6264,11 @@ mod tests {
 		// the strip has the rows in the order they sat, nearest the content first:
 		// the row that left row 44 each step, plus the one row 45 gave up when the
 		// region narrowed
-		let text: Vec<String> = strip
-			.rows
-			.iter()
-			.map(|r| {
-				r.iter()
-					.map(|c| c.c)
-					.collect::<String>()
-					.trim_end()
-					.to_string()
-			})
-			.collect();
+		let text: Vec<String> = strip.rows.iter().map(|r| r.iter().map(|c| c.c).collect::<String>().trim_end().to_string()).collect();
 		assert_eq!(text.len(), ends.len() + 1);
 		assert_eq!(text.first().map(String::as_str), Some("row 36"));
 		assert_eq!(text.last().map(String::as_str), Some("row 45"));
-		assert!(
-			text.windows(2).all(|w| w[0] < w[1]),
-			"screen order: {text:?}"
-		);
+		assert!(text.windows(2).all(|w| w[0] < w[1]), "screen order: {text:?}");
 	}
 
 	// An input box on a half-empty screen: 3 transcript rows, a border, `h`
@@ -7804,9 +6279,7 @@ mod tests {
 		for i in 1..=h {
 			let _ = write!(input, "\r\n| in {i} |");
 		}
-		format!(
-			"\x1b[2J\x1b[H  one\r\n  two\r\n  three\r\n+------+{input}\r\n+------+\r\n  ? help\r\n  footer"
-		)
+		format!("\x1b[2J\x1b[H  one\r\n  two\r\n  three\r\n+------+{input}\r\n+------+\r\n  ? help\r\n  footer")
 	}
 
 	// Test ID: dcvam
@@ -7822,64 +6295,27 @@ mod tests {
 		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
 		let settings = config::Settings::default();
 		let mut last = Vec::new();
-		let prints = snapshot_rows(
-			term.grid(),
-			lines,
-			cols,
-			Some((
-				term.colors(),
-				&settings,
-				&mut last,
-				&mut palette::Readable::default(),
-			)),
-		);
+		let prints = snapshot_rows(term.grid(), lines, cols, Some((term.colors(), &settings, &mut last, &mut palette::Readable::default())));
 		term.scroll_ledger_mut().clear();
 		feed(&mut term, "\x1b[6;1H\x1b[2L| in 2 |\r\n| in 3 |");
 		let ledger = term.scroll_ledger();
 		let region = ledger.region().start.0 as usize..ledger.region().end.0 as usize;
 		assert_eq!((ledger.lines(), region.clone()), (-2, 5..lines));
-		let chunk = strip_rows(
-			ledger.rows(),
-			cols,
-			term.colors(),
-			&settings,
-			&mut palette::Readable::default(),
-		);
+		let chunk = strip_rows(ledger.rows(), cols, term.colors(), &settings, &mut palette::Readable::default());
 		assert_eq!(ledger_step(false, true, 0, false, -2), Some(-2));
-		assert!(
-			slide_is_visible(-2, &region, &last, &chunk, |from, to| {
-				row_hash(&term, to as i32) == prints[from]
-			}),
-			"the footer moved, so the old rule slid it"
-		);
+		assert!(slide_is_visible(-2, &region, &last, &chunk, |from, to| { row_hash(&term, to as i32) == prints[from] }), "the footer moved, so the old rule slid it");
 		assert!(ledger_makes_room(-2, &region, lines, &last, &chunk));
 
 		// the same insert on a screen with no room pushes the footer's last row off
 		let mut full = term_fed(cols, 8, 1000, &input_box(1));
 		full.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
 		let mut full_last = Vec::new();
-		snapshot_rows(
-			full.grid(),
-			8,
-			cols,
-			Some((
-				full.colors(),
-				&settings,
-				&mut full_last,
-				&mut palette::Readable::default(),
-			)),
-		);
+		snapshot_rows(full.grid(), 8, cols, Some((full.colors(), &settings, &mut full_last, &mut palette::Readable::default())));
 		full.scroll_ledger_mut().clear();
 		feed(&mut full, "\x1b[6;1H\x1b[L| in 2 |");
 		let ledger = full.scroll_ledger();
 		let region = ledger.region().start.0 as usize..ledger.region().end.0 as usize;
-		let chunk = strip_rows(
-			ledger.rows(),
-			cols,
-			full.colors(),
-			&settings,
-			&mut palette::Readable::default(),
-		);
+		let chunk = strip_rows(ledger.rows(), cols, full.colors(), &settings, &mut palette::Readable::default());
 		assert_eq!(ledger.lines(), -1);
 		assert!(!ledger_makes_room(-1, &region, 8, &full_last, &chunk));
 
@@ -7888,23 +6324,11 @@ mod tests {
 		let empty = vec![cells("", cols); lines];
 		let gone = [cells("", cols)];
 		let whole = 1..lines;
-		assert!(!ledger_makes_room(
-			-1,
-			&(1..lines - 2),
-			lines,
-			&empty,
-			&gone
-		));
+		assert!(!ledger_makes_room(-1, &(1..lines - 2), lines, &empty, &gone));
 		assert!(ledger_makes_room(-1, &whole, lines, &empty, &gone));
 		assert!(!ledger_makes_room(1, &whole, lines, &empty, &gone), "up");
-		assert!(
-			!ledger_makes_room(-1, &whole, lines, &empty, &[]),
-			"none kept"
-		);
-		assert!(
-			!ledger_makes_room(-1, &whole, lines, &[], &gone),
-			"no frame"
-		);
+		assert!(!ledger_makes_room(-1, &whole, lines, &empty, &[]), "none kept");
+		assert!(!ledger_makes_room(-1, &whole, lines, &[], &gone), "no frame");
 	}
 
 	// Test ID: dcvb8
@@ -7926,39 +6350,15 @@ mod tests {
 		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
 		let settings = config::Settings::default();
 		let mut last = Vec::new();
-		let prints = snapshot_rows(
-			term.grid(),
-			lines,
-			cols,
-			Some((
-				term.colors(),
-				&settings,
-				&mut last,
-				&mut palette::Readable::default(),
-			)),
-		);
+		let prints = snapshot_rows(term.grid(), lines, cols, Some((term.colors(), &settings, &mut last, &mut palette::Readable::default())));
 		term.scroll_ledger_mut().clear();
-		feed(
-			&mut term,
-			"\r\x1b[K\x1b[H\x1bMline 99\r\n\x1b[24;1H\r\x1b[K:\x1b[K",
-		);
+		feed(&mut term, "\r\x1b[K\x1b[H\x1bMline 99\r\n\x1b[24;1H\r\x1b[K:\x1b[K");
 		let ledger = term.scroll_ledger();
 		let region = ledger.region().start.0 as usize..ledger.region().end.0 as usize;
 		assert_eq!((ledger.lines(), region.clone()), (-1, 0..lines));
-		let chunk = strip_rows(
-			ledger.rows(),
-			cols,
-			term.colors(),
-			&settings,
-			&mut palette::Readable::default(),
-		);
-		assert!(
-			!chunk.iter().any(|r| has_ink(r)),
-			"the kept row was blanked"
-		);
-		assert!(slide_is_visible(-1, &region, &last, &chunk, |from, to| {
-			row_hash(&term, to as i32) == prints[from]
-		}));
+		let chunk = strip_rows(ledger.rows(), cols, term.colors(), &settings, &mut palette::Readable::default());
+		assert!(!chunk.iter().any(|r| has_ink(r)), "the kept row was blanked");
+		assert!(slide_is_visible(-1, &region, &last, &chunk, |from, to| { row_hash(&term, to as i32) == prints[from] }));
 		assert!(!ledger_makes_room(-1, &region, lines, &last, &chunk));
 	}
 
@@ -7980,10 +6380,7 @@ mod tests {
 		// shrinking back is a scroll up into the same blank rows, and slides
 		let shift = scroll_shift_signed(&last, &cur, APP_SCROLL_MAX);
 		assert_eq!(shift, 2);
-		assert!(
-			!shift_makes_room(&last, &cur, shift, blank),
-			"up is never room"
-		);
+		assert!(!shift_makes_room(&last, &cur, shift, blank), "up is never room");
 
 		// A box with no room under it scrolls the grid instead, which the output
 		// ease owns. vim scrolling back over its file with a status row under it
@@ -8001,24 +6398,11 @@ mod tests {
 		let shift = scroll_shift_signed(&cur, &last, APP_SCROLL_MAX);
 		assert_eq!(shift, -2);
 		assert_eq!((last[13], last[14]), (blank, blank));
-		assert!(
-			!shift_makes_room(&cur, &last, shift, blank),
-			"the status row"
-		);
+		assert!(!shift_makes_room(&cur, &last, shift, blank), "the status row");
 	}
 
 	fn cells(text: &str, cols: usize) -> Vec<StripCell> {
-		(0..cols)
-			.map(|i| StripCell {
-				c: text.chars().nth(i).unwrap_or(' '),
-				fg: [200; 3],
-				bg: None,
-				bold: false,
-				italic: false,
-				wide: 1,
-				rules: CellRules::default(),
-			})
-			.collect()
+		(0..cols).map(|i| StripCell { c: text.chars().nth(i).unwrap_or(' '), fg: [200; 3], bg: None, bold: false, italic: false, wide: 1, rules: CellRules::default() }).collect()
 	}
 
 	fn band_rows(term: &Term<VoidListener>, lines: usize, cols: usize) -> Vec<u64> {
@@ -8032,18 +6416,12 @@ mod tests {
 	#[test]
 	fn a_progress_line_redrawn_under_new_output_is_held_still() {
 		let (cols, lines) = (30usize, 8usize);
-		let mut s = (0..20)
-			.map(|i| format!("   Compiling c{i}\r\n"))
-			.collect::<Vec<_>>()
-			.concat();
+		let mut s = (0..20).map(|i| format!("   Compiling c{i}\r\n")).collect::<Vec<_>>().concat();
 		s.push_str("    Building [=>   ] 0/9");
 		let mut term = term_fed(cols, lines, 1000, &s);
 		let last = band_rows(&term, lines, cols);
 		let h0 = term.grid().history_size();
-		feed(
-			&mut term,
-			"\r\x1b[K   Compiling b\r\n    Building [=>   ] 0/9",
-		);
+		feed(&mut term, "\r\x1b[K   Compiling b\r\n    Building [=>   ] 0/9");
 		let k = term.grid().history_size() - h0;
 		assert_eq!(k, 1);
 		let cur = band_rows(&term, lines, cols);
@@ -8052,10 +6430,7 @@ mod tests {
 		// the bar's text changed on the same tick: nothing anchors it (a known limit)
 		let mut term = term_fed(cols, lines, 1000, &s);
 		let last = band_rows(&term, lines, cols);
-		feed(
-			&mut term,
-			"\r\x1b[K   Compiling b\r\n    Building [==>  ] 1/9",
-		);
+		feed(&mut term, "\r\x1b[K   Compiling b\r\n    Building [==>  ] 1/9");
 		let cur = band_rows(&term, lines, cols);
 		assert_eq!(output_band(&cur, &last, 1, 0, blank_row(cols)), 0);
 	}
@@ -8065,10 +6440,7 @@ mod tests {
 	fn a_live_block_under_a_transcript_is_held_still() {
 		let (cols, lines) = (24usize, 12usize);
 		let block = |n: usize| format!("+--------+\r\n| work {n} |\r\n+--------+\r\n");
-		let mut s = (0..30)
-			.map(|i| format!("t{i:02}\r\n"))
-			.collect::<Vec<_>>()
-			.concat();
+		let mut s = (0..30).map(|i| format!("t{i:02}\r\n")).collect::<Vec<_>>().concat();
 		s.push_str(&block(1));
 		let mut term = term_fed(cols, lines, 1000, &s);
 		let last = band_rows(&term, lines, cols);
@@ -8085,10 +6457,7 @@ mod tests {
 	#[test]
 	fn a_prompt_that_scrolls_up_is_not_held() {
 		let (cols, lines) = (20usize, 8usize);
-		let s = (0..20)
-			.map(|i| format!("out {i}\r\n"))
-			.collect::<Vec<_>>()
-			.concat();
+		let s = (0..20).map(|i| format!("out {i}\r\n")).collect::<Vec<_>>().concat();
 		for prompt in ["$ ", "user@host\r\n$ "] {
 			let mut term = term_fed(cols, lines, 1000, &format!("{s}{prompt}"));
 			let last = band_rows(&term, lines, cols);
@@ -8097,11 +6466,7 @@ mod tests {
 			let k = term.grid().history_size() - h0;
 			assert!(k > 0);
 			let cur = band_rows(&term, lines, cols);
-			assert_eq!(
-				output_band(&cur, &last, k, 0, blank_row(cols)),
-				0,
-				"{prompt:?}"
-			);
+			assert_eq!(output_band(&cur, &last, k, 0, blank_row(cols)), 0, "{prompt:?}");
 		}
 	}
 
@@ -8109,10 +6474,7 @@ mod tests {
 	#[test]
 	fn a_line_finished_across_two_reads_is_not_held() {
 		let (cols, lines) = (20usize, 8usize);
-		let mut s = (0..20)
-			.map(|i| format!("out {i}\r\n"))
-			.collect::<Vec<_>>()
-			.concat();
+		let mut s = (0..20).map(|i| format!("out {i}\r\n")).collect::<Vec<_>>().concat();
 		s.push_str("123");
 		let mut term = term_fed(cols, lines, 1000, &s);
 		let last = band_rows(&term, lines, cols);
@@ -8162,10 +6524,7 @@ mod tests {
 		let k = term.grid().history_size() - h0;
 		assert_eq!(k, 1, "the region's top row went to history");
 		let ledger = term.scroll_ledger();
-		let (start, end) = (
-			ledger.region().start.0.max(0) as usize,
-			(ledger.region().end.0.max(0) as usize).min(lines),
-		);
+		let (start, end) = (ledger.region().start.0.max(0) as usize, (ledger.region().end.0.max(0) as usize).min(lines));
 		assert!(ledger.lines() > 0 && start == 0 && end < lines);
 		let cur = band_rows(&term, lines, cols);
 		assert_eq!(output_band(&cur, &last, k, lines - end, blank_row(cols)), 1);
@@ -8174,37 +6533,22 @@ mod tests {
 	// What a build reads of one burst of output, from a depth of `baseline`.
 	fn output_of(term: &Term<VoidListener>, baseline: usize) -> Output {
 		let ledger = term.scroll_ledger();
-		Output {
-			grew: pushed_since(term.grid().history_size(), baseline),
-			pushed: ledger.pushed(),
-			since_clear: ledger.since_clear(),
-			was_blank: false,
-		}
+		Output { grew: pushed_since(term.grid().history_size(), baseline), pushed: ledger.pushed(), since_clear: ledger.since_clear(), was_blank: false }
 	}
 
 	fn grew(lines: usize) -> Output {
-		Output {
-			grew: lines,
-			..Output::default()
-		}
+		Output { grew: lines, ..Output::default() }
 	}
 
 	// What a build makes of one burst of output: the lines the output ease has
 	// to cover, and the region slide if the ease doesn't own the motion.
-	fn advance_and_step(
-		term: &Term<VoidListener>,
-		lines: usize,
-		baseline: usize,
-	) -> (usize, Option<i32>) {
+	fn advance_and_step(term: &Term<VoidListener>, lines: usize, baseline: usize) -> (usize, Option<i32>) {
 		let ledger = term.scroll_ledger();
 		let region = ledger.region();
 		let whole = region.start.0 <= 0 && region.end.0.max(0) as usize >= lines;
 		let grew = pushed_since(term.grid().history_size(), baseline);
 		let advanced = output_advance(false, true, grew, ledger.pushed());
-		(
-			advanced,
-			ledger_step(false, true, advanced, whole, ledger.lines()),
-		)
+		(advanced, ledger_step(false, true, advanced, whole, ledger.lines()))
 	}
 
 	// Test ID: dct9d
@@ -8230,17 +6574,10 @@ mod tests {
 			assert_eq!(h0 == scrollback, scrollback == 20);
 			feed(&mut term, "\r\nline x\x1b7\x1b[8;1H\x1b[Kbar 2/9\x1b8");
 			let (advanced, step) = advance_and_step(&term, lines, h0);
-			assert_eq!(
-				(advanced, step),
-				(1, None),
-				"scrollback {scrollback}: the line eases as output"
-			);
+			assert_eq!((advanced, step), (1, None), "scrollback {scrollback}: the line eases as output");
 			let end = (term.scroll_ledger().region().end.0.max(0) as usize).min(lines);
 			let cur = band_rows(&term, lines, cols);
-			assert_eq!(
-				output_band(&cur, &last, advanced, lines - end, blank_row(cols)),
-				1
-			);
+			assert_eq!(output_band(&cur, &last, advanced, lines - end, blank_row(cols)), 1);
 		}
 	}
 
@@ -8269,18 +6606,63 @@ mod tests {
 			assert_eq!((advanced, step), (4, None), "scrollback {scrollback}");
 			let mut s = crate::scroll::Scroll::new();
 			s.set_max(term.grid().history_size() as f32);
-			ease_output(
-				&mut s,
-				false,
-				false,
-				output_of(&term, h0),
-				lines,
-				|_| None,
-				|_| false,
-			);
+			ease_output(&mut s, false, false, output_of(&term, h0), lines, |_| None, |_| false);
 			assert!(!s.animating(), "scrollback {scrollback}: the clear eased");
 			// what it eased before
 			//   assert!(s.chasing_output());
+		}
+	}
+
+	// A view parked 100 lines back stays on its text while output arrives, with
+	// the scrollback full and not. Each build snaps the grid to the view, as
+	// `Pane::build` does, and the engine has already raised its offset by the
+	// lines that went up, so the view has to land where the engine did. Before
+	// the fix the snap pulled the text down a line per line printed
+	// (2026112016030002).
+	// Test ID: dfjtz
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_parked_view_stays_on_its_text_while_output_arrives() {
+		let _g = config::test_store_lock();
+		config::update(config::Settings::default());
+		let (cols, lines) = (20usize, 8usize);
+		for scrollback in [1000usize, 120] {
+			let fill = (0..300).map(|i| format!("line {i:03}\r\n")).collect::<Vec<_>>().concat();
+			let mut term = term_fed(cols, lines, scrollback, &fill);
+			term.scroll_ledger_mut().clear();
+			let full = term.grid().history_size() == scrollback;
+			assert_eq!(full, scrollback == 120);
+			let mut depth = DepthSampler::default();
+			depth.rebaseline(term.grid().history_size());
+			let mut s = crate::scroll::Scroll::new();
+			s.set_max(term.grid().history_size() as f32);
+			s.scroll_to(100.0);
+			s.snap();
+			let snap_grid = |term: &mut Term<VoidListener>, s: &crate::scroll::Scroll| {
+				let desired = s.desired_offset().min(term.grid().history_size());
+				let delta = desired as i32 - term.grid().display_offset() as i32;
+				term.scroll_display(alacritty_terminal::grid::Scroll::Delta(delta));
+				delta
+			};
+			snap_grid(&mut term, &s);
+			assert_eq!(term.grid().display_offset(), 100);
+			let top = row_hash(&term, -100);
+			for write in 0..4 {
+				feed(&mut term, &(0..5).map(|i| format!("new {write}{i}\r\n")).collect::<Vec<_>>().concat());
+				let history = term.grid().history_size();
+				let output = Output { grew: depth.take(history), pushed: term.scroll_ledger().pushed(), since_clear: None, was_blank: false };
+				term.scroll_ledger_mut().clear();
+				s.set_max(history as f32);
+				let (follow, advanced, _) = ease_output(&mut s, false, false, output, lines, |_| None, |_| false);
+				assert!(!follow && advanced == if full { 0 } else { 5 });
+				let delta = snap_grid(&mut term, &s);
+				let at = format!("scrollback {scrollback}, write {write}");
+				assert_eq!(delta, 0, "{at}: the view and the engine disagree");
+				let offset = term.grid().display_offset() as i32;
+				assert_eq!(offset, 100 + 5 * (write + 1), "{at}");
+				assert_eq!(row_hash(&term, -offset), top, "{at}: the text slid");
+				assert!(!s.animating(), "{at}: a parked view started to move");
+			}
 		}
 	}
 
@@ -8289,10 +6671,7 @@ mod tests {
 	// whether it is moving.
 	fn eased_after(writes: &[&str], scrollback: usize, chasing: bool, lines: usize) -> (f32, bool) {
 		let cols = 40usize;
-		let listing = (0..40)
-			.map(|i| format!("old {i:02}\r\n"))
-			.collect::<Vec<_>>()
-			.concat();
+		let listing = (0..40).map(|i| format!("old {i:02}\r\n")).collect::<Vec<_>>().concat();
 		let mut term = term_fed(cols, lines, scrollback, &format!("{listing}$ "));
 		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
 		term.scroll_ledger_mut().clear();
@@ -8302,28 +6681,13 @@ mod tests {
 		s.set_max(term.grid().history_size() as f32);
 		let blank = blank_row(cols);
 		let mut build = |write: &str, s: &mut crate::scroll::Scroll| {
-			let was_blank = band_rows(&term, lines, cols)
-				.iter()
-				.all(|&row| row == blank);
+			let was_blank = band_rows(&term, lines, cols).iter().all(|&row| row == blank);
 			feed(&mut term, write);
 			let history = term.grid().history_size();
 			let ledger = term.scroll_ledger();
-			let output = Output {
-				grew: depth.take(history),
-				pushed: ledger.pushed(),
-				since_clear: ledger.since_clear(),
-				was_blank,
-			};
+			let output = Output { grew: depth.take(history), pushed: ledger.pushed(), since_clear: ledger.since_clear(), was_blank };
 			s.set_max(history as f32);
-			ease_output(
-				s,
-				false,
-				false,
-				output,
-				lines,
-				|_| None,
-				|k| blank_went_up(term.grid(), k, cols, blank),
-			);
+			ease_output(s, false, false, output, lines, |_| None, |k| blank_went_up(term.grid(), k, cols, blank));
 			term.scroll_ledger_mut().clear();
 		};
 		if chasing {
@@ -8350,47 +6714,23 @@ mod tests {
 		let _g = config::test_store_lock();
 		config::update(config::Settings::default());
 		let lines = 10usize;
-		let short = (0..5)
-			.map(|i| format!("new {i}\r\n"))
-			.collect::<Vec<_>>()
-			.concat();
-		let long = (0..30)
-			.map(|i| format!("new {i:02}\r\n"))
-			.collect::<Vec<_>>()
-			.concat();
-		let forms = [
-			("clear", "\x1b[H\x1b[2J\x1b[3J"),
-			("ctrl-l", "\x1b[H\x1b[2J"),
-			("reset", "\x1bc"),
-		];
+		let short = (0..5).map(|i| format!("new {i}\r\n")).collect::<Vec<_>>().concat();
+		let long = (0..30).map(|i| format!("new {i:02}\r\n")).collect::<Vec<_>>().concat();
+		let forms = [("clear", "\x1b[H\x1b[2J\x1b[3J"), ("ctrl-l", "\x1b[H\x1b[2J"), ("reset", "\x1bc")];
 		for scrollback in [1000usize, 20] {
 			for chasing in [false, true] {
 				for (name, clear) in forms {
 					let at = format!("{name}, scrollback {scrollback}, chasing {chasing}");
 					let with = |tail: &str| format!("{clear}{tail}");
-					assert_eq!(
-						eased_after(&[&with("$ ")], scrollback, chasing, lines),
-						(0.0, false),
-						"{at}"
-					);
-					assert_eq!(
-						eased_after(&[&with(&format!("{short}$ "))], scrollback, chasing, lines),
-						(0.0, false),
-						"{at}: short output"
-					);
+					assert_eq!(eased_after(&[&with("$ ")], scrollback, chasing, lines), (0.0, false), "{at}");
+					assert_eq!(eased_after(&[&with(&format!("{short}$ "))], scrollback, chasing, lines), (0.0, false), "{at}: short output");
 					// the clear and what follows in one read, then in 2
-					let (visual, moving) =
-						eased_after(&[&with(&format!("{long}$ "))], scrollback, chasing, lines);
+					let (visual, moving) = eased_after(&[&with(&format!("{long}$ "))], scrollback, chasing, lines);
 					// after the clear, 21 lines went up, as far as the scrollback keeps
 					let want = 21f32.min(scrollback as f32);
 					assert!(moving, "{at}: long output");
 					assert!((visual - want).abs() < 1e-3, "{at}: eased {visual}");
-					let (visual, moving) = eased_after(
-						&[&with(""), &format!("{long}$ ")],
-						scrollback,
-						chasing,
-						lines,
-					);
+					let (visual, moving) = eased_after(&[&with(""), &format!("{long}$ ")], scrollback, chasing, lines);
 					assert!(moving, "{at}: long output after");
 					assert!(visual <= want + 1e-3, "{at}: eased {visual}");
 				}
@@ -8405,15 +6745,9 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_ease_floor_does_not_reach_back_past_a_clear() {
 		let _g = config::test_store_lock();
-		config::update(config::Settings {
-			output_ease_lines: 5.0,
-			..config::Settings::default()
-		});
+		config::update(config::Settings { output_ease_lines: 5.0, ..config::Settings::default() });
 		let lines = 10usize;
-		let spill = (0..10)
-			.map(|i| format!("new {i}\r\n"))
-			.collect::<Vec<_>>()
-			.concat();
+		let spill = (0..10).map(|i| format!("new {i}\r\n")).collect::<Vec<_>>().concat();
 		let (visual, _) = eased_after(&[&format!("\x1b[H\x1b[2J{spill}$ ")], 1000, false, lines);
 		config::update(config::Settings::default());
 		assert!((visual - 1.0).abs() < 1e-3, "eased {visual}");
@@ -8453,20 +6787,11 @@ mod tests {
 		assert_eq!(term.scroll_ledger().since_clear(), Some(2));
 		assert!(blank_went_up(term.grid(), 2, cols, blank_row(cols)));
 
-		let splits: [&[&str]; 4] = [
-			&[&format!("{echo}{clear}{redraw}")],
-			&[&echo, &clear, &redraw],
-			&[&format!("{echo}{clear}"), &redraw],
-			&[&echo, &format!("{clear}{redraw}")],
-		];
+		let splits: [&[&str]; 4] = [&[&format!("{echo}{clear}{redraw}")], &[&echo, &clear, &redraw], &[&format!("{echo}{clear}"), &redraw], &[&echo, &format!("{clear}{redraw}")]];
 		for scrollback in [1000usize, 20] {
 			for chasing in [false, true] {
 				for (n, writes) in splits.iter().enumerate() {
-					assert_eq!(
-						eased_after(writes, scrollback, chasing, lines),
-						(0.0, false),
-						"split {n}, scrollback {scrollback}, chasing {chasing}"
-					);
+					assert_eq!(eased_after(writes, scrollback, chasing, lines), (0.0, false), "split {n}, scrollback {scrollback}, chasing {chasing}");
 				}
 			}
 		}
@@ -8486,10 +6811,7 @@ mod tests {
 		let (visual, moving) = eased_after(&["\r\n".repeat(12).as_str()], 1000, false, lines);
 		assert!(moving && visual > 0.0, "eased {visual}");
 		// a blank screen, then text that goes up
-		let text = (0..14)
-			.map(|i| format!("t{i}\r\n"))
-			.collect::<Vec<_>>()
-			.concat();
+		let text = (0..14).map(|i| format!("t{i}\r\n")).collect::<Vec<_>>().concat();
 		let (visual, moving) = eased_after(&["\x1b[H\x1b[2J", &text], 1000, false, lines);
 		assert!(moving && visual > 0.0, "eased {visual}");
 		// an ease under way takes blank lines from a screen it already emptied
@@ -8555,24 +6877,12 @@ mod tests {
 			feed(&mut term, &flatpak_tick(rows, lines - 3, 1, 2));
 			let (advanced, _) = advance_and_step(&term, lines, h0);
 			assert!(advanced >= lines, "scrollback {scrollback}: {advanced}");
-			assert_eq!(
-				repaint_shift(term.grid(), &last.0, &last.1, advanced, cols, blank),
-				Some(0),
-				"scrollback {scrollback}"
-			);
+			assert_eq!(repaint_shift(term.grid(), &last.0, &last.1, advanced, cols, blank), Some(0), "scrollback {scrollback}");
 
 			let mut s = crate::scroll::Scroll::new();
 			s.set_max(term.grid().history_size() as f32);
 			let output = output_of(&term, h0);
-			ease_output(
-				&mut s,
-				false,
-				false,
-				output,
-				lines,
-				|k| repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank),
-				|_| false,
-			);
+			ease_output(&mut s, false, false, output, lines, |k| repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank), |_| false);
 			assert!(!s.animating(), "scrollback {scrollback}: the tick eased");
 			assert_eq!((s.desired_offset(), s.frac()), (0, 0.0));
 
@@ -8580,28 +6890,13 @@ mod tests {
 			let last = prints(&term, lines, cols);
 			term.scroll_ledger_mut().clear();
 			let h0 = term.grid().history_size();
-			feed(
-				&mut term,
-				&format!("{}\r\n", flatpak_tick(rows, lines - 3, 2, 2)),
-			);
+			feed(&mut term, &format!("{}\r\n", flatpak_tick(rows, lines - 3, 2, 2)));
 			let (advanced, _) = advance_and_step(&term, lines, h0);
 			assert!(advanced >= lines);
-			assert_eq!(
-				repaint_shift(term.grid(), &last.0, &last.1, advanced, cols, blank),
-				Some(1),
-				"scrollback {scrollback}"
-			);
+			assert_eq!(repaint_shift(term.grid(), &last.0, &last.1, advanced, cols, blank), Some(1), "scrollback {scrollback}");
 			s.set_max(term.grid().history_size() as f32);
 			let output = output_of(&term, h0);
-			ease_output(
-				&mut s,
-				false,
-				false,
-				output,
-				lines,
-				|k| repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank),
-				|_| false,
-			);
+			ease_output(&mut s, false, false, output, lines, |k| repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank), |_| false);
 			assert!(s.chasing_output(), "scrollback {scrollback}");
 			assert!(s.visual_lines() <= 1.0, "{}", s.visual_lines());
 
@@ -8609,17 +6904,10 @@ mod tests {
 			let last = prints(&term, lines, cols);
 			term.scroll_ledger_mut().clear();
 			let h0 = term.grid().history_size();
-			feed(
-				&mut term,
-				&format!("{}\r\n", flatpak_tick(rows, lines - 3, 3, 3)),
-			);
+			feed(&mut term, &format!("{}\r\n", flatpak_tick(rows, lines - 3, 3, 3)));
 			let (advanced, _) = advance_and_step(&term, lines, h0);
 			assert!(advanced >= lines);
-			assert_eq!(
-				repaint_shift(term.grid(), &last.0, &last.1, advanced, cols, blank),
-				Some(0),
-				"scrollback {scrollback}"
-			);
+			assert_eq!(repaint_shift(term.grid(), &last.0, &last.1, advanced, cols, blank), Some(0), "scrollback {scrollback}");
 		}
 	}
 
@@ -8628,10 +6916,7 @@ mod tests {
 	fn output_that_moved_the_old_screen_up_is_not_a_repaint() {
 		let (cols, lines) = (20usize, 8usize);
 		let blank = blank_row(cols);
-		let listing = (0..30)
-			.map(|i| format!("file{i:02}\r\n"))
-			.collect::<Vec<_>>()
-			.concat();
+		let listing = (0..30).map(|i| format!("file{i:02}\r\n")).collect::<Vec<_>>().concat();
 		// a listing taller than the screen, run twice: the same picture comes
 		// back, but the old one went up into history whole
 		let mut term = term_fed(cols, lines, 1000, &format!("$ ls\r\n{listing}$ ls"));
@@ -8639,11 +6924,7 @@ mod tests {
 		let h0 = term.grid().history_size();
 		feed(&mut term, &format!("\r\n{listing}$ "));
 		let k = term.grid().history_size() - h0;
-		assert_eq!(
-			repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank),
-			None,
-			"ls"
-		);
+		assert_eq!(repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank), None, "ls");
 
 		// a clear: the screen goes up whole and comes back blank. A clear no
 		// longer gets this far in a build, since the ease snaps on it first
@@ -8656,11 +6937,7 @@ mod tests {
 			feed(&mut term, "\x1b[2J");
 			let (k, _) = advance_and_step(&term, lines, h0);
 			assert!(k > 0);
-			assert_eq!(
-				repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank),
-				None,
-				"clear, scrollback {scrollback}"
-			);
+			assert_eq!(repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank), None, "clear, scrollback {scrollback}");
 		}
 
 		// a live block redrawn under new output
@@ -8671,22 +6948,10 @@ mod tests {
 		feed(&mut term, &format!("\x1b[3A\r\x1b[J more\r\n{}", block(2)));
 		let k = term.grid().history_size() - h0;
 		assert!(k > 0);
-		assert_eq!(
-			repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank),
-			None,
-			"block"
-		);
+		assert_eq!(repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank), None, "block");
 
-		assert_eq!(
-			repaint_shift(term.grid(), &last.0[1..], &last.1[1..], k, cols, blank),
-			None,
-			"rows"
-		);
-		assert_eq!(
-			repaint_shift(term.grid(), &last.0, &last.1, 0, cols, blank),
-			None,
-			"k == 0"
-		);
+		assert_eq!(repaint_shift(term.grid(), &last.0[1..], &last.1[1..], k, cols, blank), None, "rows");
+		assert_eq!(repaint_shift(term.grid(), &last.0, &last.1, 0, cols, blank), None, "k == 0");
 	}
 
 	// Test ID: ddx56
@@ -8710,10 +6975,7 @@ mod tests {
 	// on the cores, and wall time counts every turn lost.
 	#[cfg(unix)]
 	fn thread_cpu() -> u64 {
-		let mut now = libc::timespec {
-			tv_sec: 0,
-			tv_nsec: 0,
-		};
+		let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
 		// SAFETY: a clock read into a local the call owns for its length.
 		unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &raw mut now) };
 		now.tv_sec as u64 * 1_000_000_000 + now.tv_nsec as u64
@@ -8735,14 +6997,8 @@ mod tests {
 	// Test ID: dct9f
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
-	#[cfg_attr(
-		silk_asan,
-		ignore = "ASan's checks change what each half costs, so the ratio means nothing"
-	)]
-	#[cfg_attr(
-		silk_tsan,
-		ignore = "TSan's checks change what each half costs, so the ratio means nothing"
-	)]
+	#[cfg_attr(silk_asan, ignore = "ASan's checks change what each half costs, so the ratio means nothing")]
+	#[cfg_attr(silk_tsan, ignore = "TSan's checks change what each half costs, so the ratio means nothing")]
 	fn the_scroll_record_costs_a_full_screen_program_little() {
 		// tmux, vim, and less scroll a screen that keeps no history, so the engine
 		// keeps the rows that leave for the slide to draw. It copied each one, and
@@ -8774,8 +7030,7 @@ mod tests {
 			kept.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
 			let mut history = term_fed(cols, lines, crate::scroll::SLIDE_ROWS, "");
 			history.set_scroll_ledger_rows(0);
-			let (mut kept_parser, mut history_parser): (Processor, Processor) =
-				(Processor::new(), Processor::new());
+			let (mut kept_parser, mut history_parser): (Processor, Processor) = (Processor::new(), Processor::new());
 			let turns: Vec<(f64, f64)> = flood
 				.as_bytes()
 				.chunks(8 * 1024)
@@ -8795,10 +7050,7 @@ mod tests {
 					}
 				})
 				.collect();
-			assert!(
-				turns.iter().all(|&(k, h)| k > 0.0 && h > 0.0),
-				"a turn took no time on the clock, which is too coarse for turns this short"
-			);
+			assert!(turns.iter().all(|&(k, h)| k > 0.0 && h > 0.0), "a turn took no time on the clock, which is too coarse for turns this short");
 			assert_eq!(kept.scroll_ledger().rows().len(), crate::scroll::SLIDE_ROWS);
 			assert!(history.scroll_ledger().rows().is_empty());
 			assert_eq!(history.grid().history_size(), crate::scroll::SLIDE_ROWS);
@@ -8809,37 +7061,20 @@ mod tests {
 			ratios[ratios.len() / 2]
 		};
 		let rounds: Vec<Vec<(f64, f64)>> = (0..15).map(|_| round()).collect();
-		let all = median(
-			rounds
-				.iter()
-				.flatten()
-				.map(|(kept, history)| kept / history)
-				.collect(),
-		);
+		let all = median(rounds.iter().flatten().map(|(kept, history)| kept / history).collect());
 		// Millions of the clock's unit, only good side by side: ms on Linux,
 		// Mcycles on Windows, and some Macs skip the tick conversion. The history
 		// side's sum includes its first rows being made, which the median skips.
-		let by_round: Vec<f64> = rounds
-			.iter()
-			.map(|turns| median(turns.iter().map(|(kept, history)| kept / history).collect()))
-			.collect();
+		let by_round: Vec<f64> = rounds.iter().map(|turns| median(turns.iter().map(|(kept, history)| kept / history).collect())).collect();
 		let times: Vec<(f64, f64)> = rounds
 			.iter()
 			.map(|turns| {
-				let (kept, history) = turns.iter().fold((0.0, 0.0), |(k, h), (kept, history)| {
-					(k + kept, h + history)
-				});
+				let (kept, history) = turns.iter().fold((0.0, 0.0), |(k, h), (kept, history)| (k + kept, h + history));
 				(kept / 1e6, history / 1e6)
 			})
 			.collect();
-		eprintln!(
-			"measured: rows kept against history: {all:.3}, by round {by_round:.3?}, kept and history: {times:.1?}"
-		);
-		assert!(
-			all <= 1.10,
-			"keeping rows cost {:.0}% more than history, by round {by_round:.3?}, kept and history: {times:.1?}",
-			(all - 1.0) * 100.0
-		);
+		eprintln!("measured: rows kept against history: {all:.3}, by round {by_round:.3?}, kept and history: {times:.1?}");
+		assert!(all <= 1.10, "keeping rows cost {:.0}% more than history, by round {by_round:.3?}, kept and history: {times:.1?}", (all - 1.0) * 100.0);
 	}
 
 	// Test ID: dcg3s
@@ -8875,43 +7110,16 @@ mod tests {
 		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
 		let settings = config::Settings::default();
 		let mut last = Vec::new();
-		snapshot_rows(
-			term.grid(),
-			lines,
-			cols,
-			Some((
-				term.colors(),
-				&settings,
-				&mut last,
-				&mut palette::Readable::default(),
-			)),
-		);
-		feed(
-			&mut term,
-			"\r\n\r\n\x1b[1A\x1b[2L\x1b[2K\x1b[1A\x1b[2K\x1b[3M\x1b[3L\x1b[2Kline one\r\n$ ",
-		);
+		snapshot_rows(term.grid(), lines, cols, Some((term.colors(), &settings, &mut last, &mut palette::Readable::default())));
+		feed(&mut term, "\r\n\r\n\x1b[1A\x1b[2L\x1b[2K\x1b[1A\x1b[2K\x1b[3M\x1b[3L\x1b[2Kline one\r\n$ ");
 		let ledger = term.scroll_ledger();
 		assert_eq!(ledger.lines(), -3);
 		let region = ledger.region().start.0 as usize..ledger.region().end.0 as usize;
 		assert_eq!(region, 4..8);
-		assert_eq!(
-			ledger.pushed(),
-			0,
-			"the screen was not full: nothing left it"
-		);
-		let chunk = strip_rows(
-			ledger.rows(),
-			cols,
-			term.colors(),
-			&settings,
-			&mut palette::Readable::default(),
-		);
+		assert_eq!(ledger.pushed(), 0, "the screen was not full: nothing left it");
+		let chunk = strip_rows(ledger.rows(), cols, term.colors(), &settings, &mut palette::Readable::default());
 		assert!(!slide_is_visible(-3, &region, &last, &chunk, |_, _| true));
-		assert_eq!(
-			ledger_step(false, true, 0, false, -3),
-			Some(-3),
-			"the record alone would slide"
-		);
+		assert_eq!(ledger_step(false, true, 0, false, -3), Some(-3), "the record alone would slide");
 
 		// the same shape over rows that have text is a real scroll, either way round
 		let mut inked = last.clone();
@@ -8922,18 +7130,9 @@ mod tests {
 		// its prompt and redraws it in place (2026101415085143)
 		assert!(!slide_is_visible(-3, &region, &inked, &chunk, |_, _| false));
 		assert!(!slide_is_visible(3, &(1..8), &inked, &chunk, |_, _| false));
-		assert!(
-			!slide_is_visible(3, &(4..8), &last, &chunk, |_, _| true),
-			"up: sources are the rows below"
-		);
+		assert!(!slide_is_visible(3, &(4..8), &last, &chunk, |_, _| true), "up: sources are the rows below");
 		// so is one whose rows that left had ink
-		assert!(slide_is_visible(
-			-3,
-			&region,
-			&last,
-			&[cells("gone", cols)],
-			|_, _| true
-		));
+		assert!(slide_is_visible(-3, &region, &last, &[cells("gone", cols)], |_, _| true));
 		// a background counts as ink
 		let mut bg = last.clone();
 		bg[4][0].bg = Some([1, 2, 3]);
@@ -8954,26 +7153,10 @@ mod tests {
 		// to start the ledger over and lose it.
 		assert_eq!(output_advance(false, true, 0, 2), 2);
 		assert_eq!(output_advance(false, true, 3, 3), 3);
-		assert_eq!(
-			output_advance(false, true, 1, 2),
-			2,
-			"the cap fills mid-gap"
-		);
-		assert_eq!(
-			output_advance(false, false, 0, 2),
-			0,
-			"scrolled back: nothing to chase"
-		);
-		assert_eq!(
-			output_advance(true, true, 0, 2),
-			0,
-			"alt screen: the slide's, not the ease's"
-		);
-		assert_eq!(
-			ledger_step(false, true, 2, false, -3),
-			None,
-			"the ease owns the frame"
-		);
+		assert_eq!(output_advance(false, true, 1, 2), 2, "the cap fills mid-gap");
+		assert_eq!(output_advance(false, false, 0, 2), 0, "scrolled back: nothing to chase");
+		assert_eq!(output_advance(true, true, 0, 2), 0, "alt screen: the slide's, not the ease's");
+		assert_eq!(ledger_step(false, true, 2, false, -3), None, "the ease owns the frame");
 	}
 
 	// Test ID: da88k
@@ -9003,25 +7186,14 @@ mod tests {
 		let vs_stale = scroll_shift_signed(&cur, &stale, APP_SCROLL_MAX);
 		let vs_fresh = scroll_shift_signed(&cur, &fresh, APP_SCROLL_MAX);
 		assert_eq!(vs_stale, 1, "a stale snapshot re-reads the eased scroll");
-		assert_eq!(
-			vs_fresh, 0,
-			"a fresh snapshot sees only the in-place redraw"
-		);
+		assert_eq!(vs_fresh, 0, "a fresh snapshot sees only the in-place redraw");
 	}
 
 	// Scrolled-off strip
 
 	// a marker row for strip tests: one cell whose char encodes the row identity
 	fn strip_row(tag: char) -> Vec<StripCell> {
-		vec![StripCell {
-			c: tag,
-			fg: [255; 3],
-			bg: None,
-			bold: false,
-			italic: false,
-			wide: 1,
-			rules: CellRules::default(),
-		}]
+		vec![StripCell { c: tag, fg: [255; 3], bg: None, bold: false, italic: false, wide: 1, rules: CellRules::default() }]
 	}
 
 	fn strip_tags(s: &OffStrip) -> String {
@@ -9029,18 +7201,11 @@ mod tests {
 	}
 
 	fn test_strip() -> OffStrip {
-		OffStrip::new(glyphon::Buffer::new_empty(glyphon::Metrics::new(
-			16.0, 20.0,
-		)))
+		OffStrip::new(glyphon::Buffer::new_empty(glyphon::Metrics::new(16.0, 20.0)))
 	}
 
 	fn text_row(text: &str) -> Vec<StripCell> {
-		text.chars()
-			.map(|c| StripCell {
-				c,
-				..strip_row(c)[0]
-			})
-			.collect()
+		text.chars().map(|c| StripCell { c, ..strip_row(c)[0] }).collect()
 	}
 
 	// A slide past the region's height has moved the rows nearest the content
@@ -9075,12 +7240,7 @@ mod tests {
 		fn build_all(s: &mut OffStrip) {
 			for j in 0..s.len() {
 				let tag = s.rows[j][0].c.to_string();
-				s.buf.lines[j] = glyphon::BufferLine::new(
-					tag,
-					glyphon::cosmic_text::LineEnding::default(),
-					AttrsList::new(&glyphon::Attrs::new()),
-					glyphon::Shaping::Advanced,
-				);
+				s.buf.lines[j] = glyphon::BufferLine::new(tag, glyphon::cosmic_text::LineEnding::default(), AttrsList::new(&glyphon::Attrs::new()), glyphon::Shaping::Advanced);
 				s.built[j] = true;
 			}
 		}
@@ -9115,9 +7275,7 @@ mod tests {
 			up.push_step(1, (0, 10), vec![strip_row(tag(i))]);
 		}
 		build_all(&mut up);
-		let more: Vec<_> = (OffStrip::CAP..OffStrip::CAP + 3)
-			.map(|i| strip_row(tag(i)))
-			.collect();
+		let more: Vec<_> = (OffStrip::CAP..OffStrip::CAP + 3).map(|i| strip_row(tag(i))).collect();
 		up.push_step(1, (0, 10), more);
 		assert_eq!(up.len(), OffStrip::CAP);
 		assert_eq!(up.rows[0][0].c, tag(3));
@@ -9128,9 +7286,7 @@ mod tests {
 			down.push_step(-1, (0, 10), vec![strip_row(tag(i))]);
 		}
 		build_all(&mut down);
-		let more: Vec<_> = (OffStrip::CAP..OffStrip::CAP + 3)
-			.map(|i| strip_row(tag(i)))
-			.collect();
+		let more: Vec<_> = (OffStrip::CAP..OffStrip::CAP + 3).map(|i| strip_row(tag(i))).collect();
 		down.push_step(-1, (0, 10), more);
 		assert_eq!(down.len(), OffStrip::CAP);
 		assert_eq!(down.rows[OffStrip::CAP - 1][0].c, tag(3));
@@ -9154,25 +7310,10 @@ mod tests {
 		}
 		let fg = [200; 3];
 		let width = 400.0;
-		let drawn = |s: &OffStrip, window: &std::ops::Range<usize>| -> Vec<String> {
-			s.buf
-				.layout_runs()
-				.take(window.len())
-				.map(|run| run.text.to_string())
-				.collect()
-		};
-		let want = |s: &OffStrip, window: &std::ops::Range<usize>| -> Vec<String> {
-			s.rows
-				.range(window.clone())
-				.map(|row| row.iter().map(|cell| cell.c).collect())
-				.collect()
-		};
+		let drawn = |s: &OffStrip, window: &std::ops::Range<usize>| -> Vec<String> { s.buf.layout_runs().take(window.len()).map(|run| run.text.to_string()).collect() };
+		let want = |s: &OffStrip, window: &std::ops::Range<usize>| -> Vec<String> { s.rows.range(window.clone()).map(|row| row.iter().map(|cell| cell.c).collect()).collect() };
 		let mut s = OffStrip::new(ctx.new_buffer(width, ctx.cell_h));
-		s.push_step(
-			1,
-			(0, 30),
-			(0..40).map(|i| text_row(&format!("row {i}"))).collect(),
-		);
+		s.push_step(1, (0, 30), (0..40).map(|i| text_row(&format!("row {i}"))).collect());
 		let window = s.visible(20.0);
 		assert_eq!(s.shape(&mut ctx, fg, width, window.clone()), 21);
 		assert_eq!(drawn(&s, &window), want(&s, &window));
@@ -9180,10 +7321,7 @@ mod tests {
 			s.push_step(1, (0, 30), vec![text_row(&format!("row {step}"))]);
 			let window = s.visible(20.0);
 			let kept = window.start..window.end - 1;
-			assert!(
-				kept.clone().all(|j| s.buf.lines[j].shape_opt().is_some()),
-				"the rows still in the window kept their shaping"
-			);
+			assert!(kept.clone().all(|j| s.buf.lines[j].shape_opt().is_some()), "the rows still in the window kept their shaping");
 			assert_eq!(s.shape(&mut ctx, fg, width, window.clone()), 1);
 			assert_eq!(drawn(&s, &window), want(&s, &window));
 		}
@@ -9193,11 +7331,7 @@ mod tests {
 		assert_eq!(drawn(&s, &window), want(&s, &window));
 		// content moving down puts the window at the strip's top
 		let mut d = OffStrip::new(ctx.new_buffer(width, ctx.cell_h));
-		d.push_step(
-			-1,
-			(0, 30),
-			(0..10).map(|i| text_row(&format!("down {i}"))).collect(),
-		);
+		d.push_step(-1, (0, 30), (0..10).map(|i| text_row(&format!("down {i}"))).collect());
 		let window = d.visible(-4.0);
 		assert_eq!(d.shape(&mut ctx, fg, width, window.clone()), 5);
 		d.push_step(-1, (0, 30), vec![text_row("down new")]);
@@ -9235,10 +7369,7 @@ mod tests {
 		// strip's. The top stays at the band.
 		assert_eq!(weld_region_clip(20.0, 160.0, -20.0, 120.0), (20.0, 120.0));
 		// no top band: f32::MIN stays open until the content edge
-		assert_eq!(
-			weld_region_clip(f32::MIN, 160.0, 40.0, 200.0),
-			(40.0, 160.0)
-		);
+		assert_eq!(weld_region_clip(f32::MIN, 160.0, 40.0, 200.0), (40.0, 160.0));
 	}
 
 	// Test ID: d9kmm
@@ -9286,18 +7417,11 @@ mod tests {
 		// the cap trims the rows farthest from the content (oldest)
 		let mut long = test_strip();
 		for i in 0..(OffStrip::CAP + 3) {
-			long.push_step(
-				1,
-				(0, 10),
-				vec![strip_row(char::from(b'a' + (i % 26) as u8))],
-			);
+			long.push_step(1, (0, 10), vec![strip_row(char::from(b'a' + (i % 26) as u8))]);
 		}
 		assert_eq!(long.len(), OffStrip::CAP);
 		// the newest row (nearest the content, strip bottom) survives
-		assert_eq!(
-			long.rows.back().unwrap()[0].c,
-			char::from(b'a' + ((OffStrip::CAP + 2) % 26) as u8)
-		);
+		assert_eq!(long.rows.back().unwrap()[0].c, char::from(b'a' + ((OffStrip::CAP + 2) % 26) as u8));
 	}
 
 	// (cell_w, cell_h, margin) for the link tests. Round numbers, so a pixel
@@ -9307,38 +7431,14 @@ mod tests {
 	// Pointer at the center of grid cell (row, col), in window pixels.
 	fn cell_px(row: i32, col: usize) -> (f32, f32) {
 		let (cw, ch, margin) = LINK_METRICS;
-		(
-			margin + col as f32 * cw + cw / 2.0,
-			margin + row as f32 * ch + ch / 2.0,
-		)
+		(margin + col as f32 * cw + cw / 2.0, margin + row as f32 * ch + ch / 2.0)
 	}
 
-	fn link_probe(
-		term: &Term<VoidListener>,
-		cols: usize,
-		lines: usize,
-		row: i32,
-		col: usize,
-	) -> Option<LinkHit> {
+	fn link_probe(term: &Term<VoidListener>, cols: usize, lines: usize, row: i32, col: usize) -> Option<LinkHit> {
 		let settings = config::Settings::default();
-		let rect = Rect {
-			x: 0.0,
-			y: 0.0,
-			w: 400.0,
-			h: 200.0,
-		};
+		let rect = Rect { x: 0.0, y: 0.0, w: 400.0, h: 200.0 };
 		let (px, py) = cell_px(row, col);
-		link_at(
-			term.grid(),
-			term.colors(),
-			&settings,
-			rect,
-			px,
-			py,
-			LINK_METRICS,
-			(cols, lines),
-			0,
-		)
+		link_at(term.grid(), term.colors(), &settings, rect, px, py, LINK_METRICS, (cols, lines), 0)
 	}
 
 	// Test ID: datv2
@@ -9383,31 +7483,11 @@ mod tests {
 	fn the_margin_is_over_no_link() {
 		let term = term_fed(40, 4, 100, "http://example.com/x");
 		let settings = config::Settings::default();
-		let rect = Rect {
-			x: 0.0,
-			y: 0.0,
-			w: 400.0,
-			h: 200.0,
-		};
-		let probe = |px, py| {
-			link_at(
-				term.grid(),
-				term.colors(),
-				&settings,
-				rect,
-				px,
-				py,
-				LINK_METRICS,
-				(40, 4),
-				0,
-			)
-		};
+		let rect = Rect { x: 0.0, y: 0.0, w: 400.0, h: 200.0 };
+		let probe = |px, py| link_at(term.grid(), term.colors(), &settings, rect, px, py, LINK_METRICS, (40, 4), 0);
 		assert!(probe(2.0, 12.0).is_none(), "left margin");
 		assert!(probe(12.0, 2.0).is_none(), "top margin");
-		assert!(
-			probe(12.0, 12.0).is_some(),
-			"and the cell itself still hits"
-		);
+		assert!(probe(12.0, 12.0).is_some(), "and the cell itself still hits");
 	}
 
 	// Test ID: d98jr
@@ -9452,16 +7532,10 @@ mod tests {
 				let text = String::from_utf8_lossy(case);
 				// Bracketed: an ESC would end the bracket early and everything
 				// after it would be read as keystrokes.
-				assert!(
-					!paste_payload(&text, true).contains('\u{1b}'),
-					"an ESC survived into a bracketed paste"
-				);
+				assert!(!paste_payload(&text, true).contains('\u{1b}'), "an ESC survived into a bracketed paste");
 				// Unbracketed: the application can't tell the paste from typing,
 				// so a line break has to be the one the Enter key sends.
-				assert!(
-					!paste_payload(&text, false).contains('\n'),
-					"an LF survived into an unbracketed paste"
-				);
+				assert!(!paste_payload(&text, false).contains('\n'), "an LF survived into an unbracketed paste");
 			};
 			for case in &corpus {
 				check(case);
@@ -9478,8 +7552,7 @@ mod tests {
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_selected_pair_stays_inside_its_row() {
-			const PAIRS: [(char, char); 5] =
-				[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ('\'', '\'')];
+			const PAIRS: [(char, char); 5] = [('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ('\'', '\'')];
 			let corpus = fuzz::corpus("pairs");
 			fuzz::soak("pairs", |seed| {
 				let mut rng = fuzz::Rng::new(seed);
@@ -9487,19 +7560,11 @@ mod tests {
 				let row: Vec<char> = String::from_utf8_lossy(&case).chars().collect();
 				for col in 0..row.len() {
 					if let Some((a, b)) = pair_inside(&row, col, &PAIRS) {
-						assert!(
-							a <= b && b < row.len(),
-							"{a}..{b} outside a row of {}",
-							row.len()
-						);
+						assert!(a <= b && b < row.len(), "{a}..{b} outside a row of {}", row.len());
 					}
 					for &(open, _) in &PAIRS {
 						if let Some((a, b)) = same_char_pair(&row, col, open) {
-							assert!(
-								a <= b && b < row.len(),
-								"{a}..{b} outside a row of {}",
-								row.len()
-							);
+							assert!(a <= b && b < row.len(), "{a}..{b} outside a row of {}", row.len());
 						}
 					}
 				}
@@ -9560,22 +7625,12 @@ mod tests {
 	fn inverse_video_is_drawn_bold_unless_turned_off() {
 		let term = term_fed(8, 2, 100, "\x1b[7mX\x1b[0mY");
 		let grid = term.grid();
-		let cell = |settings: &config::Settings, col: usize| {
-			strip_cell(
-				&grid[Line(0)][Column(col)],
-				term.colors(),
-				settings,
-				&mut crate::palette::Readable::default(),
-			)
-		};
+		let cell = |settings: &config::Settings, col: usize| strip_cell(&grid[Line(0)][Column(col)], term.colors(), settings, &mut crate::palette::Readable::default());
 		let on = config::Settings::default();
 		assert!(on.embolden_inverse, "on by default");
 		assert_eq!((cell(&on, 0).c, cell(&on, 0).bold), ('X', true));
 		assert_eq!((cell(&on, 1).c, cell(&on, 1).bold), ('Y', false));
-		let off = config::Settings {
-			embolden_inverse: false,
-			..Default::default()
-		};
+		let off = config::Settings { embolden_inverse: false, ..Default::default() };
 		assert!(!cell(&off, 0).bold);
 	}
 
@@ -9587,25 +7642,14 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_block_cursor_takes_its_size_from_the_settings() {
 		let _g = config::test_store_lock();
-		config::update(config::Settings {
-			cursor_size_width: 40.0,
-			cursor_size_height: 60.0,
-			..Default::default()
-		});
+		config::update(config::Settings { cursor_size_width: 40.0, cursor_size_height: 60.0, ..Default::default() });
 		let s = config::settings();
 		assert_eq!(cursor_geometry(CursorShape::Block, false, &s), (0.4, 0.6));
 		assert_eq!(cursor_geometry(CursorShape::Block, true, &s), (1.0, 1.0));
 		assert_eq!(cursor_geometry(CursorShape::Beam, false, &s), (0.15, 1.0));
-		assert_eq!(
-			cursor_geometry(CursorShape::Underline, false, &s),
-			(1.0, 0.15)
-		);
+		assert_eq!(cursor_geometry(CursorShape::Underline, false, &s), (1.0, 0.15));
 		// a zero never makes the cursor vanish
-		config::update(config::Settings {
-			cursor_size_width: 0.0,
-			cursor_size_height: 0.0,
-			..Default::default()
-		});
+		config::update(config::Settings { cursor_size_width: 0.0, cursor_size_height: 0.0, ..Default::default() });
 		let s = config::settings();
 		assert_eq!(cursor_geometry(CursorShape::Block, false, &s), (0.02, 0.02));
 		config::update(config::Settings::default());
@@ -9618,50 +7662,24 @@ mod tests {
 	fn a_pulse_grows_holds_shrinks_then_disappears() {
 		assert_eq!(pulse_env(0.0), 0.0);
 		let rising: Vec<f32> = (0..40).map(|i| pulse_env(i as f32 / 100.0)).collect();
-		assert!(
-			rising.windows(2).all(|w| w[1] > w[0]),
-			"grows the whole way"
-		);
+		assert!(rising.windows(2).all(|w| w[1] > w[0]), "grows the whole way");
 		for phase in [0.40, 0.45, 0.5, 0.55, 0.599] {
 			assert_eq!(pulse_env(phase), 1.0, "held full at {phase}");
 		}
 		let falling: Vec<f32> = (60..90).map(|i| pulse_env(i as f32 / 100.0)).collect();
-		assert!(
-			falling.windows(2).all(|w| w[1] < w[0]),
-			"shrinks the whole way"
-		);
+		assert!(falling.windows(2).all(|w| w[1] < w[0]), "shrinks the whole way");
 		for phase in [0.90, 0.95, 0.999] {
 			assert_eq!(pulse_env(phase), 0.0, "gone at {phase}");
 		}
 
 		let geom = (0.8, 0.6);
 		let env = pulse_env(0.2);
-		let (w, h, alpha, pw, ph) = cursor_envelope(
-			Some(CursorAnimation::PulseVertical),
-			0.2,
-			geom,
-			CURSOR_ALPHA,
-		);
-		assert_eq!(
-			(w, h, alpha, pw, ph),
-			(0.8, 0.6 * env, CURSOR_ALPHA, false, true)
-		);
-		let (w, h, alpha, pw, ph) = cursor_envelope(
-			Some(CursorAnimation::PulseHorizontal),
-			0.2,
-			geom,
-			CURSOR_ALPHA,
-		);
-		assert_eq!(
-			(w, h, alpha, pw, ph),
-			(0.8 * env, 0.6, CURSOR_ALPHA, true, false)
-		);
-		let (w, h, alpha, pw, ph) =
-			cursor_envelope(Some(CursorAnimation::PulseBoth), 0.2, geom, CURSOR_ALPHA);
-		assert_eq!(
-			(w, h, alpha, pw, ph),
-			(0.8 * env, 0.6 * env, CURSOR_ALPHA, true, true)
-		);
+		let (w, h, alpha, pw, ph) = cursor_envelope(Some(CursorAnimation::PulseVertical), 0.2, geom, CURSOR_ALPHA);
+		assert_eq!((w, h, alpha, pw, ph), (0.8, 0.6 * env, CURSOR_ALPHA, false, true));
+		let (w, h, alpha, pw, ph) = cursor_envelope(Some(CursorAnimation::PulseHorizontal), 0.2, geom, CURSOR_ALPHA);
+		assert_eq!((w, h, alpha, pw, ph), (0.8 * env, 0.6, CURSOR_ALPHA, true, false));
+		let (w, h, alpha, pw, ph) = cursor_envelope(Some(CursorAnimation::PulseBoth), 0.2, geom, CURSOR_ALPHA);
+		assert_eq!((w, h, alpha, pw, ph), (0.8 * env, 0.6 * env, CURSOR_ALPHA, true, true));
 	}
 
 	// Dragging a divider sets its split's ratio from the pointer, and marks the
@@ -9675,12 +7693,7 @@ mod tests {
 				Node::Leaf(_) => panic!("not a split"),
 			}
 		}
-		let area = Rect {
-			x: 0.0,
-			y: 0.0,
-			w: 400.0,
-			h: 200.0,
-		};
+		let area = Rect { x: 0.0, y: 0.0, w: 400.0, h: 200.0 };
 		let usable = area.w - config::PANE_GAP_PX;
 		let mut root = split(Dir::Vertical, 0.5, false, leaf(1), leaf(2));
 		set_ratio(&mut root, area, &[], usable / 4.0, 50.0, 1.0);
@@ -9691,18 +7704,10 @@ mod tests {
 		assert_eq!(ratio(&root).0, 0.95);
 
 		// a path gets to the nested split and leaves the outer one alone
-		let mut root = split(
-			Dir::Horizontal,
-			0.5,
-			false,
-			leaf(1),
-			split(Dir::Vertical, 0.5, false, leaf(2), leaf(3)),
-		);
+		let mut root = split(Dir::Horizontal, 0.5, false, leaf(1), split(Dir::Vertical, 0.5, false, leaf(2), leaf(3)));
 		set_ratio(&mut root, area, &[true], usable * 0.75, 150.0, 1.0);
 		assert_eq!(ratio(&root), (0.5, false));
-		let Node::Split { second, .. } = &root else {
-			unreachable!()
-		};
+		let Node::Split { second, .. } = &root else { unreachable!() };
 		assert_eq!(ratio(second), (0.75, true));
 	}
 
@@ -9712,14 +7717,7 @@ mod tests {
 	#[test]
 	fn swapping_two_panes_trades_their_places_and_nothing_else() {
 		fn splits(node: &Node, out: &mut Vec<(f32, bool)>) {
-			if let Node::Split {
-				ratio,
-				manual,
-				first,
-				second,
-				..
-			} = node
-			{
+			if let Node::Split { ratio, manual, first, second, .. } = node {
 				out.push((*ratio, *manual));
 				splits(first, out);
 				splits(second, out);
@@ -9727,22 +7725,11 @@ mod tests {
 		}
 		let order = |node: &Node| {
 			let mut out = Vec::new();
-			let area = Rect {
-				x: 0.0,
-				y: 0.0,
-				w: 400.0,
-				h: 200.0,
-			};
+			let area = Rect { x: 0.0, y: 0.0, w: 400.0, h: 200.0 };
 			layout(node, area, 1.0, &mut out);
 			out.into_iter().map(|(id, _)| id).collect::<Vec<_>>()
 		};
-		let mut root = split(
-			Dir::Vertical,
-			0.3,
-			true,
-			leaf(1),
-			split(Dir::Horizontal, 0.6, false, leaf(2), leaf(3)),
-		);
+		let mut root = split(Dir::Vertical, 0.3, true, leaf(1), split(Dir::Horizontal, 0.6, false, leaf(2), leaf(3)));
 		let mut before = Vec::new();
 		splits(&root, &mut before);
 		swap_leaves(&mut root, 1, 3);
@@ -9763,11 +7750,7 @@ mod tests {
 		// a Windows checkout has CRLF line ends, and a body left uncut runs on into
 		// code that does try the lock
 		let file = include_str!("pane.rs").replace("\r\n", "\n");
-		let body = file
-			.split("pub fn arm_capture(&mut self) {")
-			.nth(1)
-			.and_then(|rest| rest.split("\n\t}\n").next())
-			.expect("the body of arm_capture");
+		let body = file.split("pub fn arm_capture(&mut self) {").nth(1).and_then(|rest| rest.split("\n\t}\n").next()).expect("the body of arm_capture");
 		assert!(body.contains(".lock_unfair()"), "it waits for the lock");
 		assert!(!body.contains("try_lock"), "a try can lose the race");
 	}
@@ -9778,27 +7761,15 @@ mod tests {
 	// Test ID: dd5q7
 	#[test]
 	fn pane_ids_come_from_one_counter_for_the_whole_program() {
-		let body = include_str!("pane.rs")
-			.split("\nmod tests {")
-			.next()
-			.expect("the file above its own tests");
+		let body = include_str!("pane.rs").split("\nmod tests {").next().expect("the file above its own tests");
 		assert!(body.contains("static PANE_ID_SEQ: AtomicU64"));
 		let spawns = body.matches("spawn_pane(ctx, proxy, ").count();
 		assert!(spawns >= 2, "a new tab and a split both spawn");
-		assert_eq!(
-			body.matches(" = alloc_pane_id();").count(),
-			spawns,
-			"every pane spawned takes a program-wide id"
-		);
+		assert_eq!(body.matches(" = alloc_pane_id();").count(), spawns, "every pane spawned takes a program-wide id");
 		// and the counter hands out no id twice, from however many threads
 		let ids: Vec<u64> = std::thread::scope(|scope| {
-			let workers: Vec<_> = (0..4)
-				.map(|_| scope.spawn(|| (0..500).map(|_| alloc_pane_id()).collect::<Vec<_>>()))
-				.collect();
-			workers
-				.into_iter()
-				.flat_map(|w| w.join().expect("worker"))
-				.collect()
+			let workers: Vec<_> = (0..4).map(|_| scope.spawn(|| (0..500).map(|_| alloc_pane_id()).collect::<Vec<_>>())).collect();
+			workers.into_iter().flat_map(|w| w.join().expect("worker")).collect()
 		});
 		let unique: std::collections::HashSet<_> = ids.iter().collect();
 		assert_eq!(unique.len(), ids.len());
@@ -9815,16 +7786,10 @@ mod tests {
 		let lightness = |c: [u8; 3]| crate::palette::to_oklab(c).0;
 		let (bg, fg, cursor) = ([0xf6, 0xf5, 0xf0], [0x30, 0x32, 0x38], [0x33, 0x55, 0x99]);
 		let alpha = cursor_alpha(fg, bg, cursor, floor);
-		assert!(
-			alpha > CURSOR_ALPHA && alpha < CURSOR_ALPHA_LIGHT,
-			"alpha {alpha}"
-		);
+		assert!(alpha > CURSOR_ALPHA && alpha < CURSOR_ALPHA_LIGHT, "alpha {alpha}");
 		let gap = lightness(cursor_plate(cursor, bg, alpha)) - lightness(fg);
 		assert!(gap >= floor, "the text sits {gap} from the plate");
-		assert_eq!(
-			cursor_alpha([0x88, 0xee, 0xcc], [0, 0, 0], [0x8a, 0x3f, 0xa4], floor),
-			CURSOR_ALPHA
-		);
+		assert_eq!(cursor_alpha([0x88, 0xee, 0xcc], [0, 0, 0], [0x8a, 0x3f, 0xa4], floor), CURSOR_ALPHA);
 	}
 
 	// The phase blink fades on a cosine: full at the start of the cycle, gone at
@@ -9832,23 +7797,12 @@ mod tests {
 	// Test ID: dd5q8
 	#[test]
 	fn the_phase_blink_fades_instead_of_switching() {
-		let alpha = |phase: f32| {
-			cursor_envelope(
-				Some(CursorAnimation::Phase),
-				phase,
-				(1.0, 1.0),
-				CURSOR_ALPHA,
-			)
-			.2
-		};
+		let alpha = |phase: f32| cursor_envelope(Some(CursorAnimation::Phase), phase, (1.0, 1.0), CURSOR_ALPHA).2;
 		assert_eq!(alpha(0.0), CURSOR_ALPHA);
 		assert!(alpha(0.5).abs() < 1e-6, "gone at mid-cycle: {}", alpha(0.5));
 		for phase in [0.25, 0.75] {
 			let a = alpha(phase);
-			assert!(
-				a > 0.1 * CURSOR_ALPHA && a < 0.9 * CURSOR_ALPHA,
-				"partway at {phase}: {a}"
-			);
+			assert!(a > 0.1 * CURSOR_ALPHA && a < 0.9 * CURSOR_ALPHA, "partway at {phase}: {a}");
 		}
 		assert!(alpha(0.1) > alpha(0.2) && alpha(0.2) > alpha(0.3));
 	}
@@ -9860,17 +7814,11 @@ mod tests {
 	fn no_animation_leaves_the_cursor_alone_and_phase_only_fades_it() {
 		let geom = (0.4, 0.6);
 		for phase in [0.0, 0.2, 0.5, 0.95] {
-			assert_eq!(
-				cursor_envelope(None, phase, geom, CURSOR_ALPHA),
-				(0.4, 0.6, CURSOR_ALPHA, false, false)
-			);
-			let (w, h, _, pw, ph) =
-				cursor_envelope(Some(CursorAnimation::Phase), phase, geom, CURSOR_ALPHA);
+			assert_eq!(cursor_envelope(None, phase, geom, CURSOR_ALPHA), (0.4, 0.6, CURSOR_ALPHA, false, false));
+			let (w, h, _, pw, ph) = cursor_envelope(Some(CursorAnimation::Phase), phase, geom, CURSOR_ALPHA);
 			assert_eq!((w, h, pw, ph), (0.4, 0.6, false, false));
 		}
-		assert!(
-			cursor_envelope(Some(CursorAnimation::Phase), 0.5, geom, CURSOR_ALPHA).2 < CURSOR_ALPHA
-		);
+		assert!(cursor_envelope(Some(CursorAnimation::Phase), 0.5, geom, CURSOR_ALPHA).2 < CURSOR_ALPHA);
 	}
 
 	// Leaving the alt screen hands the normal screen's scrollback back in one
@@ -9885,16 +7833,14 @@ mod tests {
 		let mut s = crate::scroll::Scroll::new();
 		s.set_max(0.0); // the alt screen has no scrollback
 		s.set_max(500.0);
-		let (follow, advanced, _) =
-			ease_output(&mut s, false, true, grew(500), 24, |_| None, |_| false);
+		let (follow, advanced, _) = ease_output(&mut s, false, true, grew(500), 24, |_| None, |_| false);
 		assert!(follow);
 		assert_eq!(advanced, 500);
 		assert!(!s.animating(), "the exit is a cut");
 		assert_eq!((s.desired_offset(), s.frac()), (0, 0.0));
 
 		s.set_max(503.0);
-		let (_, advanced, was_chasing) =
-			ease_output(&mut s, false, false, grew(3), 24, |_| None, |_| false);
+		let (_, advanced, was_chasing) = ease_output(&mut s, false, false, grew(3), 24, |_| None, |_| false);
 		assert_eq!(advanced, 3);
 		assert!(!was_chasing);
 		assert!(s.chasing_output(), "three new lines ease in");
@@ -9916,8 +7862,7 @@ mod tests {
 		assert!(s.animating());
 		s.snap();
 		s.set_max(2100.0);
-		let (_, advanced, _) =
-			ease_output(&mut s, false, true, grew(2000), 24, |_| None, |_| false);
+		let (_, advanced, _) = ease_output(&mut s, false, true, grew(2000), 24, |_| None, |_| false);
 		assert_eq!(advanced, 2000);
 		assert!(!s.animating());
 		assert_eq!((s.desired_offset(), s.frac()), (0, 0.0));
@@ -9951,8 +7896,7 @@ mod tests {
 			while !started.load(Ordering::Relaxed) {
 				std::thread::yield_now();
 			}
-			let got = (0..=super::LOCK_WAIT_AFTER)
-				.find_map(|_| lock_for_frame(&term, &mut misses).map(|data| *data));
+			let got = (0..=super::LOCK_WAIT_AFTER).find_map(|_| lock_for_frame(&term, &mut misses).map(|data| *data));
 			stop.store(true, Ordering::Relaxed);
 			assert!(got.is_some(), "a frame got the term within the wait");
 			assert_eq!(misses, 0, "and the misses start over");
@@ -9971,10 +7915,7 @@ mod tests {
 		let wait = cursor_wake_after(true, false, false, 0.5, 0.2, 0.1).expect("a wake");
 		assert!((wait - 0.42).abs() < 1e-6, "{wait}");
 		let now = cursor_wake_after(true, false, false, 0.5, 3.0, 3.0).expect("a wake");
-		assert!(
-			(now - 0.02).abs() < 1e-6,
-			"an overdue resume wakes at once: {now}"
-		);
+		assert!((now - 0.02).abs() < 1e-6, "an overdue resume wakes at once: {now}");
 	}
 
 	// One scrollbar, at the far right of the pane's whole area: past the minimap
@@ -9983,32 +7924,17 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_scrollbar_sits_at_the_far_edge_past_the_minimap() {
-		let full = Rect {
-			x: 10.0,
-			y: 20.0,
-			w: 800.0,
-			h: 600.0,
-		};
+		let full = Rect { x: 10.0, y: 20.0, w: 800.0, h: 600.0 };
 		let (thickness, margin) = (16.0, 4.0);
-		let map = config::Settings {
-			minimap: true,
-			minimap_width: 100.0,
-			..Default::default()
-		};
+		let map = config::Settings { minimap: true, minimap_width: 100.0, ..Default::default() };
 		let text = minimap::text_rect(full, &map, 1.0, true);
 		assert!(text.w < full.w, "the column takes its room");
 		let track = bar_track(full, text, thickness, margin);
 		assert_eq!(track.x + track.w, full.x + full.w);
-		assert!(
-			track.x >= text.x + text.w,
-			"over the column, clear of the text"
-		);
+		assert!(track.x >= text.x + text.w, "over the column, clear of the text");
 		assert_eq!((track.y, track.h), (text.y + margin, text.h - 2.0 * margin));
 		// no column: the same edge, now over the text
-		let bare = config::Settings {
-			minimap: false,
-			..map
-		};
+		let bare = config::Settings { minimap: false, ..map };
 		let text = minimap::text_rect(full, &bare, 1.0, true);
 		let track = bar_track(full, text, thickness, margin);
 		assert_eq!(track.x + track.w, text.x + text.w);
@@ -10024,10 +7950,7 @@ mod tests {
 		let base = mono_attrs();
 		let mut bold = base.clone();
 		bold.weight = Weight::BOLD;
-		let bold_italic = bold
-			.clone()
-			.style(Style::Italic)
-			.color(GColor::rgb(200, 10, 10));
+		let bold_italic = bold.clone().style(Style::Italic).color(GColor::rgb(200, 10, 10));
 		let mut crisp = AttrsList::new(&base);
 		crisp.add_span(0..4, &bold);
 		crisp.add_span(4..8, &bold_italic);
@@ -10048,12 +7971,7 @@ mod tests {
 	// Test ID: dd5qg
 	#[test]
 	fn a_pixel_maps_to_a_cell_half_and_clamps_at_the_edges() {
-		let rect = Rect {
-			x: 10.0,
-			y: 20.0,
-			w: 820.0,
-			h: 500.0,
-		};
+		let rect = Rect { x: 10.0, y: 20.0, w: 820.0, h: 500.0 };
 		let at = |x: f32, y: f32, offset: i32| {
 			let (p, side) = grid_point(x, y, rect, 4.0, (10.0, 20.0), (80, 24), offset);
 			(p.line.0, p.column.0, side)
@@ -10086,11 +8004,7 @@ mod tests {
 		let ch = lines as f32 * ctx.cell_h;
 		let mut buf = ctx.new_buffer(400.0, text_buffer_h(ch, ctx.cell_h));
 		let rows: Vec<String> = (0..=lines).map(|i| format!("row {i}")).collect();
-		set_buffer_rows(
-			&mut buf,
-			rows.iter()
-				.map(|row| (row.as_str(), AttrsList::new(&mono_attrs()))),
-		);
+		set_buffer_rows(&mut buf, rows.iter().map(|row| (row.as_str(), AttrsList::new(&mono_attrs()))));
 		buf.shape_until_scroll(&mut ctx.font_system, false);
 		assert_eq!(buf.layout_runs().count(), lines + 1);
 	}
@@ -10102,11 +8016,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn each_underline_style_lines_its_own_cells() {
-		let line = concat!(
-			"\x1b[4mplain\x1b[0m \x1b[4:3mcurly\x1b[0m \x1b[4:2mdouble\x1b[0m ",
-			"\x1b[4:4mdot\x1b[0m \x1b[4:5mdash\x1b[0m \x1b[9mgone\x1b[0m ",
-			"\x1b[4;58:2::255:0:0mred\x1b[0m \x1b[4;8mhid\x1b[0m",
-		);
+		let line = concat!("\x1b[4mplain\x1b[0m \x1b[4:3mcurly\x1b[0m \x1b[4:2mdouble\x1b[0m ", "\x1b[4:4mdot\x1b[0m \x1b[4:5mdash\x1b[0m \x1b[9mgone\x1b[0m ", "\x1b[4;58:2::255:0:0mred\x1b[0m \x1b[4;8mhid\x1b[0m",);
 		let cols = 60;
 		let term = term_fed(cols, 2, 0, line);
 		let settings = config::Settings::default();
@@ -10114,30 +8024,11 @@ mod tests {
 		let (mut unders, mut strikes) = (Vec::new(), Vec::new());
 		let row = &term.grid()[Line(0)];
 		for column in 0..cols {
-			let rules = cell_rules(
-				&row[Column(column)],
-				[200; 3],
-				[0; 3],
-				term.colors(),
-				&settings,
-				&mut readable,
-			);
+			let rules = cell_rules(&row[Column(column)], [200; 3], [0; 3], term.colors(), &settings, &mut readable);
 			push_cell_rules(rules, (&mut unders, &mut strikes), 0, 0.0, column, 1);
 		}
-		let spans = |list: &[RuleSpan]| -> Vec<(Rule, usize, usize)> {
-			list.iter().map(|s| (s.rule, s.first, s.end)).collect()
-		};
-		assert_eq!(
-			spans(&unders),
-			[
-				(Rule::Single, 0, 5),
-				(Rule::Curly, 6, 11),
-				(Rule::Double, 12, 18),
-				(Rule::Dotted, 19, 22),
-				(Rule::Dashed, 23, 27),
-				(Rule::Single, 33, 36),
-			]
-		);
+		let spans = |list: &[RuleSpan]| -> Vec<(Rule, usize, usize)> { list.iter().map(|s| (s.rule, s.first, s.end)).collect() };
+		assert_eq!(spans(&unders), [(Rule::Single, 0, 5), (Rule::Curly, 6, 11), (Rule::Double, 12, 18), (Rule::Dotted, 19, 22), (Rule::Dashed, 23, 27), (Rule::Single, 33, 36),]);
 		assert_eq!(spans(&strikes), [(Rule::Strike, 28, 32)]);
 		let red = palette::readable([255, 0, 0], [0; 3], settings.min_contrast());
 		let colors: Vec<_> = unders.iter().map(|s| s.color).collect();
@@ -10160,14 +8051,7 @@ mod tests {
 		for column in 0..6 {
 			let cell = &row[Column(column)];
 			assert!(cell.flags.contains(Flags::BOLD), "column {column}");
-			let rules = cell_rules(
-				cell,
-				[200; 3],
-				[0; 3],
-				term.colors(),
-				&settings,
-				&mut readable,
-			);
+			let rules = cell_rules(cell, [200; 3], [0; 3], term.colors(), &settings, &mut readable);
 			unders.push(rules.under.map(|(rule, _)| rule));
 		}
 		let double = Some(Rule::Double);
@@ -10181,41 +8065,20 @@ mod tests {
 	#[test]
 	fn the_rules_stay_inside_their_cells() {
 		use crate::gfx::QuadMode;
-		let all = [
-			Rule::Single,
-			Rule::Double,
-			Rule::Curly,
-			Rule::Dotted,
-			Rule::Dashed,
-			Rule::Strike,
-		];
+		let all = [Rule::Single, Rule::Double, Rule::Curly, Rule::Dotted, Rule::Dashed, Rule::Strike];
 		for height in 6..=64u8 {
 			let cell_h = f32::from(height);
 			let cell_w = (cell_h * 0.5).round();
 			let (thick, drop) = underline_metrics(cell_h);
 			for rule in all {
-				let span = RuleSpan {
-					rule,
-					color: [1, 2, 3],
-					row: 3,
-					y: 100.0,
-					first: 2,
-					end: 5,
-				};
+				let span = RuleSpan { rule, color: [1, 2, 3], row: 3, y: 100.0, first: 2, end: 5 };
 				let mut out = Vec::new();
 				span_quads(&span, 10.0, (cell_w, cell_h), None, &mut out);
-				assert_eq!(
-					out.len(),
-					if rule == Rule::Double { 2 } else { 1 },
-					"{rule:?}"
-				);
+				assert_eq!(out.len(), if rule == Rule::Double { 2 } else { 1 }, "{rule:?}");
 				for quad in &out {
 					assert_eq!(quad.pos[0], 10.0 + 2.0 * cell_w);
 					assert_eq!(quad.size[0], 3.0 * cell_w);
-					assert!(
-						quad.pos[1] >= 100.0 && quad.pos[1] + quad.size[1] <= 100.0 + cell_h,
-						"{rule:?} at {cell_h}: {quad:?}"
-					);
+					assert!(quad.pos[1] >= 100.0 && quad.pos[1] + quad.size[1] <= 100.0 + cell_h, "{rule:?} at {cell_h}: {quad:?}");
 				}
 				let mode = match rule {
 					Rule::Single | Rule::Double | Rule::Strike => QuadMode::Solid,
@@ -10234,19 +8097,8 @@ mod tests {
 				}
 				let mut clipped = Vec::new();
 				let (clip_t, clip_b) = (100.0, 100.0 + drop);
-				span_quads(
-					&span,
-					10.0,
-					(cell_w, cell_h),
-					Some((clip_t, clip_b)),
-					&mut clipped,
-				);
-				assert!(
-					clipped
-						.iter()
-						.all(|quad| quad.pos[1] >= clip_t && quad.pos[1] + quad.size[1] <= clip_b),
-					"{rule:?} at {cell_h}: {clipped:?}"
-				);
+				span_quads(&span, 10.0, (cell_w, cell_h), Some((clip_t, clip_b)), &mut clipped);
+				assert!(clipped.iter().all(|quad| quad.pos[1] >= clip_t && quad.pos[1] + quad.size[1] <= clip_b), "{rule:?} at {cell_h}: {clipped:?}");
 				if rule == Rule::Single {
 					assert!(clipped.is_empty());
 				}
@@ -10267,12 +8119,7 @@ mod tests {
 			ctx.cell_w = cell_w;
 			ctx.cell_h = cell_h;
 			for n in 1..300 {
-				let rect = Rect {
-					x: 0.0,
-					y: 0.0,
-					w: n as f32 * cell_w + 8.0,
-					h: n as f32 * cell_h + 8.0,
-				};
+				let rect = Rect { x: 0.0, y: 0.0, w: n as f32 * cell_w + 8.0, h: n as f32 * cell_h + 8.0 };
 				let (_, _, cols, lines) = content_dims(rect, &ctx);
 				assert_eq!((cols, lines), (n, n), "{cell_w}x{cell_h}");
 			}

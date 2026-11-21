@@ -5,10 +5,7 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use glyphon::cosmic_text::fontdb;
-use glyphon::{
-	Attrs, Buffer, Cache, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
-	SwashContent, TextArea, TextAtlas, TextRenderer, Viewport, Wrap,
-};
+use glyphon::{Attrs, Buffer, Cache, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache, SwashContent, TextArea, TextAtlas, TextRenderer, Viewport, Wrap};
 
 use crate::coloremoji::{ColorGlyphs, ColorMetrics};
 use crate::config;
@@ -33,8 +30,7 @@ static MONO_PINNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBoo
 /// Every font change and new window resolves the families again, and a leak per
 /// resolve grew for as long as the process ran.
 pub(crate) fn intern(text: String) -> &'static str {
-	static KEPT: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<&'static str>>> =
-		std::sync::OnceLock::new();
+	static KEPT: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<&'static str>>> = std::sync::OnceLock::new();
 	let mut kept = crate::locks::lock(KEPT.get_or_init(Default::default));
 	if let Some(&have) = kept.get(text.as_str()) {
 		return have;
@@ -102,15 +98,7 @@ fn pin_mono_family(fs: &FontSystem) {
 pub fn text_blend(fg: [u8; 3], bg: [u8; 3], amount: f32) -> (f32, f32, f32) {
 	let (fg_gray, bg_gray) = (gray_of(fg), gray_of(bg));
 	let on = crate::palette::to_oklab(fg).0 < crate::palette::to_oklab(bg).0;
-	(
-		fg_gray,
-		bg_gray,
-		if on {
-			amount.clamp(0.0, crate::config::MAX_DARK_ON_LIGHT)
-		} else {
-			0.0
-		},
-	)
+	(fg_gray, bg_gray, if on { amount.clamp(0.0, crate::config::MAX_DARK_ON_LIGHT) } else { 0.0 })
 }
 
 // A color as the sRGB gray of the same brightness. Rec.709 luma in linear light,
@@ -162,31 +150,15 @@ fn ui_family() -> Option<&'static str> {
 
 // Nearest face the family has to (weight, slant); None when the family
 // has no faces at all (shouldn't happen for a db-validated name).
-fn nearest_face(
-	db: &fontdb::Database,
-	fam: &str,
-	want_weight: u16,
-	want_italic: bool,
-) -> Option<(u16, bool)> {
+fn nearest_face(db: &fontdb::Database, fam: &str, want_weight: u16, want_italic: bool) -> Option<(u16, bool)> {
 	let mut best: Option<(u16, bool)> = None;
 	for face in db.faces() {
 		if !face.families.iter().any(|(name, _)| name == fam) {
 			continue;
 		}
 		let is_italic = face.style == fontdb::Style::Italic;
-		let candidate = (
-			is_italic != want_italic,
-			face.weight.0.abs_diff(want_weight),
-			face.weight.0,
-		);
-		let beats = best.is_none_or(|(best_weight, best_italic)| {
-			candidate
-				< (
-					best_italic != want_italic,
-					best_weight.abs_diff(want_weight),
-					best_weight,
-				)
-		});
+		let candidate = (is_italic != want_italic, face.weight.0.abs_diff(want_weight), face.weight.0);
+		let beats = best.is_none_or(|(best_weight, best_italic)| candidate < (best_italic != want_italic, best_weight.abs_diff(want_weight), best_weight));
 		if beats {
 			best = Some((face.weight.0, is_italic));
 		}
@@ -210,12 +182,10 @@ fn pin_ui_family(fs: &FontSystem) {
 	let (body_weight, body_italic, title_weight) = match name {
 		Some(family_name) => {
 			let db = fs.db();
-			let (weight, italic) =
-				nearest_face(db, family_name, want_weight, want_italic).unwrap_or((400, false));
+			let (weight, italic) = nearest_face(db, family_name, want_weight, want_italic).unwrap_or((400, false));
 			// emphasis (dialog titles/headers): the family's nearest face to 700,
 			// again snapped so it can't leave the family
-			let title_weight = nearest_face(db, family_name, 700, italic)
-				.map_or(weight, |(nearest_weight, _)| nearest_weight);
+			let title_weight = nearest_face(db, family_name, 700, italic).map_or(weight, |(nearest_weight, _)| nearest_weight);
 			(weight, italic && want_italic, title_weight)
 		}
 		None => (400, false, 700),
@@ -233,11 +203,7 @@ fn ui_vmetrics(fs: &mut FontSystem, ui_px: f32) -> (f32, f32, f32) {
 	use std::sync::atomic::Ordering;
 	let want_weight = fontdb::Weight(UI_WEIGHT.load(Ordering::Relaxed));
 	let id = {
-		let query = fontdb::Query {
-			families: &[ui_family().map_or(fontdb::Family::SansSerif, fontdb::Family::Name)],
-			weight: want_weight,
-			..Default::default()
-		};
+		let query = fontdb::Query { families: &[ui_family().map_or(fontdb::Family::SansSerif, fontdb::Family::Name)], weight: want_weight, ..Default::default() };
 		fs.db().query(&query)
 	};
 	let fallback = (ui_px * 0.8, ui_px * 0.2, ui_px * 0.7);
@@ -247,11 +213,7 @@ fn ui_vmetrics(fs: &mut FontSystem, ui_px: f32) -> (f32, f32, f32) {
 	let metrics = font.as_swash().metrics(&[]);
 	let scale = ui_px / f32::from(metrics.units_per_em).max(1.0);
 	// an old OS/2 table has no cap height
-	let cap = if metrics.cap_height > 0.0 {
-		metrics.cap_height * scale
-	} else {
-		fallback.2
-	};
+	let cap = if metrics.cap_height > 0.0 { metrics.cap_height * scale } else { fallback.2 };
 	(metrics.ascent * scale, metrics.descent * scale, cap)
 }
 
@@ -287,13 +249,7 @@ fn ui_baseline_in_buf(ui_line_h: f32, vmetrics: (f32, f32)) -> f32 {
 // on a whole pixel. Sentence-case labels, like the settings tabs, take this:
 // line-box centering moves with each font's ascent and descent split, and a
 // half-pixel baseline blurs some rows and not others.
-fn ui_cap_center_top(
-	ui_line_h: f32,
-	vmetrics: (f32, f32),
-	cap: f32,
-	bar_top: f32,
-	bar_h: f32,
-) -> f32 {
+fn ui_cap_center_top(ui_line_h: f32, vmetrics: (f32, f32), cap: f32, bar_top: f32, bar_h: f32) -> f32 {
 	let baseline = (bar_top + f32::midpoint(bar_h, cap)).round();
 	baseline - ui_baseline_in_buf(ui_line_h, vmetrics)
 }
@@ -355,36 +311,11 @@ fn resolve_ui_family(fs: &FontSystem) -> Option<String> {
 	// returns the db's own spelling of the family, since cosmic-text's fallback
 	// compares face family names case-sensitively
 	let installed = |fam: &str| {
-		let query = fontdb::Query {
-			families: &[fontdb::Family::Name(fam)],
-			..Default::default()
-		};
-		db.query(&query)
-			.and_then(|id| db.face(id))
-			.and_then(|face| {
-				face.families
-					.iter()
-					.find(|(name, _)| name.eq_ignore_ascii_case(fam))
-					.map(|(name, _)| name.clone())
-			})
+		let query = fontdb::Query { families: &[fontdb::Family::Name(fam)], ..Default::default() };
+		db.query(&query).and_then(|id| db.face(id)).and_then(|face| face.families.iter().find(|(name, _)| name.eq_ignore_ascii_case(fam)).map(|(name, _)| name.clone()))
 	};
-	let curated = [
-		"DejaVu Sans",
-		"Noto Sans",
-		"Liberation Sans",
-		"Cantarell",
-		"Ubuntu",
-		"Segoe UI",
-		"Helvetica Neue",
-		"Arial",
-	];
-	crate::sysfont::interface()
-		.family
-		.as_deref()
-		.into_iter()
-		.chain(crate::sysfont::sans_serif())
-		.chain(curated)
-		.find_map(installed)
+	let curated = ["DejaVu Sans", "Noto Sans", "Liberation Sans", "Cantarell", "Ubuntu", "Segoe UI", "Helvetica Neue", "Arial"];
+	crate::sysfont::interface().family.as_deref().into_iter().chain(crate::sysfont::sans_serif()).chain(curated).find_map(installed)
 }
 
 // The family search order, in full, whether or not any of it is installed. Same
@@ -395,12 +326,7 @@ fn resolve_ui_family(fs: &FontSystem) -> Option<String> {
 // None and automatic gives the built-in stack there, with no special case for
 // it. Kept pure so the order can be tested without a font db.
 fn mono_candidates(os_family: Option<&str>, family: &str) -> Vec<String> {
-	let split = |list: &str| {
-		list.split(',')
-			.map(|name| name.trim().to_string())
-			.filter(|name| !name.is_empty())
-			.collect::<Vec<_>>()
-	};
+	let split = |list: &str| list.split(',').map(|name| name.trim().to_string()).filter(|name| !name.is_empty()).collect::<Vec<_>>();
 	let mut candidates = split(family);
 	candidates.extend(os_family.map(str::to_string));
 	// The built-in stack is the last resort everywhere, ahead of the bare
@@ -427,17 +353,8 @@ fn resolve_mono_family_in(fs: &FontSystem, family: &str) -> Option<String> {
 	let db = fs.db();
 
 	let installed = |fam: &str| {
-		let query = fontdb::Query {
-			families: &[fontdb::Family::Name(fam)],
-			..Default::default()
-		};
-		db.query(&query)
-			.and_then(|id| db.face(id))
-			.is_some_and(|face| {
-				face.families
-					.iter()
-					.any(|(name, _)| name.eq_ignore_ascii_case(fam))
-			})
+		let query = fontdb::Query { families: &[fontdb::Family::Name(fam)], ..Default::default() };
+		db.query(&query).and_then(|id| db.face(id)).is_some_and(|face| face.families.iter().any(|(name, _)| name.eq_ignore_ascii_case(fam)))
 	};
 
 	for fam in mono_candidates(crate::sysfont::monospace().family.as_deref(), family) {
@@ -446,15 +363,8 @@ fn resolve_mono_family_in(fs: &FontSystem, family: &str) -> Option<String> {
 		}
 	}
 
-	let query = fontdb::Query {
-		families: &[fontdb::Family::Monospace],
-		..Default::default()
-	};
-	db.query(&query)
-		.and_then(|id| db.face(id))?
-		.families
-		.first()
-		.map(|(name, _)| name.clone())
+	let query = fontdb::Query { families: &[fontdb::Family::Monospace], ..Default::default() };
+	db.query(&query).and_then(|id| db.face(id))?.families.first().map(|(name, _)| name.clone())
 }
 
 pub struct TextCtx {
@@ -517,11 +427,7 @@ pub struct TextCtx {
 
 impl std::fmt::Debug for TextCtx {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("TextCtx")
-			.field("scale", &self.scale)
-			.field("cell_w", &self.cell_w)
-			.field("cell_h", &self.cell_h)
-			.finish_non_exhaustive()
+		f.debug_struct("TextCtx").field("scale", &self.scale).field("cell_w", &self.cell_w).field("cell_h", &self.cell_h).finish_non_exhaustive()
 	}
 }
 
@@ -550,29 +456,18 @@ struct TextGpu {
 
 const DETACHED: &str = "text drawn while its GPU half is released";
 
-#[allow(
-	clippy::expect_used,
-	reason = "the window draws only between attach_gpu and detach_gpu (G114)"
-)]
+#[allow(clippy::expect_used, reason = "the window draws only between attach_gpu and detach_gpu (G114)")]
 fn attached(gpu: &mut Option<TextGpu>) -> &mut TextGpu {
 	gpu.as_mut().expect(DETACHED)
 }
 
-#[allow(
-	clippy::expect_used,
-	reason = "the window draws only between attach_gpu and detach_gpu (G114)"
-)]
+#[allow(clippy::expect_used, reason = "the window draws only between attach_gpu and detach_gpu (G114)")]
 fn attached_ref(gpu: Option<&TextGpu>) -> &TextGpu {
 	gpu.expect(DETACHED)
 }
 
 impl TextGpu {
-	fn new(
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		format: wgpu::TextureFormat,
-		loss: &Loss,
-	) -> Self {
+	fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat, loss: &Loss) -> Self {
 		let cache = Cache::new(device);
 		let mut atlas = TextAtlas::new(device, queue, &cache, format);
 		// The scrim text pass renders into its own coverage texture
@@ -584,28 +479,11 @@ impl TextGpu {
 		let mut viewport = Viewport::new(device, &cache);
 		// Acts only where `set_text_blend` turns the correction on.
 		viewport.set_text_contrast(queue, crate::config::DARK_ON_LIGHT_CONTRAST);
-		let renderer =
-			TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
-		let overlay =
-			TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
+		let renderer = TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
+		let overlay = TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
 		let tip = TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
-		let scrim = TextRenderer::new(
-			&mut scrim_atlas,
-			device,
-			wgpu::MultisampleState::default(),
-			None,
-		);
-		Self {
-			atlas,
-			scrim_atlas,
-			viewport,
-			viewport_size: (0, 0),
-			renderer,
-			overlay,
-			tip,
-			scrim,
-			loss: loss.clone(),
-		}
+		let scrim = TextRenderer::new(&mut scrim_atlas, device, wgpu::MultisampleState::default(), None);
+		Self { atlas, scrim_atlas, viewport, viewport_size: (0, 0), renderer, overlay, tip, scrim, loss: loss.clone() }
 	}
 }
 
@@ -630,26 +508,11 @@ impl TextCtx {
 	/// `SILK_MEMDBG`: rasterized glyphs kept on the heap, and the font faces known.
 	pub fn memdbg_line(&self) -> String {
 		let images = &self.swash_cache.image_cache;
-		let bytes: usize = images
-			.values()
-			.flatten()
-			.map(|image| image.data.len())
-			.sum();
-		format!(
-			"glyphs: {} rasterized, {:.1} MiB; {} font faces",
-			images.len(),
-			crate::memdbg::mib(bytes),
-			self.font_system.db().len()
-		)
+		let bytes: usize = images.values().flatten().map(|image| image.data.len()).sum();
+		format!("glyphs: {} rasterized, {:.1} MiB; {} font faces", images.len(), crate::memdbg::mib(bytes), self.font_system.db().len())
 	}
 
-	pub fn new(
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		format: wgpu::TextureFormat,
-		loss: &Loss,
-		scale: f32,
-	) -> Self {
+	pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat, loss: &Loss, scale: f32) -> Self {
 		let mut ctx = Self::new_cpu(scale);
 		ctx.attach_gpu(device, queue, format, loss);
 		ctx
@@ -657,13 +520,7 @@ impl TextCtx {
 
 	/// The device half again, on a new device. The atlases start empty, so the
 	/// next frame rasterizes what it shows.
-	pub fn attach_gpu(
-		&mut self,
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		format: wgpu::TextureFormat,
-		loss: &Loss,
-	) {
+	pub fn attach_gpu(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat, loss: &Loss) {
 		self.gpu = Some(TextGpu::new(device, queue, format, loss));
 	}
 
@@ -694,28 +551,18 @@ impl TextCtx {
 		// Chrome follows the desktop UI font size, converted like the mono path;
 		// terminal size is the fallback so the old chrome look is kept where no
 		// desktop setting is readable.
-		let ui_px = crate::sysfont::interface()
-			.size_pt
-			.map(crate::sysfont::px_from_pt)
-			.filter(|px| *px >= 4.0)
-			.unwrap_or_else(config::effective_font_size);
+		let ui_px = crate::sysfont::interface().size_pt.map(crate::sysfont::px_from_pt).filter(|px| *px >= 4.0).unwrap_or_else(config::effective_font_size);
 		let ui_px_at_1x = ui_px.round().max(8.0);
 		let ui_px = (ui_px * scale).round().max(8.0);
 		let ui_line_h = (ui_px * 1.35).round(); // roomy UI leading; descenders must clear buttons
 		let ui_metrics = Metrics::new(ui_px, ui_line_h);
 		let (ascent, descent, ui_cap) = ui_vmetrics(&mut font_system, ui_px);
 		let ui_vmetrics = (ascent, descent);
-		UI_INK_PER_LINE.store(
-			((ui_cap + 2.0 * descent) / ui_line_h).to_bits(),
-			std::sync::atomic::Ordering::Relaxed,
-		);
+		UI_INK_PER_LINE.store(((ui_cap + 2.0 * descent) / ui_line_h).to_bits(), std::sync::atomic::Ordering::Relaxed);
 
 		let mono_face = {
 			let fam = mono_family();
-			let query = fontdb::Query {
-				families: &[fam.map_or(fontdb::Family::Monospace, fontdb::Family::Name)],
-				..Default::default()
-			};
+			let query = fontdb::Query { families: &[fam.map_or(fontdb::Family::Monospace, fontdb::Family::Name)], ..Default::default() };
 			font_system.db().query(&query)
 		};
 
@@ -753,10 +600,7 @@ impl TextCtx {
 		let family = resolve_mono_family_in(&self.font_system, &font.family);
 		let mut attrs = Attrs::new();
 		attrs.family = family.as_deref().map_or(Family::Monospace, Family::Name);
-		(
-			measure_cell_in(&mut self.font_system, metrics, &attrs),
-			metrics.line_height.max(1.0),
-		)
+		(measure_cell_in(&mut self.font_system, metrics, &attrs), metrics.line_height.max(1.0))
 	}
 
 	/// A chrome measurement written in DIP, in physical pixels at this display's
@@ -797,19 +641,16 @@ impl TextCtx {
 		if let Some(&cached) = self.cover_cache.get(&ch) {
 			return cached;
 		}
-		let cells = self
-			.mono_face
-			.and_then(|id| self.font_system.get_font(id, fontdb::Weight::NORMAL))
-			.map_or(0, |font| {
-				let face = font.as_swash();
-				let glyph = face.charmap().map(ch);
-				if glyph == 0 {
-					return 0;
-				}
-				let metrics = face.glyph_metrics(&[]);
-				let unit = metrics.advance_width(face.charmap().map('M'));
-				advance_cells(metrics.advance_width(glyph), unit)
-			});
+		let cells = self.mono_face.and_then(|id| self.font_system.get_font(id, fontdb::Weight::NORMAL)).map_or(0, |font| {
+			let face = font.as_swash();
+			let glyph = face.charmap().map(ch);
+			if glyph == 0 {
+				return 0;
+			}
+			let metrics = face.glyph_metrics(&[]);
+			let unit = metrics.advance_width(face.charmap().map('M'));
+			advance_cells(metrics.advance_width(glyph), unit)
+		});
 		self.cover_cache.insert(ch, cells);
 		cells
 	}
@@ -838,11 +679,7 @@ impl TextCtx {
 	pub fn new_plain_buffer(&mut self) -> Buffer {
 		let mut buf = Buffer::new(&mut self.font_system, self.metrics);
 		buf.set_wrap(&mut self.font_system, Wrap::None);
-		buf.set_size(
-			&mut self.font_system,
-			Some(self.cell_w * 2.5),
-			Some(self.cell_h),
-		);
+		buf.set_size(&mut self.font_system, Some(self.cell_w * 2.5), Some(self.cell_h));
 		buf
 	}
 
@@ -878,21 +715,8 @@ impl TextCtx {
 	// set in, which is how a green check mark in a git prompt came out purple.
 	// Reshape against a face that has no color glyph for it, and keep what the
 	// first attempt gave if there is no such face.
-	fn unpaint(
-		&mut self,
-		buf: &mut Buffer,
-		ch: char,
-		attrs: &Attrs,
-		ink: Ink,
-		want: Option<f32>,
-	) -> (f32, f32, f32) {
-		let placed = |ink: &Ink| {
-			(
-				ink.width,
-				ink.left,
-				want.map_or(0.0, |base| base - ink.baseline),
-			)
-		};
+	fn unpaint(&mut self, buf: &mut Buffer, ch: char, attrs: &Attrs, ink: Ink, want: Option<f32>) -> (f32, f32, f32) {
+		let placed = |ink: &Ink| (ink.width, ink.left, want.map_or(0.0, |base| base - ink.baseline));
 		if !ink.painted || crate::coloremoji::wants_color(ch) {
 			return placed(&ink);
 		}
@@ -935,13 +759,7 @@ impl TextCtx {
 	/// `top` for a chrome buffer whose capitals center in the bar, baseline
 	/// snapped to a whole pixel. For the settings tab titles.
 	pub fn ui_cap_top(&self, bar_top: f32, bar_h: f32) -> f32 {
-		ui_cap_center_top(
-			self.ui_line_h,
-			self.ui_vmetrics,
-			self.ui_cap,
-			bar_top,
-			bar_h,
-		)
+		ui_cap_center_top(self.ui_line_h, self.ui_vmetrics, self.ui_cap, bar_top, bar_h)
 	}
 
 	/// As `ui_text_top`, but centering the whole ink box, for tab titles.
@@ -1000,11 +818,7 @@ impl TextCtx {
 	pub fn new_ui_buffer(&mut self, w_px: f32, h_px: f32) -> Buffer {
 		let mut buf = Buffer::new(&mut self.font_system, self.ui_metrics);
 		buf.set_wrap(&mut self.font_system, Wrap::None);
-		buf.set_size(
-			&mut self.font_system,
-			Some(w_px.max(1.0)),
-			Some(h_px.max(1.0)),
-		);
+		buf.set_size(&mut self.font_system, Some(w_px.max(1.0)), Some(h_px.max(1.0)));
 		buf
 	}
 
@@ -1016,28 +830,18 @@ impl TextCtx {
 		// glyphon lays out at the font's natural advance and the text drifts
 		// from the grid across a line.
 		buf.set_monospace_width(&mut self.font_system, Some(self.cell_w));
-		buf.set_size(
-			&mut self.font_system,
-			Some(w_px.max(1.0)),
-			Some(h_px.max(1.0)),
-		);
+		buf.set_size(&mut self.font_system, Some(w_px.max(1.0)), Some(h_px.max(1.0)));
 		buf
 	}
 
 	pub fn resize_buffer(&mut self, buf: &mut Buffer, w_px: f32, h_px: f32) {
-		buf.set_size(
-			&mut self.font_system,
-			Some(w_px.max(1.0)),
-			Some(h_px.max(1.0)),
-		);
+		buf.set_size(&mut self.font_system, Some(w_px.max(1.0)), Some(h_px.max(1.0)));
 	}
 
 	/// Set the coverage correction for every renderer sharing this context. Cheap
 	/// per frame: the uniform is only rewritten when the value changes.
 	pub fn set_text_blend(&mut self, queue: &wgpu::Queue, blend: (f32, f32, f32)) {
-		self.gpu()
-			.viewport
-			.set_text_blend(queue, blend.0, blend.1, blend.2);
+		self.gpu().viewport.set_text_blend(queue, blend.0, blend.1, blend.2);
 	}
 
 	pub fn update_viewport(&mut self, queue: &wgpu::Queue, w: u32, h: u32) {
@@ -1047,51 +851,19 @@ impl TextCtx {
 			return;
 		}
 		gpu.viewport_size = (w, h);
-		gpu.viewport.update(
-			queue,
-			Resolution {
-				width: w,
-				height: h,
-			},
-		);
+		gpu.viewport.update(queue, Resolution { width: w, height: h });
 	}
 
-	pub fn prepare<'a>(
-		&mut self,
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		areas: impl IntoIterator<Item = TextArea<'a>>,
-	) -> Result<(), glyphon::PrepareError> {
+	pub fn prepare<'a>(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, areas: impl IntoIterator<Item = TextArea<'a>>) -> Result<(), glyphon::PrepareError> {
 		// Destructured so the color-glyph lookup can borrow alongside the renderer
 		// and font system (disjoint fields of the same struct).
-		let Self {
-			gpu,
-			font_system,
-			swash_cache,
-			color_glyphs,
-			..
-		} = self;
-		let TextGpu {
-			renderer,
-			atlas,
-			viewport,
-			loss,
-			..
-		} = attached(gpu);
+		let Self { gpu, font_system, swash_cache, color_glyphs, .. } = self;
+		let TextGpu { renderer, atlas, viewport, loss, .. } = attached(gpu);
 		// the frame is refused anyway, before or at its acquire or present
 		if loss.lost() {
 			return Ok(());
 		}
-		renderer.prepare_with_custom(
-			device,
-			queue,
-			font_system,
-			atlas,
-			viewport,
-			areas,
-			swash_cache,
-			|req| color_glyphs.raster(req),
-		)
+		renderer.prepare_with_custom(device, queue, font_system, atlas, viewport, areas, swash_cache, |req| color_glyphs.raster(req))
 	}
 
 	pub fn render(&self, pass: &mut wgpu::RenderPass<'_>) -> Result<(), glyphon::RenderError> {
@@ -1099,66 +871,27 @@ impl TextCtx {
 		gpu.renderer.render(&gpu.atlas, &gpu.viewport, pass)
 	}
 
-	pub fn prepare_overlay<'a>(
-		&mut self,
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		areas: impl IntoIterator<Item = TextArea<'a>>,
-	) -> Result<(), glyphon::PrepareError> {
-		let Self {
-			gpu,
-			font_system,
-			swash_cache,
-			..
-		} = self;
+	pub fn prepare_overlay<'a>(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, areas: impl IntoIterator<Item = TextArea<'a>>) -> Result<(), glyphon::PrepareError> {
+		let Self { gpu, font_system, swash_cache, .. } = self;
 		let gpu = attached(gpu);
 		if gpu.loss.lost() {
 			return Ok(());
 		}
-		gpu.overlay.prepare(
-			device,
-			queue,
-			font_system,
-			&mut gpu.atlas,
-			&gpu.viewport,
-			areas,
-			swash_cache,
-		)
+		gpu.overlay.prepare(device, queue, font_system, &mut gpu.atlas, &gpu.viewport, areas, swash_cache)
 	}
 
-	pub fn render_overlay(
-		&self,
-		pass: &mut wgpu::RenderPass<'_>,
-	) -> Result<(), glyphon::RenderError> {
+	pub fn render_overlay(&self, pass: &mut wgpu::RenderPass<'_>) -> Result<(), glyphon::RenderError> {
 		let gpu = attached_ref(self.gpu.as_ref());
 		gpu.overlay.render(&gpu.atlas, &gpu.viewport, pass)
 	}
 
-	pub fn prepare_tip<'a>(
-		&mut self,
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		areas: impl IntoIterator<Item = TextArea<'a>>,
-	) -> Result<(), glyphon::PrepareError> {
-		let Self {
-			gpu,
-			font_system,
-			swash_cache,
-			..
-		} = self;
+	pub fn prepare_tip<'a>(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, areas: impl IntoIterator<Item = TextArea<'a>>) -> Result<(), glyphon::PrepareError> {
+		let Self { gpu, font_system, swash_cache, .. } = self;
 		let gpu = attached(gpu);
 		if gpu.loss.lost() {
 			return Ok(());
 		}
-		gpu.tip.prepare(
-			device,
-			queue,
-			font_system,
-			&mut gpu.atlas,
-			&gpu.viewport,
-			areas,
-			swash_cache,
-		)
+		gpu.tip.prepare(device, queue, font_system, &mut gpu.atlas, &gpu.viewport, areas, swash_cache)
 	}
 
 	pub fn render_tip(&self, pass: &mut wgpu::RenderPass<'_>) -> Result<(), glyphon::RenderError> {
@@ -1166,45 +899,16 @@ impl TextCtx {
 		gpu.tip.render(&gpu.atlas, &gpu.viewport, pass)
 	}
 
-	pub fn prepare_scrim<'a>(
-		&mut self,
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		areas: impl IntoIterator<Item = TextArea<'a>>,
-	) -> Result<(), glyphon::PrepareError> {
-		let Self {
-			gpu,
-			font_system,
-			swash_cache,
-			color_glyphs,
-			..
-		} = self;
-		let TextGpu {
-			scrim,
-			scrim_atlas,
-			viewport,
-			loss,
-			..
-		} = attached(gpu);
+	pub fn prepare_scrim<'a>(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, areas: impl IntoIterator<Item = TextArea<'a>>) -> Result<(), glyphon::PrepareError> {
+		let Self { gpu, font_system, swash_cache, color_glyphs, .. } = self;
+		let TextGpu { scrim, scrim_atlas, viewport, loss, .. } = attached(gpu);
 		if loss.lost() {
 			return Ok(());
 		}
-		scrim.prepare_with_custom(
-			device,
-			queue,
-			font_system,
-			scrim_atlas,
-			viewport,
-			areas,
-			swash_cache,
-			|req| color_glyphs.raster(req),
-		)
+		scrim.prepare_with_custom(device, queue, font_system, scrim_atlas, viewport, areas, swash_cache, |req| color_glyphs.raster(req))
 	}
 
-	pub fn render_scrim(
-		&self,
-		pass: &mut wgpu::RenderPass<'_>,
-	) -> Result<(), glyphon::RenderError> {
+	pub fn render_scrim(&self, pass: &mut wgpu::RenderPass<'_>) -> Result<(), glyphon::RenderError> {
 		let gpu = attached_ref(self.gpu.as_ref());
 		gpu.scrim.render(&gpu.scrim_atlas, &gpu.viewport, pass)
 	}
@@ -1218,10 +922,7 @@ impl TextCtx {
 
 fn cell_metrics(font_size: f32, scale: f32) -> Metrics {
 	let font_px = (font_size * scale).round();
-	Metrics::new(
-		font_px,
-		(font_px * config::settings().line_height_scale).round(),
-	)
+	Metrics::new(font_px, (font_px * config::settings().line_height_scale).round())
 }
 
 // Measure the per-cell advance the render buffer produces, shaped with
@@ -1243,10 +944,7 @@ fn measure_cell_in(fs: &mut FontSystem, metrics: Metrics, attrs: &Attrs) -> f32 
 	buf.set_size(fs, None, None);
 	buf.set_text(fs, &"M".repeat(N), attrs, Shaping::Advanced, None);
 	buf.shape_until_scroll(fs, false);
-	buf.layout_runs()
-		.next()
-		.map_or(metrics.font_size * 0.6, |run| run.line_w / N as f32)
-		.max(1.0)
+	buf.layout_runs().next().map_or(metrics.font_size * 0.6, |run| run.line_w / N as f32).max(1.0)
 }
 
 // Does a bold run shape to the same advance as the regular pitch cell_w? Shaped
@@ -1264,10 +962,7 @@ fn bold_matches_cell(fs: &mut FontSystem, metrics: Metrics, cell_w: f32) -> bool
 	attrs.weight = fontdb::Weight(MONO_WEIGHT_BOLD.load(std::sync::atomic::Ordering::Relaxed));
 	buf.set_text(fs, &"M".repeat(N), &attrs, Shaping::Advanced, None);
 	buf.shape_until_scroll(fs, false);
-	let adv = buf
-		.layout_runs()
-		.next()
-		.map_or(cell_w, |run| run.line_w / N as f32);
+	let adv = buf.layout_runs().next().map_or(cell_w, |run| run.line_w / N as f32);
 	(adv - cell_w).abs() < 0.1
 }
 
@@ -1286,21 +981,9 @@ struct Ink {
 // Shape `ch` into `buf` and measure its rasterized ink as `(width_px, left_px)`.
 // None when the face draws nothing: no glyph for it, or a glyph that rasterizes
 // empty, as a color-bitmap emoji face does through swash.
-fn shaped_ink(
-	fs: &mut FontSystem,
-	swash: &mut SwashCache,
-	buf: &mut Buffer,
-	ch: char,
-	attrs: &Attrs,
-) -> Option<Ink> {
+fn shaped_ink(fs: &mut FontSystem, swash: &mut SwashCache, buf: &mut Buffer, ch: char, attrs: &Attrs) -> Option<Ink> {
 	let mut utf8_buf = [0u8; 4];
-	buf.set_text(
-		fs,
-		ch.encode_utf8(&mut utf8_buf),
-		attrs,
-		Shaping::Advanced,
-		None,
-	);
+	buf.set_text(fs, ch.encode_utf8(&mut utf8_buf), attrs, Shaping::Advanced, None);
 	buf.shape_until_scroll(fs, false);
 	let run = buf.layout_runs().next()?;
 	let baseline = run.line_y;
@@ -1309,12 +992,7 @@ fn shaped_ink(
 	if image.placement.width == 0 || image.placement.height == 0 {
 		return None;
 	}
-	Some(Ink {
-		width: image.placement.width as f32,
-		left: phys.x as f32 + image.placement.left as f32,
-		painted: image.content == SwashContent::Color,
-		baseline,
-	})
+	Some(Ink { width: image.placement.width as f32, left: phys.x as f32 + image.placement.left as f32, painted: image.content == SwashContent::Color, baseline })
 }
 
 /// Whole cells across `len` pixels, one at least. A length a grid asked for
@@ -1340,10 +1018,7 @@ pub fn reuse_areas<'a>(mut areas: Vec<TextArea<'_>>) -> Vec<TextArea<'a>> {
 	areas.clear();
 	// Collecting a Vec's own iterator into an item of the same layout keeps its
 	// buffer (dfe85 checks it). The list is empty, so nothing is ever mapped.
-	#[allow(
-		clippy::unnecessary_filter_map,
-		reason = "filter would keep the old lifetime, which is what this drops"
-	)]
+	#[allow(clippy::unnecessary_filter_map, reason = "filter would keep the old lifetime, which is what this drops")]
 	areas.into_iter().filter_map(|_| None).collect()
 }
 
@@ -1359,15 +1034,7 @@ mod tests {
 	fn reused_areas_keep_their_buffer() {
 		let mut text = TextCtx::new_cpu(1.0);
 		let buf = text.new_ui_buffer(100.0, 20.0);
-		let area = |left| TextArea {
-			buffer: &buf,
-			left,
-			top: 0.0,
-			scale: 1.0,
-			bounds: glyphon::TextBounds::default(),
-			default_color: glyphon::Color::rgb(0, 0, 0),
-			custom_glyphs: &[],
-		};
+		let area = |left| TextArea { buffer: &buf, left, top: 0.0, scale: 1.0, bounds: glyphon::TextBounds::default(), default_color: glyphon::Color::rgb(0, 0, 0), custom_glyphs: &[] };
 		let mut areas: Vec<TextArea> = (0..40).map(|i| area(i as f32)).collect();
 		let (at, room) = (areas.as_ptr() as usize, areas.capacity());
 		let before = crate::perf::thread_allocs();
@@ -1423,24 +1090,14 @@ mod tests {
 	#[test]
 	fn a_length_of_whole_cells_counts_every_cell() {
 		assert_eq!(cells_across(144.0, 9.6), 15);
-		assert_eq!(
-			cells_across(143.9, 9.6),
-			14,
-			"a real part cell is still cut"
-		);
+		assert_eq!(cells_across(143.9, 9.6), 14, "a real part cell is still cut");
 		assert_eq!(cells_across(0.0, 9.6), 1, "always at least one cell");
 		assert_eq!(cells_across(-5.0, 9.6), 1);
-		for cell in [
-			7.0, 8.4, 9.6, 10.65, 10.8, 12.578_125, 13.33, 16.2, 19.2, 24.0,
-		] {
+		for cell in [7.0, 8.4, 9.6, 10.65, 10.8, 12.578_125, 13.33, 16.2, 19.2, 24.0] {
 			for n in 1..1000 {
 				let len = n as f32 * cell;
 				assert_eq!(cells_across(len, cell), n, "{cell} x {n}");
-				assert_eq!(
-					cells_across(len - 0.5, cell),
-					(n - 1).max(1),
-					"{cell} x {n} short"
-				);
+				assert_eq!(cells_across(len - 0.5, cell), (n - 1).max(1), "{cell} x {n} short");
 			}
 		}
 	}
@@ -1454,10 +1111,7 @@ mod tests {
 		let again = intern(String::from("Interned Sans Test"));
 		assert!(std::ptr::eq(first, again));
 		assert_eq!(again, "Interned Sans Test");
-		assert!(!std::ptr::eq(
-			first,
-			intern(String::from("Interned Mono Test"))
-		));
+		assert!(!std::ptr::eq(first, intern(String::from("Interned Mono Test"))));
 	}
 
 	// Only dark-on-light gets the correction. Applying it the other way would
@@ -1469,24 +1123,15 @@ mod tests {
 		assert_eq!(text_blend(black, white, 1.0).2, 1.0);
 		assert_eq!(text_blend(white, black, 1.0).2, 0.0);
 		// a light theme's real pair, as well as the extremes
-		assert_eq!(
-			text_blend([0x30, 0x2c, 0x28], [0xf2, 0xef, 0xe9], 1.0).2,
-			1.0
-		);
-		assert_eq!(
-			text_blend([0xd8, 0xd4, 0xcc], [0x1c, 0x1c, 0x22], 1.0).2,
-			0.0
-		);
+		assert_eq!(text_blend([0x30, 0x2c, 0x28], [0xf2, 0xef, 0xe9], 1.0).2, 1.0);
+		assert_eq!(text_blend([0xd8, 0xd4, 0xcc], [0x1c, 0x1c, 0x22], 1.0).2, 0.0);
 		// nothing to correct where both are the same
 		assert_eq!(text_blend(white, white, 1.0).2, 0.0);
 		// the setting off means the shader takes its old path either way
 		assert_eq!(text_blend(black, white, 0.0).2, 0.0);
 		// the headroom above the blend is real, and it stops somewhere
 		assert_eq!(text_blend(black, white, 1.6).2, 1.6);
-		assert_eq!(
-			text_blend(black, white, 9.0).2,
-			crate::config::MAX_DARK_ON_LIGHT
-		);
+		assert_eq!(text_blend(black, white, 9.0).2, crate::config::MAX_DARK_ON_LIGHT);
 	}
 
 	// The pair the curve is built from spans the real pair's own brightness, and
@@ -1512,10 +1157,7 @@ mod tests {
 	// sRGB match, mirrored here.
 	fn ink(fg: [u8; 3], bg: [u8; 3], contrast: f32) -> f32 {
 		let (fg_g, bg_g, amount) = text_blend(fg, bg, 1.0);
-		let (fg_l, bg_l) = (
-			crate::config::to_linear_f32(fg_g),
-			crate::config::to_linear_f32(bg_g),
-		);
+		let (fg_l, bg_l) = (crate::config::to_linear_f32(fg_g), crate::config::to_linear_f32(bg_g));
 		let steps = 100;
 		let mut sum = 0.0;
 		for step in 0..steps {
@@ -1541,16 +1183,9 @@ mod tests {
 	fn light_text_puts_down_the_ink_dark_text_does() {
 		for (name, t) in crate::theme::THEMES {
 			let dark = ink(t.dark.fg, t.dark.bg, crate::config::DARK_ON_LIGHT_CONTRAST);
-			let light = ink(
-				t.light.fg,
-				t.light.bg,
-				crate::config::DARK_ON_LIGHT_CONTRAST,
-			);
+			let light = ink(t.light.fg, t.light.bg, crate::config::DARK_ON_LIGHT_CONTRAST);
 			let ratio = light / dark;
-			assert!(
-				(0.95..=1.12).contains(&ratio),
-				"{name}: light mode puts down {ratio:.3} of dark mode's ink"
-			);
+			assert!((0.95..=1.12).contains(&ratio), "{name}: light mode puts down {ratio:.3} of dark mode's ink");
 			let plain = ink(t.light.fg, t.light.bg, 0.0) / dark;
 			assert!(plain < 0.85, "{name}: {plain:.3} with no lift");
 		}
@@ -1566,11 +1201,7 @@ mod tests {
 		let unit = 1240.0; // Monaspace Argon's own ASCII advance, in font units
 		assert_eq!(advance_cells(unit, unit), 1);
 		assert_eq!(advance_cells(unit * 2.0, unit), 2);
-		assert_eq!(
-			advance_cells(unit * 1.02, unit),
-			1,
-			"hinting slack is not a cell"
-		);
+		assert_eq!(advance_cells(unit * 1.02, unit), 1, "hinting slack is not a cell");
 		assert_eq!(advance_cells(0.0, unit), 0);
 		// A face that reports no usable advance keeps the shared-buffer path.
 		assert_eq!(advance_cells(0.0, 0.0), 1);
@@ -1582,20 +1213,14 @@ mod tests {
 	// Test ID: ddq9d
 	#[test]
 	fn mono_candidates_put_the_family_first_and_the_built_in_stack_last() {
-		let builtin: Vec<String> = config::DEFAULT_FONT_STACK
-			.split(',')
-			.map(|name| name.trim().to_string())
-			.collect();
+		let builtin: Vec<String> = config::DEFAULT_FONT_STACK.split(',').map(|name| name.trim().to_string()).collect();
 		let set = mono_candidates(Some("OS Mono"), "Alpha, Beta");
 		assert_eq!(set[..3], ["Alpha", "Beta", "OS Mono"]);
 		assert!(set.ends_with(&builtin), "built-in stack must back it up");
 		// automatic hands the desktop's own family in, and it isn't tried twice
 		let automatic = mono_candidates(Some("OS Mono"), "OS Mono");
 		assert_eq!(automatic[0], "OS Mono");
-		assert_eq!(
-			automatic.iter().filter(|name| *name == "OS Mono").count(),
-			1
-		);
+		assert_eq!(automatic.iter().filter(|name| *name == "OS Mono").count(), 1);
 		// Windows reports no family, so automatic is the built-in stack alone
 		assert_eq!(mono_candidates(None, config::DEFAULT_FONT_STACK), builtin);
 		// an empty stack leaves no blank entries behind
@@ -1656,10 +1281,7 @@ mod tests {
 		let mut generic = mono_attrs();
 		generic.family = Family::Monospace;
 		for ch in ['\u{1F680}', '\u{1F525}', '\u{1F49A}'] {
-			assert!(
-				shaped_ink(&mut fs, &mut swash, &mut buf, ch, &generic).is_some(),
-				"no ink for {ch:?}"
-			);
+			assert!(shaped_ink(&mut fs, &mut swash, &mut buf, ch, &generic).is_some(), "no ink for {ch:?}");
 		}
 	}
 
@@ -1675,11 +1297,7 @@ mod tests {
 			let top = ui_visible_center_top(ui_line_h, vmetrics, bar_top, bar_h);
 			let baseline = top + ui_baseline_in_buf(ui_line_h, vmetrics);
 			let visible_center = baseline - vmetrics.0 / 2.0; // midpoint of ascender..baseline
-			assert!(
-				(visible_center - (bar_top + bar_h / 2.0)).abs() < 0.01,
-				"visible center {visible_center} != bar center {}",
-				bar_top + bar_h / 2.0
-			);
+			assert!((visible_center - (bar_top + bar_h / 2.0)).abs() < 0.01, "visible center {visible_center} != bar center {}", bar_top + bar_h / 2.0);
 		}
 	}
 
@@ -1695,10 +1313,7 @@ mod tests {
 			let baseline = top + ui_baseline_in_buf(ui_line_h, vmetrics);
 			let above = baseline - vmetrics.0 - bar_top;
 			let below = bar_top + bar_h - (baseline + vmetrics.1);
-			assert!(
-				(above - below).abs() < 0.01,
-				"above {above} != below {below}"
-			);
+			assert!((above - below).abs() < 0.01, "above {above} != below {below}");
 		}
 	}
 
@@ -1708,26 +1323,15 @@ mod tests {
 	// Test ID: df452
 	#[test]
 	fn chrome_caps_center_in_bar_on_a_whole_pixel() {
-		for &(vmetrics, cap) in &[
-			((13.6f32, 3.4f32), 9.8f32),
-			((16.2, 4.9), 11.3),
-			((11.0, 2.6), 8.0),
-		] {
+		for &(vmetrics, cap) in &[((13.6f32, 3.4f32), 9.8f32), ((16.2, 4.9), 11.3), ((11.0, 2.6), 8.0)] {
 			let ui_line_h = 23.0;
-			for &(bar_top, bar_h) in &[(0.0f32, 29.0f32), (29.0, 29.0), (10.5, 40.0), (7.25, 27.5)]
-			{
+			for &(bar_top, bar_h) in &[(0.0f32, 29.0f32), (29.0, 29.0), (10.5, 40.0), (7.25, 27.5)] {
 				let top = ui_cap_center_top(ui_line_h, vmetrics, cap, bar_top, bar_h);
 				let baseline = top + ui_baseline_in_buf(ui_line_h, vmetrics);
-				assert!(
-					(baseline - baseline.round()).abs() < 0.001,
-					"baseline {baseline} is between pixels"
-				);
+				assert!((baseline - baseline.round()).abs() < 0.001, "baseline {baseline} is between pixels");
 				let above = baseline - cap - bar_top;
 				let below = bar_top + bar_h - baseline;
-				assert!(
-					(above - below).abs() <= 1.0 + 0.001,
-					"above {above} below {below}"
-				);
+				assert!((above - below).abs() <= 1.0 + 0.001, "above {above} below {below}");
 			}
 		}
 	}
@@ -1740,10 +1344,7 @@ mod tests {
 		let line_h = 23.0;
 		for &(cap, descent) in &[(9.8f32, 3.4f32), (10.0, 7.5), (8.0, 1.0)] {
 			let h = band_floor(line_h, (cap + 2.0 * descent) / line_h);
-			assert!(
-				(h - cap) / 2.0 >= descent + DESCENT_CLEAR - 0.001,
-				"cap {cap} descent {descent} band {h}"
-			);
+			assert!((h - cap) / 2.0 >= descent + DESCENT_CLEAR - 0.001, "cap {cap} descent {descent} band {h}");
 		}
 	}
 
@@ -1777,16 +1378,9 @@ mod tests {
 		b.shape_until_scroll(&mut fs, false);
 		for run in b.layout_runs() {
 			for g in run.glyphs {
-				let fams: Vec<String> = fs
-					.db()
-					.face(g.font_id)
-					.map(|f| f.families.iter().map(|(n, _)| n.clone()).collect())
-					.unwrap_or_default();
+				let fams: Vec<String> = fs.db().face(g.font_id).map(|f| f.families.iter().map(|(n, _)| n.clone()).collect()).unwrap_or_default();
 				eprintln!("glyph font: {fams:?} weight_req={:?}", attrs.weight);
-				assert!(
-					fams.iter().any(|n| n == want),
-					"chrome glyph shaped in {fams:?}, not the pinned family {want:?}"
-				);
+				assert!(fams.iter().any(|n| n == want), "chrome glyph shaped in {fams:?}, not the pinned family {want:?}");
 			}
 		}
 	}
@@ -1809,17 +1403,8 @@ mod tests {
 		};
 		attrs.weight = mono_bold_weight();
 		// the pinned weight must be one the family has
-		let shipped: Vec<u16> = fs
-			.db()
-			.faces()
-			.filter(|f| f.families.iter().any(|(n, _)| n == want))
-			.map(|f| f.weight.0)
-			.collect();
-		assert!(
-			shipped.contains(&mono_bold_weight().0),
-			"bold weight {} not among {want:?}'s faces (has {shipped:?})",
-			mono_bold_weight().0
-		);
+		let shipped: Vec<u16> = fs.db().faces().filter(|f| f.families.iter().any(|(n, _)| n == want)).map(|f| f.weight.0).collect();
+		assert!(shipped.contains(&mono_bold_weight().0), "bold weight {} not among {want:?}'s faces (has {shipped:?})", mono_bold_weight().0);
 		let mut b = Buffer::new(&mut fs, Metrics::new(16.0, 20.0));
 		b.set_monospace_width(&mut fs, Some(9.0));
 		b.set_size(&mut fs, Some(400.0), Some(30.0));
@@ -1827,15 +1412,8 @@ mod tests {
 		b.shape_until_scroll(&mut fs, false);
 		for run in b.layout_runs() {
 			for g in run.glyphs {
-				let fams: Vec<String> = fs
-					.db()
-					.face(g.font_id)
-					.map(|f| f.families.iter().map(|(n, _)| n.clone()).collect())
-					.unwrap_or_default();
-				assert!(
-					fams.iter().any(|n| n == want),
-					"bold mono glyph shaped in {fams:?}, not the pinned family {want:?}"
-				);
+				let fams: Vec<String> = fs.db().face(g.font_id).map(|f| f.families.iter().map(|(n, _)| n.clone()).collect()).unwrap_or_default();
+				assert!(fams.iter().any(|n| n == want), "bold mono glyph shaped in {fams:?}, not the pinned family {want:?}");
 			}
 		}
 	}
@@ -1859,19 +1437,10 @@ mod tests {
 			let cw = measure_cell(&mut fs, metrics);
 			let mut buf = Buffer::new(&mut fs, metrics);
 			buf.set_size(&mut fs, None, None);
-			buf.set_text(
-				&mut fs,
-				&"M".repeat(120),
-				&mono_attrs(),
-				Shaping::Advanced,
-				None,
-			);
+			buf.set_text(&mut fs, &"M".repeat(120), &mono_attrs(), Shaping::Advanced, None);
 			buf.shape_until_scroll(&mut fs, false);
 			let line_w = buf.layout_runs().next().map_or(0.0, |run| run.line_w);
-			assert!(
-				(line_w - 120.0 * cw).abs() < 0.5,
-				"at {size}px 120 cells of {cw} miss the text's {line_w}"
-			);
+			assert!((line_w - 120.0 * cw).abs() < 0.5, "at {size}px 120 cells of {cw} miss the text's {line_w}");
 		}
 	}
 
@@ -1925,21 +1494,13 @@ mod tests {
 		}
 		assert!(ctx.covered_at('A', 1));
 		// chars the grid gives 2 cells
-		let wide = [
-			'\u{FF01}', '\u{FF21}', '\u{2705}', '\u{26A1}', '\u{231B}', '\u{2615}', '\u{4E2D}',
-		];
+		let wide = ['\u{FF01}', '\u{FF21}', '\u{2705}', '\u{26A1}', '\u{231B}', '\u{2615}', '\u{4E2D}'];
 		let Some(ch) = wide.into_iter().find(|&ch| ctx.face_cells(ch) == 1) else {
 			eprintln!("the mono face draws none of {wide:?} at one cell; skipping");
 			return;
 		};
-		assert!(
-			ctx.covered_at(ch, 1),
-			"{ch:?} rides the row buffer as one cell"
-		);
-		assert!(
-			!ctx.covered_at(ch, 2),
-			"{ch:?} at one cell must not fill the grid's two"
-		);
+		assert!(ctx.covered_at(ch, 1), "{ch:?} rides the row buffer as one cell");
+		assert!(!ctx.covered_at(ch, 2), "{ch:?} at one cell must not fill the grid's two");
 	}
 
 	// Attrs read before the first text context used to have the generic family
@@ -1950,25 +1511,10 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn attrs_read_before_the_first_context_match_the_context() {
-		let out = std::process::Command::new(std::env::current_exe().unwrap())
-			.args([
-				"--exact",
-				"text::tests::attrs_before_context_child",
-				"--nocapture",
-			])
-			.env("SILK_ATTRS_FIRST", "1")
-			.output()
-			.unwrap();
+		let out = std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact", "text::tests::attrs_before_context_child", "--nocapture"]).env("SILK_ATTRS_FIRST", "1").output().unwrap();
 		let text = String::from_utf8_lossy(&out.stdout);
-		assert!(
-			out.status.success(),
-			"{text}{}",
-			String::from_utf8_lossy(&out.stderr)
-		);
-		assert!(
-			text.contains("attrs_child_ran"),
-			"the child did nothing: {text}"
-		);
+		assert!(out.status.success(), "{text}{}", String::from_utf8_lossy(&out.stderr));
+		assert!(text.contains("attrs_child_ran"), "the child did nothing: {text}");
 	}
 
 	// Test ID: ddwmj
@@ -1985,10 +1531,7 @@ mod tests {
 		let probe = "2026-10-09 Blink rate 10080";
 		// measured past the context's memo, which is keyed by text alone
 		let metrics = ctx.ui_metrics;
-		let (early, late) = (
-			ctx.measure_at(probe, &ui_first, metrics),
-			ctx.measure_at(probe, &ui_attrs(), metrics),
-		);
+		let (early, late) = (ctx.measure_at(probe, &ui_first, metrics), ctx.measure_at(probe, &ui_attrs(), metrics));
 		println!("ui {:?} {early} vs {late}", ui_attrs().family);
 		assert_eq!(ui_first, ui_attrs());
 		assert_eq!(ui_bold_first, ui_bold_weight());

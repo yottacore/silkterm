@@ -82,11 +82,7 @@ pub struct ColorGlyphs {
 // Counts only: the rasters are pixel buffers.
 impl std::fmt::Debug for ColorGlyphs {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("ColorGlyphs")
-			.field("chars", &self.chars.len())
-			.field("rasters", &self.rasters.len())
-			.field("frame", &self.frame)
-			.finish_non_exhaustive()
+		f.debug_struct("ColorGlyphs").field("chars", &self.chars.len()).field("rasters", &self.rasters.len()).field("frame", &self.frame).finish_non_exhaustive()
 	}
 }
 
@@ -117,13 +113,7 @@ pub fn wants_color(ch: char) -> bool {
 
 impl ColorGlyphs {
 	pub fn new() -> Self {
-		Self {
-			faces: None,
-			lookup: HashMap::new(),
-			chars: Vec::new(),
-			rasters: HashMap::new(),
-			frame: 0,
-		}
+		Self { faces: None, lookup: HashMap::new(), chars: Vec::new(), rasters: HashMap::new(), frame: 0 }
 	}
 
 	/// Does `ch` have a color glyph, and how big is it in design units? None for
@@ -134,11 +124,7 @@ impl ColorGlyphs {
 		}
 		if let Some(hit) = self.lookup.get(&ch) {
 			let hit = (*hit)?;
-			return Some(ColorMetrics {
-				id: hit.id,
-				box_w: hit.box_w,
-				box_h: hit.box_h,
-			});
+			return Some(ColorMetrics { id: hit.id, box_w: hit.box_w, box_h: hit.box_h });
 		}
 		// u16 ids: 65k distinct color glyphs is far past any real font's coverage,
 		// but refuse (cache as a miss) rather than wrap onto a live id.
@@ -149,11 +135,7 @@ impl ColorGlyphs {
 		});
 		self.lookup.insert(ch, found);
 		let found = found?;
-		Some(ColorMetrics {
-			id: found.id,
-			box_w: found.box_w,
-			box_h: found.box_h,
-		})
+		Some(ColorMetrics { id: found.id, box_w: found.box_w, box_h: found.box_h })
 	}
 
 	fn resolve(&mut self, db: &fontdb::Database, ch: char) -> Option<Resolved> {
@@ -166,25 +148,19 @@ impl ColorGlyphs {
 				// A ClipBox gives the exact painted extent; without one, fall back to
 				// the glyph's advance and the font's vertical extent. A color font
 				// fills that box closely enough for cell fitting.
-				let (x, y, w, h) =
-					match glyph.bounding_box(LocationRef::default(), Size::unscaled()) {
-						Some(bb) if bb.x_max > bb.x_min && bb.y_max > bb.y_min => {
-							(bb.x_min, bb.y_min, bb.x_max - bb.x_min, bb.y_max - bb.y_min)
+				let (x, y, w, h) = match glyph.bounding_box(LocationRef::default(), Size::unscaled()) {
+					Some(bb) if bb.x_max > bb.x_min && bb.y_max > bb.y_min => (bb.x_min, bb.y_min, bb.x_max - bb.x_min, bb.y_max - bb.y_min),
+					_ => {
+						let metrics = font.metrics(Size::unscaled(), LocationRef::default());
+						let adv = font.glyph_metrics(Size::unscaled(), LocationRef::default()).advance_width(gid).unwrap_or(metrics.units_per_em.into());
+						let top = metrics.ascent;
+						let bot = metrics.descent;
+						if adv <= 0.0 || top <= bot {
+							return None;
 						}
-						_ => {
-							let metrics = font.metrics(Size::unscaled(), LocationRef::default());
-							let adv = font
-								.glyph_metrics(Size::unscaled(), LocationRef::default())
-								.advance_width(gid)
-								.unwrap_or(metrics.units_per_em.into());
-							let top = metrics.ascent;
-							let bot = metrics.descent;
-							if adv <= 0.0 || top <= bot {
-								return None;
-							}
-							(0.0, bot, adv, top - bot)
-						}
-					};
+						(0.0, bot, adv, top - bot)
+					}
+				};
 				Some(Resolved {
 					id: 0, // assigned by metrics() on first sight
 					face,
@@ -226,9 +202,7 @@ impl ColorGlyphs {
 		let Some(Some(res)) = self.lookup.get(&ch).copied() else {
 			return;
 		};
-		let rgba = db
-			.with_face_data(res.face, |data, index| paint(data, index, &res, w, h))
-			.flatten();
+		let rgba = db.with_face_data(res.face, |data, index| paint(data, index, &res, w, h)).flatten();
 		if let Some(rgba) = rgba {
 			self.sweep();
 			self.rasters.insert((id, w, h), (self.frame, rgba));
@@ -258,17 +232,8 @@ impl ColorGlyphs {
 		if req.width == 0 || req.height == 0 {
 			return None;
 		}
-		let data = self
-			.rasters
-			.get(&(req.id, req.width, req.height))
-			.map_or_else(
-				|| vec![0u8; req.width as usize * req.height as usize * 4],
-				|(_, data)| data.clone(),
-			);
-		Some(RasterizedCustomGlyph {
-			data,
-			content_type: ContentType::Color,
-		})
+		let data = self.rasters.get(&(req.id, req.width, req.height)).map_or_else(|| vec![0u8; req.width as usize * req.height as usize * 4], |(_, data)| data.clone());
+		Some(RasterizedCustomGlyph { data, content_type: ContentType::Color })
 	}
 }
 
@@ -284,13 +249,7 @@ pub fn text_families(db: &fontdb::Database, ch: char) -> Option<String> {
 		if !info.monospaced && first.is_some() {
 			continue;
 		}
-		let plain = db.with_face_data(info.id, |data, index| {
-			FontRef::from_index(data, index).is_ok_and(|font| {
-				font.charmap()
-					.map(ch)
-					.is_some_and(|gid| font.color_glyphs().get(gid).is_none())
-			})
-		});
+		let plain = db.with_face_data(info.id, |data, index| FontRef::from_index(data, index).is_ok_and(|font| font.charmap().map(ch).is_some_and(|gid| font.color_glyphs().get(gid).is_none())));
 		if plain != Some(true) {
 			continue;
 		}
@@ -308,16 +267,7 @@ pub fn text_families(db: &fontdb::Database, ch: char) -> Option<String> {
 // Faces with a COLR table. fontdb memory-maps its sources, so this touches
 // little more than each file's table directory.
 fn color_faces(db: &fontdb::Database) -> Vec<fontdb::ID> {
-	db.faces()
-		.filter(|info| {
-			db.with_face_data(info.id, |data, index| {
-				FontRef::from_index(data, index)
-					.ok()
-					.is_some_and(|font| font.colr().is_ok())
-			}) == Some(true)
-		})
-		.map(|info| info.id)
-		.collect()
+	db.faces().filter(|info| db.with_face_data(info.id, |data, index| FontRef::from_index(data, index).ok().is_some_and(|font| font.colr().is_ok())) == Some(true)).map(|info| info.id).collect()
 }
 
 // Paint one color glyph into a straight-alpha sRGB RGBA buffer of `w`x`h`.
@@ -328,40 +278,9 @@ fn paint(data: &[u8], index: u32, res: &Resolved, w: u16, h: u16) -> Option<Vec<
 	// Design box -> pixels, flipping the font's y-up axis to the bitmap's y-down.
 	let sx = w as f32 / res.box_w;
 	let sy = h as f32 / res.box_h;
-	let base = Transform {
-		xx: sx,
-		yx: 0.0,
-		xy: 0.0,
-		yy: -sy,
-		dx: -res.box_x * sx,
-		dy: (res.box_y + res.box_h) * sy,
-	};
-	let palette = ColorPalettes::new(&font)
-		.get(0)
-		.map(|p| {
-			p.colors()
-				.iter()
-				.map(|c| {
-					[
-						f32::from(c.red) / 255.0,
-						f32::from(c.green) / 255.0,
-						f32::from(c.blue) / 255.0,
-						f32::from(c.alpha) / 255.0,
-					]
-				})
-				.collect()
-		})
-		.unwrap_or_default();
-	let mut painter = Painter {
-		outlines: font.outline_glyphs(),
-		palette,
-		w,
-		h,
-		layers: vec![vec![0.0; w * h * 4]],
-		clips: Vec::new(),
-		xforms: vec![base],
-		overflowed: false,
-	};
+	let base = Transform { xx: sx, yx: 0.0, xy: 0.0, yy: -sy, dx: -res.box_x * sx, dy: (res.box_y + res.box_h) * sy };
+	let palette = ColorPalettes::new(&font).get(0).map(|p| p.colors().iter().map(|c| [f32::from(c.red) / 255.0, f32::from(c.green) / 255.0, f32::from(c.blue) / 255.0, f32::from(c.alpha) / 255.0]).collect()).unwrap_or_default();
+	let mut painter = Painter { outlines: font.outline_glyphs(), palette, w, h, layers: vec![vec![0.0; w * h * 4]], clips: Vec::new(), xforms: vec![base], overflowed: false };
 	glyph.paint(LocationRef::default(), &mut painter).ok()?;
 	Some(painter.finish())
 }
@@ -395,22 +314,14 @@ impl Painter<'_> {
 	fn cover(&self, path: &[Command]) -> Vec<u8> {
 		let mut buf = vec![0u8; self.w * self.h];
 		if !path.is_empty() {
-			Mask::new(path)
-				.format(Format::Alpha)
-				.origin(Origin::TopLeft)
-				.size(self.w as u32, self.h as u32)
-				.render_into(&mut buf, None);
+			Mask::new(path).format(Format::Alpha).origin(Origin::TopLeft).size(self.w as u32, self.h as u32).render_into(&mut buf, None);
 		}
 		buf
 	}
 
 	fn push_cover(&mut self, mask: Vec<u8>) {
 		let merged = match self.clips.last() {
-			Some(parent) => parent
-				.iter()
-				.zip(&mask)
-				.map(|(&a, &b)| ((u16::from(a) * u16::from(b) + 127) / 255) as u8)
-				.collect(),
+			Some(parent) => parent.iter().zip(&mask).map(|(&a, &b)| ((u16::from(a) * u16::from(b) + 127) / 255) as u8).collect(),
 			None => mask,
 		};
 		self.clips.push(merged);
@@ -443,11 +354,7 @@ impl Painter<'_> {
 			if t >= a.offset && t <= b.offset {
 				let span = b.offset - a.offset;
 				// Coincident stops are a hard color break; take the later one.
-				let f = if span > f32::EPSILON {
-					(t - a.offset) / span
-				} else {
-					1.0
-				};
+				let f = if span > f32::EPSILON { (t - a.offset) / span } else { 1.0 };
 				let (ca, cb) = (self.stop_color(a), self.stop_color(b));
 				let mut out = [0.0; 4];
 				for c in 0..4 {
@@ -472,10 +379,7 @@ impl Painter<'_> {
 		if index == 0xFFFF {
 			return [1.0, 1.0, 1.0, 1.0];
 		}
-		self.palette
-			.get(index as usize)
-			.copied()
-			.unwrap_or([1.0, 1.0, 1.0, 1.0])
+		self.palette.get(index as usize).copied().unwrap_or([1.0, 1.0, 1.0, 1.0])
 	}
 
 	fn finish(mut self) -> Vec<u8> {
@@ -519,21 +423,12 @@ impl ColorPainter for Painter<'_> {
 		let m = self.cur();
 		// The box is axis-aligned in paint space but can arrive rotated here, so
 		// walk its corners rather than transforming 2 of them.
-		let corners = [
-			(clip_box.x_min, clip_box.y_min),
-			(clip_box.x_max, clip_box.y_min),
-			(clip_box.x_max, clip_box.y_max),
-			(clip_box.x_min, clip_box.y_max),
-		];
+		let corners = [(clip_box.x_min, clip_box.y_min), (clip_box.x_max, clip_box.y_min), (clip_box.x_max, clip_box.y_max), (clip_box.x_min, clip_box.y_max)];
 		let mut path = Vec::with_capacity(5);
 		for (i, &(x, y)) in corners.iter().enumerate() {
 			let (dx, dy) = m.transform(x, y);
 			let p = ZPoint::new(dx, dy);
-			path.push(if i == 0 {
-				Command::MoveTo(p)
-			} else {
-				Command::LineTo(p)
-			});
+			path.push(if i == 0 { Command::MoveTo(p) } else { Command::LineTo(p) });
 		}
 		path.push(Command::Close);
 		let mask = self.cover(&path);
@@ -547,13 +442,7 @@ impl ColorPainter for Painter<'_> {
 	fn fill(&mut self, brush: Brush<'_>) {
 		let m = self.cur();
 		let shade = Shade::new(self, &brush, m);
-		let Self {
-			w,
-			h,
-			layers,
-			clips,
-			..
-		} = self;
+		let Self { w, h, layers, clips, .. } = self;
 		let (w, h) = (*w, *h);
 		let Some(dst) = layers.last_mut() else {
 			return;
@@ -610,10 +499,7 @@ impl ColorPainter for Painter<'_> {
 		composite(dst, &src, composite_mode);
 	}
 
-	fn paint_cached_color_glyph(
-		&mut self,
-		_glyph: GlyphId,
-	) -> Result<skrifa::color::PaintCachedColorGlyph, PaintError> {
+	fn paint_cached_color_glyph(&mut self, _glyph: GlyphId) -> Result<skrifa::color::PaintCachedColorGlyph, PaintError> {
 		// No sub-glyph cache here; let skrifa traverse the referenced subgraph.
 		Ok(skrifa::color::PaintCachedColorGlyph::Unimplemented)
 	}
@@ -626,10 +512,7 @@ impl Painter<'_> {
 		let Some(outline) = self.outlines.get(gid) else {
 			return Vec::new();
 		};
-		let mut pen = PathPen {
-			m: self.cur(),
-			path: Vec::new(),
-		};
+		let mut pen = PathPen { m: self.cur(), path: Vec::new() };
 		let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
 		if outline.draw(settings, &mut pen).is_err() {
 			return Vec::new();
@@ -680,51 +563,21 @@ impl OutlinePen for PathPen {
 // back rather than transforming the gradient itself.
 enum Shade {
 	Solid([f32; 4]),
-	Linear {
-		inv: Transform,
-		p0: (f32, f32),
-		d: (f32, f32),
-		len2: f32,
-		ramp: Vec<[f32; 4]>,
-		extend: Extend,
-	},
-	Radial {
-		inv: Transform,
-		c0: (f32, f32),
-		r0: f32,
-		cd: (f32, f32),
-		dr: f32,
-		ramp: Vec<[f32; 4]>,
-		extend: Extend,
-	},
-	Sweep {
-		inv: Transform,
-		c0: (f32, f32),
-		start: f32,
-		sweep: f32,
-		ramp: Vec<[f32; 4]>,
-		extend: Extend,
-	},
+	Linear { inv: Transform, p0: (f32, f32), d: (f32, f32), len2: f32, ramp: Vec<[f32; 4]>, extend: Extend },
+	Radial { inv: Transform, c0: (f32, f32), r0: f32, cd: (f32, f32), dr: f32, ramp: Vec<[f32; 4]>, extend: Extend },
+	Sweep { inv: Transform, c0: (f32, f32), start: f32, sweep: f32, ramp: Vec<[f32; 4]>, extend: Extend },
 	None,
 }
 
 impl Shade {
 	fn new(painter: &Painter<'_>, brush: &Brush<'_>, m: Transform) -> Self {
 		match brush {
-			Brush::Solid {
-				palette_index,
-				alpha,
-			} => {
+			Brush::Solid { palette_index, alpha } => {
 				let mut color = painter.color(*palette_index);
 				color[3] *= alpha;
 				Shade::Solid(color)
 			}
-			Brush::LinearGradient {
-				p0,
-				p1,
-				color_stops,
-				extend,
-			} => {
+			Brush::LinearGradient { p0, p1, color_stops, extend } => {
 				let Some(inv) = invert(m) else {
 					return Shade::None;
 				};
@@ -733,43 +586,15 @@ impl Shade {
 				if len2 <= f32::EPSILON {
 					return Shade::Solid(painter.stop_at(color_stops, 0.0));
 				}
-				Shade::Linear {
-					inv,
-					p0: (p0.x, p0.y),
-					d,
-					len2,
-					ramp: painter.ramp(color_stops),
-					extend: *extend,
-				}
+				Shade::Linear { inv, p0: (p0.x, p0.y), d, len2, ramp: painter.ramp(color_stops), extend: *extend }
 			}
-			Brush::RadialGradient {
-				c0,
-				r0,
-				c1,
-				r1,
-				color_stops,
-				extend,
-			} => {
+			Brush::RadialGradient { c0, r0, c1, r1, color_stops, extend } => {
 				let Some(inv) = invert(m) else {
 					return Shade::None;
 				};
-				Shade::Radial {
-					inv,
-					c0: (c0.x, c0.y),
-					r0: *r0,
-					cd: (c1.x - c0.x, c1.y - c0.y),
-					dr: r1 - r0,
-					ramp: painter.ramp(color_stops),
-					extend: *extend,
-				}
+				Shade::Radial { inv, c0: (c0.x, c0.y), r0: *r0, cd: (c1.x - c0.x, c1.y - c0.y), dr: r1 - r0, ramp: painter.ramp(color_stops), extend: *extend }
 			}
-			Brush::SweepGradient {
-				c0,
-				start_angle,
-				end_angle,
-				color_stops,
-				extend,
-			} => {
+			Brush::SweepGradient { c0, start_angle, end_angle, color_stops, extend } => {
 				let Some(inv) = invert(m) else {
 					return Shade::None;
 				};
@@ -777,14 +602,7 @@ impl Shade {
 				if sweep.abs() <= f32::EPSILON {
 					return Shade::Solid(painter.stop_at(color_stops, 0.0));
 				}
-				Shade::Sweep {
-					inv,
-					c0: (c0.x, c0.y),
-					start: *start_angle,
-					sweep,
-					ramp: painter.ramp(color_stops),
-					extend: *extend,
-				}
+				Shade::Sweep { inv, c0: (c0.x, c0.y), start: *start_angle, sweep, ramp: painter.ramp(color_stops), extend: *extend }
 			}
 		}
 	}
@@ -793,39 +611,17 @@ impl Shade {
 		match self {
 			Shade::None => None,
 			Shade::Solid(color) => Some(*color),
-			Shade::Linear {
-				inv,
-				p0,
-				d,
-				len2,
-				ramp,
-				extend,
-			} => {
+			Shade::Linear { inv, p0, d, len2, ramp, extend } => {
 				let (u, v) = inv.transform(x, y);
 				let t = ((u - p0.0) * d.0 + (v - p0.1) * d.1) / len2;
 				Some(sample(ramp, t, *extend))
 			}
-			Shade::Radial {
-				inv,
-				c0,
-				r0,
-				cd,
-				dr,
-				ramp,
-				extend,
-			} => {
+			Shade::Radial { inv, c0, r0, cd, dr, ramp, extend } => {
 				let (u, v) = inv.transform(x, y);
 				let t = conical(*c0, *r0, *cd, *dr, u, v)?;
 				Some(sample(ramp, t, *extend))
 			}
-			Shade::Sweep {
-				inv,
-				c0,
-				start,
-				sweep,
-				ramp,
-				extend,
-			} => {
+			Shade::Sweep { inv, c0, start, sweep, ramp, extend } => {
 				let (u, v) = inv.transform(x, y);
 				// skrifa hands back clockwise angles; font space is y-up, so negate.
 				let mut deg = -(v - c0.1).atan2(u - c0.0).to_degrees();
@@ -895,14 +691,7 @@ fn invert(m: Transform) -> Option<Transform> {
 		return None;
 	}
 	let inv = 1.0 / det;
-	Some(Transform {
-		xx: m.yy * inv,
-		yx: -m.yx * inv,
-		xy: -m.xy * inv,
-		yy: m.xx * inv,
-		dx: (m.xy * m.dy - m.yy * m.dx) * inv,
-		dy: (m.yx * m.dx - m.xx * m.dy) * inv,
-	})
+	Some(Transform { xx: m.yy * inv, yx: -m.yx * inv, xy: -m.xy * inv, yy: m.xx * inv, dx: (m.xy * m.dy - m.yy * m.dx) * inv, dy: (m.yx * m.dx - m.xx * m.dy) * inv })
 }
 
 // Merge `src` onto `dst`, both premultiplied. Porter-Duff modes reduce to a pair
@@ -934,7 +723,8 @@ fn pd_factors(mode: CompositeMode, sa: f32, ba: f32) -> Option<(f32, f32)> {
 		M::Clear => (0.0, 0.0),
 		M::Src => (1.0, 0.0),
 		M::Dest => (0.0, 1.0),
-		M::SrcOver => (1.0, 1.0 - sa),
+		// HSL modes need all 3 channels at once; they're very rare in real fonts, so they use the ordinary over.
+		M::SrcOver | M::HslHue | M::HslSaturation | M::HslColor | M::HslLuminosity | M::Unknown => (1.0, 1.0 - sa),
 		M::DestOver => (1.0 - ba, 1.0),
 		M::SrcIn => (ba, 0.0),
 		M::DestIn => (0.0, sa),
@@ -944,11 +734,6 @@ fn pd_factors(mode: CompositeMode, sa: f32, ba: f32) -> Option<(f32, f32)> {
 		M::DestAtop => (1.0 - ba, sa),
 		M::Xor => (1.0 - ba, 1.0 - sa),
 		M::Plus => (1.0, 1.0),
-		// HSL modes need all 3 channels at once; they're very rare in
-		// real fonts, so they use the ordinary over.
-		M::HslHue | M::HslSaturation | M::HslColor | M::HslLuminosity | M::Unknown => {
-			(1.0, 1.0 - sa)
-		}
 		_ => return None,
 	})
 }
@@ -1000,11 +785,7 @@ fn soft_light(cb: f32, cs: f32) -> f32 {
 	if cs <= 0.5 {
 		cb - (1.0 - 2.0 * cs) * cb * (1.0 - cb)
 	} else {
-		let d = if cb <= 0.25 {
-			((16.0 * cb - 12.0) * cb + 4.0) * cb
-		} else {
-			cb.sqrt()
-		};
+		let d = if cb <= 0.25 { ((16.0 * cb - 12.0) * cb + 4.0) * cb } else { cb.sqrt() };
 		cb + (2.0 * cs - 1.0) * (d - cb)
 	}
 }
@@ -1018,22 +799,10 @@ mod tests {
 	// Test ID: dc3tw
 	#[test]
 	fn a_dingbat_is_not_an_emoji() {
-		for ch in [
-			'\u{2714}', '\u{2718}', '\u{2713}', '\u{2717}', '\u{00a9}', '\u{00ae}', '\u{2122}',
-		] {
-			assert!(
-				!wants_color(ch),
-				"{ch:?} should be set in the terminal font"
-			);
+		for ch in ['\u{2714}', '\u{2718}', '\u{2713}', '\u{2717}', '\u{00a9}', '\u{00ae}', '\u{2122}'] {
+			assert!(!wants_color(ch), "{ch:?} should be set in the terminal font");
 		}
-		for ch in [
-			'\u{2705}',
-			'\u{274c}',
-			'\u{2728}',
-			'\u{2b50}',
-			'\u{1f600}',
-			'\u{1f1fa}',
-		] {
+		for ch in ['\u{2705}', '\u{274c}', '\u{2728}', '\u{2b50}', '\u{1f600}', '\u{1f1fa}'] {
 			assert!(wants_color(ch), "{ch:?} should be painted");
 		}
 	}
@@ -1067,14 +836,7 @@ mod tests {
 	#[test]
 	fn a_missing_raster_answers_with_transparent_pixels() {
 		let cg = ColorGlyphs::new();
-		let req = RasterizeCustomGlyphRequest {
-			id: 7,
-			width: 4,
-			height: 3,
-			x_bin: glyphon::cosmic_text::SubpixelBin::Zero,
-			y_bin: glyphon::cosmic_text::SubpixelBin::Zero,
-			scale: 1.0,
-		};
+		let req = RasterizeCustomGlyphRequest { id: 7, width: 4, height: 3, x_bin: glyphon::cosmic_text::SubpixelBin::Zero, y_bin: glyphon::cosmic_text::SubpixelBin::Zero, scale: 1.0 };
 		let got = cg.raster(req).expect("a miss still answers");
 		assert_eq!(got.data.len(), 4 * 3 * 4);
 		assert!(got.data.iter().all(|b| *b == 0), "and nothing shows");
@@ -1123,34 +885,15 @@ mod tests {
 			return;
 		};
 		glyphs.warm(&db, metrics.id, 48, 48);
-		let raster = glyphs
-			.raster(RasterizeCustomGlyphRequest {
-				id: metrics.id,
-				width: 48,
-				height: 48,
-				x_bin: glyphon::cosmic_text::SubpixelBin::Zero,
-				y_bin: glyphon::cosmic_text::SubpixelBin::Zero,
-				scale: 1.0,
-			})
-			.expect("no raster produced");
+		let raster = glyphs.raster(RasterizeCustomGlyphRequest { id: metrics.id, width: 48, height: 48, x_bin: glyphon::cosmic_text::SubpixelBin::Zero, y_bin: glyphon::cosmic_text::SubpixelBin::Zero, scale: 1.0 }).expect("no raster produced");
 		assert_eq!(raster.content_type, ContentType::Color);
 		assert_eq!(raster.data.len(), 48 * 48 * 4);
 		let opaque = raster.data.chunks_exact(4).filter(|p| p[3] > 128).count();
-		assert!(
-			opaque > 200,
-			"only {opaque} solid pixels - glyph came out blank"
-		);
+		assert!(opaque > 200, "only {opaque} solid pixels - glyph came out blank");
 		// "Color" means the channels differ somewhere; a monochrome
 		// outline would pass the coverage check above on its own.
-		let tinted = raster
-			.data
-			.chunks_exact(4)
-			.filter(|p| p[3] > 128 && p[0].abs_diff(p[2]) > 24)
-			.count();
-		assert!(
-			tinted > 100,
-			"only {tinted} colored pixels - looks monochrome"
-		);
+		let tinted = raster.data.chunks_exact(4).filter(|p| p[3] > 128 && p[0].abs_diff(p[2]) > 24).count();
+		assert!(tinted > 100, "only {tinted} colored pixels - looks monochrome");
 	}
 
 	// Porter-Duff SrcIn keeps only the part of the source covered by the backdrop,
@@ -1162,10 +905,7 @@ mod tests {
 		let src = vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
 		composite(&mut dst, &src, CompositeMode::SrcIn);
 		assert_eq!(dst[3], 0.0, "no backdrop -> nothing survives");
-		assert!(
-			(dst[7] - 0.2).abs() < 1e-6,
-			"backdrop alpha gates the source"
-		);
+		assert!((dst[7] - 0.2).abs() < 1e-6, "backdrop alpha gates the source");
 	}
 
 	// Extend modes set what happens past the ends of a color line.
