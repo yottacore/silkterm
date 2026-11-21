@@ -129,6 +129,147 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- Splitting a pane, or opening a tab from it, runs a script that was opened by double-click again
+	- ID: 2026112016030001
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: A window opened with `--open`, such as a script double-clicked on Windows, keeps the script as its pane's command. A split or a new tab from that pane copies the command, so the script runs a second time, without a question. Whatever it changes, it changes again.
+	- Expected behavior: A split or new tab from such a pane starts the default shell in the same folder. A pane started with `--shell` still passes its shell on.
+	- Reproduced: No. Traced from `--open` through the first pane to the split and new tab paths.
+	- Possible cause: `--open` puts the file's run line in the launch shell, and splits and new tabs copy the pane's command.
+	- Origin: c6eaa043, 20260628, for splits copying the command. It became a rerun with `--open` in 9301f8e6, 20260930. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: `PaneManager::split`, `inherit_spawn` for a new tab, and any other spawn that reads `pane.command`.
+	- Related IDs: 2026111713374940, a different fault with relative `--open` paths
+	- Notes:
+		- Code review 20261120 item 1.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- While scrolled back, new output moves the view, so the text being read slides away
+	- ID: 2026112016030002
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: With the view scrolled back and output still coming, each new line moves the view down a line. The text being read keeps sliding, so the scrollback can't be read while a program prints. glossary.md says the scrollback is kept for reading back. alacritty, kitty, VTE and Windows Terminal keep the view on its text.
+	- Expected behavior: A view that isn't following the bottom stays on the same text while output arrives, until that text is dropped from the scrollback.
+	- Reproduced: No. Traced through the engine's grid scroll and the frame build.
+	- Possible cause: The engine raises its display offset to keep the text still. Each frame then sets it back to the smooth scroll position, which counts from the bottom and isn't moved for output while scrolled back.
+	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Confirmed by trace.
+	- Notes:
+		- Code review 20261120 item 2.
+		- Item 8 has the same root. Nothing counts the lines pushed while scrolled back with a full scrollback.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- An environment variable that isn't valid UTF-8 crashes SilkTerm at launch
+	- ID: 2026112016030003
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Linux, macOS
+	- Target version: rc.1
+	- Incorrect behavior: One variable with bytes that aren't UTF-8 aborts every launch, `--version` included, with exit 134. `OLDPWD` after a `cd` into a folder with a Latin-1 name is enough.
+	- Expected behavior: SilkTerm starts, and the variable reaches the shell as it was.
+	- Reproduced: Yes, 20261120. `FOO=$'\xe9' silkterm --version` aborted with exit 134.
+	- Possible cause: The shell environment cleanup reads the environment with `std::env::vars()`, which panics on a value that isn't Unicode.
+	- Origin: 393b34ef, 20260821. The fix for 2026111713374941 checked command-line arguments only. Confirmed.
+	- Sweep: Every read of the whole environment, or of one variable, that assumes Unicode.
+	- Related IDs: 2026111713374941
+	- Notes:
+		- Code review 20261120 item 3.
+		- It crashes, so it's on rc.1 by the rule used for Code review 20261117.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- With a menu open, a Ctrl or Ctrl+Shift chord picks a menu row, so the copy chord can close the tab
+	- ID: 2026112016030004
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: An open menu takes any typed letter as its accelerator, whatever modifiers are held. Ctrl+Shift+C with the Tabs menu open closes the tab, and with the Panes menu open it closes the pane. Neither asks, so what was running there is gone. Ctrl+Shift+V in the right-click menu splits the pane.
+	- Expected behavior: A letter picks a row only on its own or with Shift. Other chords do nothing in the menu, or close it and run as hotkeys.
+	- Reproduced: No. Traced through the menu key handler.
+	- Possible cause: The menu's letter handling never looks at the modifiers, and winit leaves Ctrl out of the key it reports.
+	- Origin: c6eaa043, 20260628, and ec829224, 20260706. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: Any other place that matches an accelerator letter, such as Settings dropdowns.
+	- Notes:
+		- Code review 20261120 item 4.
+		- On rc.1 since it can end a running program, by the rule used for Code review 20261117.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Saving or renaming a theme drops the comments in its block and moves it to the end of the list
+	- ID: 2026112016030005
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: A theme's comments, inside its block and on the line above it, are lost when it's saved or renamed in Settings. The block is written again after the other user themes, so the order in the theme dropdown changes too. design.md says a user's comments and grouping survive a save, and theme.rs says a rename rewrites only the name.
+	- Expected behavior: A save changes only the lines that changed. A rename changes only `name`. Comments and order stay.
+	- Reproduced: Yes, 20261120, with the same remove and set steps through the shcl command line on a scratch file.
+	- Possible cause: The theme writer removes the whole block, then writes it again.
+	- Origin: e79a250e, 20260805. Not seen by an earlier round. Confirmed.
+	- Decisions:
+		- 20261120: G30 rewrites a theme's whole subtree on purpose, so stale colors can't survive. A fix keeps that by removing the keys the theme no longer has, rather than the block.
+	- Notes:
+		- Code review 20261120 item 5.
+		- On rc.1 since it loses text the user wrote, by the rule used for Code review 20261117.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Saving a new theme can delete a theme block of the same name that Settings didn't list
+	- ID: 2026112016030006
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: A new theme whose name makes the same key as a block already in the file removes that block. That happens when another window saved a theme of that name while this Settings was open, or when a hand-typed theme didn't load, such as one with an unquoted color.
+	- Expected behavior: A new theme takes a key that's free in the file as it is at save time.
+	- Reproduced: No. The remove step was checked with the shcl command line.
+	- Possible cause: The free-key check looks only at the themes the dialog loaded.
+	- Origin: e79a250e, 20260805. Not seen by an earlier round. Plausible.
+	- Related IDs: The shell list got a 3-way merge against the file for the same case, in c6d68c11
+	- Notes:
+		- Code review 20261120 item 6.
+		- On rc.1 since it can delete user text, by the rule used for Code review 20261117.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Both installers still rewrite a hand-edited launcher that wraps the program in `sh -c` or names it bare
+	- ID: 2026112016030007
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Linux, Windows
+	- Target version: rc.1
+	- Incorrect behavior: An upgrade keeps a launcher whose Exec line names the installed program, but it misses `Exec=sh -c "/home/u/.local/bin/silkterm --x"` and `Exec=silkterm --x`. Those launchers are overwritten and the edits are lost. The 20261118 decision on 2026111713374947 says a wrapper around the program counts as naming it.
+	- Expected behavior: Both forms are kept, by install.bash and install.ps1.
+	- Reproduced: No. Traced through `fLauncherNames` in both installers.
+	- Possible cause: The match wants the path after a space or after the quote that opens the value, and never takes the bare name.
+	- Origin: 5c03a06a, 20261118, the fix for 2026111713374947. Confirmed by trace.
+	- Related IDs: 2026111713374947
+	- Notes:
+		- Code review 20261120 item 7.
+		- On rc.1 as a gap in an rc.1 fix that loses user edits.
+		- Detail: `detail_backlog.md`, under this ID.
+
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900
 	- Type: Bug
@@ -1558,6 +1699,209 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Code fixup 20261119. The same pass fixed 19 other scripts of this kind.
 		- Detail: `detail_backlog.md`, under this ID.
 
+- The minimap never catches up after output arrives while scrolled back with a full scrollback
+	- ID: 2026112016030008
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: With a full scrollback and the view scrolled back, new output leaves the history part of the map shifted by the lines pushed, for good. The lit band and a click in the column point at the wrong lines. The minimap design doc says the cache is rebuilt at a limited rate in this case. It never is.
+	- Expected behavior: The map is rebuilt within the resync delay after such output.
+	- Reproduced: No. Traced through `Minimap::update`.
+	- Possible cause: The call that starts the resync timer clears it again and stores the new last line, so the next call sees nothing to catch up.
+	- Origin: 50726c5d, 20260831. Not seen by an earlier round. Confirmed by trace.
+	- Related IDs: Item 2
+	- Notes:
+		- Code review 20261120 item 8.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A keystroke while output scrolls cuts the scroll speed, and the output chase stays off for the rest of the output
+	- ID: 2026112016030009
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Every key that sends bytes jumps to the bottom, even when the view already follows it. Mid-output that drops the scroll speed to about 15% for a frame, and the lag behind the newest line grows. The chase, with its ramp-down and braking, doesn't come back until the output stops.
+	- Expected behavior: A keystroke at the bottom changes nothing about the scroll. One from the scrollback hands over at the speed the view had.
+	- Reproduced: No. A copy of the scroll code was stepped with steady output and one keystroke.
+	- Possible cause: The jump to the bottom starts a sweep even when following, and the chase starts again from a speed of 0 when the sweep ends.
+	- Origin: be16c3e9, 20260802, and c5374c32, 20260903. Not seen by an earlier round. Confirmed with a copy of the code.
+	- Notes:
+		- Code review 20261120 item 9.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A wheel notch up during fast output moves the view toward the newest line
+	- ID: 2026112016030010
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: During fast output the view trails the newest line by many lines. A notch up sets the target 3 lines from the bottom, so the view runs forward through what it was showing, the opposite of the gesture. At 10 lines a frame it moves 223 lines down.
+	- Expected behavior: A notch up never moves the view down. It starts from what's on screen.
+	- Reproduced: No. A copy of the scroll code was stepped through a flood and one notch.
+	- Possible cause: The wheel adds to the target, which sits at the bottom while the view lags.
+	- Origin: c6eaa043, 20260628. A one-line form was fixed before, pinned by dbsyc. Confirmed with a copy of the code.
+	- Related IDs: Test dbsyc
+	- Notes:
+		- Code review 20261120 item 10.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A press where the pointer shows the resize shape scrolls the pane or goes to a mouse program instead
+	- ID: 2026112016030011
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: The resize pointer shows up to 5 DIP each side of a divider. A press in that band on the left goes to the scrollbar or the minimap, which reach the pane's edge, so the view jumps. On the right, a mouse program such as tmux or vim gets the press. Only the 1 DIP gap starts a resize. A Done item says the room either side of a divider shows the resize pointer and grabs it.
+	- Expected behavior: A press wherever the resize pointer shows starts a resize.
+	- Reproduced: No. Traced through the press handler and the pointer shape code.
+	- Possible cause: The press checks the scrollbar, the minimap and mouse reports before the divider. The pointer shape checks the divider first.
+	- Origin: 7d69b5ae, 20260703, 76cd488c, 20260802, and 50726c5d, 20260831. Not seen by an earlier round. Confirmed by trace.
+	- Notes:
+		- Code review 20261120 item 11.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A sideways scroll is sent to mouse programs as a wheel-down, and pages the tab strip one way only
+	- ID: 2026112016030012
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: A touchpad's sideways part, or a tilt wheel, arrives as its own event with no up or down. It's sent to tmux, vim and other mouse programs as a notch down, so a scroll up that drifts sideways mixes in downs. Over the tab strip, either direction pages the same way.
+	- Expected behavior: A sideways step isn't sent as up or down. The tab strip pages by its direction, or ignores it.
+	- Reproduced: No. Traced, with winit 0.30.13's event shapes.
+	- Possible cause: The wheel code treats any step that isn't up as down, with at least 1 notch.
+	- Origin: 7d69b5ae, 20260703. Not seen by an earlier round. Confirmed by trace.
+	- Notes:
+		- Code review 20261120 item 12.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Small wheel and touchpad steps aren't added up, so mouse programs get too many reports and less gets none
+	- ID: 2026112016030013
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Each wheel event sends at least one whole notch to a mouse program. A hi-res wheel sends about 8 per detent, and a trackpad swipe sends dozens. In less or man, which get arrow keys for the wheel, each small step rounds to 0 and nothing scrolls. The backlog's mouse reporting item says one event per line.
+	- Expected behavior: Steps add up per window. Whole lines go out and the rest is kept, as the scrollback path already does.
+	- Reproduced: No. Traced through the wheel handler.
+	- Possible cause: The report and arrow key routes round each event on its own.
+	- Origin: 7d69b5ae, 20260703, and c6eaa043, 20260628. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: The wheel report, the arrow key route and the tab strip.
+	- Notes:
+		- Code review 20261120 item 13.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A tab can name a shell other than the one running in it
+	- ID: 2026112016030014
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: When a listed shell is uninstalled, its entry is switched off but kept, without a program path. A pane running another shell of the same name, such as `/bin/bash` beside a removed Homebrew bash, matches that entry first. The tab and its tip show the removed shell's name and version. On Windows, removing MSYS2 makes every Git Bash tab say MSYS2.
+	- Expected behavior: The tab names the entry whose program is the one running. A match by name alone comes last and skips entries that are off.
+	- Reproduced: No. Traced through the shell name lookup.
+	- Possible cause: An entry without a program path matches any command of the same name, and the lookup takes the first match.
+	- Origin: 6a775f4e, 20260829, and c20128ca, 20260821. Not seen by an earlier round. Confirmed by trace.
+	- Decisions:
+		- 20261120: G21 keeps the match on a bare `pwsh`. A fix keeps it as the fallback.
+	- Notes:
+		- Code review 20261120 item 14.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A resize right after a held drag to another monitor is saved for the old monitor, then undone
+	- ID: 2026112016030015
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Linux
+	- Target version: rc.2
+	- Incorrect behavior: When the monitor check is put off after a drag, a resize from the window's frame edge is saved under the monitor the window left, over that monitor's own size. When the pointer comes back, the new monitor's kept size is taken, which undoes the resize. design.md says a size set after the move began wins.
+	- Expected behavior: A resize counts as the person being back. The save waits for the monitor check and goes to the new monitor.
+	- Reproduced: No. Traced through the save, the flush and the monitor check. It needs a resize that sends no pointer events, as server decorations under Xwayland do.
+	- Possible cause: The flush waits while a monitor check is due, but not while one is put off.
+	- Origin: 931d3cdb, 20261006, and the held drag fix e2e44df6, 20261014. Not seen by an earlier round. Plausible.
+	- Notes:
+		- Code review 20261120 item 15.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Create input method support for CJK and other composed input
+	- ID: 2026112016030041
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Requirements:
+		- Turn input methods on for the focused text target: the terminal, a tab rename and Settings fields.
+		- Place the candidate window at the cursor.
+		- Show composing text in place, and send the committed text as if typed.
+	- Origin: Never built. Confirmed by grep.
+	- Notes:
+		- Code review 20261120 item 41.
+		- Nothing turns input methods on now, and nothing handles their events. alacritty, kitty, wezterm and foot have it. A Swept row from October noted there's no input method handling.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Closing the focused pane should give focus to the pane used before it
+	- ID: 2026112016030042
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Requirements:
+		- After a pane closes, focus goes to the pane that had it before, if that pane is still open, and otherwise to a pane in the space that took its place.
+	- Origin: c6eaa043, 20260628. Not seen by an earlier round.
+	- Notes:
+		- Code review 20261120 item 42.
+		- Focus goes to the top-left pane now, so a second close meant for the neighbor closes another pane. tmux and kitty go back to the last pane.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- The block cursor should cover both cells of a wide character
+	- ID: 2026112016030043
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Requirements:
+		- On a wide character, the cursor is 2 cells wide.
+		- On the second half of one, it's drawn on the first.
+	- Origin: e4060188, 20260701. Not seen by an earlier round.
+	- Notes:
+		- Code review 20261120 item 43.
+		- It covers the left half only now. alacritty, kitty and wezterm draw it 2 cells wide.
+		- Detail: `detail_backlog.md`, under this ID.
+
 - A pre-nesting file's look settings stop applying after it converts
 	- ID: 2026111917532694
 	- Type: Bug
@@ -2028,6 +2372,454 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- Code fixup 20261119.
 
+- With a scrollback of 150,000 lines or more, a scroll deep in history never comes to rest
+	- ID: 2026112016030016
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Past about 150,000 lines back at 240 Hz, or 525,000 at 60 Hz, a wheel scroll stops short and never settles. The view rests up to 2 lines off with part of a row showing, and the window keeps drawing at full frame rate while it stays there. The scrollback setting allows 1,000,000 lines.
+	- Expected behavior: A scroll settles on its line at any depth.
+	- Reproduced: No. A copy of the scroll code in 32-bit floats was stepped at 999,000 lines.
+	- Possible cause: Scroll positions are 32-bit floats, too coarse that far back for the last steps of the ease.
+	- Origin: c6eaa043, 20260628, with the ease from 2158732b and faa19f8a, 20260802. Not seen by an earlier round. Confirmed with a copy of the code.
+	- Notes:
+		- Code review 20261120 item 16.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A path with an unclosed `${` comes back with the text before it written twice
+	- ID: 2026112016030017
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: `~/pics/a${b` turns into `<home>/pics/a<home>/pics/a${b`. The startup folder, the wallpaper image, the rotation folder, `--directory` and a shell's program all go through it, so they point at a path nobody typed.
+	- Expected behavior: Text with an unclosed `${` stays as typed.
+	- Reproduced: Yes, 20261120, with a copy of the loop.
+	- Possible cause: The text before `${` is added before the missing `}` is noticed, then added again after the loop.
+	- Origin: 46078715, 20260916. Not seen by an earlier round. Confirmed.
+	- Notes:
+		- Code review 20261120 item 17.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A theme or shell whose name needs quotes in the file is ignored without a word
+	- ID: 2026112016030018
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: A hand-written `"git bash":` under `shells:`, or `"my theme":` under `themes:`, checks clean but never shows up, and nothing says why. design.md says the shell list can be edited by hand.
+	- Expected behavior: Such entries load, and save back under the same name.
+	- Reproduced: Yes, 20261120. shcl reads the file clean and refuses the path the readers build.
+	- Possible cause: The readers put raw key names into dotted paths without quoting them.
+	- Origin: e79a250e, 20260805, for themes, and 37bd34a0, 20260818, for shells. Not seen by an earlier round. Confirmed.
+	- Sweep: The theme and shell readers, and the remove and set steps in the theme and shell writers.
+	- Notes:
+		- Code review 20261120 item 18.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A dialog that lost its GPU device tries to rebuild it on every redraw
+	- ID: 2026112016030019
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: With the GPU gone and no software adapter, an open Settings dialog makes a new graphics instance and asks every adapter for a device on each redraw, such as each caret blink, hover or key. Each try runs on the window thread, so the terminal stalls too. The terminal's own rebuild waits 250 ms, rising to 5 s.
+	- Expected behavior: A dialog's rebuild backs off the same way.
+	- Reproduced: No. Traced. The cost of one failed try wasn't measured.
+	- Possible cause: The dialog's render tries the rebuild whenever the device is lost, without a wait.
+	- Origin: 2c50547e, 20261117, the fix for 2026111713374902 (Code review 20261117 item 3). Confirmed by trace that nothing gates it. The stall is Plausible.
+	- Related IDs: 2026111713374902
+	- Notes:
+		- Code review 20261120 item 19.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- GL: a window taller than the texture limit draws at its bottom, while clicks go by its top
+	- ID: 2026112016030020
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Linux
+	- Target version: rc.2
+	- Incorrect behavior: On the X11 GL route, a window made taller than the GPU's texture limit, under a window manager that ignores the size hint, draws in its bottom part only. The top isn't painted. The menu bar, grid and clicks are placed from the top, so every click lands that many rows off.
+	- Expected behavior: The picture sits at the top, where layout and the pointer expect it. A window wider than the limit already works.
+	- Reproduced: No. Traced into wgpu-hal's GL viewport, which counts from the bottom.
+	- Possible cause: The drawing size is capped, but the GL framebuffer is the whole window and its origin is at the bottom left.
+	- Origin: 5945ca84, 20261117, the fix for 2026111713374910 (Code review 20261117 item 11). Its test oversizes the width only. Plausible.
+	- Related IDs: 2026111713374910, test dfek4
+	- Notes:
+		- Code review 20261120 item 20.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A publish with nothing to commit prints a CICD ABORTED line, though the run goes on and passes
+	- ID: 2026112016030021
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: When the run changed no tracked file, the publish step prints `[ CICD ABORTED (exit 1) ... ]` to stderr. The run then goes on and passes.
+	- Expected behavior: A passing run prints no abort line.
+	- Reproduced: Yes, 20261120, with the same line under the script's shell options and error trap.
+	- Possible cause: A `grep -c` that counts 0 exits 1 inside a command substitution, and the error trap fires there.
+	- Origin: 8a740a4b, 20261119. Not seen by an earlier round. Confirmed.
+	- Sweep: Every other count by `grep -c` inside `$( )` in cicd.bash and what it sources.
+	- Notes:
+		- Code review 20261120 item 21.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A rebuilt config counts a unit-converted setting as lost when the file also sets its new name
+	- ID: 2026112016030022
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: A file that sets both `cursor.blink_rate_ms` and `cursor.blink_rate_s`, and needs a rebuild, reports one more lost setting than it lost. The value kept is right. design.md says renames aren't counted, and the code treats unit converts as renames.
+	- Expected behavior: The old name is dropped without a count when the new one is set, as for renames.
+	- Reproduced: No. Traced through the rebuild.
+	- Possible cause: 2e69811b added the check for a new name already set to renames only.
+	- Origin: 8add123f, 20261009. The twin was left by 2e69811b, 20261119. Confirmed by trace.
+	- Related IDs: Test dfhga
+	- Notes:
+		- Code review 20261120 item 22.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- An open menu stays up when the window loses focus, and typing after coming back picks rows
+	- ID: 2026112016030023
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Open the right-click menu, switch away and back, and the menu is still there. Typing `pwd` pastes, `vim` splits the pane, and the first click back closes the menu or picks a row.
+	- Expected behavior: A menu closes when the window loses focus, as a tab rename already does, and as GTK, Qt and Windows menus do.
+	- Reproduced: No. Traced through the focus handler.
+	- Origin: 85d77f64, 20260830. Not seen by an earlier round. Confirmed by trace.
+	- Notes:
+		- Code review 20261120 item 23.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- The menu from the Menu key offers Open link for whatever link is under the mouse
+	- ID: 2026112016030024
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: The Menu key opens the menu at the focused pane's corner, but its link rows come from the mouse position. That can be a link in another pane, or a spot the pointer has left. Down and Enter then open a link the keyboard user never chose.
+	- Expected behavior: The Menu key's menu has no link rows, or takes a link at the cursor.
+	- Reproduced: No. Traced.
+	- Origin: a4ebbd38, 20260804. Not seen by an earlier round. Confirmed by trace.
+	- Notes:
+		- Code review 20261120 item 24.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- The cursor slides instead of snapping when Enter on the bottom row scrolls the screen
+	- ID: 2026112016030025
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: At a prompt on the bottom row, `ls` and Enter scroll the screen, and the new prompt sits on the same row. The cursor slides left from its old column instead of snapping, and after the output ease it shows at the old column first. A Done item says it snaps on a newline.
+	- Expected behavior: A move to a new line snaps, even when the screen row stays the same.
+	- Reproduced: No. Traced through the cursor quad.
+	- Possible cause: The jump check compares screen rows, which don't change when the screen scrolls.
+	- Origin: ad1cea67, 20260629. Not seen by an earlier round. Confirmed by trace.
+	- Notes:
+		- Code review 20261120 item 25.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Grabbing the scrollbar thumb or minimap marker while the view eases makes it jump away from the pointer
+	- ID: 2026112016030026
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: After a wheel flick, a press on the thumb is measured against where the thumb is drawn, and the next frame draws it at the ease's target, far from the pointer. The first drag move then sends the view back. G18 says the handle tracks the pointer exactly.
+	- Expected behavior: A grab stops the ease where the view is, like touching a flicked list.
+	- Reproduced: No. Traced through the scrollbar and minimap grabs.
+	- Origin: 76cd488c, 20260802, and c862b0a8, 20260920. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: The scrollbar grab and the minimap grab.
+	- Notes:
+		- Code review 20261120 item 26.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Every relayout resets the scroll ease of every pane, including ones whose size didn't change
+	- ID: 2026112016030027
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Starting less in one pane hides its minimap and lays out every pane again. A pane in another split that's mid-slide loses its strip, so its reveal gap goes blank for the rest of the ease, and a held progress line drops back into the text. A divider drag does this on every pointer move.
+	- Expected behavior: A pane whose area and grid didn't change keeps its scroll state.
+	- Reproduced: No. The resets are traced. The blank gap is read from the code.
+	- Origin: Built up over several commits. 2026101415085143 noted that a relayout drops the snapshot. Confirmed by trace.
+	- Related IDs: 2026101415085143
+	- Notes:
+		- Code review 20261120 item 27.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A menu or tip reopened unchanged can draw glyphs the atlas has since dropped
+	- ID: 2026112016030028
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Close a menu, print enough new characters to fill the glyph atlas, then open the same menu again. Its text prepare is skipped since nothing about it changed, and it draws from reused atlas slots, so its labels come out garbled until other text changes.
+	- Expected behavior: A reopened menu, tip or banner is prepared again.
+	- Reproduced: No. Traced through the overlay check and the glyphon fork's atlas. It needs a full atlas.
+	- Possible cause: The overlay's change check isn't cleared while no overlay is up.
+	- Origin: 349c92bf, 20260731. Not seen by an earlier round. Plausible.
+	- Notes:
+		- Code review 20261120 item 28.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Chrome text sits about a pixel off its centering rule, since glyphon rounds the baseline another way
+	- ID: 2026112016030029
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Settings tab titles and other text centered on its capitals are placed for a baseline at the line top plus the font's baseline offset. glyphon draws at the whole part of the top plus the offset rounded, so text can sit a pixel high, and accelerator underlines can be 1 or 2 pixels off. Test df452 passes since it does the same float math.
+	- Expected behavior: The placement predicts the baseline glyphon draws.
+	- Reproduced: No. Traced into glyphon and cosmic-text, with DejaVu Sans at 15 pixels.
+	- Origin: 49bc85d3, 20261110, and 623557a7, 20260703. Not seen by an earlier round. Confirmed by trace.
+	- Related IDs: Test df452
+	- Decisions:
+		- 20261120: The 20261110 centering rules stay as they are, the menu bar and main tabs included. Only the baseline math changes.
+	- Notes:
+		- Code review 20261120 item 29.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A font family typed in other letter case quietly falls back to the default font
+	- ID: 2026112016030030
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: `font.family: "jetbrains mono"` or `--font-name "dejavu sans mono"` isn't found, and the first installed font in the fallback list is used without a message. Terminals that use fontconfig match family names in any case.
+	- Expected behavior: The family is found in any case, and the font database's spelling is used.
+	- Reproduced: No. Traced into fontdb 0.23, which compares names exactly.
+	- Origin: c6eaa043, 20260628, and ec829224, 20260706. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: The monospace and UI family lookups.
+	- Notes:
+		- Code review 20261120 item 30.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- In light mode, a wallpaper with transparency is too bright where the picture is see-through
+	- ID: 2026112016030031
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: The light mode wallpaper shader blends as if the picture's alpha were premultiplied, and it isn't. Half-clear white over a light background comes out too bright and clips to white, and a fully clear pixel shows its stored color over the background. Dark mode is right.
+	- Expected behavior: Light mode blends straight alpha, as dark mode does.
+	- Reproduced: No. Worked out from the shader and the upload.
+	- Origin: 77d45875, 20260920. Not seen by an earlier round. Confirmed by arithmetic.
+	- Notes:
+		- Code review 20261120 item 31.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- The tab tip shows a program's name and folder raw, control characters included
+	- ID: 2026112016030032
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: The tab label and window title are cleaned of control characters, but the tip's current path and running program rows aren't. A folder name with a line break in it, read from the OS when the shell doesn't report its folder, cuts the row off or draws over the next one. Escape and other control characters show as boxes.
+	- Expected behavior: Every tip row is cleaned the same way as the label.
+	- Reproduced: No. The data path is traced. How the line break draws is Plausible.
+	- Origin: 931d3cdb, 20261006, and e48197da, 20261117. A twin that Code review 20260914 item 12 (F44) left. Confirmed by trace.
+	- Related IDs: Code review 20260914 item 12 (F44), test dcdjh
+	- Notes:
+		- Code review 20261120 item 32.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A fuzz failure names a test filter that doesn't run the failing test, and some corpus folders are never replayed
+	- ID: 2026112016030033
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: A soak failure prints `SILK_FUZZ_SEED=N cargo test <name>`. For 14 of 22 targets that filter runs no test, or other tests, and passes, so the seed looks fixed. The corpus readme says each target replays a folder of its name, but 11 don't.
+	- Expected behavior: The hint runs the failing test, and the readme says which target replays which folder.
+	- Reproduced: No. Every target name was matched against its test path and folder.
+	- Origin: 1f2364b3, 20260909. Not seen by an earlier round. Confirmed by trace.
+	- Notes:
+		- Code review 20261120 item 33.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- `cicd-win.ps1 -BacklogRunQuick` makes no run folder and sweeps no stale ones
+	- ID: 2026112016030034
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.2
+	- Incorrect behavior: The quick run returns before the run folder is made, so cargo, test-id.py and the PowerShell lint use the account's own TEMP, and old run folders stay. 2026103115564581 asks for a run folder on every run, and cicd.bash's quick run makes one.
+	- Expected behavior: The quick run makes, uses and removes its run folder, and sweeps stale ones.
+	- Reproduced: No. Traced through `fMain`.
+	- Origin: 203e720d, 20261028. e9f3066f, 20261101, added the run folder after that early return. Not seen by an earlier round. Confirmed by trace.
+	- Related IDs: 2026103115564581
+	- Notes:
+		- Code review 20261120 item 34.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Declining the launcher's UAC prompt brings a second one, and declining that gives no terminal
+	- ID: 2026112016030035
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.2
+	- Incorrect behavior: For a shortcut that asks for admin rights, after No at UAC, n8runterm.ps1 shows its not-elevated notice and goes on, but still starts the terminal elevated, so UAC asks again. A second No ends with launch failed and no terminal. The script's own comment says a declined prompt still gets a terminal.
+	- Expected behavior: After a decline, the terminal starts without elevation.
+	- Reproduced: No. Traced.
+	- Origin: 4050e29a, 20260908, and 43fdf61e, 20260715. Not seen by an earlier round. Confirmed by trace.
+	- Notes:
+		- Code review 20261120 item 35.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- `wallpaper-gallery.bash --check` passes when the contact sheet is missing or unreadable
+	- ID: 2026112016030036
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: The README links the contact sheet. If it's deleted or corrupt, the check can't read its size, skips the row count, and says it matches the pack. The Done item for Code review 20260914 item 79 says the check fails on a wrong row count.
+	- Expected behavior: A sheet the check can't read fails it.
+	- Reproduced: No. Read from the script.
+	- Origin: 51212679, 20260917. Not seen by an earlier round. Confirmed by reading.
+	- Notes:
+		- Code review 20261120 item 36.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- win-unlock.bash uses whatever X server is already on :98
+	- ID: 2026112016030037
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Linux
+	- Target version: rc.2
+	- Incorrect behavior: If display `:98` answers, the script skips its own Xvfb and opens its RDP window there, inside the profiler's, sizebench's or another project's screen. If its own Xvfb fails to start, it goes on anyway.
+	- Expected behavior: It takes a free display number, or refuses one that's taken.
+	- Reproduced: No. Read from the script.
+	- Origin: 8b1cdb1c, 20260908. Same class as 2026111713374946, whose sweep missed it. Confirmed by reading.
+	- Related IDs: 2026111713374946
+	- Notes:
+		- Code review 20261120 item 37.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- termbench can pick another compositor's Wayland socket
+	- ID: 2026112016030038
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Linux
+	- Target version: rc.2
+	- Incorrect behavior: termbench takes the newest `wayland-*` socket made in the shared runtime folder since it started. A second headless sway started then, by another run or project, can be picked, so the terminal under test opens on the wrong compositor.
+	- Expected behavior: termbench gives its sway a private runtime folder, or asks sway for its socket.
+	- Reproduced: No. Read from the script.
+	- Origin: d154c80a, 20260730. Not seen by an earlier round. Plausible.
+	- Notes:
+		- Code review 20261120 item 38.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- The backup archive's exclude list leaves out target/codeql, about 6 GB
+	- ID: 2026112016030039
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: config.bash says a new scratch folder under target needs a line in its exclude list. codeql.bash keeps its database in target/codeql, which isn't listed. Where target is a real folder, a CodeQL run that publishes puts about 6 GB in the archive. Where target is a link, it's left out whole and nothing happens.
+	- Expected behavior: target/codeql is excluded, along with every other scratch folder the scripts make under target.
+	- Reproduced: No. Read from the scripts, with the folder sizes measured.
+	- Origin: 884226f9, 20261022, with the path from 435c79de, 20261031. Not seen by an earlier round. Plausible.
+	- Notes:
+		- Code review 20261120 item 39.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- idletmux puts its sockets under the test folder, and the long path check doesn't look for that
+	- ID: 2026112016030040
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Linux
+	- Target version: rc.2
+	- Incorrect behavior: idletmux puts its tmux socket and runtime folder under the test's home folder. Under a long temp path the socket name is too long, tmux can't start, and the test fails rather than skips. The other window tests switch to a short folder past 70 characters, and the check in testdir/run.bash looks only for sway and the control socket.
+	- Expected behavior: idletmux uses the same short folder rule, and the check also looks for a tmux socket and `XDG_RUNTIME_DIR`.
+	- Reproduced: No. Read from the scripts.
+	- Origin: b6d46b46, 20261120. Not seen by an earlier round. Plausible.
+	- Notes:
+		- Code review 20261120 item 40.
+		- Detail: `detail_backlog.md`, under this ID.
+
 - An open Settings field redraws the dialog about 30 times a second for as long as it's open
 	- ID: 2026111713374953
 	- Type: Enhancement
@@ -2083,6 +2875,76 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Sweep: The 2 s VRAM probe runs only while the device is held, by design.
 	- Notes:
 		- Code review 20261117 item 56.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- The scrollbar's hold after a scroll should use a timed wake, not full-rate frames
+	- ID: 2026112016030044
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Requirements:
+		- The scrollbar's 1.1 s hold after a scroll wakes once when it ends, rather than drawing every frame.
+		- It doesn't count as animating while auto-hide is off or the view is scrolled back.
+	- Origin: 76cd488c, 20260802. Not seen by an earlier round.
+	- Notes:
+		- Code review 20261120 item 44.
+		- Each wheel tick draws full-rate frames for 1.1 s after the ease ends now. G96 and the cursor park already use a timed wake.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- The shell scan should skip empty and relative PATH entries
+	- ID: 2026112016030045
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Requirements:
+		- The shell scan ignores empty PATH entries, such as a trailing `:`, `::` or `;;`, and relative ones such as `.`.
+	- Origin: 37bd34a0, 20260818. Not seen by an earlier round.
+	- Notes:
+		- Code review 20261120 item 45.
+		- A scan started in a folder holding a program named like a known shell, such as `rc`, can add it to the shell list now. It runs later from whatever folder the new pane starts in. Go 1.19 made the same change to its path lookup for this reason.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Windows: a snapped window should save the size it had before the snap
+	- ID: 2026112016030046
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.2
+	- Requirements:
+		- A window snapped with Win and an arrow saves its last ordinary size, rather than the snapped one.
+	- Origin: 931d3cdb, 20261006. Not seen by an earlier round.
+	- Notes:
+		- Code review 20261120 item 46.
+		- The next launch opens unsnapped at the snapped size now. design.md says the size written down is an ordinary window's, and zoom already treats a snapped window's size as the window manager's.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Remove the line length limit from the rustfmt and ruff settings
+	- ID: 2026112016030047
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Requirements:
+		- rustfmt.toml sets `max_width` as high as rustfmt allows.
+		- ruff.toml sets `line-length = 320`, its highest.
+	- Origin: Directive 20261118, Line length. Not a defect.
+	- Notes:
+		- Code review 20261120 item 47.
+		- The house rule since 20261118 is no line length limit in code or comments. Raising rustfmt's width reflows every Rust file once, so it goes in a commit of its own, with nothing else in flight. The forks keep their own settings.
 		- Detail: `detail_backlog.md`, under this ID.
 
 - The OSC buffer cap is now in 2 places
@@ -18595,6 +19457,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20260707-022408
 
 ### Canceled
+
+- 🚫 Code review 20261120: observations not filed.
+	- Decided against: A launch resize that comes after the first frame could count as the user's and unpin a size from the command line. monwl and dpirand's pinned-size seeds pass. Reopen if a SILK_MONDBG trace on X11 shows a resize after the first frame and a later move takes a size.
+	- Decided against: A zoom with Resize window on zoom, under a window manager that quietly ignores the request, saves the grid it asked for. Reopen on a report.
+	- Decided against: A split's program starts at the whole tab's size, and the resize follows right after. Reopen if a program that reads its size at start shows the wrong size in a new split.
+	- Decided against: Pane buffers are rebuilt at the pane's full height and rely on a relayout after. Every caller does one now. Reopen if a new caller doesn't.
+	- Decided against: An app scroll with no cover leaves its chase state stale. No path reaches it.
+	- Decided against: The UI text measure cache clears at 512 entries. Whether Settings measures more than that per frame wasn't traced. Reopen if SILK_PERF shows Settings measuring every frame.
+	- Decided against: A font zoom builds the font database again. That picks up newly installed fonts, and the cost wasn't measured. Reopen if SILK_PERF shows it over a frame.
+	- Decided against: A tab rename has no length cap. Only a deliberate paste of megabytes reaches it. Reopen on a report of a slow rename.
+	- Decided against: A menu taller than the window is cut off at the bottom. The right-click menu fits the default window. Reopen if a menu grows or a report comes from a short window.
+	- Decided against: An unset `%NAME%` expands to nothing, so text between 2 percent signs in a typed path is lost. That's the rule design.md states. Reopen on a report.
+	- Decided against: Tab strip paging uses floors that aren't clamped. It shows only with both tab width settings at about 5% or less.
+	- Decided against: dfeeg passes with the OSC cap in cwd.rs switched off, since the vte fork caps at the same size. dfeeh still covers it with a small limit, and 2026111914450007 tracks the cap being in 2 places.
+	- Decided against: FreeBSD: the X11 monitor paths are Linux-only, so a fullscreen set by the window manager isn't seen. BSD support is deferred in design.md.
 
 - 🚫 Code review 20261117: observations not filed.
 	- Decided against: Renaming `colors.focus` to the highlight setting in a hand-written file. It's a recorded call, and a config.rs test pins it.
