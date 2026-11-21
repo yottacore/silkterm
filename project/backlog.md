@@ -100,8 +100,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Does not release resources in tmux and/or muffer
 	- ID: 2026112006320249
 	- Type: Bug
-	- Status: Done
-		- 20261120: It needs a look on b23 with muffer idle in tmux, per the hand testing row. The rigs used a quiet shell in tmux, not muffer.
+	- Status: Closed
 	- Stand-in: none (20261120). What's left is what muffer itself writes while idle, and test windows never run muffer. A silent alt-screen app in tmux writes no more than the quiet shell idletmux already covers.
 	- Needs hand testing: No. Checked on b23 with muffer idle in tmux on 20261121.
 	- Severity: High
@@ -131,6 +130,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Commit: a7e25bfe
 	- Acceptance signoff: JC, 20261121: tested on b23 and marked Done.
 	- Closed: 20261121-093036
+	- Closed reason: Done
 
 - Splitting a pane, or opening a tab from it, runs a script that was opened by double-click again
 	- ID: 2026112016030001
@@ -181,17 +181,17 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Confirmed by trace.
 	- Decisions:
 		- 20261120: JC: a view that isn't following the bottom stays on its text while output arrives, as filed. It stays a High defect.
-		- 20261120: the minimap's count of lines the view hasn't shown stays as it was. Moving it with the view would hide from the map all output that arrives while scrolled back. Item 8 owns the map's catch-up.
+		- 20261120: the minimap's count of lines the view hasn't shown stays as it was. Moving it with the view would hide from the map all output that arrives while scrolled back. The map's catch-up is 2026112016030008.
 	- Notes:
 		- Code review 20261120 item 2.
-		- Item 8 has the same root. Nothing counts the lines pushed while scrolled back with a full scrollback.
+		- 2026112016030008 has the same root. Nothing counts the lines pushed while scrolled back with a full scrollback.
 		- Detail: `detail_backlog.md`, under this ID.
 	- Actual cause: confirmed. The engine raises its display offset by the lines that go up, and each frame set it back to the view's place, counted from the bottom, which output didn't move while scrolled back.
-	- Actual fix [Bug]: while the view isn't following the bottom, each frame moves it up by the lines that went into the scrollback, until it reaches the top. With the scrollback full, the engine's own count of those lines is used, since the depth stays flat there. An ease in flight keeps its course.
+	- Actual fix: while the view isn't following the bottom, each frame moves it up by the lines that went into the scrollback, until it reaches the top. With the scrollback full, the engine's own count of those lines is used, since the depth stays flat there. An ease in flight keeps its course.
 	- Swept: the frame build's grid snap is the only place the grid offset is set from the view. The alt screen has no scrollback, so it can't be scrolled back.
 	- Test case: dfjtz `a_parked_view_stays_on_its_text_while_output_arrives`, dfjv0 `keep_place_shifts_a_parked_view_with_the_text`.
 	- Verified: 20261120. dfjtz passes, with the scrollback full and not. It fails with the fix taken out, and fails at a full scrollback with only the depth's growth counted. dfjv0 passes. The quick gate's format, lint and test areas pass.
-	- Acceptance signoff: Self-closed: the behavior JC decided, red before and green after.
+	- Acceptance signoff: Self-closed: the behavior JC chose, red before and green after.
 	- Closed: 20261120-171200
 	- Closed reason: Done
 	- Branch: nov20b-2026112016030002
@@ -434,6 +434,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Reproduced: Yes, 20261120, with the same remove and set steps through the shcl command line on a scratch file.
 	- Possible cause: The theme writer removes the whole block, then writes it again.
 	- Origin: e79a250e, 20260805. Not seen by an earlier round. Confirmed.
+	- Notes:
+		- Code review 20261120 item 5.
+		- On rc.1 since it loses text the user wrote, by the rule used for Code review 20261117.
+		- Detail: `detail_backlog.md`, under this ID.
 	- Actual cause: `write_user_themes` removed a changed theme's whole block and wrote it again, which took its comments with it and added it after the other themes.
 	- Decisions:
 		- 20261120: G30 rewrites a theme's whole subtree on purpose, so stale colors can't survive. A fix keeps that by removing the keys the theme no longer has, rather than the block.
@@ -448,10 +452,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Acceptance signoff: Self-closed: the intent was clear, and its tests failed before the fix and pass after.
 	- Closed: 20261120-174609
 	- Closed reason: Done
-	- Notes:
-		- Code review 20261120 item 5.
-		- On rc.1 since it loses text the user wrote, by the rule used for Code review 20261117.
-		- Detail: `detail_backlog.md`, under this ID.
 
 - A settings file from before shcl 3 that is written new loses renamed and moved settings
 	- ID: 2026111917525263
@@ -836,7 +836,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261120: the minimap marker drag had the same fault and is fixed with it.
 		- 20261120: while output arrives during a drag with the pointer still, the text stays put and the thumb moves a little, since the same text sits higher in a deeper scrollback. The handle tracks the pointer's moves rather than its exact spot then.
 		- 20261120: a view held at the top of a full scrollback doesn't move with the output, and the drag doesn't count those lines either, so dragging down moves it at once.
-	- Actual fix [Bug]: a handle drag goes on from where it started, moved by the lines output has carried the view up since. The thumb drag maps the pointer's move from the grab at the current scrollback's scale.
+	- Actual fix: a handle drag goes on from where it started, moved by the lines output has carried the view up since. The thumb drag maps the pointer's move from the grab at the current scrollback's scale.
 	- Swept: the thumb drag and the marker drag are the only drags that set the place from the pointer. A track click, a marker jump and a selection's edge scroll are one-shot or relative.
 	- Test case: dfjwf `a_handle_drag_keeps_the_text_still_while_output_arrives`.
 	- Verified: 20261120. dfjwf passes, with the scrollback growing and full. With the shift taken out of the drag it fails, the view going back to where it was grabbed. Counting the lines that went up rather than what the view moved fails its top-of-scrollback case. daqnd, dfjtz, dfjv0 and dc0b5 pass. The quick gate's format, lint, test, script and docs areas pass.
@@ -861,6 +861,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: The free-key check looks only at the themes the dialog loaded.
 	- Origin: e79a250e, 20260805. Not seen by an earlier round. Plausible.
 	- Related IDs: The shell list got a 3-way merge against the file for the same case, in c6d68c11
+	- Notes:
+		- Code review 20261120 item 6.
+		- On rc.1 since it can delete user text, by the rule used for Code review 20261117.
+		- Detail: `detail_backlog.md`, under this ID.
 	- Actual cause: Confirmed. A new theme's key was checked only against the themes the dialog loaded, and the save removed whatever block the file had under it before writing.
 	- Decisions:
 		- 20261120: A new theme whose key the file already has takes the next free number after it, as the dialog numbers a second theme of one name. The block it would have hit is left as it is.
@@ -874,10 +878,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Acceptance signoff: Self-closed: the test failed before the fix and passes after.
 	- Closed: 20261120-174609
 	- Closed reason: Done
-	- Notes:
-		- Code review 20261120 item 6.
-		- On rc.1 since it can delete user text, by the rule used for Code review 20261117.
-		- Detail: `detail_backlog.md`, under this ID.
 
 - Both installers still rewrite a hand-edited launcher that wraps the program in `sh -c` or names it bare
 	- ID: 2026112016030007
@@ -902,7 +902,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261120: The bare name counts only as a whole word, after a space, a quote or `=`, and before a space or a quote. So `silkterm-old` and `/opt/elsewhere/silkterm` are still rewritten. A bare name that PATH resolves to some other copy is kept too, since the launcher can't tell which one it gets.
 	- Actual cause: `fLauncherNames` matched the plain path only between spaces, and never matched the bare name.
 	- Actual fix: Both installers also take the path or the bare name after a quote or `=`, and before a quote. Installer version 1.3.3.
-		- Swept: `fLauncherNames` in install.bash and install.ps1 are the only launcher matchers. The Windows shortcut check compares the target path and isn't touched, so Target OS Windows has nothing to change.
+	- Swept: `fLauncherNames` in install.bash and install.ps1 are the only launcher matchers. The Windows shortcut check compares the target path and isn't touched, so Target OS Windows has nothing to change.
 	- Verified: dcbdz passes for bash, bash 3.2 and pwsh on Linux. Its 2 new keep checks failed on the old installers, for each of the 3. The quick gate passed.
 	- Branch: nov20b-2026112016030007
 	- Commit: 73434409
@@ -1343,12 +1343,11 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Origin: Directive 20261118, Line length. Not a defect.
 	- Decisions:
 		- 20261120: JC: go ahead, at the start of the next backlog run, in a commit of its own. Moved above the rc.1 cut so that run takes it.
+		- 20261121: `max_width = 65535`, rustfmt's highest. The 4 nested-call rules scale with it, so calls and chains now stay on one line. Two fallouts: rustfmt leaves a trailing comma before `)` in one-lined macro calls, which clippy's `unnecessary_trailing_comma` rejects, so those were removed. A comment above a match arm made clippy's `match_same_arms` fire on `pd_factors` in `coloremoji.rs`, so the arms were merged.
 	- Notes:
 		- Code review 20261120 item 47.
 		- The house rule since 20261118 is no line length limit in code or comments. Raising rustfmt's width reflows every Rust file once, so it goes in a commit of its own, with nothing else in flight. The forks keep their own settings.
 		- Detail: `detail_backlog.md`, under this ID.
-	- Decisions (cont.):
-		- 20261121: `max_width = 65535`, rustfmt's highest. The 4 nested-call rules scale with it, so calls and chains now stay on one line. Two fallouts: rustfmt leaves a trailing comma before `)` in one-lined macro calls, which clippy's `unnecessary_trailing_comma` rejects, so those were removed. A comment above a match arm made clippy's `match_same_arms` fire on `pd_factors` in `coloremoji.rs`, so the arms were merged.
 	- Verified: 20261121 `cargo fmt --check` and `cicd/cicd.bash --backlog-run-quick` with all 5 areas pass. No file under `forks/` changed.
 	- Branch: nov20b-2026112016030047
 	- Commit: bb94fb96
@@ -1862,7 +1861,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Reproduced: No. Traced through `Minimap::update`.
 	- Possible cause: The call that starts the resync timer clears it again and stores the new last line, so the next call sees nothing to catch up.
 	- Origin: 50726c5d, 20260831. Not seen by an earlier round. Confirmed by trace.
-	- Related IDs: Item 2
+	- Related IDs: 2026112016030002
 	- Notes:
 		- Code review 20261120 item 8.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -3585,7 +3584,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Expected behavior: Every clear shows at once, under load too.
 	- Reproduced: 20261105, 2 of 2 with the cores loaded. It passed 3 of 3 with the box at load 12. It passed in every earlier run log, X11 and Wayland, back to 10-29.
 	- Possible cause: It isn't known yet. Either the clear slides when the frames come slowly, which a user on a busy box would see, or the scene's timing doesn't hold up under load. Telling those apart comes first.
-	- Actual cause [Bug]:
+	- Actual cause:
 		- It was the scene's timing. A frame moves a slide on by at most 0.1 s, so with frames a second apart the bursts were still sliding when the clears came. A clear while a big slide still runs slides by design, per 2026101611321631's "Not covered". The failing frames were that leftover slide.
 		- With that fixed, there was a second gap. Without a frame between a clear and the next fill, one frame showed the pane scrolled away and then refilled. That is a burst, which slides.
 		- To tell them apart, 2 cores were taken by busy loops, with the harness pinned there, which gave a frame about a second. The old scene failed there, with the 4 bursts' slide at its 128-row cap under the clears. Spread across 32 cores, the same load passed twice.
@@ -3594,7 +3593,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Decisions:
 		- 20261106: It was fixed in the scene rather than in the clear rule. On a box this slow a user who clears while output still slides sees it slide, which is the documented limit. The rule stays out of the way while a big slide runs so a flood in tmux keeps sliding.
 		- 20261106: A wait that runs out is a skip rather than a pass or a fail, since the scene never got the screen it tests. altenter does the same.
-	- Actual fix [Bug]: After each fill, clear, and mark, the scene waits up to 15 s for a frame drawn since then, at rest, in place of a fixed 0.8 s. A wait that runs out leaves a note, and the analyzer calls that run a skip.
+	- Actual fix: After each fill, clear, and mark, the scene waits up to 15 s for a frame drawn since then, at rest, in place of a fixed 0.8 s. A wait that runs out leaves a note, and the analyzer calls that run a skip.
 	- Verified: 20261106 on b23, debug build, harness pinned to 2 cores under 6 busy loops. The old scene failed 1 of 1, the first fix failed 2 of 10, and the final scene passed 4 of 4. With a 1 s wait it reported the skip. Quiet runs pass on X11 and Wayland. dcbdt passes. shellcheck, ruff, and `--backlog-run-quick` with all 5 areas pass.
 		- Swept: the other scenes on fixed pauses. The `clear` scene under the same load ran past an 85 s limit, so it isn't verified there. It passed in every earlier full run.
 	- Branch: rnd1106
@@ -3725,7 +3724,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Actual cause:
 		- Once flatpak's table is taller than the screen, each redraw goes to the top row, clears, and prints the whole table again. The rows that don't fit are printed without line breaks between them, so they wrap into about a screenful that scrolls up into history. The screen ends up looking the same, but SilkTerm eased through the whole screenful on every redraw.
 		- Before 20260903, at a full scrollback the advance was read off the screen rows, and those didn't show anything moving. The tmux scrolling change (c5374c3) switched that to the engine's own count of lines pushed into history, which counts flatpak's. That's the regression. Before the scrollback fills it eased on every redraw back then too.
-	- Actual fix [Bug]: Output is a repaint when the screen comes back mostly as it was and almost none of the rows it showed went up with the new lines. A repaint doesn't ease. The view goes to the bottom, or eases only the row or so the picture itself moved. Rows that only got respaced, when a column grows wider, still count as the same. A scrollback clear is left out here. Since 2026101310563297 a clear doesn't ease at all.
+	- Actual fix: Output is a repaint when the screen comes back mostly as it was and almost none of the rows it showed went up with the new lines. A repaint doesn't ease. The view goes to the bottom, or eases only the row or so the picture itself moved. Rows that only got respaced, when a column grows wider, still count as the same. A scrollback clear is left out here. Since 2026101310563297 a clear doesn't ease at all.
 	- Verified: 20261013 on b23, a real `flatpak update` of 60 apps. The frames that eased during the update went from 55 to 8 with the scrollback not full, and from 50 to 12 with it full. What's left is the first table and its first redraw. The same output fed straight into the terminal eased the first table and 1 of its 242 redraws, against all of them before. The gate and the 11 scroll scenes pass.
 	- Progress log:
 		- 20261013: Waiting on UAT for a look at a real update with downloads in a real window. It still eases once, on the first redraw, when the table gets its progress column.
@@ -6509,8 +6508,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: 99f5810 ("knobs: MIT") changed the headers, and the test's `.rs` branch still wants GPL on every tracked `.rs` file.
 	- Notes:
 		- Found while working 2026101714445003. It fails every full run until fixed.
-	- Actual cause [Bug]: The test's `.rs` branch had GPL and the Jim Collier form written in for every tracked `.rs` file, so it couldn't follow a crate that changed license.
-	- Actual fix [Bug]: A `.rs` file takes the `license` of the nearest Cargo.toml above it, GPL when that doesn't name one. Its line 1 has to match. An MIT file may use either copyright form, as an MIT script may, and a GPL one still needs the Jim Collier form.
+	- Actual cause: The test's `.rs` branch had GPL and the Jim Collier form written in for every tracked `.rs` file, so it couldn't follow a crate that changed license.
+	- Actual fix: A `.rs` file takes the `license` of the nearest Cargo.toml above it, GPL when that doesn't name one. Its line 1 has to match. An MIT file may use either copyright form, as an MIT script may, and a GPL one still needs the Jim Collier form.
 	- Swept: every tracked `.rs` file and Cargo.toml. knobs and knobs/demo are MIT. source and sanitizer-canary say GPL, and clipboard-race and gpu-stress don't name a license and have GPL headers. The script branch already took MIT. `every_source_file_has_the_license_header` reads only `source/src/`, which stays GPL.
 	- Verified: 20261023. The test failed with the 6 faults before and passes after. A GPL header put into `knobs/src/tests.rs`, and an MIT Bubbles header into gpu-stress, each made it fail. fmt and clippy are clean.
 	- Branch: rnd1023
@@ -6576,7 +6575,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Actual cause:
 		- tmux never passes a clear on. It keeps the terminal on the alt screen and draws the pane itself. With its status line on the bottom row it can't erase to the bottom, so it scrolls the pane's rows away instead. SilkTerm took that as the pane scrolling and slid it.
 		- Output inside tmux comes the same way. A burst scrolls the whole pane away and then draws the new rows, so the scroll alone can't tell the two apart.
-	- Actual fix [Bug]: A pane scrolled away whole that's left mostly blank is a clear. It shows at once, and the Enter that ran it stops sliding. A burst fills the pane, so it still slides. The rule only applies while the slide still running is a line or two, since a burst's draw can be cut by a frame early on during a flood.
+	- Actual fix: A pane scrolled away whole that's left mostly blank is a clear. It shows at once, and the Enter that ran it stops sliding. A burst fills the pane, so it still slides. The rule only applies while the slide still running is a line or two, since a burst's draw can be cut by a frame early on during a flood.
 	- Not covered:
 		- A clear that comes while a big slide is still running, such as `seq 100; clear` on one line, still slides.
 		- With ble.sh, when the clear and ble.sh's prompt redraw come in one frame, the Enter's one-row slide runs out over the cleared screen. It did that before too.
@@ -6683,7 +6682,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Best-guess reading: the clear itself shows at once, with nothing sliding, at any scrollback depth, and the same every time. The old bug's complaint was that it wasn't the same every time.
 		- Output after the clear that fits on the screen shows in place. Output long enough to scroll eases like any other output, but only by what went up after the clear.
 		- This applies to `clear` and `tput clear` (both send home, erase the screen, and erase the scrollback), Ctrl+L, and a reset (`printf '\033c'`).
-	- Actual fix [Bug]: The terminal engine notes each clear of the screen and each reset, with how many lines went up after it. On a clear the view goes straight to the bottom, and only those lines ease. The ease's minimum distance can't reach back past them into the screen that was cleared. Blank lines that go up from a blank screen don't ease, since nothing seen moved. After a clear, that rule applies to the lines that went up after it.
+	- Actual fix: The terminal engine notes each clear of the screen and each reset, with how many lines went up after it. On a clear the view goes straight to the bottom, and only those lines ease. The ease's minimum distance can't reach back past them into the screen that was cleared. Blank lines that go up from a blank screen don't ease, since nothing seen moved. After a clear, that rule applies to the lines that went up after it.
 	- Verified: 20261013 on b23. The full unit test suite, the engine's own tests, rustfmt, and clippy pass. A new scroll scene runs all 4 clears twice, with the scrollback full and then not. It failed on the build from before (27 frames eased) and passes now. The other 11 scroll scenes still pass on X11.
 	- Verified: 20261013 on b23, in a window with ble.sh and a prompt that wraps. Frames that eased after `clear`: 64 on the build from before 9c99883 and 66 on 9c99883 after a long listing, 78 and 59 after a short one, 0 and 0 now. With a prompt that fits, 1 frame on all 3, which is the typed command's own line going up before the clear arrives. The full unit suite, clippy, and all 12 scroll scenes pass. The `clear` scene now includes ble.sh's redraw, and it failed on 9c99883 (72 frames eased) and passes now.
 	- Note: Old tests that said a clear eases:
@@ -11040,8 +11039,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261106: The title's height comes from its own tab's box, the same box that is drawn, so nothing in the layout can add up down the list. Both renderers in the frame get the same surface size.
 		- 20261109: Measured the tabs from Silk down to Keys. Every box is 29 px tall, and every baseline sits 8 px above the box's bottom edge, so nothing moves down the list. The letters are what differ. A title with a tall letter (Silk, Themes, Background, Window, Shell) starts 8 px below the box top. A title without one (Appearance, Text, Cursor, Movement, Program, Keys) starts 11 px down, so it looks low. The titles are centered from the top of a tall letter to the baseline, the same as the main window's menu and tab titles.
 		- 20261110: Titles now center on their capitals, with the baseline on a whole pixel. In a 29 px box that leaves 9 px over the capitals and 10 under the baseline on every tab, where it was 8 or 11 over before, by letter. A font with a deep descent makes the tabs taller, so g and y stay 2 px clear of the edge.
-	- Actual cause [Bug]: Titles were centered by line box, then dropped half the descent, which centers ascender-top to baseline. A title without a tall letter read low.
-	- Actual fix [Bug]: Tab titles are placed by their capitals, baseline = band top + (band height + cap height) / 2, snapped to a whole pixel. The band grows when the font leaves less than its descent plus 2 px under the baseline.
+	- Actual cause: Titles were centered by line box, then dropped half the descent, which centers ascender-top to baseline. A title without a tall letter read low.
+	- Actual fix: Tab titles are placed by their capitals, baseline = band top + (band height + cap height) / 2, snapped to a whole pixel. The band grows when the font leaves less than its descent plus 2 px under the baseline.
 	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd) runs on both sides, at 4 scales, in tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build. `chrome_caps_center_in_bar_on_a_whole_pixel` (df452) and `band_floor_clears_descenders` (df453) fail when the snap or the descent room is taken out.
 	- Branch: rnd1106, tabcap
 	- Acceptance signoff: Self-closed: the new placement was checked in the dialog against the 11-09 build, and its tests fail without it.
@@ -11066,7 +11065,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- tukzmon fixed it in commit 5fcb1e7 (tests df399 to df39c). Its copy now has Presets and Indent enums, so the patch needs those parts adapted here.
 		- 20261109: Ported. The Presets and Indent enums weren't needed here, since the chooser check keys on from_program as the rest of check_links does.
-	- Actual fix [Bug]: check_links folds case on paths, refuses NaN range ends and detents, refuses option twins, refuses a chooser that isn't a choice, and walks the reads Model::value makes for a loop. Spec::valid refuses a NaN value.
+	- Actual fix: check_links folds case on paths, refuses NaN range ends and detents, refuses option twins, refuses a chooser that isn't a choice, and walks the reads Model::value makes for a loop. Spec::valid refuses a NaN value.
 	- Branch: rnd1109
 	- Test case: df3k1 to df3k4 in knobs/src/tests.rs. Each fails on the old code. The settings spec and its dialog tests still pass.
 	- Acceptance signoff: Self-closed: the spec checks have tests that fail without them, and the real settings spec still loads.
@@ -11088,8 +11087,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Incorrect behavior: `cicd/tests/scroll/run.bash` (d9j4v) failed with "scroll scene nano (Wayland), expected st=1 while sliding but saw st=2". The X11 nano scene and the other 13 Wayland scenes passed in the same run.
 	- Expected behavior: Every sliding frame of the nano scene reads st=1, under the title bar.
 	- Reproduced: No, 20261108. On the host, 5 runs of `--wayland --only nano` passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines. Yes, 20261109, every time, on Wayland with the debug build, by holding the scene for 0.5 s after the first region row of its first scroll step.
-	- Actual cause [Bug]: The scene wrote its frame one row at a time. A frame drawn between those writes on the first step of a slide had the first region row already moved and the rest not. On the next frame that row read the same as before, so it was held as part of the top band, and the bands stay frozen for the whole slide.
-	- Actual fix [Bug]: The full-redraw shapes (less, vim, nano, muffer) write each frame at once, as curses does and as the pill shape already did.
+	- Actual cause: The scene wrote its frame one row at a time. A frame drawn between those writes on the first step of a slide had the first region row already moved and the rest not. On the next frame that row read the same as before, so it was held as part of the top band, and the bands stay frozen for the whole slide.
+	- Actual fix: The full-redraw shapes (less, vim, nano, muffer) write each frame at once, as curses does and as the pill shape already did.
 	- Progress log:
 		- 20261109: The same hold mid-slide passed, since the bands are only measured on a slide's first step. A real app that redraws row by row over a slow link could have one row held for a slide the same way. It hasn't been seen.
 	- Branch: rnd1109
@@ -11871,7 +11870,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target OS: All
 	- Target version: rc.1
 	- Incorrect behavior: `every_script_has_the_license_header_with_history_at_the_bottom` fails on dev since e56595f, which added the script without one.
-	- Actual fix [Bug]: Added the History block.
+	- Actual fix: Added the History block.
 	- Test case: `every_script_has_the_license_header_with_history_at_the_bottom` itself, which failed on dev and passes with the block.
 	- Acceptance signoff: Self-closed: mechanical.
 	- Branch: tmuxclear
@@ -12420,7 +12419,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Expected behavior: `fCamelCase` functions, camelCase variables, `[[ ]]`, and `"${var}"`.
 	- Note: `retry_build` is named in the project notes, and the gfs helpers are shared with other projects, so those renames go with their references.
 	- Origin: db4d40b (2026-08-01) for cicd.bash, c09beb3 (2026-08-06) for install.bash, c7678e6 (2026-09-17) for gui-headless.bash. There's no earlier review item. Confirmed.
-	- Actual fix [Bug]:
+	- Actual fix:
 		- Functions are fCamelCase and variables camelCase, with every caller, test, and note that names them. `retry_build` is now `fRetryBuild`.
 		- The output helpers moved out of cicd.bash into `cicd/utility/include/echo.bash`. release.bash sources it, so it prints through fEcho_Clean and fails through fDie.
 		- install.bash and its test use `[[ ]]` throughout. Version fields there compare as base 10, since `-gt` inside `[[ ]]` would read a leading zero as octal.
@@ -12736,7 +12735,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The Python directive table says 4 spaces. The scripts use tabs, so the config pins tabs.
 		- `ruff.toml` turns off E401, E702, E731, and E741, 10 lines in 5 scripts, for 2026100314050016 to take back.
 		- The PowerShell lint test had failed 3 checks since a192b87. That commit turned off `PSUseApprovedVerbs`, and the test's planted finding was an unapproved verb. The finding is now an alias, and the verb case checks that it stays excluded.
-	- Actual fix [Bug]:
+	- Actual fix:
 		- There's a `ruff.toml` with ruff's default rules and the formatter set to tabs, and a `cicd/utility/py-lint.py` (ruff, then a tab check on block indentation). cicd.bash gates on it beside the shellcheck and PowerShell lints.
 		- `ps-lint.ps1` checks that indentation is tabs, with spaces allowed after them. Here-string text is skipped.
 		- `style-guide.md` has short Bash, PowerShell, and Python sections.
@@ -13164,7 +13163,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Expected behavior: the line shows the file's size, 12M here.
 	- Reproduced: 20261013 on b23, in the full pipeline run at 3e8df3f.
 	- Actual cause: the size comes from `du -h`, which on ZFS reads a just-written file as almost nothing until the write is committed, and after that gives the compressed size, 7.0M here.
-	- Actual fix [Bug]: It uses `du -h --apparent-size`, as the gallery thumbnail line already did. The wallpaper gallery's "Wrote" line got the same fix.
+	- Actual fix: It uses `du -h --apparent-size`, as the gallery thumbnail line already did. The wallpaper gallery's "Wrote" line got the same fix.
 	- Verified: 20261013, `du -h` reads 7.0M and `du -h --apparent-size` 12M on the settled build. shellcheck and the bash style check pass.
 	- Swept: every `du` in `cicd/`, `utility/`, and the installers. The 3 lines above were the only ones without `--apparent-size`.
 	- Branch: dusize
