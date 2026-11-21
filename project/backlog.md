@@ -209,7 +209,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - An environment variable that isn't valid UTF-8 crashes SilkTerm at launch
 	- ID: 2026112016030003
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Avg
 	- Opened: 20261120-160300
 	- Opened by: CC
@@ -226,6 +226,18 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Code review 20261120 item 3.
 		- It crashes, so it's on rc.1 by the rule used for Code review 20261117.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Decisions:
+		- 20261120: A variable whose name isn't Unicode is skipped by the cleanup, since no listed name can match it. A value that isn't Unicode is compared in lossy form, since only listed names are ever written back.
+	- Actual cause: `sanitize_shell_env` in term.rs read the whole environment with `std::env::vars()`, which panics on the first entry that isn't Unicode. It runs at the top of main, before the arguments are read.
+	- Actual fix: The cleanup reads `vars_os()` through a new `inherited_env`, which skips a non-Unicode name and keeps a non-Unicode value in lossy form. Nothing else in the environment is rewritten, so other variables reach the shell as raw bytes.
+	- Swept: `std::env::vars()` had one caller, in term.rs. There are none in forks/, knobs/ or cicd/. Single reads with `std::env::var` return an error rather than panic on a non-Unicode value, and none unwraps it outside build.rs, which reads cargo's own variables. Those reads treat such a value as unset, such as `SHELL` in shells.rs and in the alacritty fork, which then fall back.
+	- Verified: Before the fix, `FOO=$'\xe9' silkterm --version` panicked in `sanitize_shell_env` with exit 101 on the debug build. Now it prints the version with exit 0. On a private Xvfb, a pane started with `FOO=$'caf\xe9'` and `OLDPWD=$'/data/caf\xe9'` got `FOO` byte for byte and no `OLDPWD`, as designed. dfjva fails with `inherited_env` unwrapping as `vars()` does, and passes with the fix. The backlog quick run passes in all 5 areas, with 1529 unit tests, and clippy is clean for the Windows target. It wasn't run on macOS.
+	- Test case: dfjva `a_variable_that_is_not_unicode_does_not_stop_the_launch`.
+	- Branch: nov20b-2026112016030003
+	- Commit: 118dfd62
+	- Acceptance signoff: Self-closed: reproduced, and the test and a run of the binary fail before the fix and pass after.
+	- Closed: 20261120-172900
+	- Closed reason: Done
 
 - With a menu open, a Ctrl or Ctrl+Shift chord picks a menu row, so the copy chord can close the tab
 	- ID: 2026112016030004

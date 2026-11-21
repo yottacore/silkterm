@@ -937,7 +937,7 @@ pub fn sanitize_shell_env() {
 	let Some(session) = session_env() else {
 		return;
 	};
-	let inherited: std::collections::HashMap<String, String> = std::env::vars().collect();
+	let inherited = inherited_env(std::env::vars_os());
 	for (name, value) in env_fixups(SHELL_PRIVATE_ENV, &session, &inherited) {
 		// SAFETY: single-threaded here, since this runs at the top of main, before
 		// the event loop, any worker thread, or any PTY exists.
@@ -948,6 +948,25 @@ pub fn sanitize_shell_env() {
 			}
 		}
 	}
+}
+
+// Our own environment as text, for env_fixups to compare. std::env::vars panics
+// on the first entry that isn't Unicode, and one is easy to get: OLDPWD after a
+// cd into a folder with a Latin-1 name. A name that isn't Unicode can't be on
+// the list, so it's skipped. A value that isn't is kept lossy, since it's only
+// compared, and only a listed name is ever written back. Everything else
+// reaches a pane's shell untouched, as raw bytes.
+fn inherited_env(
+	vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+) -> std::collections::HashMap<String, String> {
+	vars.into_iter()
+		.filter_map(|(name, value)| {
+			Some((
+				name.into_string().ok()?,
+				value.to_string_lossy().into_owned(),
+			))
+		})
+		.collect()
 }
 
 // What has to change for each named variable to read the way a freshly launched
@@ -1792,8 +1811,8 @@ fn wsl_cd(argv: &[String], dir: &std::path::Path) -> Option<Vec<String>> {
 mod tests {
 	use super::{
 		SHELL_PRIVATE_ENV, TITLE_MAX_BYTES, WakeGate, capped_title, env_fixups, expand_refs,
-		grid_dims, is_command_child, join_for, parse_env_block, query_reply, requested_color,
-		resize_changes, usable_cwd, wsl_cd,
+		grid_dims, inherited_env, is_command_child, join_for, parse_env_block, query_reply,
+		requested_color, resize_changes, usable_cwd, wsl_cd,
 	};
 
 	// tmux redraws its status line clock with nobody there, and that kept the
@@ -2944,6 +2963,38 @@ mod tests {
 		assert!(fixups.iter().all(|(_, value)| value.is_none()));
 		// and the one nobody asked about is untouched
 		assert!(!fixups.iter().any(|(name, _)| name == "PATH"));
+	}
+
+	// One variable whose bytes aren't UTF-8 used to abort every launch, --version
+	// included, since the whole environment was read as text. OLDPWD after a cd
+	// into a Latin-1 folder is enough. It still has to be seen, so it's dropped.
+	// Test ID: dfjva
+	#[test]
+	fn a_variable_that_is_not_unicode_does_not_stop_the_launch() {
+		use std::ffi::OsString;
+		#[cfg(unix)]
+		let bad = |text: &str| {
+			use std::os::unix::ffi::OsStringExt;
+			let mut bytes = text.as_bytes().to_vec();
+			bytes.push(0xe9);
+			OsString::from_vec(bytes)
+		};
+		#[cfg(windows)]
+		let bad = |text: &str| {
+			use std::os::windows::ffi::OsStringExt;
+			let mut wide: Vec<u16> = text.encode_utf16().collect();
+			wide.push(0xd800);
+			OsString::from_wide(&wide)
+		};
+		let inherited = inherited_env([
+			(OsString::from("OLDPWD"), bad("/data/caf")),
+			(OsString::from("PATH"), OsString::from("/usr/bin")),
+			(bad("FOO"), OsString::from("x")),
+		]);
+		assert_eq!(inherited.len(), 2);
+		assert_eq!(inherited.get("PATH").map(String::as_str), Some("/usr/bin"));
+		let fixups = env_fixups(&["OLDPWD"], &vars(&[]), &inherited);
+		assert_eq!(fixups, vec![("OLDPWD".to_string(), None)]);
 	}
 
 	// Whatever a program prints, the terminal must not end up typing for it.
