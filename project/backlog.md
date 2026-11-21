@@ -242,7 +242,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - With a menu open, a Ctrl or Ctrl+Shift chord picks a menu row, so the copy chord can close the tab
 	- ID: 2026112016030004
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Avg
 	- Opened: 20261120-160300
 	- Opened by: CC
@@ -258,6 +258,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Code review 20261120 item 4.
 		- On rc.1 since it can end a running program, by the rule used for Code review 20261117.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: The open menu's key handler matched the typed letter against the rows and never read the held modifiers. winit reports Ctrl+Shift+C as a plain "C", so it picked the Tabs menu's Close tab row.
+	- Decisions:
+		- 20261120: A chord does nothing while a menu is open, the first of the 2 readings offered. The menu stays up. Closing it and running the hotkey could close a tab or send a control byte to the shell from a press aimed at the menu.
+		- 20261120: Alt alone still picks a row, beyond the wording's "on its own or with Shift". That keeps Alt+F then Alt+N working with Alt held, as on Windows, and it's the same rule that makes Alt plus a letter open a menu title. Alt+Shift picks nothing, since the pane chords use it, such as Alt+Shift+W.
+	- Actual fix: A letter picks its row on its own, with Shift, or with Alt alone. With Ctrl or Super held (Command on a Mac) it picks nothing. The UI style guide says so under the menu rules.
+	- Swept: The only place a letter is matched to a menu row is the open menu's key handler, which every in-window menu goes through: the bar dropdowns, their submenus, the right-click menu, and the tab rename's menu. The Settings dropdowns and its field menu have no letter keys, and its Alt button keys already need Alt. The macOS menu bar is drawn by macOS.
+	- Test case: `a_ctrl_or_command_chord_picks_no_menu_row` (dfjvn), which walks every menu and letter, and `a_letter_picks_a_menu_row_only_alone_or_with_shift_or_alt` (dfjvm). dfjvn fails with the modifier check taken out.
+	- Verified: The quick gate, all 5 areas, and clippy for Windows.
+	- Branch: nov20b-2026112016030004
+	- Commit: f624b3bb
+	- Acceptance signoff: Self-closed: the intent was clear, and the test failed before the fix and passes after.
+	- Closed: 20261120-173128
+	- Closed reason: Done
 
 - Saving or renaming a theme drops the comments in its block and moves it to the end of the list
 	- ID: 2026112016030005

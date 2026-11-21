@@ -17,6 +17,7 @@ use crate::settings_ui::EditCmd;
 use crate::shells::ShellEntry;
 use crate::term::{PaneId, UserEvent};
 use winit::event_loop::EventLoopProxy;
+use winit::keyboard::ModifiersState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MenuAction {
@@ -215,6 +216,21 @@ pub(super) fn entry_accel(entry: &Entry) -> Option<(&str, usize)> {
 		} => Some((label, *pos)),
 		_ => None,
 	}
+}
+
+/// The row a key typed into an open menu picks, if any: the first one
+/// underlined with that letter, and only when the held keys make it a letter
+/// rather than a hotkey (`input::picks_menu_row`).
+pub(super) fn accel_row(entries: &[Entry], typed: &str, mods: ModifiersState) -> Option<usize> {
+	if !crate::input::picks_menu_row(mods) {
+		return None;
+	}
+	let ch = typed.chars().next()?.to_ascii_lowercase();
+	entries.iter().position(|entry| {
+		entry_accel(entry).is_some_and(|(label, pos)| {
+			label[pos..].chars().next().map(|c| c.to_ascii_lowercase()) == Some(ch)
+		})
+	})
 }
 
 // Byte offset of the accelerator letter: exact case first, then the start of
@@ -1363,7 +1379,7 @@ mod tests {
 	use super::super::rotation::rotation_live;
 	use super::super::tests::shell;
 	use super::{
-		ContextMenu, CtxState, Entry, MenuAction, ViewState, accel_at, accel_clash,
+		ContextMenu, CtxState, Entry, MenuAction, ViewState, accel_at, accel_clash, accel_row,
 		context_menu_items, edit_menu_items, entry_accel, entry_check_accel, entry_item_accel,
 		entry_label, entry_sub, file_menu_items, help_menu_items, menu_metrics, panes_menu_items,
 		split_shells, tabs_menu_items, view_menu_items, with_shortcuts,
@@ -1823,6 +1839,64 @@ mod tests {
 	// Sentence case: past the first letter, a capital is either the row's
 	// accelerator ("Paste selection") or part of the shortcut. Shell titles in a
 	// flyout are names and keep theirs.
+	// winit reports Ctrl+Shift+C as a plain "C", so a menu that went by the
+	// letter alone closed the tab from Tabs, the pane from Panes, and split the
+	// pane from the right-click menu on Ctrl+Shift+V. A chord picks no row in
+	// any menu, and the letter on its own still does.
+	// Test ID: dfjvn
+	#[test]
+	fn a_ctrl_or_command_chord_picks_no_menu_row() {
+		use winit::keyboard::ModifiersState as M;
+		let chords = [
+			M::CONTROL,
+			M::CONTROL | M::SHIFT,
+			M::CONTROL | M::ALT,
+			M::SUPER,
+			M::SUPER | M::SHIFT,
+			M::ALT | M::SHIFT,
+		];
+		let row = |items: &[Entry], ch: &str, mods| accel_row(items, ch, mods);
+		let mut picked = 0;
+		for (name, items) in every_menu(&three_shells()) {
+			for c in 'a'..='z' {
+				let ch = c.to_string();
+				let plain = row(&items, &ch, M::empty());
+				assert_eq!(
+					row(&items, &ch.to_uppercase(), M::SHIFT),
+					plain,
+					"{name} Shift+{c}"
+				);
+				assert_eq!(row(&items, &ch, M::ALT), plain, "{name} Alt+{c}");
+				picked += usize::from(plain.is_some());
+				for mods in chords {
+					assert_eq!(
+						row(&items, &ch.to_uppercase(), mods),
+						None,
+						"{name} {mods:?}+{c}"
+					);
+					assert_eq!(row(&items, &ch, mods), None, "{name} {mods:?}+{c}");
+				}
+			}
+		}
+		assert!(picked > 10, "the menus have accelerators to pick: {picked}");
+		let menus = every_menu(&three_shells());
+		let by = |name: &str| &menus.iter().find(|(n, _)| *n == name).unwrap().1;
+		let action = |items: &[Entry], at: Option<usize>| match at.map(|i| &items[i]) {
+			Some(Entry::Item { action, .. }) => Some(*action),
+			_ => None,
+		};
+		let tabs = by("Tabs");
+		assert_eq!(
+			action(tabs, row(tabs, "c", M::empty())),
+			Some(MenuAction::CloseTab)
+		);
+		let ctx = by("right-click");
+		assert_eq!(
+			action(ctx, row(ctx, "v", M::empty())),
+			Some(MenuAction::SplitVertical)
+		);
+	}
+
 	// Test ID: dd5pp
 	#[test]
 	fn every_menu_row_is_in_sentence_case() {

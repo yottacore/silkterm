@@ -34,7 +34,7 @@ use dialogs::notice_due;
 pub(crate) use idle::tune_heap;
 use idle::{Conserve, IdleClock, MinimizedProbe, idledbg, restore_sign};
 use menubar::{bar_menu_for, bar_title_underlines, menu_bar_at_launch, menubar_text_slot};
-use menus::{ContextMenu, entry_accel, entry_label};
+use menus::{ContextMenu, accel_row, entry_accel, entry_label};
 pub(crate) use menus::{Entry, MenuAction};
 #[cfg(any(test, target_os = "macos"))]
 pub(crate) use menus::{mac_entries, menu_hotkey, without_rows};
@@ -5203,18 +5203,14 @@ impl ApplicationHandler<UserEvent> for App {
 							}
 						}
 						// accelerator: a letter picks the item underlined with it.
-						// It's unique per menu, and some items have none.
+						// It's unique per menu, and some items have none. A chord
+						// such as Ctrl+Shift+C picks nothing and stays in the menu.
 						Key::Character(typed) => {
-							let ch = typed.chars().next().map(|c| c.to_ascii_lowercase());
-							let hit = ch.and_then(|ch| {
-								let inner = state.menu.as_ref()?.popups().last()?;
-								inner.entries.iter().position(|entry| {
-									entry_accel(entry).is_some_and(|(label, pos)| {
-										label[pos..].chars().next().map(|c| c.to_ascii_lowercase())
-											== Some(ch)
-									})
-								})
-							});
+							let hit = state
+								.menu
+								.as_ref()
+								.and_then(|menu| menu.popups().last())
+								.and_then(|inner| accel_row(&inner.entries, typed, state.mods));
 							if let Some(row) = hit {
 								state.menu_activate(row, &self.proxy);
 							}

@@ -300,6 +300,16 @@ pub fn opens_menu_title(mods: ModifiersState) -> bool {
 	mods == ModifiersState::ALT
 }
 
+/// Whether a letter typed into an open menu picks the row underlined with it:
+/// on its own, with Shift, or with Alt alone, so Alt+F then Alt+N rolls as it
+/// does on Windows. Ctrl or Super held makes it a hotkey, and winit reports
+/// Ctrl+Shift+C as a plain "C", so without this the copy chord closed the tab
+/// from the Tabs menu. Alt+Shift is the pane chords' family, so it picks
+/// nothing either.
+pub fn picks_menu_row(mods: ModifiersState) -> bool {
+	mods.difference(ModifiersState::SHIFT).is_empty() || opens_menu_title(mods)
+}
+
 /// Where a write to the desktop clipboard comes from.
 #[derive(Debug, Clone, Copy)]
 pub enum CopyFrom {
@@ -1461,6 +1471,30 @@ mod tests {
 		}
 		assert!(opens_menu_title(ALT));
 		assert!(!opens_menu_title(NONE));
+	}
+
+	// A letter in an open menu is the row's own key on its own, with Shift, or
+	// with Alt alone. Ctrl or Super held makes it a hotkey, and Alt+Shift is
+	// the pane chords', so none of those pick a row.
+	// Test ID: dfjvm
+	#[test]
+	fn a_letter_picks_a_menu_row_only_alone_or_with_shift_or_alt() {
+		const ALT: ModifiersState = ModifiersState::ALT;
+		const SHIFT: ModifiersState = ModifiersState::SHIFT;
+		for mods in [NONE, SHIFT, ALT] {
+			assert!(picks_menu_row(mods), "{mods:?}");
+		}
+		for mods in [
+			CTRL,
+			CTRL.union(SHIFT),
+			CTRL.union(ALT),
+			COMMAND,
+			COMMAND.union(SHIFT),
+			ALT.union(SHIFT),
+			ALT.union(COMMAND),
+		] {
+			assert!(!picks_menu_row(mods), "{mods:?}");
+		}
 	}
 
 	// On a Mac the pane chords are iTerm2's: Command+D splits right,
