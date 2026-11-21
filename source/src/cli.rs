@@ -34,7 +34,10 @@ pub enum Size {
 #[derive(Debug, Default, Clone)]
 pub struct Style {
 	pub shell: Option<Vec<String>>, // argv (already shell-word-split)
-	pub directory: Option<String>,  // where that shell starts (unexpanded)
+	/// `shell` is the file `--open` runs, which only the pane it was given to
+	/// runs. A pane made from that one starts the default shell.
+	pub opened_file: bool,
+	pub directory: Option<String>, // where that shell starts (unexpanded)
 	pub keep_open: Option<bool>,
 	pub font_name: Option<String>,
 	pub font_size: Option<f32>,
@@ -565,7 +568,10 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 			}
 		};
 		match name {
-			"shell" => style.shell = Some(shell_split(&tokens.value(name, inline)?)?),
+			"shell" => {
+				style.shell = Some(shell_split(&tokens.value(name, inline)?)?);
+				style.opened_file = false;
+			}
 			// Kept unexpanded: `~` and the env-var spellings are resolved at spawn
 			// time by config::cli_dir, the same way the config setting is.
 			"directory" | "dir" => style.directory = Some(tokens.value(name, inline)?),
@@ -581,6 +587,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 					cfg!(windows),
 					&|| crate::shells::which("pwsh").is_some(),
 				));
+				style.opened_file = true;
 				if style.directory.is_none() {
 					style.directory = std::path::Path::new(&file)
 						.parent()

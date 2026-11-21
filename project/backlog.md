@@ -132,7 +132,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Splitting a pane, or opening a tab from it, runs a script that was opened by double-click again
 	- ID: 2026112016030001
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: High
 	- Opened: 20261120-160300
 	- Opened by: CC
@@ -148,6 +148,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- Code review 20261120 item 1.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: confirmed. `--open` sets the launch shell to the file's run line, and `PaneManager::split` and `inherit_spawn` copied the pane's command as it was.
+	- Progress log:
+		- 20261120: fixed. A pane `--open` made is marked, and keeps the file as its command for its label. A split, a new tab, or a command-line pane made from it gets the default shell, in the same folder. A `--shell` pane still hands its shell on. usage.md says so in the `--open` row.
+	- Swept: `PaneManager::split`, `inherit_spawn` (new tab and new tab in tmux), and the command-line layout's split cascade, which now skips a tab's or window's `--open` file too. The other readers of the command, `launched` and `tab_facts`, only name the tab. A new window takes only the folder.
+	- Decisions:
+		- 20261120: the mark sits beside the command rather than replacing it, so the tab still names what the pane ran.
+	- Test case: dfjtj `a_split_or_new_tab_does_not_run_an_opened_file_again`.
+	- Verified: 20261120. dfjtj passes, and fails with the mark ignored in `passed_on` and with `--open` not setting it. The quick gate's format, lint, test and docs areas pass. Not run on Windows, since the change has no platform code.
+	- Branch: nov20b-2026112016030001
+	- Commit: 35175998
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its test passes.
+	- Closed: 20261120-165827
+	- Closed reason: Done
 
 - While scrolled back, new output moves the view, so the text being read slides away
 	- ID: 2026112016030002

@@ -1624,6 +1624,9 @@ pub struct Pane {
 	// runs the same shell as the one it forked off (see design.md). A pane in
 	// tmux keeps the shell here, not tmux, so it is named and inherited alike.
 	command: Option<Vec<String>>,
+	/// `command` is a file `--open` ran. It still names the pane, but a split
+	/// or new tab from here starts the default shell rather than run it again.
+	pub opened_file: bool,
 	/// The tmux session SilkTerm started this pane in, which is the one closing
 	/// it may end (tmux.rs).
 	pub tmux: Option<crate::tmux::Session>,
@@ -1838,6 +1841,10 @@ impl Pane {
 	/// The program this pane was started with, so a title naming it can be known.
 	pub fn launched(&self) -> Option<&str> {
 		self.command.as_deref()?.first().map(String::as_str)
+	}
+
+	fn passed_on(&self) -> Option<Vec<String>> {
+		passed_on(self.command.as_deref(), self.opened_file)
 	}
 
 	pub fn build(
@@ -4020,7 +4027,7 @@ impl PaneManager {
 
 	/// Interactive split from the menu or keyboard: even ratio, new pane after. It inherits the
 	/// source pane's command and current directory, so the new pane runs the same
-	/// shell it forked off, starting where that shell is now.
+	/// shell it forked off, starting where that shell is now. See `passed_on`.
 	pub fn split(
 		&mut self,
 		ctx: &mut TextCtx,
@@ -4029,7 +4036,7 @@ impl PaneManager {
 		dir: Dir,
 		area: Rect,
 	) {
-		let cmd = self.panes.get(&id).and_then(|p| p.command.clone());
+		let cmd = self.panes.get(&id).and_then(Pane::passed_on);
 		self.split_cmd(ctx, proxy, id, dir, cmd, area);
 	}
 
@@ -4090,11 +4097,12 @@ impl PaneManager {
 	}
 
 	/// What a new tab or window made from the focused pane should inherit:
-	/// its launch command (None = default shell) and the shell's current dir.
+	/// its launch command (None = default shell, see `passed_on`) and the shell's
+	/// current dir.
 	pub fn inherit_spawn(&self) -> (Option<Vec<String>>, Option<std::path::PathBuf>) {
-		self.panes.get(&self.focused).map_or((None, None), |pane| {
-			(pane.command.clone(), pane.inherit_cwd())
-		})
+		self.panes
+			.get(&self.focused)
+			.map_or((None, None), |pane| (pane.passed_on(), pane.inherit_cwd()))
 	}
 
 	/// The tmux sessions SilkTerm started in this tab's panes.
@@ -4402,6 +4410,13 @@ fn content_dims(rect: Rect, ctx: &TextCtx) -> (f32, f32, usize, usize) {
 	(cw, ch, cols, lines)
 }
 
+/// What a split, new tab or command-line pane made from a pane runs, None being
+/// the default shell. A file `--open` ran is the exception, since running it
+/// again would redo whatever it did.
+pub(crate) fn passed_on(command: Option<&[String]>, opened_file: bool) -> Option<Vec<String>> {
+	command.filter(|_| !opened_file).map(<[String]>::to_vec)
+}
+
 fn spawn_pane(
 	ctx: &mut TextCtx,
 	proxy: &EventLoopProxy<UserEvent>,
@@ -4468,6 +4483,7 @@ fn spawn_pane(
 		title: String::new(), // what the running program asked the window be called
 		read_only: false,
 		keep_open: false,
+		opened_file: false,
 		held: false,
 		command,
 		tmux,

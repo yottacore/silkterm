@@ -30,6 +30,42 @@ fn pane_shell(
 		.or_else(default)
 }
 
+// What a pane inherits from a place on the command line: its shell, unless
+// that is a file `--open` runs, which only the pane it was given to runs.
+fn handed_on(style: &crate::cli::Style) -> Option<&[String]> {
+	style.shell.as_deref().filter(|_| !style.opened_file)
+}
+
+// The shell of a launch with no tab or pane flags, and whether it is a file
+// `--open` runs.
+fn plain_shell(
+	cli: &crate::cli::Cli,
+	default: impl FnOnce() -> Option<Vec<String>>,
+) -> (Option<Vec<String>>, bool) {
+	let window = &cli.win.style;
+	let shell = pane_shell(None, None, None, window.shell.as_deref(), default);
+	(shell, window.opened_file)
+}
+
+// A tab's first pane's shell, and whether it is a file `--open` runs. The
+// parser gives the first pane's options to the tab, so both count as its own.
+fn main_shell(
+	tab: &crate::cli::TabSpec,
+	window: &crate::cli::Style,
+	default: impl FnOnce() -> Option<Vec<String>>,
+) -> (Option<Vec<String>>, bool) {
+	let own = &tab.panes[0].style;
+	let shell = pane_shell(
+		own.shell.as_deref(),
+		None,
+		tab.style.shell.as_deref(),
+		handed_on(window),
+		default,
+	);
+	let opened = own.opened_file || (own.shell.is_none() && tab.style.opened_file);
+	(shell, opened)
+}
+
 // A new pane's direction: its own, else the one the pane it splits was given,
 // which passes down the chain. None leaves it to `default_dir`.
 fn pane_split_dir(
@@ -70,20 +106,20 @@ pub(super) fn build_layout(
 			p.keep_open = keep;
 		}
 	};
+	let mark_opened = |pm: &mut PaneManager, id: PaneId, opened: bool| {
+		if let Some(p) = pm.panes.get_mut(&id) {
+			p.opened_file = opened;
+		}
+	};
 	if !cli.hierarchical() {
-		let shell = pane_shell(
-			None,
-			None,
-			None,
-			cli.win.style.shell.as_deref(),
-			config::default_shell_argv,
-		);
+		let (shell, opened) = plain_shell(cli, config::default_shell_argv);
 		// a plain launch starts its pane as a new tab would, in tmux when the
 		// setting is on; a layout the command line asks for stays as written
 		let in_tmux = config::settings().tmux_new_session;
 		let mut pm = spawn(text, shell, win_dir, in_tmux);
 		let id = pm.focused;
 		hold(&mut pm, id, cli.win.style.keep_open.unwrap_or(false));
+		mark_opened(&mut pm, id, opened);
 		return vec![pm];
 	}
 	let mut out = Vec::new();
@@ -93,13 +129,7 @@ pub(super) fn build_layout(
 		.map(|index| &cli.tabs[index])
 	{
 		// main pane's shell cascades pane -> tab -> window
-		let main_shell = pane_shell(
-			tab.panes[0].style.shell.as_deref(),
-			None,
-			tab.style.shell.as_deref(),
-			cli.win.style.shell.as_deref(),
-			config::default_shell_argv,
-		);
+		let (main_shell, main_opened) = main_shell(tab, &cli.win.style, config::default_shell_argv);
 		// directories cascade the same way the shells do
 		let tab_dir = tab
 			.style
@@ -122,6 +152,7 @@ pub(super) fn build_layout(
 		let mut pm = spawn(text, main_shell.clone(), main_dir.clone(), false);
 		let main_id = pm.focused;
 		hold(&mut pm, main_id, main_keep);
+		mark_opened(&mut pm, main_id, main_opened);
 		let mut handles: HashMap<String, PaneId> = HashMap::new();
 		handles.insert("main".into(), main_id);
 		handles.insert("0".into(), main_id);
@@ -129,7 +160,10 @@ pub(super) fn build_layout(
 			handles.insert(handle.clone(), main_id);
 		}
 		let mut shells: HashMap<PaneId, Option<Vec<String>>> = HashMap::new();
-		shells.insert(main_id, main_shell);
+		shells.insert(
+			main_id,
+			crate::pane::passed_on(main_shell.as_deref(), main_opened),
+		);
 		let mut dirs: HashMap<PaneId, Option<PathBuf>> = HashMap::new();
 		dirs.insert(main_id, main_dir);
 		let mut keeps: HashMap<PaneId, bool> = HashMap::new();
@@ -157,10 +191,11 @@ pub(super) fn build_layout(
 			let shell = pane_shell(
 				pane_spec.style.shell.as_deref(),
 				shells.get(&target).and_then(Option::as_deref),
-				tab.style.shell.as_deref(),
-				cli.win.style.shell.as_deref(),
+				handed_on(&tab.style),
+				handed_on(&cli.win.style),
 				config::default_shell_argv,
 			);
+			let opened = pane_spec.style.opened_file;
 			// and its directory: explicit -> the pane it splits -> tab -> window
 			let pane_dir = pane_spec
 				.style
@@ -205,13 +240,14 @@ pub(super) fn build_layout(
 				if let Some(handle) = &pane_spec.id {
 					handles.insert(handle.clone(), new_id);
 				}
-				shells.insert(new_id, shell);
+				shells.insert(new_id, crate::pane::passed_on(shell.as_deref(), opened));
 				dirs.insert(new_id, pane_dir);
 				keeps.insert(new_id, keep);
 				if let Some(given) = given_dir {
 					split_dirs.insert(new_id, given);
 				}
 				hold(&mut pm, new_id, keep);
+				mark_opened(&mut pm, new_id, opened);
 				prev = new_id;
 			}
 		}
@@ -274,7 +310,8 @@ fn default_dir_for(rect: Option<Rect>) -> crate::cli::Dir4 {
 #[cfg(test)]
 mod tests {
 	use super::{
-		default_dir_for, new_window_command, pane_shell, pane_split_dir, settings_after_reload,
+		default_dir_for, handed_on, main_shell, new_window_command, pane_shell, pane_split_dir,
+		plain_shell, settings_after_reload,
 	};
 	use crate::config;
 	use crate::pane::Rect;
@@ -420,5 +457,35 @@ mod tests {
 			reloaded.wallpaper_enabled,
 			"a named wallpaper stays switched on"
 		);
+	}
+
+	// A double-clicked script is its pane's command. A split or new tab from
+	// that pane starts the default shell, rather than run the script again.
+	// Test ID: dfjtj
+	#[test]
+	fn a_split_or_new_tab_does_not_run_an_opened_file_again() {
+		use crate::pane::passed_on;
+		let parse = |s: &[&str]| crate::cli::parse(s.iter().map(ToString::to_string)).unwrap();
+		let never = || -> Option<Vec<String>> { panic!("every pane here was given a shell") };
+		let fish = Some(vec!["fish".to_string()]);
+
+		let c = parse(&["--keep-open", "--open", "/s/go.bat"]);
+		let (shell, opened) = plain_shell(&c, never);
+		assert_eq!(shell, c.win.style.shell, "the first pane runs the file");
+		assert_eq!(passed_on(shell.as_deref(), opened), None);
+
+		let c = parse(&["--shell", "fish"]);
+		let (shell, opened) = plain_shell(&c, never);
+		assert_eq!(passed_on(shell.as_deref(), opened), fish);
+
+		// on a tab of its own, beside a tab that takes the window's shell
+		let c = parse(&["--shell", "fish", "--new-tab", "--open", "/s/go.bat"]);
+		let (shell, opened) = main_shell(&c.tabs[1], &c.win.style, never);
+		assert_eq!(shell, c.tabs[1].style.shell, "the tab's pane runs the file");
+		assert_eq!(passed_on(shell.as_deref(), opened), None);
+		let (shell, opened) = main_shell(&c.tabs[0], &c.win.style, never);
+		assert_eq!(passed_on(shell.as_deref(), opened), fish);
+		assert_eq!(handed_on(&c.tabs[1].style), None, "nor to its other panes");
+		assert_eq!(handed_on(&c.win.style).map(<[String]>::to_vec), fish);
 	}
 }
