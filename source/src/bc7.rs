@@ -64,27 +64,17 @@ pub fn decode(blocks: &[u8], (w, h): (u32, u32)) -> Option<image::RgbaImage> {
 		// next 2 bits turn a channel around, which this never does
 		let texels: [[i32; 4]; 16] = if bits & 0x7f == 0x40 {
 			let low = [field(63, 1), field(64, 1)];
-			let ends = [0, 1]
-				.map(|e| [0, 1, 2, 3].map(|c| field(7 + 14 * c + 7 * e, 7) << 1 | low[e as usize]));
+			let ends = [0, 1].map(|e| [0, 1, 2, 3].map(|c| field(7 + 14 * c + 7 * e, 7) << 1 | low[e as usize]));
 			std::array::from_fn(|i| {
-				let pick = if i == 0 {
-					field(65, 3)
-				} else {
-					field(64 + 4 * i as u32, 4)
-				};
+				let pick = if i == 0 { field(65, 3) } else { field(64 + 4 * i as u32, 4) };
 				[0, 1, 2, 3].map(|c| mix(ends[0][c], ends[1][c], SIXTEEN[pick as usize]))
 			})
 		} else if bits & 0xff == 0x20 {
-			let ends =
-				[0, 1].map(|e| [0, 1, 2].map(|c| Mode::Five.expand(field(8 + 14 * c + 7 * e, 7))));
+			let ends = [0, 1].map(|e| [0, 1, 2].map(|c| Mode::Five.expand(field(8 + 14 * c + 7 * e, 7))));
 			let alpha = [field(50, 8), field(58, 8)];
 			std::array::from_fn(|i| {
 				let at = |from: u32| {
-					if i == 0 {
-						field(from, 1)
-					} else {
-						field(from - 1 + 2 * i as u32, 2)
-					}
+					if i == 0 { field(from, 1) } else { field(from - 1 + 2 * i as u32, 2) }
 				};
 				let (pick, alpha_pick) = (FOUR[at(66) as usize], FOUR[at(97) as usize]);
 				let [r, g, b] = [0, 1, 2].map(|c| mix(ends[0][c], ends[1][c], pick));
@@ -134,11 +124,7 @@ impl Mode {
 	fn end_of(self, v: f32) -> i32 {
 		let guess = (v / 2.0).round() as i32;
 		let off = |q: i32| (self.expand(q) as f32 - v).abs();
-		[guess - 1, guess, guess + 1]
-			.map(|q| q.clamp(0, 127))
-			.into_iter()
-			.min_by(|a, b| off(*a).total_cmp(&off(*b)))
-			.unwrap_or(0)
+		[guess - 1, guess, guess + 1].map(|q| q.clamp(0, 127)).into_iter().min_by(|a, b| off(*a).total_cmp(&off(*b))).unwrap_or(0)
 	}
 
 	// The point nearest `t` 64ths of the way.
@@ -146,9 +132,7 @@ impl Mode {
 		let t = t.round().clamp(0.0, 64.0);
 		match self {
 			Mode::Six => usize::from(NEAREST[t as usize]),
-			Mode::Five => (0..4)
-				.min_by_key(|&k| (FOUR[k] - t as i32).abs())
-				.unwrap_or(0),
+			Mode::Five => (0..4).min_by_key(|&k| (FOUR[k] - t as i32).abs()).unwrap_or(0),
 		}
 	}
 }
@@ -168,12 +152,8 @@ impl Encoded {
 	fn of(mode: Mode, block: &[Texel; 16], ends: [[i32; 3]; 2]) -> Encoded {
 		let weights = mode.weights();
 		let top = weights.len() - 1;
-		let (a, b) = (
-			ends[0].map(|q| mode.expand(q)),
-			ends[1].map(|q| mode.expand(q)),
-		);
-		let points: [[i32; 3]; 16] =
-			std::array::from_fn(|k| [0, 1, 2].map(|c| mix(a[c], b[c], weights[k.min(top)])));
+		let (a, b) = (ends[0].map(|q| mode.expand(q)), ends[1].map(|q| mode.expand(q)));
+		let points: [[i32; 3]; 16] = std::array::from_fn(|k| [0, 1, 2].map(|c| mix(a[c], b[c], weights[k.min(top)])));
 		let d = [0, 1, 2].map(|c| (b[c] - a[c]) as f32);
 		let len = d.iter().map(|v| v * v).sum::<f32>();
 		let mut picks = [0u8; 16];
@@ -187,11 +167,7 @@ impl Encoded {
 					})
 					.sum::<u32>()
 			};
-			let along = if len > 0.0 {
-				(0..3).map(|c| (texel[c] - a[c]) as f32 * d[c]).sum::<f32>() / len
-			} else {
-				0.0
-			};
+			let along = if len > 0.0 { (0..3).map(|c| (texel[c] - a[c]) as f32 * d[c]).sum::<f32>() / len } else { 0.0 };
 			let near = mode.nearest(along * 64.0);
 			let mut best = (dist(near), near);
 			for k in [near.saturating_sub(1), (near + 1).min(top)] {
@@ -203,12 +179,7 @@ impl Encoded {
 			*pick = best.1 as u8;
 			err += best.0;
 		}
-		Encoded {
-			mode,
-			ends,
-			picks,
-			err,
-		}
+		Encoded { mode, ends, picks, err }
 	}
 
 	// The first texel's pick is a bit short, so it must be in the lower half.
@@ -304,9 +275,7 @@ fn encode_block(block: &[Texel; 16]) -> [u8; 16] {
 	// starry sky touches 0 in most blocks, so the rest skip it
 	let spread = (0..3)
 		.map(|c| {
-			let (lo, hi) = block.iter().fold((255, 0), |(lo, hi), texel| {
-				(texel[c].min(lo), texel[c].max(hi))
-			});
+			let (lo, hi) = block.iter().fold((255, 0), |(lo, hi), texel| (texel[c].min(lo), texel[c].max(hi)));
 			hi - lo
 		})
 		.max()
@@ -323,11 +292,7 @@ fn encode_block(block: &[Texel; 16]) -> [u8; 16] {
 // The line through the block's ends, then ends from the points the texels
 // picked, by least squares.
 fn along(mode: Mode, block: &[Texel; 16], [hi, lo]: [[f32; 3]; 2]) -> Encoded {
-	let mut best = Encoded::of(
-		mode,
-		block,
-		[hi.map(|v| mode.end_of(v)), lo.map(|v| mode.end_of(v))],
-	);
+	let mut best = Encoded::of(mode, block, [hi.map(|v| mode.end_of(v)), lo.map(|v| mode.end_of(v))]);
 	for _ in 0..2 {
 		match refit(block, best) {
 			Some(next) if next.err < best.err => best = next,
@@ -370,19 +335,11 @@ mod tests {
 	use super::{decode, encode, len_for};
 
 	fn worst(a: &image::RgbaImage, b: &image::RgbaImage) -> u8 {
-		a.pixels()
-			.zip(b.pixels())
-			.flat_map(|(p, q)| (0..4).map(move |c| p[c].abs_diff(q[c])))
-			.max()
-			.unwrap_or(0)
+		a.pixels().zip(b.pixels()).flat_map(|(p, q)| (0..4).map(move |c| p[c].abs_diff(q[c]))).max().unwrap_or(0)
 	}
 
 	fn mean(a: &image::RgbaImage, b: &image::RgbaImage) -> f64 {
-		let sum: u64 = a
-			.pixels()
-			.zip(b.pixels())
-			.flat_map(|(p, q)| (0..3).map(move |c| u64::from(p[c].abs_diff(q[c]))))
-			.sum();
+		let sum: u64 = a.pixels().zip(b.pixels()).flat_map(|(p, q)| (0..3).map(move |c| u64::from(p[c].abs_diff(q[c])))).sum();
 		sum as f64 / (3 * a.width() * a.height()) as f64
 	}
 
@@ -394,17 +351,10 @@ mod tests {
 	fn a_flat_color_comes_back_exact() {
 		for value in 0..=255u8 {
 			let shade = [value, 255 - value, value / 3 + 40];
-			let rgba = image::RgbaImage::from_pixel(
-				8,
-				8,
-				image::Rgba([shade[0], shade[1], shade[2], 255]),
-			);
+			let rgba = image::RgbaImage::from_pixel(8, 8, image::Rgba([shade[0], shade[1], shade[2], 255]));
 			let back = decode(&encode(&rgba), (8, 8)).unwrap();
 			let off = worst(&rgba, &back);
-			assert!(
-				off == 0 || (off == 1 && shade.contains(&0)),
-				"{shade:?}: {off}"
-			);
+			assert!(off == 0 || (off == 1 && shade.contains(&0)), "{shade:?}: {off}");
 		}
 	}
 
@@ -415,14 +365,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_slow_gradient_comes_back_within_a_level() {
-		let rgba = image::RgbaImage::from_fn(256, 96, |x, y| {
-			image::Rgba([
-				(90 + x / 6) as u8,
-				(140 + x / 8 + y / 12) as u8,
-				(200 + y / 4) as u8,
-				255,
-			])
-		});
+		let rgba = image::RgbaImage::from_fn(256, 96, |x, y| image::Rgba([(90 + x / 6) as u8, (140 + x / 8 + y / 12) as u8, (200 + y / 4) as u8, 255]));
 		let back = decode(&encode(&rgba), (256, 96)).unwrap();
 		assert!(worst(&rgba, &back) <= 1, "{}", worst(&rgba, &back));
 		let bc1 = crate::bc1::decode(&crate::bc1::encode(&rgba), (256, 96)).unwrap();
@@ -442,8 +385,7 @@ mod tests {
 			seed ^= seed << 5;
 			(seed >> 24) as u8
 		};
-		let rgba =
-			image::RgbaImage::from_fn(64, 64, |_, _| image::Rgba([next(), next(), next(), 255]));
+		let rgba = image::RgbaImage::from_fn(64, 64, |_, _| image::Rgba([next(), next(), next(), 255]));
 		let back = decode(&encode(&rgba), (64, 64)).unwrap();
 		let bc1 = crate::bc1::decode(&crate::bc1::encode(&rgba), (64, 64)).unwrap();
 		let (ours, theirs) = (mean(&rgba, &back), mean(&rgba, &bc1));
@@ -486,11 +428,7 @@ mod tests {
 				assert_eq!(mode(&blocks), 6, "no 0, no mode 5");
 			}
 			let back = decode(&blocks, (4, 4)).unwrap();
-			assert!(
-				worst(&rgba, &back) <= 1,
-				"lift {lift}: {}",
-				worst(&rgba, &back)
-			);
+			assert!(worst(&rgba, &back) <= 1, "lift {lift}: {}", worst(&rgba, &back));
 		}
 	}
 
@@ -500,9 +438,7 @@ mod tests {
 	fn sizes_round_up_to_whole_blocks_and_only_mode_6_reads() {
 		assert_eq!(len_for((1917, 993)), 480 * 249 * 16);
 		// the texels past the picture repeat its last row and column
-		let rgba = image::RgbaImage::from_fn(7, 5, |x, y| {
-			image::Rgba([(x * 30) as u8, (y * 40) as u8, 9, 255])
-		});
+		let rgba = image::RgbaImage::from_fn(7, 5, |x, y| image::Rgba([(x * 30) as u8, (y * 40) as u8, 9, 255]));
 		let blocks = encode(&rgba);
 		assert_eq!(blocks.len(), len_for((7, 5)));
 		let wide = image::RgbaImage::from_fn(8, 8, |x, y| *rgba.get_pixel(x.min(6), y.min(4)));

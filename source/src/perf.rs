@@ -89,24 +89,12 @@ pub fn timed<T>(counter: &AtomicU64, body: impl FnOnce() -> T) -> T {
 fn cpu_seconds() -> Option<(f64, f64)> {
 	use std::ptr::from_mut;
 	use windows_sys::Win32::Foundation::FILETIME;
-	use windows_sys::Win32::System::Threading::{
-		GetCurrentProcess, GetCurrentThread, GetProcessTimes, GetThreadTimes,
-	};
+	use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetCurrentThread, GetProcessTimes, GetThreadTimes};
 
-	let secs = |t: FILETIME| {
-		((u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime)) as f64 / 1e7
-	};
-	let zero = FILETIME {
-		dwLowDateTime: 0,
-		dwHighDateTime: 0,
-	};
+	let secs = |t: FILETIME| ((u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime)) as f64 / 1e7;
+	let zero = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
 	let (mut created, mut exited, mut kernel, mut user) = (zero, zero, zero, zero);
-	let (created, exited, kernel, user) = (
-		from_mut(&mut created),
-		from_mut(&mut exited),
-		from_mut(&mut kernel),
-		from_mut(&mut user),
-	);
+	let (created, exited, kernel, user) = (from_mut(&mut created), from_mut(&mut exited), from_mut(&mut kernel), from_mut(&mut user));
 	// SAFETY: plain Win32 calls on pseudo-handles; every output is owned here.
 	unsafe {
 		GetThreadTimes(GetCurrentThread(), created, exited, kernel, user);
@@ -133,18 +121,14 @@ pub struct Span<'a> {
 
 impl<'a> Span<'a> {
 	pub fn new(counter: &'a AtomicU64) -> Self {
-		Self {
-			counter,
-			start: on().then(Instant::now),
-		}
+		Self { counter, start: on().then(Instant::now) }
 	}
 }
 
 impl Drop for Span<'_> {
 	fn drop(&mut self) {
 		if let Some(start) = self.start {
-			self.counter
-				.fetch_add(start.elapsed().as_nanos() as u64, Relaxed);
+			self.counter.fetch_add(start.elapsed().as_nanos() as u64, Relaxed);
 		}
 	}
 }
@@ -156,28 +140,9 @@ pub fn report() {
 	}
 	let cpu = cpu_seconds();
 	let ms = |counter: &AtomicU64| counter.load(Relaxed) as f64 / 1e6;
-	eprintln!(
-		"[perf] wakeups {} passes {} frames {} | render {:.0}ms (build {:.0}ms) note {:.0}ms | lock misses {}",
-		WAKEUPS.load(Relaxed),
-		PASSES.load(Relaxed),
-		FRAMES.load(Relaxed),
-		ms(&RENDER_NS),
-		ms(&BUILD_NS),
-		ms(&NOTE_NS),
-		LOCK_MISS.load(Relaxed),
-	);
-	eprintln!(
-		"[perf] our handlers: user_event {:.0}ms about_to_wait {:.0}ms",
-		ms(&EVENT_NS),
-		ms(&PASS_NS),
-	);
-	eprintln!(
-		"[perf] frame parts: prepare {:.0}ms acquire {:.0}ms encode {:.0}ms submit+present {:.0}ms",
-		ms(&PREP_NS),
-		ms(&ACQUIRE_NS),
-		ms(&ENCODE_NS),
-		ms(&SUBMIT_NS),
-	);
+	eprintln!("[perf] wakeups {} passes {} frames {} | render {:.0}ms (build {:.0}ms) note {:.0}ms | lock misses {}", WAKEUPS.load(Relaxed), PASSES.load(Relaxed), FRAMES.load(Relaxed), ms(&RENDER_NS), ms(&BUILD_NS), ms(&NOTE_NS), LOCK_MISS.load(Relaxed));
+	eprintln!("[perf] our handlers: user_event {:.0}ms about_to_wait {:.0}ms", ms(&EVENT_NS), ms(&PASS_NS));
+	eprintln!("[perf] frame parts: prepare {:.0}ms acquire {:.0}ms encode {:.0}ms submit+present {:.0}ms", ms(&PREP_NS), ms(&ACQUIRE_NS), ms(&ENCODE_NS), ms(&SUBMIT_NS));
 	if let Some((thread_cpu, process_cpu)) = cpu {
 		eprintln!("[perf] cpu: this thread {thread_cpu:.2}s of process {process_cpu:.2}s");
 	}
@@ -222,12 +187,7 @@ pub fn typed(key: Option<Instant>, pane: u64) {
 	let Some(key) = key else {
 		return;
 	};
-	*crate::locks::lock(&PENDING) = Some(Pending {
-		pane,
-		key,
-		wrote: Instant::now(),
-		out: None,
-	});
+	*crate::locks::lock(&PENDING) = Some(Pending { pane, key, wrote: Instant::now(), out: None });
 }
 
 /// Output arrived from the pane that was typed at. Only the first notice counts:
@@ -272,21 +232,11 @@ pub fn painted() {
 		return;
 	};
 	let us = |d: Duration| d.as_micros() as u32;
-	let (send, echo, draw) = (
-		us(pending.wrote - pending.key),
-		us(out - pending.wrote),
-		us(out.elapsed()),
-	);
+	let (send, echo, draw) = (us(pending.wrote - pending.key), us(out - pending.wrote), us(out.elapsed()));
 	*slot = None;
 	drop(slot);
 	let ms = |us: u32| f64::from(us) / 1e3;
-	eprintln!(
-		"[latency] send {:.2}ms  echo {:.2}ms  draw {:.2}ms  total {:.2}ms",
-		ms(send),
-		ms(echo),
-		ms(draw),
-		ms(send + echo + draw),
-	);
+	eprintln!("[latency] send {:.2}ms  echo {:.2}ms  draw {:.2}ms  total {:.2}ms", ms(send), ms(echo), ms(draw), ms(send + echo + draw));
 	crate::locks::lock(&SAMPLES).push((send, echo, draw));
 }
 
@@ -307,9 +257,7 @@ fn latency_report() {
 		return;
 	}
 	let count = samples.len();
-	let mean = |leg: fn(&(u32, u32, u32)) -> u32| {
-		samples.iter().map(|s| u64::from(leg(s))).sum::<u64>() as f64 / count as f64 / 1e3
-	};
+	let mean = |leg: fn(&(u32, u32, u32)) -> u32| samples.iter().map(|s| u64::from(leg(s))).sum::<u64>() as f64 / count as f64 / 1e3;
 	let legs = [mean(|s| s.0), mean(|s| s.1), mean(|s| s.2)];
 	let mut totals: Vec<u32> = samples.iter().map(|s| s.0 + s.1 + s.2).collect();
 	drop(samples);
@@ -318,16 +266,8 @@ fn latency_report() {
 	#[allow(clippy::unwrap_used, reason = "`samples` is not empty, checked above")]
 	let worst = *totals.last().unwrap();
 	let ms = |us: u32| f64::from(us) / 1e3;
-	eprintln!(
-		"[latency] {count} keystrokes: median {:.2}ms  p95 {:.2}ms  worst {:.2}ms",
-		ms(median),
-		ms(p95),
-		ms(worst),
-	);
-	eprintln!(
-		"[latency] mean legs: send {:.2}ms  echo {:.2}ms  draw {:.2}ms",
-		legs[0], legs[1], legs[2],
-	);
+	eprintln!("[latency] {count} keystrokes: median {:.2}ms  p95 {:.2}ms  worst {:.2}ms", ms(median), ms(p95), ms(worst));
+	eprintln!("[latency] mean legs: send {:.2}ms  echo {:.2}ms  draw {:.2}ms", legs[0], legs[1], legs[2]);
 }
 
 // Heap allocations made on the calling thread. Counted only in a debug build,
@@ -418,13 +358,7 @@ impl std::fmt::Display for FrameCause {
 	// Written from fixed words, so printing it allocates nothing the next
 	// frame's count would pick up.
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let words = [
-			(self.rebuild, "rebuild"),
-			(self.output, "output"),
-			(self.scroll, "scroll"),
-			(self.cursor, "cursor"),
-			(self.bell, "bell"),
-		];
+		let words = [(self.rebuild, "rebuild"), (self.output, "output"), (self.scroll, "scroll"), (self.cursor, "cursor"), (self.bell, "bell")];
 		let mut first = true;
 		for (_, word) in words.iter().filter(|(on, _)| *on) {
 			if !first {
@@ -460,10 +394,7 @@ pub fn frame_allocs(before: u64, cause: FrameCause) {
 	let end = thread_allocs();
 	let between = LAST_END.with(|last| last.replace(Some(end)).map(|prev| before - prev));
 	match between {
-		Some(between) => eprintln!(
-			"[allocs] frame {} between {between} for {cause}",
-			end - before
-		),
+		Some(between) => eprintln!("[allocs] frame {} between {between} for {cause}", end - before),
 		None => eprintln!("[allocs] frame {} for {cause}", end - before),
 	}
 }
@@ -477,18 +408,9 @@ mod tests {
 	// Test ID: dec7m
 	#[test]
 	fn a_frame_cause_prints_the_words_the_window_test_reads() {
-		let cursor = FrameCause {
-			cursor: true,
-			..FrameCause::default()
-		};
+		let cursor = FrameCause { cursor: true, ..FrameCause::default() };
 		assert_eq!(cursor.to_string(), "cursor");
-		let busy = FrameCause {
-			rebuild: true,
-			output: true,
-			scroll: true,
-			cursor: true,
-			bell: true,
-		};
+		let busy = FrameCause { rebuild: true, output: true, scroll: true, cursor: true, bell: true };
 		assert_eq!(busy.to_string(), "rebuild+output+scroll+cursor+bell");
 		assert_eq!(FrameCause::default().to_string(), "nothing");
 	}

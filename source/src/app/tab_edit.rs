@@ -39,14 +39,7 @@ pub(super) struct TabEdit {
 impl TabEdit {
 	// All of it selected, so the first thing typed replaces it.
 	fn new(tab: usize, text: String) -> TabEdit {
-		TabEdit {
-			tab,
-			caret: text.len(),
-			anchor: 0,
-			text,
-			dragging: false,
-			clicks: None,
-		}
+		TabEdit { tab, caret: text.len(), anchor: 0, text, dragging: false, clicks: None }
 	}
 
 	pub(super) fn range(&self) -> (usize, usize) {
@@ -184,38 +177,21 @@ fn tab_edit_key(key: &Key, keys: input::EditKeys, selected: bool) -> Option<TabE
 		Key::Named(NamedKey::F10) if keys.shift => TabEditKey::Menu,
 		Key::Named(NamedKey::Backspace) => TabEditKey::Erase { back: true, reach },
 		Key::Named(NamedKey::Delete) if keys.shift && selected => TabEditKey::Edit(EditCmd::Cut),
-		Key::Named(NamedKey::Delete) => TabEditKey::Erase {
-			back: false,
-			reach: Reach::new(keys.word, false),
-		},
+		Key::Named(NamedKey::Delete) => TabEditKey::Erase { back: false, reach: Reach::new(keys.word, false) },
 		Key::Named(NamedKey::Insert) if keys.shift => TabEditKey::Edit(EditCmd::Paste),
 		Key::Named(NamedKey::Insert) if keys.shortcut => TabEditKey::Edit(EditCmd::Copy),
-		Key::Named(NamedKey::ArrowLeft) => TabEditKey::Move {
-			to: Caret::Left(reach),
-			select: keys.shift,
-		},
-		Key::Named(NamedKey::ArrowRight) => TabEditKey::Move {
-			to: Caret::Right(reach),
-			select: keys.shift,
-		},
-		Key::Named(NamedKey::Home) => TabEditKey::Move {
-			to: Caret::Left(Reach::End),
-			select: keys.shift,
-		},
-		Key::Named(NamedKey::End) => TabEditKey::Move {
-			to: Caret::Right(Reach::End),
-			select: keys.shift,
-		},
+		Key::Named(NamedKey::ArrowLeft) => TabEditKey::Move { to: Caret::Left(reach), select: keys.shift },
+		Key::Named(NamedKey::ArrowRight) => TabEditKey::Move { to: Caret::Right(reach), select: keys.shift },
+		Key::Named(NamedKey::Home) => TabEditKey::Move { to: Caret::Left(Reach::End), select: keys.shift },
+		Key::Named(NamedKey::End) => TabEditKey::Move { to: Caret::Right(Reach::End), select: keys.shift },
 		Key::Named(NamedKey::Space) if types => TabEditKey::Type(" ".into()),
-		Key::Character(typed) if keys.shortcut => {
-			TabEditKey::Edit(match typed.to_ascii_lowercase().as_str() {
-				"a" => EditCmd::SelectAll,
-				"c" => EditCmd::Copy,
-				"x" => EditCmd::Cut,
-				"v" => EditCmd::Paste,
-				_ => return None,
-			})
-		}
+		Key::Character(typed) if keys.shortcut => TabEditKey::Edit(match typed.to_ascii_lowercase().as_str() {
+			"a" => EditCmd::SelectAll,
+			"c" => EditCmd::Copy,
+			"x" => EditCmd::Cut,
+			"v" => EditCmd::Paste,
+			_ => return None,
+		}),
 		Key::Character(typed) if types => TabEditKey::Type(typed.to_string()),
 		_ => return None,
 	})
@@ -226,31 +202,16 @@ fn tab_edit_key(key: &Key, keys: input::EditKeys, selected: bool) -> Option<TabE
 fn tab_edit_menu_items(selected: bool, has_text: bool, can_paste: bool) -> Vec<Entry> {
 	let mut entries = Vec::new();
 	if selected {
-		entries.extend([
-			entry_item_accel('t', "Cut", MenuAction::Edit(EditCmd::Cut)),
-			entry_item_accel('C', "Copy", MenuAction::Edit(EditCmd::Copy)),
-		]);
+		entries.extend([entry_item_accel('t', "Cut", MenuAction::Edit(EditCmd::Cut)), entry_item_accel('C', "Copy", MenuAction::Edit(EditCmd::Copy))]);
 	}
 	if can_paste {
-		entries.push(entry_item_accel(
-			'P',
-			"Paste",
-			MenuAction::Edit(EditCmd::Paste),
-		));
+		entries.push(entry_item_accel('P', "Paste", MenuAction::Edit(EditCmd::Paste)));
 	}
 	if selected {
-		entries.push(entry_item_accel(
-			'D',
-			"Delete",
-			MenuAction::Edit(EditCmd::Delete),
-		));
+		entries.push(entry_item_accel('D', "Delete", MenuAction::Edit(EditCmd::Delete)));
 	}
 	if has_text {
-		entries.push(entry_item_accel(
-			'a',
-			"Select all",
-			MenuAction::Edit(EditCmd::SelectAll),
-		));
+		entries.push(entry_item_accel('a', "Select all", MenuAction::Edit(EditCmd::SelectAll)));
 	}
 	entries
 }
@@ -259,27 +220,14 @@ fn tab_edit_menu_items(selected: bool, has_text: bool, can_paste: bool) -> Vec<E
 // rename's own rows, and Copy, Paste, and Paste selection from any menu, as in
 // any text box with the focus.
 fn tab_edit_takes(action: MenuAction) -> bool {
-	matches!(
-		action,
-		MenuAction::Edit(_) | MenuAction::Copy | MenuAction::Paste | MenuAction::PasteSelection
-	)
+	matches!(action, MenuAction::Edit(_) | MenuAction::Copy | MenuAction::Paste | MenuAction::PasteSelection)
 }
 
 impl State {
 	/// Start renaming tab `i` in place, seeded with what it says now and with all
 	/// of that selected, so the first thing typed replaces it.
 	pub(super) fn begin_tab_edit(&mut self, tab: usize) {
-		let text = self
-			.tabs
-			.list
-			.get(tab)
-			.and_then(|pm| pm.title_override.clone())
-			.unwrap_or_else(|| {
-				self.tab_label_forms(tab)
-					.into_iter()
-					.next()
-					.unwrap_or_default()
-			});
+		let text = self.tabs.list.get(tab).and_then(|pm| pm.title_override.clone()).unwrap_or_else(|| self.tab_label_forms(tab).into_iter().next().unwrap_or_default());
 		let mut edit = TabEdit::new(tab, text);
 		// begun by a double-click, so one more press is the third
 		edit.clicks = Some((Instant::now(), 2));
@@ -302,11 +250,7 @@ impl State {
 		if let Some(pm) = self.tabs.list.get_mut(edit.tab) {
 			pm.title_override = None;
 		}
-		let auto = self
-			.tab_label_forms(edit.tab)
-			.into_iter()
-			.next()
-			.unwrap_or_default();
+		let auto = self.tab_label_forms(edit.tab).into_iter().next().unwrap_or_default();
 		if let Some(pm) = self.tabs.list.get_mut(edit.tab) {
 			pm.title_override = typed_title(edit.text, &auto);
 		}
@@ -333,10 +277,7 @@ impl State {
 	/// goes to the shell.
 	pub(super) fn tab_edit_key(&mut self, key: &Key) {
 		let keys = input::edit_keys(self.mods, cfg!(target_os = "macos"));
-		let selected = self
-			.tab_edit
-			.as_ref()
-			.is_some_and(|e| e.selected().is_some());
+		let selected = self.tab_edit.as_ref().is_some_and(|e| e.selected().is_some());
 		match tab_edit_key(key, keys, selected) {
 			Some(TabEditKey::Commit) => self.commit_tab_edit(),
 			Some(TabEditKey::Cancel) => self.cancel_tab_edit(),
@@ -419,10 +360,7 @@ impl State {
 			return;
 		};
 		let (selected, has_text) = (edit.selected().is_some(), !edit.text.is_empty());
-		let can_paste = self
-			.clipboard
-			.get_clipboard()
-			.is_some_and(|t| !t.is_empty());
+		let can_paste = self.clipboard.get_clipboard().is_some_and(|t| !t.is_empty());
 		let entries = tab_edit_menu_items(selected, has_text, can_paste);
 		if entries.is_empty() {
 			return;
@@ -437,14 +375,7 @@ impl State {
 	fn tab_edit_field(&mut self) -> Option<Rect> {
 		let tab = self.tab_edit.as_ref()?.tab;
 		let (x, w) = self.tab_box(tab)?;
-		Some(tab_edit_box(
-			x,
-			w,
-			self.menubar_h(),
-			self.tab_bar_h(),
-			self.text.ui_line_h,
-			self.text.scale,
-		))
+		Some(tab_edit_box(x, w, self.menubar_h(), self.tab_bar_h(), self.text.ui_line_h, self.text.scale))
 	}
 
 	/// The byte offset in the name nearest a pointer at `x`.
@@ -454,18 +385,14 @@ impl State {
 		let edit = self.tab_edit.as_ref()?;
 		let text_ctx = &mut self.text;
 		let attrs = crate::text::ui_attrs();
-		Some(caret_from_click(&edit.text, rel_x, &mut |s: &str| {
-			text_ctx.measure_ui_text(s, &attrs)
-		}))
+		Some(caret_from_click(&edit.text, rel_x, &mut |s: &str| text_ctx.measure_ui_text(s, &attrs)))
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::super::menus::{Entry, MenuAction, accel_clash, entry_label};
-	use super::{
-		Caret, TabEdit, TabEditKey, tab_edit_key, tab_edit_menu_items, tab_edit_takes, typed_title,
-	};
+	use super::{Caret, TabEdit, TabEditKey, tab_edit_key, tab_edit_menu_items, tab_edit_takes, typed_title};
 	use crate::settings_ui::EditCmd;
 	use crate::textedit::Reach;
 	use std::time::{Duration, Instant};
@@ -477,10 +404,7 @@ mod tests {
 		assert_eq!(typed_title(String::new(), "bash"), None);
 		assert_eq!(typed_title("   ".to_string(), "bash"), None);
 		assert_eq!(typed_title("bash".to_string(), "bash"), None);
-		assert_eq!(
-			typed_title("notes".to_string(), "bash"),
-			Some("notes".to_string())
-		);
+		assert_eq!(typed_title("notes".to_string(), "bash"), Some("notes".to_string()));
 	}
 
 	// A tab title is renamed by byte offset over text that might not be ASCII, so
@@ -531,107 +455,42 @@ mod tests {
 		let ch = |c: &str| Key::Character(c.into());
 		let named = Key::Named;
 		let edit = |cmd| Some(TabEditKey::Edit(cmd));
-		for (letter, cmd) in [
-			("a", EditCmd::SelectAll),
-			("c", EditCmd::Copy),
-			("x", EditCmd::Cut),
-			("v", EditCmd::Paste),
-		] {
+		for (letter, cmd) in [("a", EditCmd::SelectAll), ("c", EditCmd::Copy), ("x", EditCmd::Cut), ("v", EditCmd::Paste)] {
 			assert_eq!(tab_edit_key(&ch(letter), pc(M::CONTROL), false), edit(cmd));
 			assert_eq!(tab_edit_key(&ch(letter), mac(M::SUPER), false), edit(cmd));
 			assert_eq!(tab_edit_key(&ch(letter), mac(M::CONTROL), false), None);
 		}
-		assert_eq!(
-			tab_edit_key(&ch("V"), pc(M::CONTROL | M::SHIFT), false),
-			edit(EditCmd::Paste)
-		);
+		assert_eq!(tab_edit_key(&ch("V"), pc(M::CONTROL | M::SHIFT), false), edit(EditCmd::Paste));
 		assert_eq!(tab_edit_key(&ch("k"), pc(M::CONTROL), false), None);
-		assert_eq!(
-			tab_edit_key(&named(NamedKey::Insert), pc(M::SHIFT), false),
-			edit(EditCmd::Paste)
-		);
-		assert_eq!(
-			tab_edit_key(&named(NamedKey::Insert), pc(M::CONTROL), false),
-			edit(EditCmd::Copy)
-		);
-		assert_eq!(
-			tab_edit_key(&named(NamedKey::Delete), pc(M::SHIFT), true),
-			edit(EditCmd::Cut)
-		);
-		assert_eq!(
-			tab_edit_key(&named(NamedKey::Delete), pc(M::SHIFT), false),
-			Some(TabEditKey::Erase {
-				back: false,
-				reach: Reach::Char
-			})
-		);
+		assert_eq!(tab_edit_key(&named(NamedKey::Insert), pc(M::SHIFT), false), edit(EditCmd::Paste));
+		assert_eq!(tab_edit_key(&named(NamedKey::Insert), pc(M::CONTROL), false), edit(EditCmd::Copy));
+		assert_eq!(tab_edit_key(&named(NamedKey::Delete), pc(M::SHIFT), true), edit(EditCmd::Cut));
+		assert_eq!(tab_edit_key(&named(NamedKey::Delete), pc(M::SHIFT), false), Some(TabEditKey::Erase { back: false, reach: Reach::Char }));
 		let moves = |mods, key| tab_edit_key(&named(key), mods, false);
 		let to = |to, select| Some(TabEditKey::Move { to, select });
-		assert_eq!(
-			moves(pc(M::CONTROL), NamedKey::ArrowLeft),
-			to(Caret::Left(Reach::Word), false)
-		);
-		assert_eq!(
-			moves(pc(M::CONTROL | M::SHIFT), NamedKey::ArrowRight),
-			to(Caret::Right(Reach::Word), true)
-		);
-		assert_eq!(
-			moves(mac(M::ALT), NamedKey::ArrowLeft),
-			to(Caret::Left(Reach::Word), false)
-		);
-		assert_eq!(
-			moves(mac(M::SUPER), NamedKey::ArrowRight),
-			to(Caret::Right(Reach::End), false)
-		);
-		assert_eq!(
-			moves(pc(M::SHIFT), NamedKey::Home),
-			to(Caret::Left(Reach::End), true)
-		);
+		assert_eq!(moves(pc(M::CONTROL), NamedKey::ArrowLeft), to(Caret::Left(Reach::Word), false));
+		assert_eq!(moves(pc(M::CONTROL | M::SHIFT), NamedKey::ArrowRight), to(Caret::Right(Reach::Word), true));
+		assert_eq!(moves(mac(M::ALT), NamedKey::ArrowLeft), to(Caret::Left(Reach::Word), false));
+		assert_eq!(moves(mac(M::SUPER), NamedKey::ArrowRight), to(Caret::Right(Reach::End), false));
+		assert_eq!(moves(pc(M::SHIFT), NamedKey::Home), to(Caret::Left(Reach::End), true));
 		let erase = |back, reach| Some(TabEditKey::Erase { back, reach });
-		assert_eq!(
-			moves(pc(M::CONTROL), NamedKey::Backspace),
-			erase(true, Reach::Word)
-		);
-		assert_eq!(
-			moves(mac(M::ALT), NamedKey::Backspace),
-			erase(true, Reach::Word)
-		);
-		assert_eq!(
-			moves(mac(M::SUPER), NamedKey::Backspace),
-			erase(true, Reach::End)
-		);
-		assert_eq!(
-			moves(mac(M::ALT), NamedKey::Delete),
-			erase(false, Reach::Word)
-		);
-		assert_eq!(
-			moves(pc(M::empty()), NamedKey::ContextMenu),
-			Some(TabEditKey::Menu)
-		);
+		assert_eq!(moves(pc(M::CONTROL), NamedKey::Backspace), erase(true, Reach::Word));
+		assert_eq!(moves(mac(M::ALT), NamedKey::Backspace), erase(true, Reach::Word));
+		assert_eq!(moves(mac(M::SUPER), NamedKey::Backspace), erase(true, Reach::End));
+		assert_eq!(moves(mac(M::ALT), NamedKey::Delete), erase(false, Reach::Word));
+		assert_eq!(moves(pc(M::empty()), NamedKey::ContextMenu), Some(TabEditKey::Menu));
 		assert_eq!(moves(pc(M::SHIFT), NamedKey::F10), Some(TabEditKey::Menu));
 		assert_eq!(moves(pc(M::empty()), NamedKey::F10), None);
 		let typed = |s: &str| Some(TabEditKey::Type(s.into()));
 		assert_eq!(tab_edit_key(&ch("q"), pc(M::empty()), false), typed("q"));
 		assert_eq!(tab_edit_key(&ch("o"), pc(M::ALT), false), None);
-		assert_eq!(
-			tab_edit_key(&ch("\u{f8}"), mac(M::ALT), false),
-			typed("\u{f8}")
-		);
+		assert_eq!(tab_edit_key(&ch("\u{f8}"), mac(M::ALT), false), typed("\u{f8}"));
 		assert_eq!(tab_edit_key(&ch("{"), mac(M::ALT), false), typed("{"));
 		assert_eq!(tab_edit_key(&ch("t"), mac(M::SUPER), false), None);
 		assert_eq!(moves(pc(M::SHIFT), NamedKey::Space), typed(" "));
-		assert_eq!(
-			moves(pc(M::empty()), NamedKey::Enter),
-			Some(TabEditKey::Commit)
-		);
-		assert_eq!(
-			moves(pc(M::empty()), NamedKey::Tab),
-			Some(TabEditKey::Commit)
-		);
-		assert_eq!(
-			moves(pc(M::empty()), NamedKey::Escape),
-			Some(TabEditKey::Cancel)
-		);
+		assert_eq!(moves(pc(M::empty()), NamedKey::Enter), Some(TabEditKey::Commit));
+		assert_eq!(moves(pc(M::empty()), NamedKey::Tab), Some(TabEditKey::Commit));
+		assert_eq!(moves(pc(M::empty()), NamedKey::Escape), Some(TabEditKey::Cancel));
 	}
 
 	// The name edits as a Settings box does: one press places the caret, 2
@@ -652,17 +511,9 @@ mod tests {
 		edit.drag_to(1);
 		assert_eq!(edit.caret, 12, "no drag once the button is up");
 		edit.press(8, at(100), false);
-		assert_eq!(
-			edit.selected(),
-			Some("server"),
-			"a double-click takes the word"
-		);
+		assert_eq!(edit.selected(), Some("server"), "a double-click takes the word");
 		edit.press(8, at(200), false);
-		assert_eq!(
-			edit.selected(),
-			Some("build server.log"),
-			"a third takes it all"
-		);
+		assert_eq!(edit.selected(), Some("build server.log"), "a third takes it all");
 		edit.press(5, at(1000), false);
 		edit.press(12, at(2000), true);
 		assert_eq!(edit.selected(), Some(" server"), "Shift extends");
@@ -693,44 +544,18 @@ mod tests {
 	// Test ID: dde0v
 	#[test]
 	fn menus_reach_a_tab_rename() {
-		for action in [
-			MenuAction::Copy,
-			MenuAction::Paste,
-			MenuAction::PasteSelection,
-			MenuAction::Edit(EditCmd::Cut),
-			MenuAction::Edit(EditCmd::SelectAll),
-		] {
+		for action in [MenuAction::Copy, MenuAction::Paste, MenuAction::PasteSelection, MenuAction::Edit(EditCmd::Cut), MenuAction::Edit(EditCmd::SelectAll)] {
 			assert!(tab_edit_takes(action), "{action:?}");
 		}
-		for action in [
-			MenuAction::NewTab,
-			MenuAction::CloseTab,
-			MenuAction::ToggleSingleTab,
-			MenuAction::Settings,
-			MenuAction::CopyLink,
-		] {
+		for action in [MenuAction::NewTab, MenuAction::CloseTab, MenuAction::ToggleSingleTab, MenuAction::Settings, MenuAction::CopyLink] {
 			assert!(!tab_edit_takes(action), "{action:?}");
 		}
-		let labels = |entries: Vec<Entry>| -> Vec<String> {
-			entries
-				.iter()
-				.filter_map(|entry| entry_label(entry).map(str::to_string))
-				.collect()
-		};
+		let labels = |entries: Vec<Entry>| -> Vec<String> { entries.iter().filter_map(|entry| entry_label(entry).map(str::to_string)).collect() };
 		let all = tab_edit_menu_items(true, true, true);
 		assert_eq!(accel_clash(&all), None);
-		assert_eq!(
-			labels(all),
-			["Cut", "Copy", "Paste", "Delete", "Select all"]
-		);
-		assert_eq!(
-			labels(tab_edit_menu_items(false, true, true)),
-			["Paste", "Select all"]
-		);
-		assert_eq!(
-			labels(tab_edit_menu_items(false, true, false)),
-			["Select all"]
-		);
+		assert_eq!(labels(all), ["Cut", "Copy", "Paste", "Delete", "Select all"]);
+		assert_eq!(labels(tab_edit_menu_items(false, true, true)), ["Paste", "Select all"]);
+		assert_eq!(labels(tab_edit_menu_items(false, true, false)), ["Select all"]);
 		assert!(tab_edit_menu_items(false, false, false).is_empty());
 	}
 }

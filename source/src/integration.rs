@@ -113,11 +113,7 @@ pub fn powershells(found: &[Found]) -> Vec<String> {
 		// one costs a shell launched to ask it the same question and a second
 		// copy of the same diagnostic.
 		let same = |seen: &String| {
-			if cfg!(windows) {
-				seen.eq_ignore_ascii_case(program)
-			} else {
-				seen == program
-			}
+			if cfg!(windows) { seen.eq_ignore_ascii_case(program) } else { seen == program }
 		};
 		if !out.iter().any(same) {
 			out.push(program.clone());
@@ -139,11 +135,7 @@ fn is_powershell(program: &str) -> bool {
 // Windows path is passed to it on any of them and Path would return the whole
 // string for one on unix.
 fn program_base(program: &str) -> String {
-	let base = program
-		.rsplit(['/', '\\'])
-		.next()
-		.unwrap_or(program)
-		.to_ascii_lowercase();
+	let base = program.rsplit(['/', '\\']).next().unwrap_or(program).to_ascii_lowercase();
 	match base.strip_suffix(".exe") {
 		Some(stem) => stem.to_string(),
 		None => base,
@@ -162,15 +154,8 @@ pub fn install(found: &[Found]) {
 			continue;
 		};
 		if !policy_runs_scripts(&policy) {
-			let answer = if policy.is_empty() {
-				"no answer"
-			} else {
-				&policy
-			};
-			eprintln!(
-				"{}: {program} won't run profile scripts ({answer}), so its profile was left alone. See shell-integration.md",
-				config::APP_NAME
-			);
+			let answer = if policy.is_empty() { "no answer" } else { &policy };
+			eprintln!("{}: {program} won't run profile scripts ({answer}), so its profile was left alone. See shell-integration.md", config::APP_NAME);
 			continue;
 		}
 		// 2 PowerShells can share a profile; only look at each file once
@@ -195,8 +180,7 @@ fn ask_shell(program: &str) -> Option<(PathBuf, String)> {
 // an English Windows, so a path outside ASCII came back with U+FFFD in it and
 // the block went into a new file no shell reads. The path comes back as the hex
 // of its UTF-8 bytes instead, which no code page can change.
-const PROFILE_QUERY: &str =
-	"[BitConverter]::ToString([Text.Encoding]::UTF8.GetBytes($PROFILE)); Get-ExecutionPolicy";
+const PROFILE_QUERY: &str = "[BitConverter]::ToString([Text.Encoding]::UTF8.GetBytes($PROFILE)); Get-ExecutionPolicy";
 
 fn query_shell(program: &str, query: &str) -> Option<(PathBuf, String)> {
 	let mut command = std::process::Command::new(program);
@@ -219,19 +203,8 @@ fn query_shell(program: &str, query: &str) -> Option<(PathBuf, String)> {
 // Anything that isn't the hex this asked for writes nothing, since a guess at
 // a path is how a profile nobody loads gets created.
 fn parse_answer(answer: &str) -> Option<(PathBuf, String)> {
-	let mut lines = answer
-		.lines()
-		.map(str::trim)
-		.filter(|line| !line.is_empty());
-	let bytes = lines
-		.next()?
-		.split('-')
-		.map(|pair| {
-			(pair.len() == 2)
-				.then(|| u8::from_str_radix(pair, 16).ok())
-				.flatten()
-		})
-		.collect::<Option<Vec<u8>>>()?;
+	let mut lines = answer.lines().map(str::trim).filter(|line| !line.is_empty());
+	let bytes = lines.next()?.split('-').map(|pair| (pair.len() == 2).then(|| u8::from_str_radix(pair, 16).ok()).flatten()).collect::<Option<Vec<u8>>>()?;
 	let path = String::from_utf8(bytes).ok()?;
 	let policy = lines.next().unwrap_or_default().to_string();
 	Some((PathBuf::from(path), policy))
@@ -243,10 +216,7 @@ fn parse_answer(answer: &str) -> Option<(PathBuf, String)> {
 // answer, counts as no, since then the worst case is a feature that stays off
 // rather than an error at every prompt.
 fn policy_runs_scripts(policy: &str) -> bool {
-	matches!(
-		policy.trim().to_ascii_lowercase().as_str(),
-		"remotesigned" | "unrestricted" | "bypass"
-	)
+	matches!(policy.trim().to_ascii_lowercase().as_str(), "remotesigned" | "unrestricted" | "bypass")
 }
 
 /// The profile with our block brought up to date, or None when there's no block
@@ -256,9 +226,7 @@ fn policy_runs_scripts(policy: &str) -> bool {
 pub fn refreshed_block(profile: &str, newline: &str) -> Option<String> {
 	let start = profile.find(MARKER)?;
 	let end_marker = profile[start..].find(END_MARKER)? + start;
-	let end = profile[end_marker..]
-		.find(NL)
-		.map_or(profile.len(), |nl| end_marker + nl + 1);
+	let end = profile[end_marker..].find(NL).map_or(profile.len(), |nl| end_marker + nl + 1);
 	let block = SNIPPET.replace(CRLF, LF).replace(NL, newline);
 	if profile[start..end].replace(CRLF, LF) == block.replace(CRLF, LF) {
 		return None;
@@ -275,12 +243,7 @@ fn read_profile(profile: &Path) -> anyhow::Result<Option<String>> {
 	match std::fs::read(profile) {
 		Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
 		Err(e) => Err(e).with_context(|| format!("couldn't read {}", profile.display())),
-		Ok(bytes) => String::from_utf8(bytes).map(Some).map_err(|_| {
-			anyhow::anyhow!(
-				"{} isn't UTF-8, so it was left alone. Add the block by hand (see shell-integration.md)",
-				profile.display()
-			)
-		}),
+		Ok(bytes) => String::from_utf8(bytes).map(Some).map_err(|_| anyhow::anyhow!("{} isn't UTF-8, so it was left alone. Add the block by hand (see shell-integration.md)", profile.display())),
 	}
 }
 
@@ -295,11 +258,7 @@ fn backup_once(profile: &Path, existing: &str) -> bool {
 	}
 	let backup = profile.with_extension("ps1.silkterm-backup");
 	let refuse = |why: String| {
-		eprintln!(
-			"{}: couldn't back up {}, so it was left alone: {why}",
-			config::APP_NAME,
-			profile.display()
-		);
+		eprintln!("{}: couldn't back up {}, so it was left alone: {why}", config::APP_NAME, profile.display());
 		false
 	};
 	match std::fs::symlink_metadata(&backup) {
@@ -335,8 +294,7 @@ fn write_atomic(path: &Path, text: &str) -> anyhow::Result<()> {
 	if std::fs::metadata(path).is_ok_and(|meta| meta.permissions().readonly()) {
 		anyhow::bail!("couldn't write {}: it's read-only", path.display());
 	}
-	config::write_config_atomic(path, text)
-		.with_context(|| format!("couldn't write {}", path.display()))
+	config::write_config_atomic(path, text).with_context(|| format!("couldn't write {}", path.display()))
 }
 
 // Profiles we have written to before, one path per line.
@@ -374,10 +332,7 @@ fn note_installed(record: Option<&Path>, profile: &Path) {
 		let _ = std::fs::create_dir_all(parent);
 	}
 	let line = format!("{}\n", profile.display());
-	let opened = std::fs::OpenOptions::new()
-		.create(true)
-		.append(true)
-		.open(record);
+	let opened = std::fs::OpenOptions::new().create(true).append(true).open(record);
 	if let Ok(mut file) = opened {
 		use std::io::Write;
 		let _ = file.write_all(line.as_bytes());
@@ -409,11 +364,7 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 				return;
 			}
 			match write_atomic(profile, &updated) {
-				Ok(()) => eprintln!(
-					"{}: updated the shell integration block in {}",
-					config::APP_NAME,
-					profile.display()
-				),
+				Ok(()) => eprintln!("{}: updated the shell integration block in {}", config::APP_NAME, profile.display()),
 				Err(e) => eprintln!("{}: {e:#}", config::APP_NAME),
 			}
 		}
@@ -438,11 +389,7 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 	match write_atomic(profile, &with_block(&existing, newline)) {
 		Ok(()) => {
 			note_installed(record, profile);
-			eprintln!(
-				"{}: added shell integration to {}. New tabs and panes will open in the shell's current directory. See shell-integration.md",
-				config::APP_NAME,
-				profile.display()
-			);
+			eprintln!("{}: added shell integration to {}. New tabs and panes will open in the shell's current directory. See shell-integration.md", config::APP_NAME, profile.display());
 		}
 		Err(e) => eprintln!("{}: {e:#}", config::APP_NAME),
 	}
@@ -476,11 +423,7 @@ fn is_bash(program: &str) -> bool {
 // single-quoted, which every bash takes, a Windows one included, where a
 // backslash inside quotes would be read as an escape.
 fn prompt_command(path: &Path) -> String {
-	let quoted = path
-		.display()
-		.to_string()
-		.replace('\\', "/")
-		.replace('\'', "'\\''");
+	let quoted = path.display().to_string().replace('\\', "/").replace('\'', "'\\''");
 	format!("{{ declare -F {BASH_PROMPT_FN} >/dev/null || . '{quoted}'; }} && {BASH_PROMPT_FN}")
 }
 
@@ -505,11 +448,7 @@ fn bash_prompt_path() -> Option<&'static Path> {
 		match std::fs::write(&path, BASH_PROMPT) {
 			Ok(()) => Some(path),
 			Err(e) => {
-				eprintln!(
-					"{}: couldn't write {}: {e}",
-					config::APP_NAME,
-					path.display()
-				);
+				eprintln!("{}: couldn't write {}: {e}", config::APP_NAME, path.display());
 				None
 			}
 		}
@@ -530,17 +469,12 @@ pub fn pane_env(command: Option<&[String]>) -> Vec<(String, String)> {
 	if !is_bash(program) {
 		return Vec::new();
 	}
-	bash_prompt_path()
-		.map(|path| vec![("PROMPT_COMMAND".to_string(), prompt_command(path))])
-		.unwrap_or_default()
+	bash_prompt_path().map(|path| vec![("PROMPT_COMMAND".to_string(), prompt_command(path))]).unwrap_or_default()
 }
 
 #[cfg(test)]
 mod tests {
-	use super::{
-		BASH_PROMPT, END_MARKER, LF, MARKER, SNIPPET, already_reports, is_bash, is_powershell,
-		powershells, prompt_command, refreshed_block, with_block,
-	};
+	use super::{BASH_PROMPT, END_MARKER, LF, MARKER, SNIPPET, already_reports, is_bash, is_powershell, powershells, prompt_command, refreshed_block, with_block};
 	use crate::shells::Found;
 	#[cfg(unix)]
 	use std::path::{Path, PathBuf};
@@ -556,14 +490,8 @@ mod tests {
 		crate::config::set_config_override(dir.join("alt.shcl"));
 		let record = super::installed_record();
 		assert!(record.is_some(), "no data dir for the account");
-		assert_eq!(
-			record,
-			crate::config::native_data_dir().map(|d| d.join("shell-integration.installed"))
-		);
-		assert!(
-			!record.unwrap().starts_with(&dir),
-			"the note follows the config"
-		);
+		assert_eq!(record, crate::config::native_data_dir().map(|d| d.join("shell-integration.installed")));
+		assert!(!record.unwrap().starts_with(&dir), "the note follows the config");
 	}
 
 	// sh may be dash, and a shell named by a full path is the usual case on
@@ -584,8 +512,7 @@ mod tests {
 	// Test ID: ddkte
 	#[test]
 	fn an_unreadable_profile_names_the_file_then_why() {
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_unreadprof_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_unreadprof_{}", std::process::id()));
 		std::fs::create_dir_all(&dir).unwrap();
 		// a folder at the profile's name reads as an error everywhere
 		let said = format!("{:#}", super::read_profile(&dir).expect_err("a folder"));
@@ -600,13 +527,8 @@ mod tests {
 	// Test ID: dcqa4
 	#[test]
 	fn a_profile_path_is_read_from_its_hex_and_nothing_else() {
-		let jose =
-			"C:\\Users\\Jos\u{e9}\\Documents\\WindowsPowerShell\\Microsoft.PowerShell_profile.ps1";
-		let hex = jose
-			.bytes()
-			.map(|byte| format!("{byte:02X}"))
-			.collect::<Vec<_>>()
-			.join("-");
+		let jose = "C:\\Users\\Jos\u{e9}\\Documents\\WindowsPowerShell\\Microsoft.PowerShell_profile.ps1";
+		let hex = jose.bytes().map(|byte| format!("{byte:02X}")).collect::<Vec<_>>().join("-");
 		let (path, policy) = super::parse_answer(&format!("{hex}\r\nRemoteSigned\r\n")).unwrap();
 		assert_eq!(path, std::path::PathBuf::from(jose));
 		assert_eq!(policy, "RemoteSigned");
@@ -614,11 +536,7 @@ mod tests {
 		let mangled = String::from_utf8_lossy(b"C:\\Users\\Jos\x82\\Documents\r\nRemoteSigned\r\n");
 		assert_eq!(super::parse_answer(&mangled), None);
 		assert_eq!(super::parse_answer("\r\nRemoteSigned\r\n"), None);
-		assert_eq!(
-			super::parse_answer("C3-28\r\nRemoteSigned\r\n"),
-			None,
-			"not UTF-8"
-		);
+		assert_eq!(super::parse_answer("C3-28\r\nRemoteSigned\r\n"), None, "not UTF-8");
 		assert_eq!(super::parse_answer(""), None);
 	}
 
@@ -628,16 +546,10 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_powershell_names_a_profile_outside_ascii() {
-		let query = super::PROFILE_QUERY.replace(
-			"$PROFILE",
-			"('C:\\Users\\Jos' + [char]0xE9 + '\\Documents\\profile.ps1')",
-		);
+		let query = super::PROFILE_QUERY.replace("$PROFILE", "('C:\\Users\\Jos' + [char]0xE9 + '\\Documents\\profile.ps1')");
 		let want = std::path::PathBuf::from("C:\\Users\\Jos\u{e9}\\Documents\\profile.ps1");
 		for program in ["pwsh", "powershell.exe"] {
-			let runs = std::process::Command::new(program)
-				.args(["-NoProfile", "-NonInteractive", "-Command", "exit 0"])
-				.output()
-				.is_ok_and(|out| out.status.success());
+			let runs = std::process::Command::new(program).args(["-NoProfile", "-NonInteractive", "-Command", "exit 0"]).output().is_ok_and(|out| out.status.success());
 			if !runs {
 				eprintln!("no {program} here, skipped");
 				continue;
@@ -677,15 +589,9 @@ mod tests {
 	#[test]
 	fn a_prompt_command_sources_a_windows_path_as_bash_reads_it() {
 		let win = prompt_command(std::path::Path::new("C:\\Users\\me\\x9ps1-git"));
-		assert_eq!(
-			win,
-			"{ declare -F fX9ps1Git_SetPs1 >/dev/null || . 'C:/Users/me/x9ps1-git'; } && fX9ps1Git_SetPs1"
-		);
+		assert_eq!(win, "{ declare -F fX9ps1Git_SetPs1 >/dev/null || . 'C:/Users/me/x9ps1-git'; } && fX9ps1Git_SetPs1");
 		let odd = prompt_command(std::path::Path::new("/home/o'neil/x9ps1-git"));
-		assert!(
-			odd.contains(". '/home/o'\\''neil/x9ps1-git';"),
-			"quote not escaped: {odd}"
-		);
+		assert!(odd.contains(". '/home/o'\\''neil/x9ps1-git';"), "quote not escaped: {odd}");
 	}
 
 	// The compiled-in copy is what gets written out and then run by bash, so a
@@ -715,21 +621,7 @@ mod tests {
 	#[cfg(unix)]
 	fn prompt_bash() -> Option<&'static str> {
 		static FOUND: std::sync::OnceLock<Option<&'static str>> = std::sync::OnceLock::new();
-		*FOUND.get_or_init(|| {
-			["bash", "/opt/homebrew/bin/bash", "/usr/local/bin/bash"]
-				.into_iter()
-				.find(|bash| {
-					std::process::Command::new(bash)
-						.args([
-							"--noprofile",
-							"--norc",
-							"-c",
-							r#"PS1='\\'; printf '%s' "${PS1@P}""#,
-						])
-						.output()
-						.is_ok_and(|out| out.status.success() && out.stdout == b"\\")
-				})
-		})
+		*FOUND.get_or_init(|| ["bash", "/opt/homebrew/bin/bash", "/usr/local/bin/bash"].into_iter().find(|bash| std::process::Command::new(bash).args(["--noprofile", "--norc", "-c", r#"PS1='\\'; printf '%s' "${PS1@P}""#]).output().is_ok_and(|out| out.status.success() && out.stdout == b"\\")))
 	}
 
 	#[cfg(unix)]
@@ -763,61 +655,23 @@ mod tests {
 		let branch = "$(touch${IFS}PWNED1)`touch${IFS}PWNED2`${HOME}";
 		let remote = "https://example.com/$(touch PWNED3)/`touch PWNED4`/a\\b.git";
 		let run = |program: &str, args: &[&str]| {
-			let out = Command::new(program)
-				.args(args)
-				.current_dir(&repo)
-				.env("GIT_CONFIG_GLOBAL", "/dev/null")
-				.env("GIT_CONFIG_NOSYSTEM", "1")
-				.env_remove("GIT_DIR")
-				.env_remove("GIT_WORK_TREE")
-				.env_remove("GIT_INDEX_FILE")
-				.env_remove("X9PS1_STANDARD")
-				.output()
-				.unwrap_or_else(|e| panic!("run {program}: {e}"));
+			let out = Command::new(program).args(args).current_dir(&repo).env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1").env_remove("GIT_DIR").env_remove("GIT_WORK_TREE").env_remove("GIT_INDEX_FILE").env_remove("X9PS1_STANDARD").output().unwrap_or_else(|e| panic!("run {program}: {e}"));
 			assert!(out.status.success(), "{program} {args:?}: {out:?}");
 			String::from_utf8_lossy(&out.stdout).into_owned()
 		};
 		run("git", &["init", "-q", "-b", branch]);
 		let identity = ["-c", "user.name=test", "-c", "user.email=test@example.com"];
-		run(
-			"git",
-			&[
-				&identity[..],
-				&["commit", "-q", "--allow-empty", "-m", "test"],
-			]
-			.concat(),
-		);
+		run("git", &[&identity[..], &["commit", "-q", "--allow-empty", "-m", "test"]].concat());
 		run("git", &["config", "remote.origin.url", remote]);
 
 		// What the pane's PROMPT_COMMAND does, then the expansion bash does to show it
-		let shown = run(
-			bash,
-			&[
-				"--noprofile",
-				"--norc",
-				"-c",
-				r#"PS1=$("$BASH" "$1") && printf '%s' "${PS1@P}""#,
-				"bash",
-				&script.to_string_lossy(),
-			],
-		);
-		let ran: Vec<_> = std::fs::read_dir(&repo)
-			.expect("read repo")
-			.filter_map(Result::ok)
-			.map(|entry| entry.file_name().to_string_lossy().into_owned())
-			.filter(|name| name.starts_with("PWNED"))
-			.collect();
+		let shown = run(bash, &["--noprofile", "--norc", "-c", r#"PS1=$("$BASH" "$1") && printf '%s' "${PS1@P}""#, "bash", &script.to_string_lossy()]);
+		let ran: Vec<_> = std::fs::read_dir(&repo).expect("read repo").filter_map(Result::ok).map(|entry| entry.file_name().to_string_lossy().into_owned()).filter(|name| name.starts_with("PWNED")).collect();
 		let _ = std::fs::remove_dir_all(&dir);
 
 		assert!(ran.is_empty(), "the prompt ran commands: {ran:?}");
-		assert!(
-			shown.contains(branch),
-			"branch not shown as text: {shown:?}"
-		);
-		assert!(
-			shown.contains(remote),
-			"remote not shown as text: {shown:?}"
-		);
+		assert!(shown.contains(branch), "branch not shown as text: {shown:?}");
+		assert!(shown.contains(remote), "remote not shown as text: {shown:?}");
 	}
 
 	// The git part used to need a remote named origin, and read its marks from
@@ -832,35 +686,19 @@ mod tests {
 		let Some(bash) = prompt_bash_or_skip() else {
 			return;
 		};
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_x9ps1git_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_x9ps1git_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).expect("temp dir");
 		let script = dir.join(super::BASH_PROMPT_FILE);
 		std::fs::write(&script, BASH_PROMPT).expect("write script");
 
 		let run = |cwd: &Path, program: &str, args: &[&str]| {
-			let out = Command::new(program)
-				.args(args)
-				.current_dir(cwd)
-				.env("GIT_CONFIG_GLOBAL", "/dev/null")
-				.env("GIT_CONFIG_NOSYSTEM", "1")
-				.env("GIT_AUTHOR_NAME", "test")
-				.env("GIT_AUTHOR_EMAIL", "test@example.com")
-				.env("GIT_COMMITTER_NAME", "test")
-				.env("GIT_COMMITTER_EMAIL", "test@example.com")
-				.env_remove("GIT_DIR")
-				.env_remove("GIT_WORK_TREE")
-				.env_remove("GIT_INDEX_FILE")
-				.env_remove("X9PS1_STANDARD")
-				.output()
-				.unwrap_or_else(|e| panic!("run {program}: {e}"));
+			let out = Command::new(program).args(args).current_dir(cwd).env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1").env("GIT_AUTHOR_NAME", "test").env("GIT_AUTHOR_EMAIL", "test@example.com").env("GIT_COMMITTER_NAME", "test").env("GIT_COMMITTER_EMAIL", "test@example.com").env_remove("GIT_DIR").env_remove("GIT_WORK_TREE").env_remove("GIT_INDEX_FILE").env_remove("X9PS1_STANDARD").output().unwrap_or_else(|e| panic!("run {program}: {e}"));
 			assert!(out.status.success(), "{program} {args:?}: {out:?}");
 			String::from_utf8_lossy(&out.stdout).into_owned()
 		};
 		let git = |cwd: &Path, args: &[&str]| run(cwd, "git", args);
-		let commit =
-			|cwd: &Path, msg: &str| git(cwd, &["commit", "-q", "--allow-empty", "-m", msg]);
+		let commit = |cwd: &Path, msg: &str| git(cwd, &["commit", "-q", "--allow-empty", "-m", msg]);
 
 		// No remote at all
 		git(&dir, &["init", "-q", "-b", "lonebranch", "lone"]);
@@ -881,36 +719,14 @@ mod tests {
 		commit(&tracked, "three");
 		commit(&tracked, "four");
 
-		let shown = |cwd: &Path| {
-			run(
-				cwd,
-				bash,
-				&[
-					"--noprofile",
-					"--norc",
-					"-c",
-					r#"PS1=$("$BASH" "$1") && printf '%s' "${PS1@P}""#,
-					"bash",
-					&script.to_string_lossy(),
-				],
-			)
-		};
+		let shown = |cwd: &Path| run(cwd, bash, &["--noprofile", "--norc", "-c", r#"PS1=$("$BASH" "$1") && printf '%s' "${PS1@P}""#, "bash", &script.to_string_lossy()]);
 		let lone = shown(&dir.join("lone"));
 		let far = shown(&tracked);
 		let _ = std::fs::remove_dir_all(&dir);
 
-		assert!(
-			lone.contains("lonebranch"),
-			"no git part without a remote: {lone:?}"
-		);
-		assert!(
-			far.contains(&up_str),
-			"remote not named origin not shown: {far:?}"
-		);
-		assert!(
-			far.contains("\u{2191}2\u{2193}1"),
-			"no ahead and behind count: {far:?}"
-		);
+		assert!(lone.contains("lonebranch"), "no git part without a remote: {lone:?}");
+		assert!(far.contains(&up_str), "remote not named origin not shown: {far:?}");
+		assert!(far.contains("\u{2191}2\u{2193}1"), "no ahead and behind count: {far:?}");
 	}
 
 	// A test repository below `dir`, on branch `prompttest`, plus a plain folder
@@ -925,13 +741,7 @@ mod tests {
 		std::fs::create_dir_all(&deep).expect("temp dir");
 		let script = dir.join(super::BASH_PROMPT_FILE);
 		std::fs::write(&script, BASH_PROMPT).expect("write script");
-		let init = std::process::Command::new("git")
-			.args(["init", "-q", "-b", "prompttest"])
-			.current_dir(&repo)
-			.env("GIT_CONFIG_GLOBAL", "/dev/null")
-			.env("GIT_CONFIG_NOSYSTEM", "1")
-			.status()
-			.expect("run git");
+		let init = std::process::Command::new("git").args(["init", "-q", "-b", "prompttest"]).current_dir(&repo).env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1").status().expect("run git");
 		assert!(init.success(), "git init");
 		(outside, deep, script)
 	}
@@ -948,52 +758,21 @@ mod tests {
 	fn a_pane_prompt_starts_no_process_outside_a_repository() {
 		use std::io::Write;
 		use std::process::{Command, Stdio};
-		let traced = Command::new("strace")
-			.args(["-f", "-qq", "-o", "/dev/null", "true"])
-			.stdout(Stdio::null())
-			.stderr(Stdio::null())
-			.status()
-			.is_ok_and(|status| status.success());
+		let traced = Command::new("strace").args(["-f", "-qq", "-o", "/dev/null", "true"]).stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|status| status.success());
 		if !traced {
 			eprintln!("no strace here, skipped");
 			return;
 		}
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_x9ps1forks_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_x9ps1forks_{}", std::process::id()));
 		let (outside, deep, script) = prompt_fixture(&dir);
 		let trace = dir.join("strace.out");
 		let forks = |cwd: &Path, prompts: usize| -> i64 {
-			let mut child = Command::new("strace")
-				.args(["-f", "-qq", "-e", "trace=clone,clone3,fork,vfork", "-o"])
-				.arg(&trace)
-				.args(["bash", "--norc", "--noprofile", "-i"])
-				.current_dir(cwd)
-				.env_clear()
-				.env("PATH", std::env::var_os("PATH").unwrap_or_default())
-				.env("HOME", &dir)
-				.env("GIT_CONFIG_GLOBAL", "/dev/null")
-				.env("GIT_CONFIG_NOSYSTEM", "1")
-				.env("PROMPT_COMMAND", prompt_command(&script))
-				.stdin(Stdio::piped())
-				.stdout(Stdio::null())
-				.stderr(Stdio::null())
-				.spawn()
-				.expect("run strace");
+			let mut child = Command::new("strace").args(["-f", "-qq", "-e", "trace=clone,clone3,fork,vfork", "-o"]).arg(&trace).args(["bash", "--norc", "--noprofile", "-i"]).current_dir(cwd).env_clear().env("PATH", std::env::var_os("PATH").unwrap_or_default()).env("HOME", &dir).env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1").env("PROMPT_COMMAND", prompt_command(&script)).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("run strace");
 			// bash shows one more prompt than it reads lines, the last before EOF
-			child
-				.stdin
-				.take()
-				.expect("stdin")
-				.write_all(":\n".repeat(prompts - 1).as_bytes())
-				.expect("feed bash");
+			child.stdin.take().expect("stdin").write_all(":\n".repeat(prompts - 1).as_bytes()).expect("feed bash");
 			child.wait().expect("wait for bash");
 			let text = std::fs::read_to_string(&trace).expect("read trace");
-			let count = text
-				.lines()
-				.filter(|line| {
-					line.contains("clone(") || line.contains("clone3(") || line.contains("fork(")
-				})
-				.count();
+			let count = text.lines().filter(|line| line.contains("clone(") || line.contains("clone3(") || line.contains("fork(")).count();
 			i64::try_from(count).unwrap_or(i64::MAX)
 		};
 		let ten = |cwd: &Path| forks(cwd, 12) - forks(cwd, 2);
@@ -1002,10 +781,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 
 		assert_eq!(out, 0, "processes in 10 prompts outside a repository");
-		assert!(
-			inside <= 20,
-			"{inside} processes in 10 prompts inside a repository, want 2 a prompt"
-		);
+		assert!(inside <= 20, "{inside} processes in 10 prompts inside a repository, want 2 a prompt");
 	}
 
 	// The same PROMPT_COMMAND shows the git part from deep in a working tree,
@@ -1018,26 +794,10 @@ mod tests {
 		let Some(bash) = prompt_bash_or_skip() else {
 			return;
 		};
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_x9ps1shown_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_x9ps1shown_{}", std::process::id()));
 		let (outside, deep, script) = prompt_fixture(&dir);
 		let shown = |cwd: &Path| {
-			let out = std::process::Command::new(bash)
-				.args([
-					"--norc",
-					"--noprofile",
-					"-c",
-					r#"eval "$PROMPT_COMMAND" && printf '%s' "${PS1@P}""#,
-				])
-				.current_dir(cwd)
-				.env("GIT_CONFIG_GLOBAL", "/dev/null")
-				.env("GIT_CONFIG_NOSYSTEM", "1")
-				.env_remove("GIT_DIR")
-				.env_remove("GIT_WORK_TREE")
-				.env_remove("X9PS1_STANDARD")
-				.env("PROMPT_COMMAND", prompt_command(&script))
-				.output()
-				.expect("run bash");
+			let out = std::process::Command::new(bash).args(["--norc", "--noprofile", "-c", r#"eval "$PROMPT_COMMAND" && printf '%s' "${PS1@P}""#]).current_dir(cwd).env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1").env_remove("GIT_DIR").env_remove("GIT_WORK_TREE").env_remove("X9PS1_STANDARD").env("PROMPT_COMMAND", prompt_command(&script)).output().expect("run bash");
 			assert!(out.status.success(), "{out:?}");
 			String::from_utf8_lossy(&out.stdout).into_owned()
 		};
@@ -1046,10 +806,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 
 		assert!(inside.contains("prompttest"), "no branch: {inside:?}");
-		assert!(
-			!away.contains('\u{2714}') && !away.contains('\u{2718}'),
-			"git part outside a repository: {away:?}"
-		);
+		assert!(!away.contains('\u{2714}') && !away.contains('\u{2718}'), "git part outside a repository: {away:?}");
 	}
 
 	// No font that comes with a Mac has U+1F846, so the second line in a
@@ -1063,27 +820,10 @@ mod tests {
 		let Some(bash) = prompt_bash_or_skip() else {
 			return;
 		};
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_x9ps1arrow_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_x9ps1arrow_{}", std::process::id()));
 		let (_outside, deep, script) = prompt_fixture(&dir);
 		let shown = |ostype: &str| {
-			let out = std::process::Command::new(bash)
-				.args([
-					"--norc",
-					"--noprofile",
-					"-c",
-					r#"eval "$PROMPT_COMMAND" && printf '%s' "${PS1@P}""#,
-				])
-				.current_dir(&deep)
-				.env("GIT_CONFIG_GLOBAL", "/dev/null")
-				.env("GIT_CONFIG_NOSYSTEM", "1")
-				.env_remove("GIT_DIR")
-				.env_remove("GIT_WORK_TREE")
-				.env_remove("X9PS1_STANDARD")
-				.env("OSTYPE", ostype)
-				.env("PROMPT_COMMAND", prompt_command(&script))
-				.output()
-				.expect("run bash");
+			let out = std::process::Command::new(bash).args(["--norc", "--noprofile", "-c", r#"eval "$PROMPT_COMMAND" && printf '%s' "${PS1@P}""#]).current_dir(&deep).env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1").env_remove("GIT_DIR").env_remove("GIT_WORK_TREE").env_remove("X9PS1_STANDARD").env("OSTYPE", ostype).env("PROMPT_COMMAND", prompt_command(&script)).output().expect("run bash");
 			assert!(out.status.success(), "{out:?}");
 			String::from_utf8_lossy(&out.stdout).into_owned()
 		};
@@ -1091,14 +831,8 @@ mod tests {
 		let linux = shown("linux-gnu");
 		let _ = std::fs::remove_dir_all(&dir);
 
-		assert!(
-			mac.contains("\n\u{1b}[1;32m\u{279c}") && !mac.contains('\u{1f846}'),
-			"mac arrow: {mac:?}"
-		);
-		assert!(
-			linux.contains('\u{1f846}') && !linux.contains('\u{279c}'),
-			"other arrow: {linux:?}"
-		);
+		assert!(mac.contains("\n\u{1b}[1;32m\u{279c}") && !mac.contains('\u{1f846}'), "mac arrow: {mac:?}");
+		assert!(linux.contains('\u{1f846}') && !linux.contains('\u{279c}'), "other arrow: {linux:?}");
 	}
 
 	// A profile is a script run at every shell start, and it often contains tokens.
@@ -1110,14 +844,12 @@ mod tests {
 	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_profile_write_keeps_its_link_and_mode_and_follows_no_planted_link() {
 		use std::os::unix::fs::{PermissionsExt, symlink};
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_intlink_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_intlink_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		let record = dir.join("shell-integration.installed");
 		let name = "Microsoft.PowerShell_profile.ps1";
 		let before = "Set-Alias ll Get-ChildItem\n";
-		let mode =
-			|path: &std::path::Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+		let mode = |path: &std::path::Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
 		let make = |sub: &str, perms: u32| {
 			let path = dir.join(sub).join(name);
 			std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -1132,14 +864,8 @@ mod tests {
 		std::fs::create_dir_all(linked.parent().unwrap()).unwrap();
 		symlink(&real, &linked).unwrap();
 		super::install_into_with(&linked, Some(&record));
-		assert!(
-			std::fs::symlink_metadata(&linked).unwrap().is_symlink(),
-			"the link was replaced by a copy"
-		);
-		assert!(
-			std::fs::read_to_string(&real).unwrap().contains(MARKER),
-			"the linked file did not get the block"
-		);
+		assert!(std::fs::symlink_metadata(&linked).unwrap().is_symlink(), "the link was replaced by a copy");
+		assert!(std::fs::read_to_string(&real).unwrap().contains(MARKER), "the linked file did not get the block");
 		assert_eq!(mode(&real), 0o600, "the profile's mode changed");
 		let backup = linked.with_extension("ps1.silkterm-backup");
 		assert_eq!(mode(&backup), 0o600, "the backup is readable by others");
@@ -1166,11 +892,7 @@ mod tests {
 		symlink(&nowhere, dangling.with_extension("ps1.silkterm-backup")).unwrap();
 		super::install_into_with(&dangling, Some(&record));
 		assert!(!nowhere.exists(), "the backup went through a link");
-		assert_eq!(
-			std::fs::read_to_string(&dangling).unwrap(),
-			before,
-			"a profile that could not be backed up was written anyway"
-		);
+		assert_eq!(std::fs::read_to_string(&dangling).unwrap(), before, "a profile that could not be backed up was written anyway");
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -1180,8 +902,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_block_already_there_is_noted_so_deleting_it_sticks() {
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_intnote_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_intnote_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).expect("temp dir");
 		let own = "Set-Alias ll Get-ChildItem\n";
@@ -1194,11 +915,7 @@ mod tests {
 			super::install_into_with(&profile, Some(&record));
 			std::fs::write(&profile, own).unwrap();
 			super::install_into_with(&profile, Some(&record));
-			assert_eq!(
-				std::fs::read_to_string(&profile).unwrap(),
-				own,
-				"a {label} block came back after it was deleted"
-			);
+			assert_eq!(std::fs::read_to_string(&profile).unwrap(), own, "a {label} block came back after it was deleted");
 		}
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -1217,12 +934,7 @@ mod tests {
 	}
 
 	fn a_pwsh() -> Option<&'static str> {
-		["pwsh", "pwsh.exe"].into_iter().find(|program| {
-			std::process::Command::new(program)
-				.args(["-NoProfile", "-NonInteractive", "-Command", "exit 0"])
-				.output()
-				.is_ok_and(|out| out.status.success())
-		})
+		["pwsh", "pwsh.exe"].into_iter().find(|program| std::process::Command::new(program).args(["-NoProfile", "-NonInteractive", "-Command", "exit 0"]).output().is_ok_and(|out| out.status.success()))
 	}
 
 	// Runs the block the way a profile does, where a PowerShell is installed. The
@@ -1246,10 +958,7 @@ mod tests {
 		assert!(block.contains(hook));
 		let target = crate::testdir::run_dir();
 		let target = target.to_string_lossy();
-		for (arm, text) in [
-			("hook", block.clone()),
-			("wrap", block.replace(hook, "if ($false)")),
-		] {
+		for (arm, text) in [("hook", block.clone()), ("wrap", block.replace(hook, "if ($false)"))] {
 			let path = dir.join(format!("{arm}.ps1"));
 			std::fs::write(&path, text).unwrap();
 			let quoted = path.to_string_lossy().replace('\'', "''");
@@ -1265,10 +974,7 @@ $null = prompt
 Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 				target.replace('\'', "''")
 			);
-			let out = std::process::Command::new(pwsh)
-				.args(["-NoProfile", "-NonInteractive", "-Command", &script])
-				.output()
-				.expect("run pwsh");
+			let out = std::process::Command::new(pwsh).args(["-NoProfile", "-NonInteractive", "-Command", &script]).output().expect("run pwsh");
 			let stdout = String::from_utf8_lossy(&out.stdout);
 			let stderr = String::from_utf8_lossy(&out.stderr);
 			assert!(stderr.trim().is_empty(), "{arm}: {stderr}");
@@ -1302,37 +1008,15 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).expect("temp dir");
 		let block = dir.join("block.ps1");
-		std::fs::write(
-			&block,
-			SNIPPET.replace("-not [Console]::IsOutputRedirected", "$true"),
-		)
-		.unwrap();
+		std::fs::write(&block, SNIPPET.replace("-not [Console]::IsOutputRedirected", "$true")).unwrap();
 
 		let run = |cwd: &Path, program: &str, args: &[&str]| {
-			let out = Command::new(program)
-				.args(args)
-				.current_dir(cwd)
-				.env(
-					"GIT_CONFIG_GLOBAL",
-					if cfg!(windows) { "NUL" } else { "/dev/null" },
-				)
-				.env("GIT_CONFIG_NOSYSTEM", "1")
-				.env("GIT_AUTHOR_NAME", "test")
-				.env("GIT_AUTHOR_EMAIL", "test@example.com")
-				.env("GIT_COMMITTER_NAME", "test")
-				.env("GIT_COMMITTER_EMAIL", "test@example.com")
-				.env_remove("GIT_DIR")
-				.env_remove("GIT_WORK_TREE")
-				.env_remove("GIT_INDEX_FILE")
-				.env_remove("X9PS1_STANDARD")
-				.output()
-				.unwrap_or_else(|e| panic!("run {program}: {e}"));
+			let out = Command::new(program).args(args).current_dir(cwd).env("GIT_CONFIG_GLOBAL", if cfg!(windows) { "NUL" } else { "/dev/null" }).env("GIT_CONFIG_NOSYSTEM", "1").env("GIT_AUTHOR_NAME", "test").env("GIT_AUTHOR_EMAIL", "test@example.com").env("GIT_COMMITTER_NAME", "test").env("GIT_COMMITTER_EMAIL", "test@example.com").env_remove("GIT_DIR").env_remove("GIT_WORK_TREE").env_remove("GIT_INDEX_FILE").env_remove("X9PS1_STANDARD").output().unwrap_or_else(|e| panic!("run {program}: {e}"));
 			assert!(out.status.success(), "{program} {args:?}: {out:?}");
 			String::from_utf8_lossy(&out.stdout).into_owned()
 		};
 		let git = |cwd: &Path, args: &[&str]| run(cwd, "git", args);
-		let commit =
-			|cwd: &Path, msg: &str| git(cwd, &["commit", "-q", "--allow-empty", "-m", msg]);
+		let commit = |cwd: &Path, msg: &str| git(cwd, &["commit", "-q", "--allow-empty", "-m", msg]);
 
 		// No remote at all
 		git(&dir, &["init", "-q", "-b", "lonebranch", "lone"]);
@@ -1351,37 +1035,20 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		git(&other, &["push", "-q", &up_str, "main"]);
 		let tracked = dir.join("tracked");
 		git(&tracked, &["fetch", "-q", "upstream"]);
-		git(
-			&tracked,
-			&["remote", "add", "origin", "https://example.com/decoy.git"],
-		);
+		git(&tracked, &["remote", "add", "origin", "https://example.com/decoy.git"]);
 		commit(&tracked, "three");
 		commit(&tracked, "four");
 
 		// A branch with no upstream, where origin is the one to name
 		git(&dir, &["init", "-q", "-b", "main", "untracked"]);
 		let untracked = dir.join("untracked");
-		git(
-			&untracked,
-			&["remote", "add", "aaa", "https://example.com/first.git"],
-		);
-		git(
-			&untracked,
-			&["remote", "add", "origin", "https://example.com/origin.git"],
-		);
+		git(&untracked, &["remote", "add", "aaa", "https://example.com/first.git"]);
+		git(&untracked, &["remote", "add", "origin", "https://example.com/origin.git"]);
 
 		let shown = |cwd: &Path| {
 			let quoted = |path: &Path| path.to_string_lossy().replace('\'', "''");
-			let script = format!(
-				". '{}'\nSet-Location -LiteralPath '{}'\nWrite-Host 'PROMPT'\n__SilkTermPrompt",
-				quoted(&block),
-				quoted(cwd)
-			);
-			let out = run(
-				&dir,
-				pwsh,
-				&["-NoProfile", "-NonInteractive", "-Command", &script],
-			);
+			let script = format!(". '{}'\nSet-Location -LiteralPath '{}'\nWrite-Host 'PROMPT'\n__SilkTermPrompt", quoted(&block), quoted(cwd));
+			let out = run(&dir, pwsh, &["-NoProfile", "-NonInteractive", "-Command", &script]);
 			out.split("PROMPT").nth(1).unwrap_or_default().to_string()
 		};
 		let lone = shown(&dir.join("lone"));
@@ -1389,22 +1056,10 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		let no_upstream = shown(&untracked);
 		let _ = std::fs::remove_dir_all(&dir);
 
-		assert!(
-			lone.contains("lonebranch"),
-			"no git part without a remote: {lone:?}"
-		);
-		assert!(
-			far.contains(&up_str) && !far.contains("decoy"),
-			"not the remote the branch tracks: {far:?}"
-		);
-		assert!(
-			far.contains("\u{2191}2\u{2193}1"),
-			"no ahead and behind count: {far:?}"
-		);
-		assert!(
-			no_upstream.contains("example.com/origin.git") && !no_upstream.contains('\u{2191}'),
-			"origin not preferred with no upstream: {no_upstream:?}"
-		);
+		assert!(lone.contains("lonebranch"), "no git part without a remote: {lone:?}");
+		assert!(far.contains(&up_str) && !far.contains("decoy"), "not the remote the branch tracks: {far:?}");
+		assert!(far.contains("\u{2191}2\u{2193}1"), "no ahead and behind count: {far:?}");
+		assert!(no_upstream.contains("example.com/origin.git") && !no_upstream.contains('\u{2191}'), "origin not preferred with no upstream: {no_upstream:?}");
 	}
 
 	fn found(title: &str, command: &str) -> Found {
@@ -1418,17 +1073,9 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	#[test]
 	fn a_profile_that_already_reports_is_left_alone() {
 		assert!(already_reports(&with_block("", "\n")), "our own block");
-		assert!(
-			already_reports("Write-Host \"$e]9;9;`\"$p`\"$e\\\""),
-			"somebody else's OSC 9;9"
-		);
-		assert!(
-			already_reports("printf '\\033]7;file://%s%s' $h $p"),
-			"somebody else's OSC 7"
-		);
-		assert!(!already_reports(
-			"# just a profile\nSet-Alias ll Get-ChildItem"
-		));
+		assert!(already_reports("Write-Host \"$e]9;9;`\"$p`\"$e\\\""), "somebody else's OSC 9;9");
+		assert!(already_reports("printf '\\033]7;file://%s%s' $h $p"), "somebody else's OSC 7");
+		assert!(!already_reports("# just a profile\nSet-Alias ll Get-ChildItem"));
 		assert!(!already_reports(""));
 	}
 
@@ -1469,16 +1116,8 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 		super::install_into_with(&profile, Some(&record));
 
-		assert_eq!(
-			std::fs::read(&profile).expect("read profile"),
-			bytes,
-			"the profile is untouched"
-		);
-		assert!(
-			!dir.join("Microsoft.PowerShell_profile.ps1.silkterm-new")
-				.exists(),
-			"no half-written file left beside it"
-		);
+		assert_eq!(std::fs::read(&profile).expect("read profile"), bytes, "the profile is untouched");
+		assert!(!dir.join("Microsoft.PowerShell_profile.ps1.silkterm-new").exists(), "no half-written file left beside it");
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -1497,28 +1136,18 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		std::fs::write(&profile, "Set-Alias ll Get-ChildItem\n").expect("write profile");
 
 		super::install_into_with(&profile, Some(&record));
-		assert!(
-			std::fs::read_to_string(&profile).unwrap().contains(MARKER),
-			"the block went in"
-		);
+		assert!(std::fs::read_to_string(&profile).unwrap().contains(MARKER), "the block went in");
 
 		// the user takes it out again
 		std::fs::write(&profile, "Set-Alias ll Get-ChildItem\n").expect("write profile");
 		super::install_into_with(&profile, Some(&record));
-		assert_eq!(
-			std::fs::read_to_string(&profile).unwrap(),
-			"Set-Alias ll Get-ChildItem\n",
-			"and stays out"
-		);
+		assert_eq!(std::fs::read_to_string(&profile).unwrap(), "Set-Alias ll Get-ChildItem\n", "and stays out");
 
 		// a profile we have never touched still gets it
 		let other = dir.join("other_profile.ps1");
 		std::fs::write(&other, "# theirs\n").expect("write profile");
 		super::install_into_with(&other, Some(&record));
-		assert!(
-			std::fs::read_to_string(&other).unwrap().contains(MARKER),
-			"a profile we have not written to before is not affected"
-		);
+		assert!(std::fs::read_to_string(&other).unwrap().contains(MARKER), "a profile we have not written to before is not affected");
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -1543,34 +1172,20 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		assert!(after.starts_with(before), "what was there survived");
 		assert!(after.contains(MARKER), "the block went in");
 		let backup = dir.join("Microsoft.PowerShell_profile.ps1.silkterm-backup");
-		assert_eq!(
-			std::fs::read_to_string(&backup).ok().as_deref(),
-			Some(before),
-			"the copy beside it is the file as it was"
-		);
+		assert_eq!(std::fs::read_to_string(&backup).ok().as_deref(), Some(before), "the copy beside it is the file as it was");
 
 		// a second launch is a no-op, and can't overwrite the copy either
 		std::fs::write(&profile, format!("{after}# a line the user added\n")).unwrap();
 		super::install_into_with(&profile, Some(&record));
 		let twice = std::fs::read_to_string(&profile).expect("read profile");
 		assert_eq!(twice.matches(MARKER).count(), 1, "a second block went in");
-		assert!(
-			twice.ends_with("# a line the user added\n"),
-			"their line went"
-		);
-		assert_eq!(
-			std::fs::read_to_string(&backup).ok().as_deref(),
-			Some(before),
-			"the copy was overwritten"
-		);
+		assert!(twice.ends_with("# a line the user added\n"), "their line went");
+		assert_eq!(std::fs::read_to_string(&backup).ok().as_deref(), Some(before), "the copy was overwritten");
 
 		// and a profile that never existed is created with only the block
 		let fresh = dir.join("fresh").join("Microsoft.PowerShell_profile.ps1");
 		super::install_into_with(&fresh, Some(&record));
-		assert!(
-			std::fs::read_to_string(&fresh).unwrap().contains(MARKER),
-			"a missing profile was not created"
-		);
+		assert!(std::fs::read_to_string(&fresh).unwrap().contains(MARKER), "a missing profile was not created");
 		assert!(!fresh.with_extension("ps1.silkterm-backup").exists());
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -1606,16 +1221,8 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 		// one entry per program: the no-startup-file twin is the same shell with
 		// the same profile, and a scan lists both
-		let scan = [
-			found("Bash", "/bin/bash"),
-			found("PowerShell 7", r"C:\pwsh.exe"),
-			found("PowerShell 7 (no profile)", r"C:\pwsh.exe -NoProfile"),
-			found("Windows PowerShell 5", "powershell.exe"),
-		];
-		assert_eq!(
-			powershells(&scan),
-			vec![r"C:\pwsh.exe".to_string(), "powershell.exe".to_string()]
-		);
+		let scan = [found("Bash", "/bin/bash"), found("PowerShell 7", r"C:\pwsh.exe"), found("PowerShell 7 (no profile)", r"C:\pwsh.exe -NoProfile"), found("Windows PowerShell 5", "powershell.exe")];
+		assert_eq!(powershells(&scan), vec![r"C:\pwsh.exe".to_string(), "powershell.exe".to_string()]);
 	}
 
 	// The block gains things over time, so an install that only ever appended
@@ -1623,19 +1230,11 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// Test ID: dbjdy
 	#[test]
 	fn an_existing_block_is_brought_up_to_date_in_place() {
-		let stale = format!(
-			"# mine, above\n\n{MARKER}\nWrite-Host 'an older block'\n{END_MARKER}\n\n# mine, below\n"
-		);
+		let stale = format!("# mine, above\n\n{MARKER}\nWrite-Host 'an older block'\n{END_MARKER}\n\n# mine, below\n");
 		let updated = refreshed_block(&stale, LF).expect("a stale block needs replacing");
-		assert!(
-			updated.starts_with("# mine, above\n"),
-			"lost what was above"
-		);
+		assert!(updated.starts_with("# mine, above\n"), "lost what was above");
 		assert!(updated.ends_with("# mine, below\n"), "lost what was below");
-		assert!(
-			!updated.contains("an older block"),
-			"kept the old block: {updated}"
-		);
+		assert!(!updated.contains("an older block"), "kept the old block: {updated}");
 		assert!(updated.contains(SNIPPET.replace("\r\n", LF).trim_end()));
 		// ...and having done it once, there is nothing left to do.
 		assert_eq!(refreshed_block(&updated, LF), None);
@@ -1645,10 +1244,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	#[test]
 	fn a_profile_with_no_block_of_ours_is_not_rewritten() {
 		assert_eq!(refreshed_block("# just my own profile\n", LF), None);
-		assert_eq!(
-			refreshed_block(&format!("{MARKER}\nhalf a block\n"), LF),
-			None
-		);
+		assert_eq!(refreshed_block(&format!("{MARKER}\nhalf a block\n"), LF), None);
 	}
 
 	// A profile with no byte-order mark is read as ANSI by Windows PowerShell
@@ -1677,10 +1273,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// Test ID: dd5nm
 	#[test]
 	fn the_prompt_marks_are_the_light_pair() {
-		let glyphs = SNIPPET
-			.lines()
-			.find(|l| l.contains("$global:__SilkTermGlyphs = @{"))
-			.expect("the glyph table");
+		let glyphs = SNIPPET.lines().find(|l| l.contains("$global:__SilkTermGlyphs = @{")).expect("the glyph table");
 		assert!(glyphs.contains("Yes = [string][char]0x2713;"), "{glyphs}");
 		assert!(glyphs.contains("No = [string][char]0x2717;"), "{glyphs}");
 		assert!(!SNIPPET.contains("0x2714") && !SNIPPET.contains("0x2718"));
@@ -1693,10 +1286,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	fn the_documented_snippet_is_the_one_that_is_installed() {
 		let doc = include_str!("../../shell-integration.md").replace("\r\n", "\n");
 		let snippet = SNIPPET.replace("\r\n", "\n");
-		assert!(
-			doc.contains(snippet.trim_end()),
-			"shell-integration.md no longer has the snippet verbatim"
-		);
+		assert!(doc.contains(snippet.trim_end()), "shell-integration.md no longer has the snippet verbatim");
 	}
 
 	// Both prompts go into other people's shells, so a host color table may only
@@ -1704,29 +1294,13 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// Test ID: ddf3x
 	#[test]
 	fn the_bundled_prompts_color_no_named_machine() {
-		let live = |text: &'static str| {
-			text.lines()
-				.map(str::trim_start)
-				.filter(|line| !line.starts_with('#'))
-		};
-		let named: Vec<&str> = live(SNIPPET)
-			.filter(|line| line.starts_with('\'') && line.contains("{ '"))
-			.collect();
+		let live = |text: &'static str| text.lines().map(str::trim_start).filter(|line| !line.starts_with('#'));
+		let named: Vec<&str> = live(SNIPPET).filter(|line| line.starts_with('\'') && line.contains("{ '")).collect();
 		assert!(named.is_empty(), "{named:?}");
-		let color = live(SNIPPET)
-			.find(|line| line.starts_with("$global:__SilkTermHostColor ="))
-			.expect("the host color line");
+		let color = live(SNIPPET).find(|line| line.starts_with("$global:__SilkTermHostColor =")).expect("the host color line");
 		assert!(!color.contains("MachineName"), "{color}");
-		let arms = BASH_PROMPT
-			.split("case \"${HOSTNAME}\" in")
-			.nth(1)
-			.and_then(|rest| rest.split("esac").next())
-			.expect("the host color case");
-		let arms: Vec<&str> = arms
-			.lines()
-			.map(str::trim_start)
-			.filter(|line| line.contains(')') && !line.starts_with('#'))
-			.collect();
+		let arms = BASH_PROMPT.split("case \"${HOSTNAME}\" in").nth(1).and_then(|rest| rest.split("esac").next()).expect("the host color case");
+		let arms: Vec<&str> = arms.lines().map(str::trim_start).filter(|line| line.contains(')') && !line.starts_with('#')).collect();
 		assert_eq!(arms.len(), 1, "{arms:?}");
 		assert!(arms[0].starts_with("*)"), "{arms:?}");
 	}

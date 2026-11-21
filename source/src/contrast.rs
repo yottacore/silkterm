@@ -78,10 +78,7 @@ fn busyness(px: &[[f32; 3]], w: usize, h: usize, scale: f32) -> f32 {
 // Auto (size, strength) picked from image busyness.
 fn auto_params(busy: f32) -> (f32, f32) {
 	let b = busy.clamp(0.0, 1.0);
-	(
-		lerp(AUTO_SIZE_SMOOTH, AUTO_SIZE_BUSY, b),
-		lerp(AUTO_STRENGTH_SMOOTH, AUTO_STRENGTH_BUSY, b),
-	)
+	(lerp(AUTO_SIZE_SMOOTH, AUTO_SIZE_BUSY, b), lerp(AUTO_STRENGTH_SMOOTH, AUTO_STRENGTH_BUSY, b))
 }
 
 // Separable box mean (radius r) via per-row/col prefix sums, edge-clamped and
@@ -264,12 +261,7 @@ mod tests {
 	// Test ID: d9x0m
 	#[test]
 	fn zero_strength_is_a_noop() {
-		let src = vec![
-			[0.1, 0.2, 0.3],
-			[0.9, 0.8, 0.7],
-			[0.4, 0.5, 0.6],
-			[0.2, 0.1, 0.0],
-		];
+		let src = vec![[0.1, 0.2, 0.3], [0.9, 0.8, 0.7], [0.4, 0.5, 0.6], [0.2, 0.1, 0.0]];
 		let mut img = buf(&src, 2, 2);
 		apply(&mut img, 1.0, 0.0, 0.0, 1.0);
 		let out: Vec<[f32; 3]> = img.pixels().map(|p| [p[0], p[1], p[2]]).collect();

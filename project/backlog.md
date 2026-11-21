@@ -390,7 +390,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Remove the line length limit from the rustfmt and ruff settings
 	- ID: 2026112016030047
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Closed
 	- Priority: Low
 	- Opened: 20261120-160300
 	- Opened by: CC
@@ -406,6 +406,15 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Code review 20261120 item 47.
 		- The house rule since 20261118 is no line length limit in code or comments. Raising rustfmt's width reflows every Rust file once, so it goes in a commit of its own, with nothing else in flight. The forks keep their own settings.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Decisions (cont.):
+		- 20261121: `max_width = 65535`, rustfmt's highest. The 4 nested-call rules scale with it, so calls and chains now stay on one line. Two fallouts: rustfmt leaves a trailing comma before `)` in one-lined macro calls, which clippy's `unnecessary_trailing_comma` rejects, so those were removed. A comment above a match arm made clippy's `match_same_arms` fire on `pd_factors` in `coloremoji.rs`, so the arms were merged.
+	- Verified: 20261121 `cargo fmt --check` and `cicd/cicd.bash --backlog-run-quick` with all 5 areas pass. No file under `forks/` changed.
+	- Branch: nov20b-2026112016030047
+	- Commit: bb94fb96
+	- Test case: none, a formatter setting. `cargo fmt --check` and the quick run's fmt area pin it.
+	- Closed: 20261121-021500
+	- Closed reason: Done
+	- Acceptance signoff: Self-closed: mechanical, the formatter and the gates pass.
 
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900

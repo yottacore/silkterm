@@ -29,14 +29,8 @@ pub(super) fn vramdbg(msg: &str) {
 	if std::fs::metadata(&path).is_ok_and(|meta| meta.len() > 4_000_000) {
 		return;
 	}
-	let epoch = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.map_or(0, |d| d.as_secs());
-	if let Ok(mut f) = std::fs::OpenOptions::new()
-		.create(true)
-		.append(true)
-		.open(&path)
-	{
+	let epoch = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+	if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
 		let _ = writeln!(f, "{epoch} pid={} {msg}", std::process::id());
 	}
 }
@@ -74,10 +68,7 @@ impl VtHeal {
 /// design doc.
 #[cfg(target_os = "linux")]
 pub(super) fn spawn_vt_watch(proxy: EventLoopProxy<UserEvent>) -> bool {
-	let path = std::env::var_os("SILK_VTFILE").map_or_else(
-		|| std::path::PathBuf::from("/sys/class/tty/tty0/active"),
-		std::path::PathBuf::from,
-	);
+	let path = std::env::var_os("SILK_VTFILE").map_or_else(|| std::path::PathBuf::from("/sys/class/tty/tty0/active"), std::path::PathBuf::from);
 	let read = |p: &std::path::Path| std::fs::read_to_string(p).ok().map(|s| s.trim().to_owned());
 	// unreadable in a container or on an odd kernel, so the probes are all there is
 	let Some(home_vt) = read(&path) else {
@@ -157,10 +148,7 @@ mod tests {
 	#[test]
 	fn only_a_return_to_this_console_is_signalled() {
 		let mut watch = super::VtWatch::new("tty7".into());
-		let seen: Vec<bool> = ["tty7", "tty1", "tty7", "tty7", "tty2", "tty3", "tty7"]
-			.into_iter()
-			.map(|vt| watch.step(vt.into()))
-			.collect();
+		let seen: Vec<bool> = ["tty7", "tty1", "tty7", "tty7", "tty2", "tty3", "tty7"].into_iter().map(|vt| watch.step(vt.into())).collect();
 		assert_eq!(seen, [false, false, true, false, false, false, true]);
 	}
 }

@@ -16,9 +16,7 @@ pub fn restrict() {
 	// SAFETY: takes a constant and only changes where later loads look. It fails
 	// only on Windows 7 without KB2533623, which this doesn't run on anyway.
 	unsafe {
-		use windows_sys::Win32::System::LibraryLoader::{
-			LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, SetDefaultDllDirectories,
-		};
+		use windows_sys::Win32::System::LibraryLoader::{LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, SetDefaultDllDirectories};
 		SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
 	}
 }
@@ -30,9 +28,7 @@ mod tests {
 	use std::path::{Path, PathBuf};
 	use std::process::Command;
 	use windows_sys::Win32::Foundation::FreeLibrary;
-	use windows_sys::Win32::System::LibraryLoader::{
-		GetModuleFileNameW, GetModuleHandleW, LoadLibraryW,
-	};
+	use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW, LoadLibraryW};
 
 	fn wide(s: &str) -> Vec<u16> {
 		std::ffi::OsStr::new(s).encode_wide().chain([0]).collect()
@@ -66,27 +62,10 @@ mod tests {
 		let path = std::env::var_os("PATH").unwrap_or_default();
 		let mut dirs = vec![extra.to_path_buf()];
 		dirs.extend(std::env::split_paths(&path));
-		let out = Command::new(std::env::current_exe().unwrap())
-			.args([
-				"--exact",
-				"dllsearch::tests::dll_probe_child",
-				"--nocapture",
-			])
-			.env("SILK_DLL_PROBE", what)
-			.env("PATH", std::env::join_paths(dirs).unwrap())
-			.current_dir(cwd)
-			.output()
-			.unwrap();
+		let out = Command::new(std::env::current_exe().unwrap()).args(["--exact", "dllsearch::tests::dll_probe_child", "--nocapture"]).env("SILK_DLL_PROBE", what).env("PATH", std::env::join_paths(dirs).unwrap()).current_dir(cwd).output().unwrap();
 		let text = String::from_utf8_lossy(&out.stdout).into_owned();
-		assert!(
-			out.status.success(),
-			"{text}{}",
-			String::from_utf8_lossy(&out.stderr)
-		);
-		text.lines()
-			.find_map(|l| l.strip_prefix("probe "))
-			.unwrap_or_else(|| panic!("the child answered: {text}"))
-			.to_owned()
+		assert!(out.status.success(), "{text}{}", String::from_utf8_lossy(&out.stderr));
+		text.lines().find_map(|l| l.strip_prefix("probe ")).unwrap_or_else(|| panic!("the child answered: {text}")).to_owned()
 	}
 
 	// A DLL Windows doesn't have was taken from PATH or the working folder,
@@ -128,11 +107,7 @@ mod tests {
 				continue;
 			}
 			let got = std::fs::canonicalize(&got).unwrap();
-			assert!(
-				!got.starts_with(&base),
-				"the engine loaded {}",
-				got.display()
-			);
+			assert!(!got.starts_with(&base), "the engine loaded {}", got.display());
 		}
 	}
 
@@ -146,19 +121,8 @@ mod tests {
 		let answer = if what == "engine" {
 			use alacritty_terminal::event::WindowSize;
 			use alacritty_terminal::tty::{self, Options, Shell};
-			let options = Options {
-				shell: Some(Shell::new(
-					"cmd.exe".into(),
-					vec!["/c".into(), "exit".into()],
-				)),
-				..Options::default()
-			};
-			let size = WindowSize {
-				num_lines: 24,
-				num_cols: 80,
-				cell_width: 8,
-				cell_height: 16,
-			};
+			let options = Options { shell: Some(Shell::new("cmd.exe".into(), vec!["/c".into(), "exit".into()])), ..Options::default() };
+			let size = WindowSize { num_lines: 24, num_cols: 80, cell_width: 8, cell_height: 16 };
 			drop(tty::new(&options, size, 0).unwrap());
 			loaded_from("conpty.dll").map_or_else(|| "none".to_owned(), |p| p.display().to_string())
 		} else {

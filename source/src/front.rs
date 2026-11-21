@@ -64,17 +64,8 @@ pub fn group_front(_root: u32, pgid: u32) -> Option<u32> {
 	// SAFETY: the call writes at most `bytes` into the buffer
 	let got = unsafe { libc::proc_listpgrppids(pgid_c, pids.as_mut_ptr().cast(), bytes) };
 	let got = usize::try_from(got).ok()?.min(pids.len());
-	let members: Vec<(u32, libc::proc_bsdinfo)> = pids[..got]
-		.iter()
-		.filter_map(|&pid| u32::try_from(pid).ok().filter(|&pid| pid > 0))
-		.filter_map(|pid| bsd_info(pid).map(|info| (pid, info)))
-		.collect();
-	members
-		.iter()
-		.filter(|(_, info)| info.pbi_status != libc::SZOMB)
-		.filter(|(_, info)| !members.iter().any(|(pid, _)| *pid == info.pbi_ppid))
-		.max_by_key(|(pid, info)| (info.pbi_start_tvsec, info.pbi_start_tvusec, *pid))
-		.map(|(pid, _)| *pid)
+	let members: Vec<(u32, libc::proc_bsdinfo)> = pids[..got].iter().filter_map(|&pid| u32::try_from(pid).ok().filter(|&pid| pid > 0)).filter_map(|pid| bsd_info(pid).map(|info| (pid, info))).collect();
+	members.iter().filter(|(_, info)| info.pbi_status != libc::SZOMB).filter(|(_, info)| !members.iter().any(|(pid, _)| *pid == info.pbi_ppid)).max_by_key(|(pid, info)| (info.pbi_start_tvsec, info.pbi_start_tvusec, *pid)).map(|(pid, _)| *pid)
 }
 
 // Another user's process, as under sudo, returns nothing here; the leader's
@@ -86,15 +77,7 @@ fn bsd_info(pid: u32) -> Option<libc::proc_bsdinfo> {
 	// SAFETY: all-integer C struct, so zeroed is a valid value
 	let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
 	// SAFETY: the call writes at most `size` bytes and says how many it wrote
-	let wrote = unsafe {
-		libc::proc_pidinfo(
-			pid,
-			libc::PROC_PIDTBSDINFO,
-			0,
-			std::ptr::from_mut(&mut info).cast(),
-			size,
-		)
-	};
+	let wrote = unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDTBSDINFO, 0, std::ptr::from_mut(&mut info).cast(), size) };
 	(wrote == size).then_some(info)
 }
 
@@ -134,13 +117,7 @@ fn parse_stat(text: &str) -> Option<Stat> {
 	let pgrp = rest.nth(1)?.parse().ok()?;
 	let tpgid = rest.nth(2)?.parse().ok()?;
 	let start = rest.nth(13)?.parse().ok()?;
-	Some(Stat {
-		comm,
-		gone,
-		pgrp,
-		tpgid,
-		start,
-	})
+	Some(Stat { comm, gone, pgrp, tpgid, start })
 }
 
 // Each thread has its own list of the children it started.
@@ -152,10 +129,7 @@ fn children(pid: u32) -> Vec<u32> {
 	let mut out = Vec::new();
 	for task in tasks.flatten() {
 		if let Ok(text) = std::fs::read_to_string(task.path().join("children")) {
-			out.extend(
-				text.split_whitespace()
-					.filter_map(|pid| pid.parse::<u32>().ok()),
-			);
+			out.extend(text.split_whitespace().filter_map(|pid| pid.parse::<u32>().ok()));
 		}
 	}
 	out
@@ -232,9 +206,7 @@ impl Tmux {
 			self.query = Query::of(client);
 		}
 		self.collect(now);
-		let due = self
-			.asked
-			.is_none_or(|at| self.stirred.get() && now >= at + ASK_GAP);
+		let due = self.asked.is_none_or(|at| self.stirred.get() && now >= at + ASK_GAP);
 		if self.asking.is_none() && due {
 			self.ask(now);
 		}
@@ -249,9 +221,7 @@ impl Tmux {
 		if self.asking.is_some() {
 			return self.poll_at;
 		}
-		self.asked
-			.filter(|_| self.stirred.get())
-			.map(|at| at + ASK_GAP)
+		self.asked.filter(|_| self.stirred.get()).map(|at| at + ASK_GAP)
 	}
 
 	fn ask(&mut self, now: Instant) {
@@ -261,15 +231,7 @@ impl Tmux {
 			return;
 		};
 		let mut cmd = std::process::Command::new(&query.exe);
-		cmd.args(&query.socket)
-			.args([
-				"list-clients",
-				"-F",
-				"#{client_pid} #{pane_pid} #{alternate_on} #{mouse_any_flag}",
-			])
-			.stdin(std::process::Stdio::null())
-			.stdout(std::process::Stdio::piped())
-			.stderr(std::process::Stdio::null());
+		cmd.args(&query.socket).args(["list-clients", "-F", "#{client_pid} #{pane_pid} #{alternate_on} #{mouse_any_flag}"]).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null());
 		for (name, value) in &query.env {
 			match value {
 				Some(value) => cmd.env(name, value),
@@ -326,33 +288,15 @@ impl Query {
 	}
 
 	// `environ` is NUL-separated NAME=value pairs.
-	fn new(
-		exe: Option<std::path::PathBuf>,
-		argv: &[std::ffi::OsString],
-		environ: &[u8],
-	) -> Option<Self> {
+	fn new(exe: Option<std::path::PathBuf>, argv: &[std::ffi::OsString], environ: &[u8]) -> Option<Self> {
 		use std::os::unix::ffi::OsStrExt;
-		let var = |name: &str| {
-			environ
-				.split(|&b| b == 0)
-				.find_map(|pair| pair.strip_prefix(name.as_bytes())?.strip_prefix(b"="))
-				.map(|value| std::ffi::OsStr::from_bytes(value).to_owned())
-		};
-		let exe = exe
-			.filter(|exe| exe.is_file())
-			.unwrap_or_else(|| "tmux".into());
+		let var = |name: &str| environ.split(|&b| b == 0).find_map(|pair| pair.strip_prefix(name.as_bytes())?.strip_prefix(b"=")).map(|value| std::ffi::OsStr::from_bytes(value).to_owned());
+		let exe = exe.filter(|exe| exe.is_file()).unwrap_or_else(|| "tmux".into());
 		// Something else that calls itself tmux isn't handed tmux's arguments.
-		if !exe
-			.file_name()
-			.is_some_and(|name| name.as_bytes().starts_with(b"tmux"))
-		{
+		if !exe.file_name().is_some_and(|name| name.as_bytes().starts_with(b"tmux")) {
 			return None;
 		}
-		Some(Self {
-			exe,
-			socket: socket_args(argv),
-			env: vec![("TMUX", var("TMUX")), ("TMUX_TMPDIR", var("TMUX_TMPDIR"))],
-		})
+		Some(Self { exe, socket: socket_args(argv), env: vec![("TMUX", var("TMUX")), ("TMUX_TMPDIR", var("TMUX_TMPDIR"))] })
 	}
 }
 
@@ -360,12 +304,7 @@ impl Query {
 #[cfg(target_os = "linux")]
 fn launched_as(pid: u32) -> Option<(Option<std::path::PathBuf>, Vec<std::ffi::OsString>, Vec<u8>)> {
 	use std::os::unix::ffi::OsStrExt;
-	let argv = std::fs::read(format!("/proc/{pid}/cmdline"))
-		.ok()?
-		.split(|&b| b == 0)
-		.filter(|arg| !arg.is_empty())
-		.map(|arg| std::ffi::OsStr::from_bytes(arg).to_owned())
-		.collect();
+	let argv = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?.split(|&b| b == 0).filter(|arg| !arg.is_empty()).map(|arg| std::ffi::OsStr::from_bytes(arg).to_owned()).collect();
 	let environ = std::fs::read(format!("/proc/{pid}/environ")).ok()?;
 	// a binary replaced since it started reads "(deleted)", which is_file drops
 	let exe = std::fs::read_link(format!("/proc/{pid}/exe")).ok();
@@ -386,17 +325,7 @@ fn launched_as(pid: u32) -> Option<(Option<std::path::PathBuf>, Vec<std::ffi::Os
 	}
 	let mut buf = vec![0u8; size];
 	// SAFETY: the call writes at most `size` bytes and sets it to how many
-	if unsafe {
-		libc::sysctl(
-			mib.as_mut_ptr(),
-			3,
-			buf.as_mut_ptr().cast(),
-			&raw mut size,
-			null,
-			0,
-		)
-	} != 0
-	{
+	if unsafe { libc::sysctl(mib.as_mut_ptr(), 3, buf.as_mut_ptr().cast(), &raw mut size, null, 0) } != 0 {
 		return None;
 	}
 	buf.truncate(size);
@@ -405,10 +334,7 @@ fn launched_as(pid: u32) -> Option<(Option<std::path::PathBuf>, Vec<std::ffi::Os
 	let cap = u32::try_from(path.len()).ok()?;
 	// SAFETY: the call writes at most `cap` bytes and returns the length
 	let got = unsafe { libc::proc_pidpath(pid, path.as_mut_ptr().cast(), cap) };
-	let exe = usize::try_from(got)
-		.ok()
-		.filter(|&n| n > 0)
-		.map(|n| std::ffi::OsStr::from_bytes(&path[..n]).into());
+	let exe = usize::try_from(got).ok().filter(|&n| n > 0).map(|n| std::ffi::OsStr::from_bytes(&path[..n]).into());
 	Some((exe, argv, environ.to_vec()))
 }
 
@@ -432,10 +358,7 @@ fn procargs(buf: &[u8]) -> Option<(Vec<std::ffi::OsString>, &[u8])> {
 		rest = &rest[end + 1..];
 	}
 	let mut env_end = 0;
-	while let Some(len) = rest
-		.get(env_end..)
-		.and_then(|tail| tail.iter().position(|&b| b == 0))
-	{
+	while let Some(len) = rest.get(env_end..).and_then(|tail| tail.iter().position(|&b| b == 0)) {
 		if len == 0 {
 			break;
 		}
@@ -464,9 +387,7 @@ fn socket_args(argv: &[std::ffi::OsString]) -> Vec<std::ffi::OsString> {
 				arg[i + 1..].to_vec()
 			} else {
 				at += 1;
-				argv.get(at)
-					.map(|v| v.as_bytes().to_vec())
-					.unwrap_or_default()
+				argv.get(at).map(|v| v.as_bytes().to_vec()).unwrap_or_default()
 			};
 			if matches!(flag, b'L' | b'S') {
 				out.push(format!("-{}", flag as char).into());
@@ -485,22 +406,13 @@ impl Shown {
 		// A pane started on a program rather than a shell has that program in
 		// its own group, so it is named whether a command runs or not.
 		let groups = groups_of(self.pid);
-		let tpgid = groups
-			.and_then(|(_, tpgid)| u32::try_from(tpgid).ok())
-			.filter(|&g| g > 0);
+		let tpgid = groups.and_then(|(_, tpgid)| u32::try_from(tpgid).ok()).filter(|&g| g > 0);
 		let running = groups.zip(tpgid).is_some_and(|((pgrp, _), g)| g != pgrp);
 		let program = tpgid.and_then(|g| {
-			let pid = if running {
-				group_front(self.pid, g).unwrap_or(g)
-			} else {
-				self.pid
-			};
+			let pid = if running { group_front(self.pid, g).unwrap_or(g) } else { self.pid };
 			comm_of(pid)
 		});
-		Inner {
-			own_screen: self.alt || self.mouse && running,
-			program,
-		}
+		Inner { own_screen: self.alt || self.mouse && running, program }
 	}
 }
 
@@ -536,11 +448,7 @@ fn shown_by(out: &str, client: u32) -> Option<Shown> {
 		}
 		let pid = words.next()?.parse().ok()?;
 		let mut flag = || words.next() == Some("1");
-		Some(Shown {
-			pid,
-			alt: flag(),
-			mouse: flag(),
-		})
+		Some(Shown { pid, alt: flag(), mouse: flag() })
 	})
 }
 
@@ -580,17 +488,9 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_pipeline_whose_first_stage_exited_is_named_for_the_last() {
-		let mut first = std::process::Command::new("sleep")
-			.arg("0.3")
-			.process_group(0)
-			.spawn()
-			.unwrap();
+		let mut first = std::process::Command::new("sleep").arg("0.3").process_group(0).spawn().unwrap();
 		let pgid = first.id();
-		let mut last = std::process::Command::new("sleep")
-			.arg("30")
-			.process_group(pgid.cast_signed())
-			.spawn()
-			.unwrap();
+		let mut last = std::process::Command::new("sleep").arg("30").process_group(pgid.cast_signed()).spawn().unwrap();
 		first.wait().unwrap();
 		let found = group_front(std::process::id(), pgid);
 		reap(&mut last);
@@ -601,11 +501,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_program_s_own_children_are_not_stages() {
-		let mut sh = std::process::Command::new("sh")
-			.args(["-c", "sleep 30; :"])
-			.process_group(0)
-			.spawn()
-			.unwrap();
+		let mut sh = std::process::Command::new("sh").args(["-c", "sleep 30; :"]).process_group(0).spawn().unwrap();
 		let pgid = sh.id();
 		// the sleep it starts is newer and in the group too
 		let deadline = Instant::now() + Duration::from_secs(5);
@@ -624,14 +520,10 @@ mod tests {
 	// Test ID: ddxhb
 	#[test]
 	fn a_stat_line_parses_past_a_name_with_parens() {
-		let line =
-			"4242 (a) b (c) S 1 4240 4240 34816 4240 4194304 0 0 0 0 0 0 0 0 20 0 1 0 987654 0 0";
+		let line = "4242 (a) b (c) S 1 4240 4240 34816 4240 4194304 0 0 0 0 0 0 0 0 20 0 1 0 987654 0 0";
 		let stat = parse_stat(line).unwrap();
 		assert_eq!(stat.comm, "a) b (c");
-		assert_eq!(
-			(stat.pgrp, stat.tpgid, stat.start, stat.gone),
-			(4240, 4240, 987_654, false)
-		);
+		assert_eq!((stat.pgrp, stat.tpgid, stat.start, stat.gone), (4240, 4240, 987_654, false));
 		let zombie = line.replace(") S ", ") Z ");
 		assert!(parse_stat(&zombie).unwrap().gone);
 	}
@@ -641,16 +533,10 @@ mod tests {
 	fn tmux_socket_options_are_read_like_its_getopt() {
 		let args = |line: &str| -> Vec<String> {
 			let argv: Vec<std::ffi::OsString> = line.split(' ').map(Into::into).collect();
-			socket_args(&argv)
-				.into_iter()
-				.map(|a| a.into_string().unwrap())
-				.collect()
+			socket_args(&argv).into_iter().map(|a| a.into_string().unwrap()).collect()
 		};
 		assert!(args("tmux").is_empty());
-		assert!(
-			args("tmux new -L x").is_empty(),
-			"past the command is the command's"
-		);
+		assert!(args("tmux new -L x").is_empty(), "past the command is the command's");
 		assert_eq!(args("tmux -L work attach"), ["-L", "work"]);
 		assert_eq!(args("tmux -uLwork"), ["-L", "work"]);
 		assert_eq!(args("tmux -f /dev/null -S /tmp/s new"), ["-S", "/tmp/s"]);
@@ -662,32 +548,11 @@ mod tests {
 	#[test]
 	fn the_answer_is_our_client_s_line() {
 		let out = "100 7 1 0\n200 8 0 1\n";
-		assert_eq!(
-			shown_by(out, 200),
-			Some(Shown {
-				pid: 8,
-				alt: false,
-				mouse: true
-			})
-		);
-		assert_eq!(
-			shown_by(out, 100),
-			Some(Shown {
-				pid: 7,
-				alt: true,
-				mouse: false
-			})
-		);
+		assert_eq!(shown_by(out, 200), Some(Shown { pid: 8, alt: false, mouse: true }));
+		assert_eq!(shown_by(out, 100), Some(Shown { pid: 7, alt: true, mouse: false }));
 		assert_eq!(shown_by(out, 300), None);
 		// an older tmux with no mouse flag leaves it empty
-		assert_eq!(
-			shown_by("300 9 1 \n", 300),
-			Some(Shown {
-				pid: 9,
-				alt: true,
-				mouse: false
-			})
-		);
+		assert_eq!(shown_by("300 9 1 \n", 300), Some(Shown { pid: 9, alt: true, mouse: false }));
 	}
 
 	fn procargs_block(argc: i32, strings: &[u8]) -> Vec<u8> {
@@ -699,10 +564,7 @@ mod tests {
 	// Test ID: ddy8m
 	#[test]
 	fn sysctl_process_args_split_into_argv_and_environment() {
-		let buf = procargs_block(
-			3,
-			b"/usr/local/bin/tmux\0\0\0\0tmux\0-L\0work\0HOME=/Users/x\0TMUX_TMPDIR=/tmp/t\0\0ptr_munge=\0",
-		);
+		let buf = procargs_block(3, b"/usr/local/bin/tmux\0\0\0\0tmux\0-L\0work\0HOME=/Users/x\0TMUX_TMPDIR=/tmp/t\0\0ptr_munge=\0");
 		let (argv, environ) = procargs(&buf).unwrap();
 		assert_eq!(argv, ["tmux", "-L", "work"]);
 		assert_eq!(environ, b"HOME=/Users/x\0TMUX_TMPDIR=/tmp/t\0");
@@ -720,22 +582,12 @@ mod tests {
 	// Test ID: ddy8n
 	#[test]
 	fn a_client_s_socket_and_tmux_settings_come_from_how_it_was_launched() {
-		let buf = procargs_block(
-			4,
-			b"/nowhere/tmux\0tmux\0-S\0/tmp/sock\0attach\0TMUX_TMPDIR=/tmp/t\0PATH=/bin\0",
-		);
+		let buf = procargs_block(4, b"/nowhere/tmux\0tmux\0-S\0/tmp/sock\0attach\0TMUX_TMPDIR=/tmp/t\0PATH=/bin\0");
 		let (argv, environ) = procargs(&buf).unwrap();
 		let query = Query::new(Some("/nowhere/tmux".into()), &argv, environ).unwrap();
-		assert_eq!(
-			query.exe,
-			std::path::PathBuf::from("tmux"),
-			"a missing binary is found on PATH"
-		);
+		assert_eq!(query.exe, std::path::PathBuf::from("tmux"), "a missing binary is found on PATH");
 		assert_eq!(query.socket, ["-S", "/tmp/sock"]);
-		assert_eq!(
-			query.env,
-			[("TMUX", None), ("TMUX_TMPDIR", Some("/tmp/t".into()))]
-		);
+		assert_eq!(query.env, [("TMUX", None), ("TMUX_TMPDIR", Some("/tmp/t".into()))]);
 		let sh = std::path::PathBuf::from("/bin/sh");
 		assert!(Query::new(Some(sh), &argv, environ).is_none(), "not tmux");
 	}
@@ -770,33 +622,16 @@ mod mac_tests {
 		// so the ask finds it only through what the client was started with.
 		let dir = format!("/tmp/{sock}");
 		std::fs::create_dir_all(&dir).unwrap();
-		let tmux = |args: &[&str]| {
-			Command::new("tmux")
-				.env("TMUX_TMPDIR", &dir)
-				.args(["-L", &sock])
-				.args(args)
-				.output()
-				.unwrap()
-		};
+		let tmux = |args: &[&str]| Command::new("tmux").env("TMUX_TMPDIR", &dir).args(["-L", &sock]).args(args).output().unwrap();
 		// macOS sh runs bash under its own name
 		let made = tmux(&["-f", "/dev/null", "new-session", "-d", "/bin/bash --norc"]);
 		assert!(made.status.success(), "{made:?}");
 		// a client needs a terminal; stdin stays open, or script sends ^D
-		let mut script = Command::new("script")
-			.args(["-q", "/dev/null", "tmux", "-L", &sock, "attach"])
-			.env("TMUX_TMPDIR", &dir)
-			.env("TERM", "xterm-256color")
-			.stdin(Stdio::piped())
-			.stdout(Stdio::null())
-			.spawn()
-			.unwrap();
+		let mut script = Command::new("script").args(["-q", "/dev/null", "tmux", "-L", &sock, "attach"]).env("TMUX_TMPDIR", &dir).env("TERM", "xterm-256color").stdin(Stdio::piped()).stdout(Stdio::null()).spawn().unwrap();
 		let mut client = 0;
 		for _ in 0..100 {
 			let out = tmux(&["list-clients", "-F", "#{client_pid}"]);
-			client = String::from_utf8_lossy(&out.stdout)
-				.trim()
-				.parse()
-				.unwrap_or(0);
+			client = String::from_utf8_lossy(&out.stdout).trim().parse().unwrap_or(0);
 			if client != 0 {
 				break;
 			}
@@ -804,16 +639,10 @@ mod mac_tests {
 		}
 		let query = Query::of(client);
 		let mut state = Tmux::default();
-		let shell = Inner {
-			program: Some("bash".into()),
-			own_screen: false,
-		};
+		let shell = Inner { program: Some("bash".into()), own_screen: false };
 		let at_prompt = wait_for(&mut state, client, &shell);
 		tmux(&["send-keys", "seq 100000 | less", "Enter"]);
-		let less = Inner {
-			program: Some("less".into()),
-			own_screen: true,
-		};
+		let less = Inner { program: Some("less".into()), own_screen: true };
 		let in_less = wait_for(&mut state, client, &less);
 		tmux(&["send-keys", "q"]);
 		let back = wait_for(&mut state, client, &shell);

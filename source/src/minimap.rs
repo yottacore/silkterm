@@ -112,8 +112,7 @@ pub struct Geom {
 /// changes at their own prompt, so on the main screen it counts only while a
 /// command runs. Hand it `screen_modes`, which knows what the program asked.
 pub fn draws_own_screen(mode: TermMode, running: bool) -> bool {
-	mode.contains(TermMode::ALT_SCREEN)
-		|| running && mode.intersects(TermMode::MOUSE_MODE | TermMode::FOCUS_IN_OUT)
+	mode.contains(TermMode::ALT_SCREEN) || running && mode.intersects(TermMode::MOUSE_MODE | TermMode::FOCUS_IN_OUT)
 }
 
 /// What sits on the far side of the PTY, as far as the modes go.
@@ -128,11 +127,7 @@ pub enum PtyHost {
 }
 
 impl PtyHost {
-	pub const HERE: Self = if cfg!(windows) {
-		Self::ConPty
-	} else {
-		Self::Plain
-	};
+	pub const HERE: Self = if cfg!(windows) { Self::ConPty } else { Self::Plain };
 }
 
 /// The part of the mode `draws_own_screen` reads, less what the console host
@@ -208,18 +203,14 @@ pub fn wanted(cfg: &config::Settings, own_screen: bool, program: Option<&str>) -
 		return false;
 	};
 	let running = trim_exe(program);
-	cfg.minimap_tui_whitelist
-		.split_whitespace()
-		.any(|name| trim_exe(name).eq_ignore_ascii_case(running))
+	cfg.minimap_tui_whitelist.split_whitespace().any(|name| trim_exe(name).eq_ignore_ascii_case(running))
 }
 
 // The name to compare on: no directory, and no .exe, so one list works on both
 // platforms and a user who writes either spelling is understood.
 fn trim_exe(name: &str) -> &str {
 	let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
-	base.strip_suffix(".exe")
-		.or_else(|| base.strip_suffix(".EXE"))
-		.unwrap_or(base)
+	base.strip_suffix(".exe").or_else(|| base.strip_suffix(".EXE")).unwrap_or(base)
 }
 
 /// Width of the column, 0 when the minimap is off, the pane is too narrow to
@@ -229,19 +220,12 @@ pub fn column_w(cfg: &config::Settings, pane_w: f32, scale: f32, wanted: bool) -
 		return 0.0;
 	}
 	let w = config::dip(cfg.minimap_width, scale).min((pane_w * 0.5).floor());
-	if w < config::dip(MIN_W, scale) {
-		0.0
-	} else {
-		w
-	}
+	if w < config::dip(MIN_W, scale) { 0.0 } else { w }
 }
 
 /// The part of a pane's area the terminal text gets.
 pub fn text_rect(full: Rect, cfg: &config::Settings, scale: f32, wanted: bool) -> Rect {
-	Rect {
-		w: (full.w - column_w(cfg, full.w, scale, wanted)).max(0.0),
-		..full
-	}
+	Rect { w: (full.w - column_w(cfg, full.w, scale, wanted)).max(0.0), ..full }
 }
 
 // How tall one buffer line draws. Capped, so a buffer shorter than the column
@@ -263,14 +247,7 @@ fn line_px(track_h: f32, total: usize, scale: f32) -> f32 {
 // image stops at `shown`, since under a flood the eased text hasn't reached
 // the rest, and measuring the marker against the whole buffer instead left it
 // drifting above the lines it stood for (F148).
-fn handle_span(
-	track_h: f32,
-	total: usize,
-	shown: usize,
-	rows: usize,
-	pos: f32,
-	scale: f32,
-) -> (f32, f32) {
+fn handle_span(track_h: f32, total: usize, shown: usize, rows: usize, pos: f32, scale: f32) -> (f32, f32) {
 	let pitch = line_px(track_h, shown, scale);
 	let used = pitch * shown as f32;
 	let covers = rows as f32 * pitch; // what the viewport takes up
@@ -292,37 +269,16 @@ fn lines_per_px(track_h: f32, shown: usize, scale: f32) -> f32 {
 /// The column's geometry for a pane. `pos` rides the eased scroll position;
 /// `alt` drops the marker, and `on` is whether the pane is showing the column
 /// at all (see `wanted`).
-pub fn geom(
-	full: Rect,
-	margin: f32,
-	scale: f32,
-	cfg: &config::Settings,
-	total: usize,
-	shown: usize,
-	rows: usize,
-	pos: f32,
-	alt: bool,
-	on: bool,
-) -> Option<Geom> {
+pub fn geom(full: Rect, margin: f32, scale: f32, cfg: &config::Settings, total: usize, shown: usize, rows: usize, pos: f32, alt: bool, on: bool) -> Option<Geom> {
 	let w = column_w(cfg, full.w, scale, on);
 	let h = (full.h - 2.0 * margin).max(0.0);
 	if w <= 0.0 || h <= 0.0 {
 		return None;
 	}
-	let preview = Rect {
-		x: full.x + full.w - w,
-		y: full.y + margin,
-		w,
-		h,
-	};
+	let preview = Rect { x: full.x + full.w - w, y: full.y + margin, w, h };
 	let handle = (!alt && total > rows).then(|| {
 		let (y, hh) = handle_span(h, total, shown, rows, pos, scale);
-		Rect {
-			x: preview.x,
-			y: preview.y + y,
-			w,
-			h: hh,
-		}
+		Rect { x: preview.x, y: preview.y + y, w, h: hh }
 	});
 	Some(Geom { preview, handle })
 }
@@ -340,11 +296,7 @@ pub fn hit(g: &Geom, x: f32, y: f32) -> Option<Hit> {
 		return None;
 	}
 	let handle = g.handle?;
-	Some(if y >= handle.y && y < handle.y + handle.h {
-		Hit::Handle
-	} else {
-		Hit::Track
-	})
+	Some(if y >= handle.y && y < handle.y + handle.h { Hit::Handle } else { Hit::Track })
 }
 
 /// The scroll position a click at `y` should center the viewport on. The bottom
@@ -360,11 +312,7 @@ pub fn center_on(g: &Geom, total: usize, shown: usize, rows: usize, y: f32, scal
 	let back = total.saturating_sub(rows) as f32;
 	let first = (y - g.preview.y) * per_px - rows as f32 * 0.5;
 	let pos = back - first;
-	if pos <= total.saturating_sub(shown) as f32 {
-		0.0
-	} else {
-		pos.min(back)
-	}
+	if pos <= total.saturating_sub(shown) as f32 { 0.0 } else { pos.min(back) }
 }
 
 /// Drag: the pointer has moved from where it grabbed the marker, so the view
@@ -373,15 +321,7 @@ pub fn center_on(g: &Geom, total: usize, shown: usize, rows: usize, y: f32, scal
 /// can't work, because the height floor makes the marker taller than the lines
 /// it covers on a deep buffer, so its top is a rounded reading of the position
 /// rather than the position itself.
-pub fn drag_to(
-	g: &Geom,
-	total: usize,
-	shown: usize,
-	rows: usize,
-	grab: (f32, f32),
-	y: f32,
-	scale: f32,
-) -> f32 {
+pub fn drag_to(g: &Geom, total: usize, shown: usize, rows: usize, grab: (f32, f32), y: f32, scale: f32) -> f32 {
 	let (from_y, from_pos) = grab;
 	let moved = (y - from_y) * lines_per_px(g.preview.h, shown, scale);
 	(from_pos - moved).clamp(0.0, total.saturating_sub(rows) as f32)
@@ -471,10 +411,7 @@ pub struct Minimap {
 // The store has a raster for every history row, so leave it out.
 impl std::fmt::Debug for Minimap {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("Minimap")
-			.field("hist", &self.hist)
-			.field("shown", &self.shown)
-			.finish_non_exhaustive()
+		f.debug_struct("Minimap").field("hist", &self.hist).field("shown", &self.shown).finish_non_exhaustive()
 	}
 }
 
@@ -528,16 +465,7 @@ impl Plan {
 	// The plan without its rows, which is all that's needed to show the
 	// image it made.
 	fn numbers(&self) -> Plan {
-		Plan {
-			clear: self.clear,
-			front: self.front,
-			full: self.full,
-			width: self.width,
-			img_h: self.img_h,
-			total: self.total,
-			scale: self.scale,
-			..Default::default()
-		}
+		Plan { clear: self.clear, front: self.front, full: self.full, width: self.width, img_h: self.img_h, total: self.total, scale: self.scale, ..Default::default() }
 	}
 }
 
@@ -566,8 +494,7 @@ const RUN_GAP: usize = 64;
 
 impl Acc {
 	fn heap_bytes(&self) -> usize {
-		(self.rgb.capacity() + self.weight.capacity() + self.alpha.capacity()) * 4
-			+ (self.sum.capacity() + self.peak.capacity()) * 4
+		(self.rgb.capacity() + self.weight.capacity() + self.alpha.capacity()) * 4 + (self.sum.capacity() + self.peak.capacity()) * 4
 	}
 }
 
@@ -575,9 +502,7 @@ impl Store {
 	fn heap_bytes(&self) -> usize {
 		let row_head = std::mem::size_of::<Row>();
 		let rows: usize = self.rows.iter().chain(&self.spare).map(Vec::capacity).sum();
-		rows + (self.rows.capacity() + self.spare.capacity()) * row_head
-			+ self.img.capacity()
-			+ self.acc.heap_bytes()
+		rows + (self.rows.capacity() + self.spare.capacity()) * row_head + self.img.capacity() + self.acc.heap_bytes()
 	}
 }
 
@@ -587,13 +512,7 @@ impl Minimap {
 	pub fn heap_bytes(&self) -> usize {
 		let row_head = std::mem::size_of::<Row>();
 		let spare: usize = self.spare.iter().map(Vec::capacity).sum();
-		self.store.heap_bytes()
-			+ spare + self.spare.capacity() * row_head
-			+ self.img.capacity()
-			+ self.acc.heap_bytes()
-			+ self.rough.capacity()
-			+ self.spans.capacity() * std::mem::size_of::<(usize, f32)>()
-			+ self.span_at.capacity() * std::mem::size_of::<usize>()
+		self.store.heap_bytes() + spare + self.spare.capacity() * row_head + self.img.capacity() + self.acc.heap_bytes() + self.rough.capacity() + self.spans.capacity() * std::mem::size_of::<(usize, f32)>() + self.span_at.capacity() * std::mem::size_of::<usize>()
 	}
 
 	pub fn image(&self) -> (&[u8], usize, usize) {
@@ -606,11 +525,7 @@ impl Minimap {
 	/// be measured against a picture nobody composed. Before the first compose
 	/// there's nothing to go on, so it's the whole buffer.
 	pub fn shown_lines(&self, hist: usize, lines: usize) -> usize {
-		if self.shown == 0 {
-			hist + lines
-		} else {
-			self.shown
-		}
+		if self.shown == 0 { hist + lines } else { self.shown }
 	}
 
 	/// Free everything. Called when the column goes away. A compose still on
@@ -625,41 +540,17 @@ impl Minimap {
 	/// the newest output the eased view still sits, in whole lines, which is
 	/// where the map has to stop, and `draining` is whether that lag is still
 	/// falling.
-	pub fn update(
-		&mut self,
-		grid: &Grid<Cell>,
-		colors: &Colors,
-		cfg: &config::Settings,
-		width: usize,
-		img_h: usize,
-		scale: f32,
-		lines: usize,
-		cols: usize,
-		advanced: usize,
-		lag: usize,
-		draining: bool,
-		cut: bool,
-		now: Instant,
-	) {
+	pub fn update(&mut self, grid: &Grid<Cell>, colors: &Colors, cfg: &config::Settings, width: usize, img_h: usize, scale: f32, lines: usize, cols: usize, advanced: usize, lag: usize, draining: bool, cut: bool, now: Instant) {
 		if width == 0 || img_h == 0 || lines == 0 || cols == 0 {
 			return;
 		}
 		let collected = self.collect(now);
 		let hist = grid.history_size();
-		let mut rebuild = cut
-			|| self.width != width
-			|| self.cols != cols
-			|| self.lines != lines
-			|| advanced > hist
-			|| self.hist + advanced < hist;
+		let mut rebuild = cut || self.width != width || self.cols != cols || self.lines != lines || advanced > hist || self.hist + advanced < hist;
 		// Scrolled back with a full scrollback: nothing reports the push count, so
 		// a changed newest-history line is the only sign the cache has fallen
 		// behind. Rebuilding is the whole cache, so it waits out RESYNC_MS.
-		let tail = if hist > 0 {
-			row_hash(grid, Line(-1), cols)
-		} else {
-			0
-		};
+		let tail = if hist > 0 { row_hash(grid, Line(-1), cols) } else { 0 };
 		if !rebuild && advanced == 0 && tail != self.tail {
 			let since = *self.stale_since.get_or_insert(now);
 			rebuild = now.duration_since(since) >= Duration::from_millis(RESYNC_MS);
@@ -700,9 +591,7 @@ impl Minimap {
 			self.pending = true;
 			return;
 		}
-		let due = self
-			.last_compose
-			.is_none_or(|t| now.duration_since(t) >= gap(self.spent));
+		let due = self.last_compose.is_none_or(|t| now.duration_since(t) >= gap(self.spent));
 		// a resized column composes at once: the map is stretched to the new
 		// width until it does, and at a deep scrollback the wait is seconds
 		if due || self.img_h != img_h || self.img_w != width {
@@ -776,22 +665,15 @@ impl Minimap {
 	fn send(&mut self, mut plan: Plan, here: Duration, whole: bool, now: Instant) {
 		let mut store = std::mem::take(&mut self.store);
 		let numbers = plan.numbers();
-		let spawned = std::thread::Builder::new()
-			.name("minimap".into())
-			.spawn(move || {
-				let began = Instant::now();
-				store.run(&mut plan);
-				(store, began.elapsed())
-			});
+		let spawned = std::thread::Builder::new().name("minimap".into()).spawn(move || {
+			let began = Instant::now();
+			store.run(&mut plan);
+			(store, began.elapsed())
+		});
 		match spawned {
 			Ok(thread) => {
 				self.poll_at = Some(now + self.took.max(Duration::from_millis(POLL_MS)));
-				self.job = Some(Job {
-					thread,
-					plan: numbers,
-					here,
-					whole,
-				});
+				self.job = Some(Job { thread, plan: numbers, here, whole });
 			}
 			// the closure owned the store, and a failed spawn drops it
 			Err(_) => self.lost(),
@@ -861,27 +743,13 @@ impl Minimap {
 	// the rows around it. What is left of the budget replaces stand-ins,
 	// newest first, since the oldest are the first to leave. Also settles how
 	// far down the buffer the map draws.
-	fn plan(
-		&mut self,
-		grid: &Grid<Cell>,
-		colors: &Colors,
-		cfg: &config::Settings,
-		lag: usize,
-		img_h: usize,
-		scale: f32,
-	) -> Plan {
+	fn plan(&mut self, grid: &Grid<Cell>, colors: &Colors, cfg: &config::Settings, lag: usize, img_h: usize, scale: f32) -> Plan {
 		self.fit_spans();
 		let mut readable = std::mem::take(&mut self.readable);
 		let mut left = self.budget();
 		let fresh = std::mem::take(&mut self.fresh);
 		let step = fresh.div_ceil(left).max(1);
-		let mut plan = Plan {
-			clear: std::mem::take(&mut self.owed_clear),
-			front: std::mem::take(&mut self.owed_front),
-			groups: Vec::with_capacity(fresh.div_ceil(step)),
-			screen: Vec::with_capacity(self.lines),
-			..Default::default()
-		};
+		let mut plan = Plan { clear: std::mem::take(&mut self.owed_clear), front: std::mem::take(&mut self.owed_front), groups: Vec::with_capacity(fresh.div_ceil(step)), screen: Vec::with_capacity(self.lines), ..Default::default() };
 		let mut k = fresh;
 		while k > 0 {
 			// lines k (the oldest) down to k - group + 1, drawn from the newest
@@ -926,11 +794,7 @@ impl Minimap {
 		plan.width = self.width;
 		plan.img_h = img_h;
 		plan.scale = scale;
-		plan.full = self.moved
-			|| self.img_w != plan.width
-			|| self.img_h != img_h
-			|| self.img_total != plan.total
-			|| self.img_scale != scale;
+		plan.full = self.moved || self.img_w != plan.width || self.img_h != img_h || self.img_total != plan.total || self.img_scale != scale;
 		self.moved = false;
 		self.readable = readable;
 		plan
@@ -956,11 +820,7 @@ impl Minimap {
 			// the text. The end cells reach past the edge so the first and last
 			// pixel are covered as fully as the rest.
 			let x0 = if c == 0 { -2.0 } else { c as f32 * per_cell };
-			let x1 = if c + 1 == self.cols {
-				edge
-			} else {
-				(c + 1) as f32 * per_cell
-			};
+			let x1 = if c + 1 == self.cols { edge } else { (c + 1) as f32 * per_cell };
 			let first = (x0 - 1.0).max(0.0) as usize;
 			let last = ((x1 + 1.0).ceil() as usize).min(self.width);
 			for px in first..last {
@@ -980,15 +840,7 @@ impl Minimap {
 	// One grid line to one strip of preview pixels. Blank cells are skipped
 	// before any color is resolved, which is most of a terminal buffer.
 	// Returns whether the line laid down any ink at all.
-	fn fill(
-		&mut self,
-		grid: &Grid<Cell>,
-		line: Line,
-		colors: &Colors,
-		cfg: &config::Settings,
-		readable: &mut palette::Readable,
-		out: &mut Row,
-	) -> bool {
+	fn fill(&mut self, grid: &Grid<Cell>, line: Line, colors: &Colors, cfg: &config::Settings, readable: &mut palette::Readable, out: &mut Row) -> bool {
 		let width = self.width;
 		#[cfg(test)]
 		{
@@ -1008,11 +860,7 @@ impl Minimap {
 			if blank(cell) {
 				continue;
 			}
-			let style = Style {
-				fg: cell.fg,
-				bg: cell.bg,
-				flags: cell.flags & (Flags::INVERSE | Flags::HIDDEN),
-			};
+			let style = Style { fg: cell.fg, bg: cell.bg, flags: cell.flags & (Flags::INVERSE | Flags::HIDDEN) };
 			let ink = match last {
 				Some((seen, ink)) if seen == style => ink,
 				_ => {
@@ -1150,10 +998,8 @@ impl Store {
 			acc.reset(width);
 			let y0 = py as f32;
 			let y1 = y0 + 1.0;
-			let first = (((y0 - reach - band_top - band_h) / lh).floor().max(0.0) as usize)
-				.min(total.saturating_sub(1));
-			let last =
-				(((y1 + reach - band_top) / lh).ceil().max(0.0) as usize).clamp(first + 1, total);
+			let first = (((y0 - reach - band_top - band_h) / lh).floor().max(0.0) as usize).min(total.saturating_sub(1));
+			let last = (((y1 + reach - band_top) / lh).ceil().max(0.0) as usize).clamp(first + 1, total);
 			let mut whole = 0;
 			for i in first..last {
 				let top = i as f32 * lh + band_top;
@@ -1171,11 +1017,7 @@ impl Store {
 					}
 					continue;
 				}
-				let cover = if soft {
-					tent_over(top, top + band_h, y0 + 0.5) * gain
-				} else {
-					((top + band_h).min(y1) - top.max(y0)).max(0.0) * gain
-				};
+				let cover = if soft { tent_over(top, top + band_h, y0 + 0.5) * gain } else { ((top + band_h).min(y1) - top.max(y0)).max(0.0) * gain };
 				if cover <= 0.0 {
 					continue;
 				}
@@ -1233,8 +1075,7 @@ impl Acc {
 		let (blue, alpha) = rest.split_at_mut(n);
 		let (alpha, peak, row) = (&mut alpha[..n], &mut self.peak[..n], &row[..n * 4]);
 		for i in 0..n {
-			let px =
-				u32::from_le_bytes([row[i * 4], row[i * 4 + 1], row[i * 4 + 2], row[i * 4 + 3]]);
+			let px = u32::from_le_bytes([row[i * 4], row[i * 4 + 1], row[i * 4 + 2], row[i * 4 + 3]]);
 			let a = px >> 24;
 			red[i] += (px & 0xff) * a;
 			green[i] += ((px >> 8) & 0xff) * a;
@@ -1287,21 +1128,12 @@ impl Ink {
 		let ink = INK * share;
 		// A cell with its own background paints solid; otherwise only its ink
 		// shows, so an indented or short line reads as one.
-		if self.own_bg {
-			(mix(self.bg, self.fg, ink), 1.0)
-		} else {
-			(self.fg, ink)
-		}
+		if self.own_bg { (mix(self.bg, self.fg, ink), 1.0) } else { (self.fg, ink) }
 	}
 }
 
 // A cell's colors in the preview.
-fn paint(
-	style: &Style,
-	colors: &Colors,
-	cfg: &config::Settings,
-	readable: &mut palette::Readable,
-) -> Ink {
+fn paint(style: &Style, colors: &Colors, cfg: &config::Settings, readable: &mut palette::Readable) -> Ink {
 	let mut fg = palette::resolve(style.fg, colors, cfg);
 	let mut bg = palette::resolve(style.bg, colors, cfg);
 	if style.flags.contains(Flags::INVERSE) {
@@ -1310,11 +1142,7 @@ fn paint(
 	if style.flags.contains(Flags::HIDDEN) {
 		fg = bg;
 	}
-	Ink {
-		fg: readable.get(fg, bg, cfg.min_contrast()),
-		bg,
-		own_bg: bg != cfg.bg,
-	}
+	Ink { fg: readable.get(fg, bg, cfg.min_contrast()), bg, own_bg: bg != cfg.bg }
 }
 
 // How much of its cell a character inks, against the densest ones at 1.0.
@@ -1368,9 +1196,7 @@ fn gap(spent: Duration) -> Duration {
 // Nothing to draw: an unstyled space. Checked before any color is resolved,
 // which is what keeps rasterizing a mostly-empty buffer cheap.
 fn blank(cell: &Cell) -> bool {
-	cell.c == ' '
-		&& cell.bg == Color::Named(NamedColor::Background)
-		&& !cell.flags.intersects(Flags::INVERSE)
+	cell.c == ' ' && cell.bg == Color::Named(NamedColor::Background) && !cell.flags.intersects(Flags::INVERSE)
 }
 
 // Nearest byte for a value in 0..=255. `f32::round` is a library call on
@@ -1426,94 +1252,18 @@ pub struct MapRenderer {
 
 impl std::fmt::Debug for MapRenderer {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("MapRenderer")
-			.field("panes", &self.panes.len())
-			.finish_non_exhaustive()
+		f.debug_struct("MapRenderer").field("panes", &self.panes.len()).finish_non_exhaustive()
 	}
 }
 
 impl MapRenderer {
 	pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
-		let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("minimap bgl"),
-			entries: &[
-				wgpu::BindGroupLayoutEntry {
-					binding: 0,
-					visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-					ty: wgpu::BindingType::Buffer {
-						ty: wgpu::BufferBindingType::Uniform,
-						has_dynamic_offset: false,
-						min_binding_size: None,
-					},
-					count: None,
-				},
-				wgpu::BindGroupLayoutEntry {
-					binding: 1,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Texture {
-						sample_type: wgpu::TextureSampleType::Float { filterable: true },
-						view_dimension: wgpu::TextureViewDimension::D2,
-						multisampled: false,
-					},
-					count: None,
-				},
-				wgpu::BindGroupLayoutEntry {
-					binding: 2,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-					count: None,
-				},
-			],
-		});
-		let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-			label: Some("minimap sampler"),
-			mag_filter: wgpu::FilterMode::Nearest,
-			min_filter: wgpu::FilterMode::Nearest,
-			..Default::default()
-		});
-		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-			label: Some("minimap shader"),
-			source: wgpu::ShaderSource::Wgsl(MAP_WGSL.into()),
-		});
-		let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("minimap layout"),
-			bind_group_layouts: &[Some(&layout)],
-			immediate_size: 0,
-		});
-		let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-			label: Some("minimap pipeline"),
-			layout: Some(&pipeline_layout),
-			vertex: wgpu::VertexState {
-				module: &shader,
-				entry_point: Some("vs"),
-				compilation_options: Default::default(),
-				buffers: &[],
-			},
-			fragment: Some(wgpu::FragmentState {
-				module: &shader,
-				entry_point: Some("fs"),
-				compilation_options: Default::default(),
-				targets: &[Some(wgpu::ColorTargetState {
-					format,
-					blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-					write_mask: wgpu::ColorWrites::ALL,
-				})],
-			}),
-			primitive: wgpu::PrimitiveState {
-				topology: wgpu::PrimitiveTopology::TriangleStrip,
-				..Default::default()
-			},
-			depth_stencil: None,
-			multisample: wgpu::MultisampleState::default(),
-			multiview_mask: None,
-			cache: None,
-		});
-		Self {
-			pipeline,
-			layout,
-			sampler,
-			panes: HashMap::new(),
-		}
+		let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("minimap bgl"), entries: &[wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::VERTEX_FRAGMENT, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None }, wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }, count: None }, wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None }] });
+		let sampler = device.create_sampler(&wgpu::SamplerDescriptor { label: Some("minimap sampler"), mag_filter: wgpu::FilterMode::Nearest, min_filter: wgpu::FilterMode::Nearest, ..Default::default() });
+		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("minimap shader"), source: wgpu::ShaderSource::Wgsl(MAP_WGSL.into()) });
+		let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("minimap layout"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
+		let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor { label: Some("minimap pipeline"), layout: Some(&pipeline_layout), vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] }, fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fs"), compilation_options: Default::default(), targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })] }), primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() }, depth_stencil: None, multisample: wgpu::MultisampleState::default(), multiview_mask: None, cache: None });
+		Self { pipeline, layout, sampler, panes: HashMap::new() }
 	}
 
 	pub fn begin_frame(&mut self) {
@@ -1524,23 +1274,14 @@ impl MapRenderer {
 
 	/// Upload a pane's column image and place its quad. Must run before the pass
 	/// that draws it.
-	pub fn prepare(
-		&mut self,
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		id: u64,
-		at: Rect,
-		res: (f32, f32),
-		map: &Minimap,
-	) {
+	pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, id: u64, at: Rect, res: (f32, f32), map: &Minimap) {
 		let (pixels, w, h) = map.image();
 		if pixels.is_empty() || w == 0 || h == 0 {
 			return;
 		}
 		let (w, h) = (w as u32, h as u32);
 		if self.panes.get(&id).is_none_or(|p| p.w != w || p.h != h) {
-			self.panes
-				.insert(id, make_tex(device, &self.layout, &self.sampler, w, h));
+			self.panes.insert(id, make_tex(device, &self.layout, &self.sampler, w, h));
 		}
 		let Some(entry) = self.panes.get_mut(&id) else {
 			return;
@@ -1548,37 +1289,9 @@ impl MapRenderer {
 		entry.used = true;
 		if entry.rev != map.rev {
 			entry.rev = map.rev;
-			queue.write_texture(
-				wgpu::TexelCopyTextureInfo {
-					texture: &entry.texture,
-					mip_level: 0,
-					origin: wgpu::Origin3d::ZERO,
-					aspect: wgpu::TextureAspect::All,
-				},
-				pixels,
-				wgpu::TexelCopyBufferLayout {
-					offset: 0,
-					bytes_per_row: Some(4 * w),
-					rows_per_image: Some(h),
-				},
-				wgpu::Extent3d {
-					width: w,
-					height: h,
-					depth_or_array_layers: 1,
-				},
-			);
+			queue.write_texture(wgpu::TexelCopyTextureInfo { texture: &entry.texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, pixels, wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(4 * w), rows_per_image: Some(h) }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
 		}
-		queue.write_buffer(
-			&entry.uniform,
-			0,
-			bytemuck::bytes_of(&Uniform {
-				resolution: [res.0, res.1],
-				pos: [at.x, at.y],
-				size: [at.w, at.h],
-				alpha: PREVIEW_A,
-				_pad: 0.0,
-			}),
-		);
+		queue.write_buffer(&entry.uniform, 0, bytemuck::bytes_of(&Uniform { resolution: [res.0, res.1], pos: [at.x, at.y], size: [at.w, at.h], alpha: PREVIEW_A, _pad: 0.0 }));
 	}
 
 	pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, id: u64) {
@@ -1598,61 +1311,12 @@ impl MapRenderer {
 	}
 }
 
-fn make_tex(
-	device: &wgpu::Device,
-	layout: &wgpu::BindGroupLayout,
-	sampler: &wgpu::Sampler,
-	w: u32,
-	h: u32,
-) -> PaneTex {
-	let texture = device.create_texture(&wgpu::TextureDescriptor {
-		label: Some("minimap tex"),
-		size: wgpu::Extent3d {
-			width: w,
-			height: h,
-			depth_or_array_layers: 1,
-		},
-		mip_level_count: 1,
-		sample_count: 1,
-		dimension: wgpu::TextureDimension::D2,
-		format: wgpu::TextureFormat::Rgba8UnormSrgb,
-		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-		view_formats: &[],
-	});
+fn make_tex(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, sampler: &wgpu::Sampler, w: u32, h: u32) -> PaneTex {
+	let texture = device.create_texture(&wgpu::TextureDescriptor { label: Some("minimap tex"), size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Rgba8UnormSrgb, usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST, view_formats: &[] });
 	let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-	let uniform = device.create_buffer(&wgpu::BufferDescriptor {
-		label: Some("minimap uniform"),
-		size: std::mem::size_of::<Uniform>() as u64,
-		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-		mapped_at_creation: false,
-	});
-	let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-		label: Some("minimap bind"),
-		layout,
-		entries: &[
-			wgpu::BindGroupEntry {
-				binding: 0,
-				resource: uniform.as_entire_binding(),
-			},
-			wgpu::BindGroupEntry {
-				binding: 1,
-				resource: wgpu::BindingResource::TextureView(&view),
-			},
-			wgpu::BindGroupEntry {
-				binding: 2,
-				resource: wgpu::BindingResource::Sampler(sampler),
-			},
-		],
-	});
-	PaneTex {
-		texture,
-		bind,
-		uniform,
-		w,
-		h,
-		rev: u64::MAX,
-		used: false,
-	}
+	let uniform = device.create_buffer(&wgpu::BufferDescriptor { label: Some("minimap uniform"), size: std::mem::size_of::<Uniform>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+	let bind = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("minimap bind"), layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(sampler) }] });
+	PaneTex { texture, bind, uniform, w, h, rev: u64::MAX, used: false }
 }
 
 const MAP_WGSL: &str = r"
@@ -1704,14 +1368,7 @@ impl Minimap {
 
 	// A whole compose of the seeded rows, here and now.
 	fn compose(&mut self, img_h: usize, scale: f32) {
-		let plan = Plan {
-			full: true,
-			width: self.width,
-			img_h,
-			total: self.shown.min(self.store.rows.len()),
-			scale,
-			..Default::default()
-		};
+		let plan = Plan { full: true, width: self.width, img_h, total: self.shown.min(self.store.rows.len()), scale, ..Default::default() };
 		let len = self.width * img_h * 4;
 		self.store.img.clear();
 		self.store.img.resize(len, 0);
@@ -1731,12 +1388,7 @@ impl Minimap {
 	}
 	fn pixel(&self, x: usize, y: usize) -> [u8; 4] {
 		let i = (y * self.img_w + x) * 4;
-		[
-			self.img[i],
-			self.img[i + 1],
-			self.img[i + 2],
-			self.img[i + 3],
-		]
+		[self.img[i], self.img[i + 1], self.img[i + 2], self.img[i + 3]]
 	}
 }
 
@@ -1757,14 +1409,8 @@ mod tests {
 	// A grid with the cursor still on its first row, so what's written goes
 	// at the top and the rows under it stay blank.
 	fn fresh_term(cols: usize, lines: usize, scrollback: usize) -> (Term<VoidListener>, Processor) {
-		let cfg = TermConfig {
-			scrolling_history: scrollback,
-			..Default::default()
-		};
-		let dims = crate::term::TermDimensions {
-			columns: cols,
-			screen_lines: lines,
-		};
+		let cfg = TermConfig { scrolling_history: scrollback, ..Default::default() };
+		let dims = crate::term::TermDimensions { columns: cols, screen_lines: lines };
 		(Term::new(cfg, &dims, VoidListener), Processor::new())
 	}
 
@@ -1810,11 +1456,7 @@ mod tests {
 	}
 
 	fn cfg(on: bool, width: f32) -> config::Settings {
-		config::Settings {
-			minimap: on,
-			minimap_width: width,
-			..Default::default()
-		}
+		config::Settings { minimap: on, minimap_width: width, ..Default::default() }
 	}
 
 	// A page of identical lines has to compose to an evenly lit column. The
@@ -1837,36 +1479,17 @@ mod tests {
 				parser.advance(&mut term, b"\r\n");
 			}
 			let mut map = Minimap::default();
-			map.update(
-				term.grid(),
-				term.colors(),
-				&settings,
-				width,
-				img_h,
-				1.0,
-				lines,
-				cols,
-				total,
-				0,
-				false,
-				true,
-				Instant::now(),
-			);
+			map.update(term.grid(), term.colors(), &settings, width, img_h, 1.0, lines, cols, total, 0, false, true, Instant::now());
 			let lh = line_px(img_h as f32, map.shown, 1.0);
 			// the screen it started on is pushed up ahead of the page, and the
 			// screen it ends on sits below it, so measure between the 2
 			let from = (lh * (lines + 1) as f32) as usize;
 			let used = (lh * (map.shown - lines) as f32) as usize;
-			let rows: Vec<f32> = (from..used - 2)
-				.map(|y| (0..width).map(|x| map.pixel(x, y)[3] as f32).sum::<f32>() / width as f32)
-				.collect();
+			let rows: Vec<f32> = (from..used - 2).map(|y| (0..width).map(|x| map.pixel(x, y)[3] as f32).sum::<f32>() / width as f32).collect();
 			let mean = rows.iter().sum::<f32>() / rows.len() as f32;
 			let lo = rows.iter().copied().fold(f32::MAX, f32::min);
 			let hi = rows.iter().copied().fold(0.0f32, f32::max);
-			assert!(
-				(hi - lo) / mean < 0.12,
-				"{total} lines at {lh:.2} px: {lo} to {hi} about {mean}"
-			);
+			assert!((hi - lo) / mean < 0.12, "{total} lines at {lh:.2} px: {lo} to {hi} about {mean}");
 		}
 	}
 
@@ -1882,37 +1505,17 @@ mod tests {
 		let (mut term, mut parser) = fresh_term(cols, 4, 10);
 		// every other cell inked, which is the worst case for the beat
 		parser.advance(&mut term, "#\u{a0}".repeat(cols / 2).as_bytes());
-		let mut map = Minimap {
-			width,
-			cols,
-			..Default::default()
-		};
+		let mut map = Minimap { width, cols, ..Default::default() };
 		map.fit_spans();
 		let mut strip = map.take_row();
-		map.fill(
-			term.grid(),
-			Line(0),
-			term.colors(),
-			&cfg,
-			&mut palette::Readable::default(),
-			&mut strip,
-		);
+		map.fill(term.grid(), Line(0), term.colors(), &cfg, &mut palette::Readable::default(), &mut strip);
 		// a 5-pixel average has no cell-scale detail, so what's left in
 		// it is the slow beat
-		let smooth: Vec<f32> = (4..width - 4)
-			.map(|x| {
-				(x - 2..=x + 2)
-					.map(|i| strip[i * 4 + 3] as f32)
-					.sum::<f32>() / 5.0
-			})
-			.collect();
+		let smooth: Vec<f32> = (4..width - 4).map(|x| (x - 2..=x + 2).map(|i| strip[i * 4 + 3] as f32).sum::<f32>() / 5.0).collect();
 		let mean = smooth.iter().sum::<f32>() / smooth.len() as f32;
 		let lo = smooth.iter().copied().fold(f32::MAX, f32::min);
 		let hi = smooth.iter().copied().fold(0.0f32, f32::max);
-		assert!(
-			(hi - lo) / mean < 0.15,
-			"{cols} columns into {width} px: {lo} to {hi} about {mean}"
-		);
+		assert!((hi - lo) / mean < 0.15, "{cols} columns into {width} px: {lo} to {hi} about {mean}");
 	}
 
 	// A full-screen program draws on its own screen, which has no scroll buffer,
@@ -1966,9 +1569,7 @@ mod tests {
 		};
 		// a chat program's default view: no alt screen, focus reports on, and a
 		// block at the bottom redrawn in place
-		let chat = after(
-			b"\x1b[?2004h\x1b[?2031h\x1b[?1004h> hello\r\n  status\x1b[1A\r\x1b[2K> hello there",
-		);
+		let chat = after(b"\x1b[?2004h\x1b[?2031h\x1b[?1004h> hello\r\n  status\x1b[1A\r\x1b[2K> hello there");
 		assert!(!chat.contains(TermMode::ALT_SCREEN));
 		assert!(!wanted(&s, draws_own_screen(chat, true), Some("node")));
 		assert!(wanted(&s, draws_own_screen(chat, true), Some("less")));
@@ -2007,21 +1608,14 @@ mod tests {
 			  \x1b[?25hC:\\>ping -t localhost\r\n\r\nPinging ::1 with 32 bytes of data:\r\n",
 		);
 		let mode = *term.mode();
-		assert!(
-			mode.contains(TermMode::FOCUS_IN_OUT),
-			"the engine sees the host's ask"
-		);
+		assert!(mode.contains(TermMode::FOCUS_IN_OUT), "the engine sees the host's ask");
 		let own = |host, mode| draws_own_screen(screen_modes_from(host, mode), true);
 		assert!(wanted(&s, own(PtyHost::ConPty, mode), Some("PING")));
 		// the same ask from a program on a unix PTY is the program's
 		assert!(!wanted(&s, own(PtyHost::Plain, mode), Some("ping")));
 		// a pager still takes it there
 		parser.advance(&mut term, b"\x1b[?1049h");
-		assert!(!wanted(
-			&s,
-			own(PtyHost::ConPty, *term.mode()),
-			Some("more")
-		));
+		assert!(!wanted(&s, own(PtyHost::ConPty, *term.mode()), Some("more")));
 	}
 
 	// A nested fish, or one at the far end of an ssh, is the program running,
@@ -2039,14 +1633,10 @@ mod tests {
 			draws_own_screen(*term.mode(), true)
 		};
 		// fish 4.2.1's prompt and the start of `ls /`, as sent to this terminal
-		assert!(!own(
-			b"\x1b]0;~\x07\x1b[m\x1b[6n\x1b[0c\x1b[?2004h\x1b[>4;1m\x1b]133;A;click_events=1\x07\
-			  b23 ~ \x1b[K\r\x1b[6C"
-		));
-		assert!(!own(
-			b"\x1b[?2004l\x1b[>4;0m\x1b[4D\x1b[34mls\x1b[m \x1b[36m/\x1b[m\r\n\x1b[m\
-			  \x1b]133;C;cmdline_url=ls%20/\x07"
-		));
+		assert!(!own(b"\x1b]0;~\x07\x1b[m\x1b[6n\x1b[0c\x1b[?2004h\x1b[>4;1m\x1b]133;A;click_events=1\x07\
+			  b23 ~ \x1b[K\r\x1b[6C"));
+		assert!(!own(b"\x1b[?2004l\x1b[>4;0m\x1b[4D\x1b[34mls\x1b[m \x1b[36m/\x1b[m\r\n\x1b[m\
+			  \x1b]133;C;cmdline_url=ls%20/\x07"));
 		assert!(!own(b"bin  etc  usr\r\n\x1b]133;D;0\x07\x1b[?25h"));
 		assert!(wanted(&s, own(b""), Some("fish")));
 		assert!(wanted(&s, own(b""), Some("ssh")));
@@ -2064,11 +1654,7 @@ mod tests {
 		assert!(hold.update(true, Some("node"), at(10)));
 		// focus reports off and on again while it starts
 		assert!(hold.update(false, Some("node"), at(130)), "a lapse is held");
-		assert_eq!(
-			hold.wake(),
-			Some(at(10) + HOLD),
-			"and wakes when it runs out"
-		);
+		assert_eq!(hold.wake(), Some(at(10) + HOLD), "and wakes when it runs out");
 		assert!(hold.update(true, Some("node"), at(240)));
 		assert_eq!(hold.wake(), None, "nothing to wake for while it says so");
 		// quiet for good, still running
@@ -2088,12 +1674,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn off_costs_the_pane_nothing() {
-		let full = Rect {
-			x: 0.0,
-			y: 0.0,
-			w: 800.0,
-			h: 600.0,
-		};
+		let full = Rect { x: 0.0, y: 0.0, w: 800.0, h: 600.0 };
 		let text = text_rect(full, &cfg(false, 100.0), 1.0, true);
 		assert_eq!(text.w, full.w);
 		assert_eq!(column_w(&cfg(false, 100.0), full.w, 1.0, true), 0.0);
@@ -2105,12 +1686,7 @@ mod tests {
 	fn the_column_takes_its_width_and_no_more() {
 		let s = cfg(true, 100.0);
 		assert_eq!(column_w(&s, 800.0, 1.0, true), 100.0);
-		let full = Rect {
-			x: 10.0,
-			y: 20.0,
-			w: 800.0,
-			h: 600.0,
-		};
+		let full = Rect { x: 10.0, y: 20.0, w: 800.0, h: 600.0 };
 		assert_eq!(text_rect(full, &s, 1.0, true).w, 700.0);
 	}
 
@@ -2160,17 +1736,11 @@ mod tests {
 		for pos in [0.0, 120.0, 500.0, 960.0] {
 			let (y, _) = handle_span(track, total, total, rows, pos, 1.0);
 			let still = drag_to(&g, total, total, rows, (y, pos), y, 1.0);
-			assert!(
-				(still - pos).abs() < 1e-3,
-				"{pos} moved to {still} on its own"
-			);
+			assert!((still - pos).abs() < 1e-3, "{pos} moved to {still} on its own");
 			// 10 lines' worth of pixels up the column is 10 lines back
 			let want = (pos + 10.0).min((total - rows) as f32);
 			let moved = drag_to(&g, total, total, rows, (y, pos), y - 10.0 * pitch, 1.0);
-			assert!(
-				(moved - want).abs() < 0.01,
-				"{pos} -> {moved}, wanted {want}"
-			);
+			assert!((moved - want).abs() < 0.01, "{pos} -> {moved}, wanted {want}");
 		}
 	}
 
@@ -2197,11 +1767,7 @@ mod tests {
 				let want = (first + rows as f32 * 0.5) * pitch;
 				let note = format!("{total}/{shown} at {pos}: {y}+{h} of {used}");
 				if want - h * 0.5 >= 0.01 && want + h * 0.5 <= used - 0.01 {
-					assert!(
-						(y + h * 0.5 - want).abs() < 0.6,
-						"{note}: middle {} wants {want}",
-						y + h * 0.5
-					);
+					assert!((y + h * 0.5 - want).abs() < 0.6, "{note}: middle {} wants {want}", y + h * 0.5);
 				} else {
 					// within half a floored marker of an end, so it sits flush
 					// with that end rather than hanging off the map
@@ -2223,62 +1789,28 @@ mod tests {
 		let track = 900.0;
 		// a full screen, a screen holding only a prompt at 2 history depths,
 		// and a deep buffer where the height floor eats most of the travel
-		for &(total, shown, rows) in &[
-			(1000, 1000, 48),
-			(148, 101, 48),
-			(1048, 1001, 48),
-			(10_048, 9_858, 48),
-			(10_048, 10_048, 48),
-			(58, 11, 48),
-		] {
+		for &(total, shown, rows) in &[(1000, 1000, 48), (148, 101, 48), (1048, 1001, 48), (10_048, 9_858, 48), (10_048, 10_048, 48), (58, 11, 48)] {
 			let g = track_geom(track, total, shown, rows);
 			let back = (total - rows) as f32;
 			for step in 0..=20 {
 				let pos = back * step as f32 / 20.0;
 				let (y, h) = handle_span(track, total, shown, rows, pos, 1.0);
 				let read = drag_to(&g, total, shown, rows, (y, pos), y, 1.0);
-				assert!(
-					(read - pos).abs() < 0.5,
-					"{total}/{shown}: drawn at {pos} reads back {read}"
-				);
+				assert!((read - pos).abs() < 0.5, "{total}/{shown}: drawn at {pos} reads back {read}");
 				// and it stays inside the map it rides
 				let used = line_px(track, shown, 1.0) * shown as f32;
-				assert!(
-					y >= 0.0 && y + h <= used + 0.01,
-					"{total}/{shown}: {y}+{h} of {used}"
-				);
+				assert!(y >= 0.0 && y + h <= used + 0.01, "{total}/{shown}: {y}+{h} of {used}");
 			}
 			// the bottom of the buffer is reachable by clicking the track, not
 			// only by dragging past the end of it
 			let used = line_px(track, shown, 1.0) * shown as f32;
-			assert_eq!(
-				center_on(&g, total, shown, rows, used, 1.0),
-				0.0,
-				"{total}/{shown}: a click on the last drawn line misses the newest output"
-			);
+			assert_eq!(center_on(&g, total, shown, rows, used, 1.0), 0.0, "{total}/{shown}: a click on the last drawn line misses the newest output");
 		}
 	}
 
 	// A column of the given height, for the tests that need a `Geom`.
 	fn track_geom(track: f32, total: usize, shown: usize, rows: usize) -> Geom {
-		geom(
-			Rect {
-				x: 0.0,
-				y: 0.0,
-				w: 400.0,
-				h: track,
-			},
-			0.0,
-			1.0,
-			&cfg(true, 60.0),
-			total,
-			shown,
-			rows,
-			0.0,
-			false,
-			true,
-		)
-		.unwrap()
+		geom(Rect { x: 0.0, y: 0.0, w: 400.0, h: track }, 0.0, 1.0, &cfg(true, 60.0), total, shown, rows, 0.0, false, true).unwrap()
 	}
 
 	// Test ID: dc0b6
@@ -2385,44 +1917,20 @@ mod tests {
 			parser.advance(&mut term, line.repeat(chunk).as_bytes());
 			let (rastered, rev) = (map.rastered, map.rev);
 			let now = start + Duration::from_millis(frame * 10);
-			map.update(
-				term.grid(),
-				term.colors(),
-				&cfg,
-				16,
-				300,
-				1.0,
-				lines,
-				cols,
-				chunk,
-				0,
-				true,
-				false,
-				now,
-			);
+			map.update(term.grid(), term.colors(), &cfg, 16, 300, 1.0, lines, cols, chunk, 0, true, false, now);
 			let did = map.rastered - rastered;
 			if map.rev == rev {
-				assert_eq!(
-					did, 0,
-					"frame {frame}: a build that did not compose rasterized"
-				);
+				assert_eq!(did, 0, "frame {frame}: a build that did not compose rasterized");
 			} else {
 				composes += 1;
 				let most = term.grid().history_size() + lines;
-				assert!(
-					did <= most,
-					"frame {frame}: {did} rows for one compose, at most {most}"
-				);
+				assert!(did <= most, "frame {frame}: {did} rows for one compose, at most {most}");
 			}
 		}
 		// a second of frames; how many composes depends on how long each took
 		assert!((2..=13).contains(&composes), "{composes} composes");
 		// by now 30,000 lines went by
-		assert!(
-			map.rastered <= composes * (scrollback + lines),
-			"{}",
-			map.rastered
-		);
+		assert!(map.rastered <= composes * (scrollback + lines), "{}", map.rastered);
 		assert!(map.pixel(0, 290)[3] > 0, "the map shows the flood");
 	}
 
@@ -2447,21 +1955,7 @@ mod tests {
 		let mut build = |map: &mut Minimap, term: &mut Term<VoidListener>, at: u64| {
 			parser.advance(term, b"\rsome output\r\n");
 			let now = t0 + Duration::from_millis(at);
-			map.update(
-				term.grid(),
-				term.colors(),
-				&cfg,
-				8,
-				50,
-				1.0,
-				lines,
-				cols,
-				1,
-				0,
-				true,
-				false,
-				now,
-			);
+			map.update(term.grid(), term.colors(), &cfg, 8, 50, 1.0, lines, cols, 1, 0, true, false, now);
 		};
 		build(&mut map, &mut term, 0);
 		let first = map.rev;
@@ -2487,21 +1981,7 @@ mod tests {
 		let mut build = |map: &mut Minimap, term: &mut Term<VoidListener>, at: u64, cut: bool| {
 			parser.advance(term, b"\rsome output\r\n");
 			let now = t0 + Duration::from_millis(at);
-			map.update(
-				term.grid(),
-				term.colors(),
-				&cfg,
-				8,
-				50,
-				1.0,
-				lines,
-				cols,
-				1,
-				0,
-				true,
-				cut,
-				now,
-			);
+			map.update(term.grid(), term.colors(), &cfg, 8, 50, 1.0, lines, cols, 1, 0, true, cut, now);
 		};
 		build(&mut map, &mut term, 0, false);
 		let slow = Duration::from_millis(50);
@@ -2527,46 +2007,26 @@ mod tests {
 		let (cols, lines, scrollback) = (40, 10, 3000);
 		let (mut term, mut parser) = live_term(cols, lines, scrollback);
 		let mut rng = Rng::new(3);
-		let flood =
-			|term: &mut Term<VoidListener>, parser: &mut Processor, rng: &mut Rng, n: usize| {
-				let mut text = String::new();
-				for _ in 0..n {
-					text += &styled_line(rng, cols);
-					text += "\r\n";
-				}
-				parser.advance(term, text.as_bytes());
-			};
+		let flood = |term: &mut Term<VoidListener>, parser: &mut Processor, rng: &mut Rng, n: usize| {
+			let mut text = String::new();
+			for _ in 0..n {
+				text += &styled_line(rng, cols);
+				text += "\r\n";
+			}
+			parser.advance(term, text.as_bytes());
+		};
 		flood(&mut term, &mut parser, &mut rng, scrollback + 500);
 		let cfg = config::Settings::default();
 		let budget = 100;
-		let mut map = Minimap {
-			budget: Some(budget),
-			here_px: Some(0),
-			..Default::default()
-		};
+		let mut map = Minimap { budget: Some(budget), here_px: Some(0), ..Default::default() };
 		// a minute a step, so the throttle is never what decides a compose
 		let start = Instant::now();
-		let update =
-			|map: &mut Minimap, term: &Term<VoidListener>, pushed: usize, at: u64, cut: bool| {
-				let rastered = map.rastered;
-				map.update(
-					term.grid(),
-					term.colors(),
-					&cfg,
-					16,
-					300,
-					1.0,
-					lines,
-					cols,
-					pushed,
-					0,
-					false,
-					cut,
-					start + Duration::from_secs(at * 60),
-				);
-				let read = map.rastered - rastered;
-				assert!(read <= budget + lines, "{read} lines read at {at} s");
-			};
+		let update = |map: &mut Minimap, term: &Term<VoidListener>, pushed: usize, at: u64, cut: bool| {
+			let rastered = map.rastered;
+			map.update(term.grid(), term.colors(), &cfg, 16, 300, 1.0, lines, cols, pushed, 0, false, cut, start + Duration::from_secs(at * 60));
+			let read = map.rastered - rastered;
+			assert!(read <= budget + lines, "{read} lines read at {at} s");
+		};
 
 		// the scrollback rebuilt whole, as after a screen swap or a resize
 		update(&mut map, &term, 0, 0, true);
@@ -2613,28 +2073,10 @@ mod tests {
 			// a minute a step, well past the throttle
 			let start = Instant::now();
 			let update = |map: &mut Minimap, at: u64, cut: bool| {
-				map.update(
-					term.grid(),
-					term.colors(),
-					&cfg,
-					16,
-					img_h,
-					1.0,
-					lines,
-					cols,
-					0,
-					0,
-					false,
-					cut,
-					start + Duration::from_secs(at * 60),
-				);
+				map.update(term.grid(), term.colors(), &cfg, 16, img_h, 1.0, lines, cols, 0, 0, false, cut, start + Duration::from_secs(at * 60));
 				map.wait();
 			};
-			let mut map = Minimap {
-				budget: Some(50),
-				here_px: Some(0),
-				..Default::default()
-			};
+			let mut map = Minimap { budget: Some(50), here_px: Some(0), ..Default::default() };
 			update(&mut map, 0, true);
 			assert!(map.rough_n > 0, "{scrollback}: nothing stood in");
 			let mut at = 0;
@@ -2647,10 +2089,7 @@ mod tests {
 			let mut whole = Minimap::default();
 			update(&mut whole, at, true);
 			assert_eq!(whole.rough_n, 0);
-			assert!(
-				map.img == whole.img,
-				"{scrollback}: not the image every line makes"
-			);
+			assert!(map.img == whole.img, "{scrollback}: not the image every line makes");
 		}
 	}
 
@@ -2669,21 +2108,7 @@ mod tests {
 		let mut map = Minimap::default();
 		let build = |map: &mut Minimap, width: usize, at: u64| {
 			let now = t0 + Duration::from_millis(at);
-			map.update(
-				term.grid(),
-				term.colors(),
-				&cfg,
-				width,
-				60,
-				1.0,
-				lines,
-				cols,
-				1,
-				0,
-				true,
-				false,
-				now,
-			);
+			map.update(term.grid(), term.colors(), &cfg, width, 60, 1.0, lines, cols, 1, 0, true, false, now);
 			let (px, w, h) = map.image();
 			assert_eq!(px.len(), w * h * 4, "width {width} at {at} ms");
 		};
@@ -2696,14 +2121,7 @@ mod tests {
 	// The plain per-cell pass the raster is written to be faster than. It keeps
 	// no style memo and no span table, so a stale memo key, or a coverage table
 	// made for another width, shows up as a difference.
-	fn reference_row(
-		grid: &Grid<Cell>,
-		line: Line,
-		colors: &Colors,
-		cfg: &config::Settings,
-		width: usize,
-		cols: usize,
-	) -> Row {
+	fn reference_row(grid: &Grid<Cell>, line: Line, colors: &Colors, cfg: &config::Settings, width: usize, cols: usize) -> Row {
 		let mut out = vec![0u8; width * 4];
 		let mut rgb = vec![0f32; width * 3];
 		let mut weight = vec![0f32; width];
@@ -2715,18 +2133,10 @@ mod tests {
 			if blank(cell) {
 				continue;
 			}
-			let style = Style {
-				fg: cell.fg,
-				bg: cell.bg,
-				flags: cell.flags & (Flags::INVERSE | Flags::HIDDEN),
-			};
+			let style = Style { fg: cell.fg, bg: cell.bg, flags: cell.flags & (Flags::INVERSE | Flags::HIDDEN) };
 			let (ink, alpha) = paint(&style, colors, cfg, &mut readable).at(ink_share(cell.c));
 			let x0 = if c == 0 { -2.0 } else { c as f32 * per_cell };
-			let x1 = if c + 1 == cols {
-				width as f32 + 2.0
-			} else {
-				(c + 1) as f32 * per_cell
-			};
+			let x1 = if c + 1 == cols { width as f32 + 2.0 } else { (c + 1) as f32 * per_cell };
 			let first = (x0 - 1.0).max(0.0) as usize;
 			let last = ((x1 + 1.0).ceil() as usize).min(width);
 			for px in first..last {
@@ -2771,28 +2181,14 @@ mod tests {
 				let text = format!("{}\r\n", styled_line(&mut rng, cols));
 				parser.advance(&mut term, text.as_bytes());
 			}
-			let mut map = Minimap {
-				width,
-				cols,
-				..Default::default()
-			};
+			let mut map = Minimap { width, cols, ..Default::default() };
 			map.fit_spans();
 			let mut readable = palette::Readable::default();
 			for line in 0..lines as i32 {
 				let mut got = map.take_row();
-				map.fill(
-					term.grid(),
-					Line(line),
-					term.colors(),
-					&cfg,
-					&mut readable,
-					&mut got,
-				);
+				map.fill(term.grid(), Line(line), term.colors(), &cfg, &mut readable, &mut got);
 				let want = reference_row(term.grid(), Line(line), term.colors(), &cfg, width, cols);
-				assert!(
-					got == want,
-					"seed {seed}, line {line}, {cols} columns into {width} px"
-				);
+				assert!(got == want, "seed {seed}, line {line}, {cols} columns into {width} px");
 			}
 		}
 	}
@@ -2809,21 +2205,10 @@ mod tests {
 		let strip = |text: &str| -> Row {
 			let (mut term, mut parser) = fresh_term(cols, 4, 10);
 			parser.advance(&mut term, text.as_bytes());
-			let mut map = Minimap {
-				width,
-				cols,
-				..Default::default()
-			};
+			let mut map = Minimap { width, cols, ..Default::default() };
 			map.fit_spans();
 			let mut row = map.take_row();
-			map.fill(
-				term.grid(),
-				Line(0),
-				term.colors(),
-				&cfg,
-				&mut palette::Readable::default(),
-				&mut row,
-			);
+			map.fill(term.grid(), Line(0), term.colors(), &cfg, &mut palette::Readable::default(), &mut row);
 			row
 		};
 		let run = |c: char| strip(&c.to_string().repeat(cols - 1))[3];
@@ -2832,10 +2217,7 @@ mod tests {
 		// overall than it was under the flat model it replaced
 		assert_eq!(hashes, 255);
 		assert!(dots * 3 < hashes, "dots {dots}, hashes {hashes}");
-		assert!(
-			dots < letters && letters < hashes,
-			"{dots} {letters} {hashes}"
-		);
+		assert!(dots < letters && letters < hashes, "{dots} {letters} {hashes}");
 
 		// so a line of ordinary text is no longer one alpha across its pixels
 		let text = strip("the quick brown fox. i, l; W#@ M.");
@@ -2868,10 +2250,7 @@ mod tests {
 		let alphas: Vec<u8> = (0..used).map(|y| map.pixel(0, y)[3]).collect();
 		// no pixel row of a solid page is blank, and not every one is solid
 		assert!(alphas.iter().all(|&a| a > 0), "{alphas:?}");
-		assert!(
-			alphas.iter().any(|&a| a < 255),
-			"a solid page with no texture"
-		);
+		assert!(alphas.iter().any(|&a| a < 255), "a solid page with no texture");
 		// and it stays a page rather than fading out
 		let mean = alphas.iter().map(|&a| a as u32).sum::<u32>() / used as u32;
 		assert!(mean > 170, "mean alpha {mean}");
@@ -2895,29 +2274,10 @@ mod tests {
 			parser.advance(&mut term, b"tail");
 			let hist = term.grid().history_size();
 			let mut map = Minimap::default();
-			map.update(
-				term.grid(),
-				term.colors(),
-				&settings,
-				width,
-				img_h,
-				1.0,
-				lines,
-				cols,
-				0,
-				lag,
-				true,
-				true,
-				Instant::now(),
-			);
+			map.update(term.grid(), term.colors(), &settings, width, img_h, 1.0, lines, cols, 0, lag, true, true, Instant::now());
 			(map, hist)
 		};
-		let ink_ends = |map: &Minimap| {
-			(0..img_h)
-				.rev()
-				.find(|&y| map.pixel(0, y)[3] > 0)
-				.map_or(0, |y| y + 1)
-		};
+		let ink_ends = |map: &Minimap| (0..img_h).rev().find(|&y| map.pixel(0, y)[3] > 0).map_or(0, |y| y + 1);
 
 		// at rest the map is the whole buffer, blank screen rows and all
 		let (rest, hist) = compose(0);
@@ -2929,41 +2289,16 @@ mod tests {
 		let (eased, hist) = compose(12);
 		let shown = eased.shown_lines(hist, lines);
 		assert_eq!(shown, hist + lines - 12);
-		assert!(
-			ink_ends(&eased) < ink_ends(&rest),
-			"ink ends at {} either way",
-			ink_ends(&eased)
-		);
+		assert!(ink_ends(&eased) < ink_ends(&rest), "ink ends at {} either way", ink_ends(&eased));
 		let used = (line_px(img_h as f32, shown, 1.0) * shown as f32).ceil() as usize;
 		assert!(ink_ends(&eased) <= used, "ink past the last drawn line");
 
 		// and the marker still rides the whole buffer inside the shorter track
-		let full = Rect {
-			x: 0.0,
-			y: 0.0,
-			w: 400.0,
-			h: img_h as f32,
-		};
-		let g = geom(
-			full,
-			0.0,
-			1.0,
-			&cfg(true, 60.0),
-			hist + lines,
-			shown,
-			lines,
-			0.0,
-			false,
-			true,
-		)
-		.unwrap();
+		let full = Rect { x: 0.0, y: 0.0, w: 400.0, h: img_h as f32 };
+		let g = geom(full, 0.0, 1.0, &cfg(true, 60.0), hist + lines, shown, lines, 0.0, false, true).unwrap();
 		let handle = g.handle.unwrap();
 		let track = line_px(img_h as f32, shown, 1.0) * shown as f32;
-		assert!(
-			(handle.y + handle.h - track).abs() < 0.01,
-			"marker ends at {}, track at {track}",
-			handle.y + handle.h
-		);
+		assert!((handle.y + handle.h - track).abs() < 0.01, "marker ends at {}, track at {track}", handle.y + handle.h);
 		// and the whole scrollback is still reachable from the top of it
 		let back = center_on(&g, hist + lines, shown, lines, full.y, 1.0);
 		assert_eq!(back, hist as f32);
@@ -2988,62 +2323,21 @@ mod tests {
 		parser.advance(&mut term, b"prompt");
 		let hist = term.grid().history_size();
 		let mut map = Minimap::default();
-		map.update(
-			term.grid(),
-			term.colors(),
-			&settings,
-			width,
-			img_h,
-			1.0,
-			lines,
-			cols,
-			0,
-			0,
-			true,
-			true,
-			Instant::now(),
-		);
+		map.update(term.grid(), term.colors(), &settings, width, img_h, 1.0, lines, cols, 0, 0, true, true, Instant::now());
 		let shown = map.shown_lines(hist, lines);
 		assert_eq!(shown, hist + lines, "the blank rows are buffer too");
 
 		// the track runs the whole buffer, well past where the ink stops
 		let track = line_px(img_h as f32, shown, 1.0) * shown as f32;
 		let inked_only = line_px(img_h as f32, hist + 1, 1.0) * (hist + 1) as f32;
-		assert!(
-			track > inked_only + 1.0,
-			"track {track} no longer than the inked part {inked_only}"
-		);
+		assert!(track > inked_only + 1.0, "track {track} no longer than the inked part {inked_only}");
 
 		// and the marker rides to the end of it, so the prompt is reachable
-		let full = Rect {
-			x: 0.0,
-			y: 0.0,
-			w: 200.0,
-			h: img_h as f32,
-		};
-		let g = geom(
-			full,
-			0.0,
-			1.0,
-			&cfg(true, 60.0),
-			hist + lines,
-			shown,
-			lines,
-			0.0,
-			false,
-			true,
-		)
-		.unwrap();
+		let full = Rect { x: 0.0, y: 0.0, w: 200.0, h: img_h as f32 };
+		let g = geom(full, 0.0, 1.0, &cfg(true, 60.0), hist + lines, shown, lines, 0.0, false, true).unwrap();
 		let handle = g.handle.unwrap();
-		assert!(
-			(handle.y + handle.h - track).abs() < 0.01,
-			"marker ends at {}, track at {track}",
-			handle.y + handle.h
-		);
-		assert_eq!(
-			center_on(&g, hist + lines, shown, lines, full.y, 1.0),
-			hist as f32
-		);
+		assert!((handle.y + handle.h - track).abs() < 0.01, "marker ends at {}, track at {track}", handle.y + handle.h);
+		assert_eq!(center_on(&g, hist + lines, shown, lines, full.y, 1.0), hist as f32);
 	}
 
 	// The ease drains whether or not more output arrives, so a map that came
@@ -3058,21 +2352,7 @@ mod tests {
 			let (mut term, mut parser) = live_term(cols, lines, 500);
 			parser.advance(&mut term, "x\r\n".repeat(60).as_bytes());
 			let mut map = Minimap::default();
-			map.update(
-				term.grid(),
-				term.colors(),
-				&settings,
-				16,
-				300,
-				1.0,
-				lines,
-				cols,
-				0,
-				lag,
-				true,
-				true,
-				Instant::now(),
-			);
+			map.update(term.grid(), term.colors(), &settings, 16, 300, 1.0, lines, cols, 0, lag, true, true, Instant::now());
 			map
 		};
 		assert!(composed(6).pending(), "a short map owes a compose");
@@ -3109,10 +2389,7 @@ mod tests {
 		}
 		let lag = scroll.unshown_lines().round() as usize;
 		assert!(lag > 100, "the flood left only {lag} lines unshown");
-		assert!(
-			!scroll.unshown_draining(),
-			"parked, but the lag still drains"
-		);
+		assert!(!scroll.unshown_draining(), "parked, but the lag still drains");
 
 		let (mut term, mut parser) = live_term(cols, lines, 10_000);
 		parser.advance(&mut term, "x\r\n".repeat(2000).as_bytes());
@@ -3121,21 +2398,7 @@ mod tests {
 		// times the last compose. At a step near the floor this test read a
 		// deferred compose as a due one and went red on a busy box (F158).
 		let drive = |map: &mut Minimap, draining: bool, step: u64| {
-			map.update(
-				term.grid(),
-				term.colors(),
-				&settings,
-				width,
-				img_h,
-				1.0,
-				lines,
-				cols,
-				0,
-				lag,
-				draining,
-				false,
-				start + Duration::from_secs(step * 5),
-			);
+			map.update(term.grid(), term.colors(), &settings, width, img_h, 1.0, lines, cols, 0, lag, draining, false, start + Duration::from_secs(step * 5));
 		};
 
 		// parked: one compose settles it and nothing more is due, however long
@@ -3146,10 +2409,7 @@ mod tests {
 			assert!(!map.pending(), "step {step}: a frozen lag owes a compose");
 			assert!(map.wake().is_none(), "step {step}: and asks for a frame");
 		}
-		assert!(
-			map.shown_lines(0, lines) < 2000,
-			"the map was not trimmed at all"
-		);
+		assert!(map.shown_lines(0, lines) < 2000, "the map was not trimmed at all");
 
 		// and the control: the same short map while the ease is still draining
 		// does need one, or it would never follow the ease down
@@ -3175,21 +2435,7 @@ mod tests {
 		parser.advance(&mut term, "x\r\n".repeat(400).as_bytes());
 		let start = Instant::now();
 		let drive = |map: &mut Minimap, advanced: usize, at_ms: u64| {
-			map.update(
-				term.grid(),
-				term.colors(),
-				&settings,
-				width,
-				img_h,
-				1.0,
-				lines,
-				cols,
-				advanced,
-				0,
-				false,
-				false,
-				start + Duration::from_millis(at_ms),
-			);
+			map.update(term.grid(), term.colors(), &settings, width, img_h, 1.0, lines, cols, advanced, 0, false, false, start + Duration::from_millis(at_ms));
 		};
 
 		let mut map = Minimap::default();
@@ -3240,11 +2486,7 @@ mod tests {
 				if rng.chance(25) {
 					text += "\x1b[3J";
 				}
-				let pushed = if rng.chance(8) {
-					rng.below(3 * scrollback + 10)
-				} else {
-					rng.below(8)
-				};
+				let pushed = if rng.chance(8) { rng.below(3 * scrollback + 10) } else { rng.below(8) };
 				for _ in 0..pushed {
 					text += &styled_line(&mut rng, cols);
 					text += "\r\n";
@@ -3261,42 +2503,14 @@ mod tests {
 				let rev = map.rev;
 				let lag = rng.below(lines + 8);
 				let args = (width, img_h, 1.0, lines, cols);
-				map.update(
-					term.grid(),
-					term.colors(),
-					&cfg,
-					args.0,
-					args.1,
-					args.2,
-					args.3,
-					args.4,
-					pushed,
-					lag,
-					true,
-					cut,
-					now,
-				);
+				map.update(term.grid(), term.colors(), &cfg, args.0, args.1, args.2, args.3, args.4, pushed, lag, true, cut, now);
 				let (px, w, h) = map.image();
 				assert_eq!(px.len(), w * h * 4, "seed {seed}, step {step}");
 				if map.rev == rev {
 					continue;
 				}
 				let mut fresh = Minimap::default();
-				fresh.update(
-					term.grid(),
-					term.colors(),
-					&cfg,
-					args.0,
-					args.1,
-					args.2,
-					args.3,
-					args.4,
-					0,
-					lag,
-					true,
-					false,
-					now,
-				);
+				fresh.update(term.grid(), term.colors(), &cfg, args.0, args.1, args.2, args.3, args.4, 0, lag, true, false, now);
 				assert!(map.img == fresh.img, "seed {seed}, step {step}");
 			}
 		}
@@ -3312,10 +2526,7 @@ mod tests {
 		// at the cap the ink is a band, so it falls across 2 pixel rows
 		let (top, h) = Minimap::band(MAX_LINE_PX);
 		assert!(top > 0.0 && h < MAX_LINE_PX * 0.75);
-		assert!(
-			top.fract() + h < 1.0,
-			"band {top} + {h} should not fill a row"
-		);
+		assert!(top.fract() + h < 1.0, "band {top} + {h} should not fill a row");
 	}
 
 	// SILK_MEMDBG's minimap figure, which the reducing resources doc quotes,
@@ -3326,10 +2537,7 @@ mod tests {
 		let width = 100;
 		let mut map = Minimap::default();
 		let empty = map.heap_bytes();
-		map.seed(
-			width,
-			(0..1000).map(|_| row(width, 4, [0, 200, 0])).collect(),
-		);
+		map.seed(width, (0..1000).map(|_| row(width, 4, [0, 200, 0])).collect());
 		assert!(map.heap_bytes() >= empty + 1000 * width * 4);
 	}
 }

@@ -61,12 +61,7 @@ impl MonitorId {
 		if width == 0 || height == 0 || !scale.is_finite() || scale <= 0.0 {
 			return None;
 		}
-		Some(Self {
-			width,
-			height,
-			scale_pct: (scale * 100.0).round() as u32,
-			size_mm: size_mm.and_then(plausible),
-		})
+		Some(Self { width, height, scale_pct: (scale * 100.0).round() as u32, size_mm: size_mm.and_then(plausible) })
 	}
 
 	/// `2560x1440_125pct`, with `_597x336mm` after it when the size is known.
@@ -96,12 +91,7 @@ impl MonitorId {
 		if parts.next().is_some() {
 			return None;
 		}
-		Some(Self {
-			width,
-			height,
-			scale_pct,
-			size_mm,
-		})
+		Some(Self { width, height, scale_pct, size_mm })
 	}
 
 	/// The same monitor, read again? An EDID gives the size twice, to the mm
@@ -126,10 +116,7 @@ const MM_SLACK: u32 = 10;
 
 /// Do 2 monitor keys name the same monitor? See `MonitorId::same_as`.
 pub fn same_monitor(a: &str, b: &str) -> bool {
-	a == b
-		|| MonitorId::from_key(a)
-			.zip(MonitorId::from_key(b))
-			.is_some_and(|(a, b)| a.same_as(&b))
+	a == b || MonitorId::from_key(a).zip(MonitorId::from_key(b)).is_some_and(|(a, b)| a.same_as(&b))
 }
 
 /// Where every monitor is. The window's own resize can make the window manager
@@ -147,12 +134,7 @@ pub fn layout(window: &Window, x11: &X11Link) -> Vec<(i64, i64, i64, i64)> {
 		.available_monitors()
 		.map(|monitor| {
 			let (at, size) = (monitor.position(), monitor.size());
-			(
-				i64::from(at.x),
-				i64::from(at.y),
-				i64::from(size.width),
-				i64::from(size.height),
-			)
+			(i64::from(at.x), i64::from(at.y), i64::from(size.width), i64::from(size.height))
 		})
 		.collect()
 }
@@ -162,12 +144,7 @@ pub fn layout(window: &Window, x11: &X11Link) -> Vec<(i64, i64, i64, i64)> {
 pub fn home(window: &Window, layout: &[(i64, i64, i64, i64)]) -> Option<(i64, i64, i64, i64)> {
 	let at = window.outer_position().ok()?;
 	let size = window.outer_size();
-	let win = (
-		i64::from(at.x),
-		i64::from(at.y),
-		i64::from(size.width),
-		i64::from(size.height),
-	);
+	let win = (i64::from(at.x), i64::from(at.y), i64::from(size.width), i64::from(size.height));
 	monitor_under(win, None, layout).map(|index| layout[index])
 }
 
@@ -231,14 +208,7 @@ fn drawn_on(window: &Window, scale: f64) -> Option<winit::monitor::MonitorHandle
 			monitors.push(monitor);
 		}
 	}
-	let placed: Vec<Placed> = monitors
-		.iter()
-		.map(|m| Placed {
-			at: (i64::from(m.position().x), i64::from(m.position().y)),
-			px: (i64::from(m.size().width), i64::from(m.size().height)),
-			scale: m.scale_factor(),
-		})
-		.collect();
+	let placed: Vec<Placed> = monitors.iter().map(|m| Placed { at: (i64::from(m.position().x), i64::from(m.position().y)), px: (i64::from(m.size().width), i64::from(m.size().height)), scale: m.scale_factor() }).collect();
 	let at = other_at_scale(0, &placed, scale, logical_size(window, scale))?;
 	Some(monitors.swap_remove(at))
 }
@@ -281,11 +251,7 @@ fn laid_drawn_for(on: &[Laid], scale: f64, size: (f64, f64)) -> Option<usize> {
 	}
 	let bounds: Vec<Bounds> = on.iter().map(|o| o.bounds).collect();
 	let all: Vec<usize> = (0..on.len()).collect();
-	only(
-		at.into_iter()
-			.filter(|&i| could_be_most_on(i, &all, &bounds, &bounds, size))
-			.collect(),
-	)
+	only(at.into_iter().filter(|&i| could_be_most_on(i, &all, &bounds, &bounds, size)).collect())
 }
 
 // Wayland gives an output's scale in whole numbers, so a 150% one reads as 2
@@ -311,11 +277,7 @@ impl Placed {
 	// output says 2, so its real scale is anything above 1 up to 2.
 	fn largest(&self) -> Bounds {
 		let k = self.scale.max(1.0);
-		self.sized(if k.fract() == 0.0 && k > 1.0 {
-			k - 1.0
-		} else {
-			k
-		})
+		self.sized(if k.fract() == 0.0 && k > 1.0 { k - 1.0 } else { k })
 	}
 
 	fn smallest(&self) -> Bounds {
@@ -324,12 +286,7 @@ impl Placed {
 
 	fn sized(&self, by: f64) -> Bounds {
 		let k = self.scale.max(1.0);
-		(
-			self.at.0 as f64 / k,
-			self.at.1 as f64 / k,
-			self.px.0 as f64 / by,
-			self.px.1 as f64 / by,
-		)
+		(self.at.0 as f64 / k, self.at.1 as f64 / k, self.px.0 as f64 / by, self.px.1 as f64 / by)
 	}
 }
 
@@ -337,26 +294,15 @@ impl Placed {
 // ones at the window's scale, the only one most of a window this size could
 // be on while it still touches `first`. None when that isn't one, which
 // keeps the window's size.
-fn other_at_scale(
-	first: usize,
-	monitors: &[Placed],
-	scale: f64,
-	size: (f64, f64),
-) -> Option<usize> {
+fn other_at_scale(first: usize, monitors: &[Placed], scale: f64, size: (f64, f64)) -> Option<usize> {
 	let only = |found: Vec<usize>| (found.len() == 1).then(|| found[0]);
-	let at: Vec<usize> = (0..monitors.len())
-		.filter(|&i| at_scale(monitors[i].scale, scale))
-		.collect();
+	let at: Vec<usize> = (0..monitors.len()).filter(|&i| at_scale(monitors[i].scale, scale)).collect();
 	if at.len() < 2 {
 		return only(at);
 	}
 	let largest: Vec<Bounds> = monitors.iter().map(Placed::largest).collect();
 	let smallest: Vec<Bounds> = monitors.iter().map(Placed::smallest).collect();
-	only(
-		at.into_iter()
-			.filter(|&i| could_be_most_on(i, &[first], &largest, &smallest, size))
-			.collect(),
-	)
+	only(at.into_iter().filter(|&i| could_be_most_on(i, &[first], &largest, &smallest, size)).collect())
 }
 
 // Could most of a window this size be on monitor `on`, while it touches each
@@ -364,31 +310,19 @@ fn other_at_scale(
 // half a step and the rest shrunk by as much, so a place between 2 tries is
 // never missed. Where a monitor's size is a guess, it is taken at its largest
 // where that helps `on`, and at its smallest where it doesn't.
-fn could_be_most_on(
-	on: usize,
-	touch: &[usize],
-	largest: &[Bounds],
-	smallest: &[Bounds],
-	size: (f64, f64),
-) -> bool {
+fn could_be_most_on(on: usize, touch: &[usize], largest: &[Bounds], smallest: &[Bounds], size: (f64, f64)) -> bool {
 	let (w, h) = size;
 	if w <= 0.0 || h <= 0.0 || touch.is_empty() {
 		return false;
 	}
 	let first_at = largest[touch[0]];
-	let step = (w.min(h) / 8.0)
-		.max((first_at.2 + w) / 256.0)
-		.max((first_at.3 + h) / 256.0)
-		.max(4.0);
+	let step = (w.min(h) / 8.0).max((first_at.2 + w) / 256.0).max((first_at.3 + h) / 256.0).max(4.0);
 	let half = step / 2.0;
 	let grown = |r: Bounds, by: f64| (r.0 - by, r.1 - by, r.2 + 2.0 * by, r.3 + 2.0 * by);
 	let first_at = grown(first_at, half);
 	let touched: Vec<Bounds> = touch.iter().map(|&i| grown(largest[i], half)).collect();
 	let mine = grown(largest[on], half);
-	let rest: Vec<Bounds> = (0..smallest.len())
-		.filter(|&i| i != on)
-		.map(|i| grown(smallest[i], -half))
-		.collect();
+	let rest: Vec<Bounds> = (0..smallest.len()).filter(|&i| i != on).map(|i| grown(smallest[i], -half)).collect();
 	let area = |a: Bounds, b: Bounds| {
 		let x = (a.0 + a.2).min(b.0 + b.2) - a.0.max(b.0);
 		let y = (a.1 + a.3).min(b.1 + b.3) - a.1.max(b.1);
@@ -400,10 +334,7 @@ fn could_be_most_on(
 		while x <= first_at.0 + first_at.2 {
 			let win = (x, y, w, h);
 			let here = area(win, mine);
-			if here > 0.0
-				&& touched.iter().all(|&t| area(win, t) > 0.0)
-				&& rest.iter().all(|&o| area(win, o) <= here)
-			{
+			if here > 0.0 && touched.iter().all(|&t| area(win, t) > 0.0) && rest.iter().all(|&o| area(win, o) <= here) {
 				return true;
 			}
 			x += step;
@@ -415,11 +346,7 @@ fn could_be_most_on(
 
 // A rotated monitor reports its pixels turned and its millimeters not.
 fn upright(mm: (u32, u32), px: (u32, u32)) -> (u32, u32) {
-	if (px.0 >= px.1) == (mm.0 >= mm.1) {
-		mm
-	} else {
-		(mm.1, mm.0)
-	}
+	if (px.0 >= px.1) == (mm.0 >= mm.1) { mm } else { (mm.1, mm.0) }
 }
 
 // A projector, or a TV that gives only its aspect ratio, reports a size of
@@ -467,10 +394,7 @@ impl std::fmt::Debug for X11Link {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let mut out = f.debug_struct("X11Link");
 		#[cfg(target_os = "linux")]
-		out.field(
-			"open",
-			&self.kept.open.try_borrow().map(|open| open.is_some()).ok(),
-		);
+		out.field("open", &self.kept.open.try_borrow().map(|open| open.is_some()).ok());
 		out.finish()
 	}
 }
@@ -494,19 +418,13 @@ struct Kept<C> {
 #[cfg(target_os = "linux")]
 impl<C> Default for Kept<C> {
 	fn default() -> Self {
-		Self {
-			open: std::cell::RefCell::new(None),
-		}
+		Self { open: std::cell::RefCell::new(None) }
 	}
 }
 
 #[cfg(target_os = "linux")]
 impl<C: Opened> Kept<C> {
-	fn ask<T>(
-		&self,
-		connect: impl FnOnce() -> Option<C>,
-		read: impl FnOnce(&C) -> Option<T>,
-	) -> Option<T> {
+	fn ask<T>(&self, connect: impl FnOnce() -> Option<C>, read: impl FnOnce(&C) -> Option<T>) -> Option<T> {
 		let mut open = self.open.borrow_mut();
 		if open.is_none() {
 			*open = Some(connect()?);
@@ -567,18 +485,8 @@ impl X11 {
 
 		let (conn, screen) = x11rb::connect(None).ok()?;
 		let root = conn.setup().roots.get(screen)?.root;
-		let xwayland = conn
-			.query_extension(b"XWAYLAND")
-			.ok()
-			.and_then(|cookie| cookie.reply().ok())
-			.is_some_and(|reply| reply.present);
-		Some(Self {
-			conn,
-			root,
-			xid,
-			xwayland,
-			fullscreen_atoms: std::cell::Cell::new(None),
-		})
+		let xwayland = conn.query_extension(b"XWAYLAND").ok().and_then(|cookie| cookie.reply().ok()).is_some_and(|reply| reply.present);
+		Some(Self { conn, root, xid, xwayland, fullscreen_atoms: std::cell::Cell::new(None) })
 	}
 
 	// The lit monitors now, and the server's config time they were read at.
@@ -587,41 +495,22 @@ impl X11 {
 		use x11rb::protocol::randr::ConnectionExt as _;
 
 		let conn = &self.conn;
-		let resources = conn
-			.randr_get_screen_resources_current(self.root)
-			.ok()?
-			.reply()
-			.ok()?;
+		let resources = conn.randr_get_screen_resources_current(self.root).ok()?.reply().ok()?;
 		let at = resources.config_timestamp;
-		let asked: Vec<_> = resources
-			.crtcs
-			.iter()
-			.filter_map(|&crtc| conn.randr_get_crtc_info(crtc, at).ok())
-			.collect();
+		let asked: Vec<_> = resources.crtcs.iter().filter_map(|&crtc| conn.randr_get_crtc_info(crtc, at).ok()).collect();
 		let laid: Vec<_> = asked
 			.into_iter()
 			.filter_map(|cookie| cookie.reply().ok())
 			.filter(|info| info.mode != 0 && !info.outputs.is_empty())
 			.map(|info| {
-				let asked: Vec<_> = info
-					.outputs
-					.iter()
-					.map(|&out| conn.randr_get_output_info(out, at).ok())
-					.collect();
+				let asked: Vec<_> = info.outputs.iter().map(|&out| conn.randr_get_output_info(out, at).ok()).collect();
 				(info, asked)
 			})
 			.collect();
 		let laid = laid
 			.into_iter()
 			.map(|(info, asked)| {
-				let ends = asked
-					.into_iter()
-					.map(|cookie| {
-						cookie
-							.and_then(|cookie| cookie.reply().ok())
-							.map_or(Connection::UNKNOWN, |reply| reply.connection)
-					})
-					.collect();
+				let ends = asked.into_iter().map(|cookie| cookie.and_then(|cookie| cookie.reply().ok()).map_or(Connection::UNKNOWN, |reply| reply.connection)).collect();
 				(info, ends)
 			})
 			.collect();
@@ -647,20 +536,12 @@ fn lit_crtcs<T>(laid: Vec<(T, Vec<Connection>)>) -> Vec<T> {
 	if !laid.iter().any(|(_, ends)| lit(ends)) {
 		return laid.into_iter().map(|(crtc, _)| crtc).collect();
 	}
-	laid.into_iter()
-		.filter(|(_, ends)| lit(ends))
-		.map(|(crtc, _)| crtc)
-		.collect()
+	laid.into_iter().filter(|(_, ends)| lit(ends)).map(|(crtc, _)| crtc).collect()
 }
 
 #[cfg(target_os = "linux")]
 fn crtc_rect(info: &x11rb::protocol::randr::GetCrtcInfoReply) -> (i64, i64, i64, i64) {
-	(
-		i64::from(info.x),
-		i64::from(info.y),
-		i64::from(info.width),
-		i64::from(info.height),
-	)
+	(i64::from(info.x), i64::from(info.y), i64::from(info.width), i64::from(info.height))
 }
 
 // On X11 the server is asked which monitor the window overlaps most, or
@@ -678,26 +559,14 @@ fn x11_monitor_under(x: &X11, at_pointer: bool) -> Option<Option<PxMm>> {
 	let size = conn.get_geometry(x.xid).ok()?;
 	let at = conn.translate_coordinates(x.xid, x.root, 0, 0).ok()?;
 	let (size, at) = (size.reply().ok()?, at.reply().ok()?);
-	let win = (
-		i64::from(at.dst_x),
-		i64::from(at.dst_y),
-		i64::from(size.width),
-		i64::from(size.height),
-	);
-	let pointer = at_pointer
-		.then(|| conn.query_pointer(x.root).ok()?.reply().ok())
-		.flatten()
-		.map(|reply| (i64::from(reply.root_x), i64::from(reply.root_y)));
+	let win = (i64::from(at.dst_x), i64::from(at.dst_y), i64::from(size.width), i64::from(size.height));
+	let pointer = at_pointer.then(|| conn.query_pointer(x.root).ok()?.reply().ok()).flatten().map(|reply| (i64::from(reply.root_x), i64::from(reply.root_y)));
 	let rects: Vec<_> = crtcs.iter().map(crtc_rect).collect();
 	let Some(index) = monitor_under(win, pointer, &rects) else {
 		return Some(None);
 	};
 	let crtc = &crtcs[index];
-	let mm = conn
-		.randr_get_output_info(crtc.outputs[0], config_timestamp)
-		.ok()
-		.and_then(|cookie| cookie.reply().ok())
-		.map(|out| (out.mm_width, out.mm_height));
+	let mm = conn.randr_get_output_info(crtc.outputs[0], config_timestamp).ok().and_then(|cookie| cookie.reply().ok()).map(|out| (out.mm_width, out.mm_height));
 	Some(Some(((u32::from(crtc.width), u32::from(crtc.height)), mm)))
 }
 
@@ -741,9 +610,7 @@ mod wayland {
 		// SAFETY: winit's surface, live while its window is borrowed here. The
 		// interface is checked by name, and a surface no Rust code made reads
 		// as dead.
-		let id =
-			unsafe { ObjectId::from_ptr(WlSurface::interface(), surface.surface.as_ptr().cast()) }
-				.ok()?;
+		let id = unsafe { ObjectId::from_ptr(WlSurface::interface(), surface.surface.as_ptr().cast()) }.ok()?;
 		let data = backend.get_data(id).ok()?;
 		let on = data.data_as_any().downcast_ref::<SurfaceData>()?;
 		on.outputs().map(|output| laid(&output)).collect()
@@ -754,18 +621,9 @@ mod wayland {
 			let (w, h) = info.modes.iter().find(|m| m.current)?.dimensions;
 			let (x, y) = info.logical_position?;
 			let (lw, lh) = info.logical_size?;
-			let turned = matches!(
-				info.transform,
-				Transform::_90 | Transform::_270 | Transform::Flipped90 | Transform::Flipped270
-			);
+			let turned = matches!(info.transform, Transform::_90 | Transform::_270 | Transform::Flipped90 | Transform::Flipped270);
 			let px = if turned { (h, w) } else { (w, h) };
-			Some(Out {
-				mode: (u32::try_from(w).ok()?, u32::try_from(h).ok()?),
-				laid: Laid {
-					bounds: (f64::from(x), f64::from(y), f64::from(lw), f64::from(lh)),
-					px: (f64::from(px.0), f64::from(px.1)),
-				},
-			})
+			Some(Out { mode: (u32::try_from(w).ok()?, u32::try_from(h).ok()?), laid: Laid { bounds: (f64::from(x), f64::from(y), f64::from(lw), f64::from(lh)), px: (f64::from(px.0), f64::from(px.1)) } })
 		})
 	}
 }
@@ -775,11 +633,7 @@ mod wayland {
 // overlaps most, and none when it overlaps none, as when the monitor it was
 // on has just gone dark. Taking the first then gave a window left in the
 // gap the size of a monitor it was never on.
-fn monitor_under(
-	window: (i64, i64, i64, i64),
-	pointer: Option<(i64, i64)>,
-	monitors: &[(i64, i64, i64, i64)],
-) -> Option<usize> {
+fn monitor_under(window: (i64, i64, i64, i64), pointer: Option<(i64, i64)>, monitors: &[(i64, i64, i64, i64)]) -> Option<usize> {
 	let probe = pointer.map_or(window, |(x, y)| (x, y, 1, 1));
 	let mut best: Option<(usize, i64)> = None;
 	for (index, &monitor) in monitors.iter().enumerate() {
@@ -788,8 +642,7 @@ fn monitor_under(
 			best = Some((index, shared));
 		}
 	}
-	best.filter(|&(_, shared)| shared > 0 || pointer.is_some())
-		.map(|(index, _)| index)
+	best.filter(|&(_, shared)| shared > 0 || pointer.is_some()).map(|(index, _)| index)
 }
 
 // Shared area of 2 (x, y, width, height) rectangles.
@@ -802,55 +655,28 @@ fn overlap(a: (i64, i64, i64, i64), b: (i64, i64, i64, i64)) -> i64 {
 #[cfg(windows)]
 fn physical_mm(monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
 	use windows_sys::Win32::Graphics::Gdi::{DISPLAY_DEVICEW, EnumDisplayDevicesW};
-	use windows_sys::Win32::System::Registry::{
-		HKEY_LOCAL_MACHINE, RRF_RT_REG_BINARY, RegGetValueW,
-	};
+	use windows_sys::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_BINARY, RegGetValueW};
 	use windows_sys::Win32::UI::WindowsAndMessaging::EDD_GET_DEVICE_INTERFACE_NAME;
 	use winit::platform::windows::MonitorHandleExtWindows;
 
-	let wide = |s: &str| {
-		s.encode_utf16()
-			.chain(std::iter::once(0))
-			.collect::<Vec<u16>>()
-	};
+	let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
 	let adapter = wide(&monitor.native_id());
 	// SAFETY: DISPLAY_DEVICEW is plain data; zero is a valid starting value.
 	let mut device: DISPLAY_DEVICEW = unsafe { std::mem::zeroed() };
 	device.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as u32;
 	// SAFETY: both pointers are live for the call and `cb` is set.
-	let found = unsafe {
-		EnumDisplayDevicesW(
-			adapter.as_ptr(),
-			0,
-			&raw mut device,
-			EDD_GET_DEVICE_INTERFACE_NAME,
-		)
-	};
+	let found = unsafe { EnumDisplayDevicesW(adapter.as_ptr(), 0, &raw mut device, EDD_GET_DEVICE_INTERFACE_NAME) };
 	if found == 0 {
 		return None;
 	}
-	let len = device
-		.DeviceID
-		.iter()
-		.position(|&c| c == 0)
-		.unwrap_or(device.DeviceID.len());
+	let len = device.DeviceID.iter().position(|&c| c == 0).unwrap_or(device.DeviceID.len());
 	let subkey = edid_key(&String::from_utf16_lossy(&device.DeviceID[..len]))?;
 	let (subkey, value) = (wide(&subkey), wide("EDID"));
 	// Asked twice, since an EDID with extension blocks is longer than the
 	// first block, which is all that's read from it.
 	let read = |data: *mut u8, size: &mut u32| {
 		// SAFETY: `data` is null or has room for `size` bytes, and both strings end in 0.
-		unsafe {
-			RegGetValueW(
-				HKEY_LOCAL_MACHINE,
-				subkey.as_ptr(),
-				value.as_ptr(),
-				RRF_RT_REG_BINARY,
-				std::ptr::null_mut(),
-				data.cast(),
-				size,
-			)
-		}
+		unsafe { RegGetValueW(HKEY_LOCAL_MACHINE, subkey.as_ptr(), value.as_ptr(), RRF_RT_REG_BINARY, std::ptr::null_mut(), data.cast(), size) }
 	};
 	let mut size = 0u32;
 	if read(std::ptr::null_mut(), &mut size) != 0 || size == 0 {
@@ -873,9 +699,7 @@ fn edid_key(interface: &str) -> Option<String> {
 	if class.is_empty() || model.is_empty() || instance.is_empty() {
 		return None;
 	}
-	Some(format!(
-		r"SYSTEM\CurrentControlSet\Enum\{class}\{model}\{instance}\Device Parameters"
-	))
+	Some(format!(r"SYSTEM\CurrentControlSet\Enum\{class}\{model}\{instance}\Device Parameters"))
 }
 
 #[cfg(target_os = "macos")]
@@ -919,9 +743,7 @@ pub fn button_held(window: &Window, x11: &X11Link) -> Option<bool> {
 			return Some(None);
 		}
 		let reply = x.conn.query_pointer(x.root).ok()?.reply().ok()?;
-		Some(Some(reply.mask.intersects(
-			KeyButMask::BUTTON1 | KeyButMask::BUTTON2 | KeyButMask::BUTTON3,
-		)))
+		Some(Some(reply.mask.intersects(KeyButMask::BUTTON1 | KeyButMask::BUTTON2 | KeyButMask::BUTTON3)))
 	})
 	.flatten()
 }
@@ -929,15 +751,9 @@ pub fn button_held(window: &Window, x11: &X11Link) -> Option<bool> {
 #[cfg(windows)]
 #[allow(clippy::unnecessary_wraps, reason = "Linux returns None")]
 pub fn button_held(_window: &Window, _x11: &X11Link) -> Option<bool> {
-	use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-		GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON,
-	};
+	use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 	// SAFETY: a plain query; the high bit means down now.
-	Some(
-		[VK_LBUTTON, VK_RBUTTON]
-			.into_iter()
-			.any(|key| unsafe { GetAsyncKeyState(i32::from(key)) } < 0),
-	)
+	Some([VK_LBUTTON, VK_RBUTTON].into_iter().any(|key| unsafe { GetAsyncKeyState(i32::from(key)) } < 0))
 }
 
 #[cfg(target_os = "macos")]
@@ -967,17 +783,8 @@ fn wm_fullscreen(window: &Window, x11: &X11Link) -> bool {
 		let Some((state, full)) = x.fullscreen_atoms() else {
 			return Some(false);
 		};
-		let reply = x
-			.conn
-			.get_property(false, x.xid, state, AtomEnum::ATOM, 0, 64)
-			.ok()?
-			.reply()
-			.ok()?;
-		Some(
-			reply
-				.value32()
-				.is_some_and(|mut atoms| atoms.any(|a| a == full)),
-		)
+		let reply = x.conn.get_property(false, x.xid, state, AtomEnum::ATOM, 0, 64).ok()?.reply().ok()?;
+		Some(reply.value32().is_some_and(|mut atoms| atoms.any(|a| a == full)))
 	})
 	.unwrap_or(false)
 }
@@ -993,10 +800,7 @@ impl X11 {
 			return Some(atoms);
 		}
 		let state = self.conn.intern_atom(true, b"_NET_WM_STATE").ok()?;
-		let full = self
-			.conn
-			.intern_atom(true, b"_NET_WM_STATE_FULLSCREEN")
-			.ok()?;
+		let full = self.conn.intern_atom(true, b"_NET_WM_STATE_FULLSCREEN").ok()?;
 		let atoms = (state.reply().ok()?.atom, full.reply().ok()?.atom);
 		if atoms.0 == 0 || atoms.1 == 0 {
 			return None;
@@ -1035,8 +839,7 @@ pub fn snapped(window: &Window) -> bool {
 			if module.is_null() {
 				return None;
 			}
-			GetProcAddress(module, c"IsWindowArranged".as_ptr().cast())
-				.map(|f| std::mem::transmute::<unsafe extern "system" fn() -> isize, Arranged>(f))
+			GetProcAddress(module, c"IsWindowArranged".as_ptr().cast()).map(|f| std::mem::transmute::<unsafe extern "system" fn() -> isize, Arranged>(f))
 		}
 	});
 	// SAFETY: the handle is the live window's own.
@@ -1121,30 +924,11 @@ mod tests {
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn a_monitor_whose_cable_reads_disconnected_is_dark() {
-		let (on, off, unsure) = (
-			Connection::CONNECTED,
-			Connection::DISCONNECTED,
-			Connection::UNKNOWN,
-		);
-		assert_eq!(
-			lit_crtcs(vec![("portrait", vec![on]), ("hdmi", vec![off])]),
-			["portrait"]
-		);
-		assert_eq!(
-			lit_crtcs(vec![("a", vec![on]), ("b", vec![unsure])]),
-			["a", "b"],
-			"a server that can't say is believed lit"
-		);
-		assert_eq!(
-			lit_crtcs(vec![("cloned", vec![off, on]), ("hdmi", vec![off])]),
-			["cloned"],
-			"lit while any of its outputs is"
-		);
-		assert_eq!(
-			lit_crtcs(vec![("a", vec![off]), ("b", vec![off])]),
-			["a", "b"],
-			"all disconnected is believed for none"
-		);
+		let (on, off, unsure) = (Connection::CONNECTED, Connection::DISCONNECTED, Connection::UNKNOWN);
+		assert_eq!(lit_crtcs(vec![("portrait", vec![on]), ("hdmi", vec![off])]), ["portrait"]);
+		assert_eq!(lit_crtcs(vec![("a", vec![on]), ("b", vec![unsure])]), ["a", "b"], "a server that can't say is believed lit");
+		assert_eq!(lit_crtcs(vec![("cloned", vec![off, on]), ("hdmi", vec![off])]), ["cloned"], "lit while any of its outputs is");
+		assert_eq!(lit_crtcs(vec![("a", vec![off]), ("b", vec![off])]), ["a", "b"], "all disconnected is believed for none");
 	}
 
 	// Test ID: ddesk
@@ -1156,32 +940,17 @@ mod tests {
 		assert_eq!(unknown.key(), "1920x1080_100pct");
 		// a key the file takes as a name, and reads back as one
 		for key in [known.key(), unknown.key()] {
-			let doc = shcl::Document::parse(&format!(
-				"window:\n\tmonitors:\n\t\t{key}:\n\t\t\tcolumns: 90\n"
-			));
+			let doc = shcl::Document::parse(&format!("window:\n\tmonitors:\n\t\t{key}:\n\t\t\tcolumns: 90\n"));
 			assert_eq!(doc.children("window.monitors"), vec![key.clone()]);
-			assert_eq!(
-				doc.get_int(&format!("window.monitors.{key}.columns")).ok(),
-				Some(90)
-			);
+			assert_eq!(doc.get_int(&format!("window.monitors.{key}.columns")).ok(), Some(90));
 		}
 	}
 
 	// Test ID: ddesm
 	#[test]
 	fn a_size_that_is_no_size_is_left_out_and_a_turned_one_is_turned_back() {
-		assert_eq!(
-			MonitorId::new(1920, 1080, 1.0, Some((0, 0)))
-				.unwrap()
-				.size_mm,
-			None
-		);
-		assert_eq!(
-			MonitorId::new(1920, 1080, 1.0, Some((16, 9)))
-				.unwrap()
-				.size_mm,
-			None
-		);
+		assert_eq!(MonitorId::new(1920, 1080, 1.0, Some((0, 0))).unwrap().size_mm, None);
+		assert_eq!(MonitorId::new(1920, 1080, 1.0, Some((16, 9))).unwrap().size_mm, None);
 		assert_eq!(upright((597, 336), (1440, 2560)), (336, 597));
 		assert_eq!(upright((597, 336), (2560, 1440)), (597, 336));
 		assert!(MonitorId::new(0, 1080, 1.0, None).is_none());
@@ -1196,11 +965,7 @@ mod tests {
 		edid[..8].copy_from_slice(&[0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00]);
 		edid[21] = 60;
 		edid[22] = 34;
-		assert_eq!(
-			edid_mm(&edid),
-			Some((600, 340)),
-			"no timing: whole centimeters"
-		);
+		assert_eq!(edid_mm(&edid), Some((600, 340)), "no timing: whole centimeters");
 		// 597 x 336 mm: low bytes 0x55 0x50, high nibbles 0x2 and 0x1
 		edid[54] = 0x02;
 		edid[55] = 0x3a;
@@ -1221,11 +986,7 @@ mod tests {
 		assert_eq!(overlap((1800, 100, 400, 300), left), 120 * 300);
 		assert_eq!(overlap((1800, 100, 400, 300), right), 280 * 300);
 		assert_eq!(overlap((5000, 0, 10, 10), right), 0, "apart");
-		assert_eq!(
-			overlap((-50, -50, 100, 100), left),
-			50 * 50,
-			"partly off screen"
-		);
+		assert_eq!(overlap((-50, -50, 100, 100), left), 50 * 50, "partly off screen");
 	}
 
 	// Test ID: ddg7r
@@ -1237,21 +998,9 @@ mod tests {
 		assert_eq!(monitor_under(hidden, Some((2500, 500)), &monitors), Some(1));
 		assert_eq!(monitor_under(hidden, Some((1919, 500)), &monitors), Some(0));
 		assert_eq!(monitor_under(hidden, Some((1920, 0)), &monitors), Some(1));
-		assert_eq!(
-			monitor_under(hidden, None, &monitors),
-			Some(0),
-			"no pointer"
-		);
-		assert_eq!(
-			monitor_under(hidden, Some((2500, 1050)), &monitors),
-			Some(0),
-			"pointer off every monitor"
-		);
-		assert_eq!(
-			monitor_under((1800, 100, 400, 300), None, &monitors),
-			Some(1),
-			"a shown window goes by overlap"
-		);
+		assert_eq!(monitor_under(hidden, None, &monitors), Some(0), "no pointer");
+		assert_eq!(monitor_under(hidden, Some((2500, 1050)), &monitors), Some(0), "pointer off every monitor");
+		assert_eq!(monitor_under((1800, 100, 400, 300), None, &monitors), Some(1), "a shown window goes by overlap");
 		assert_eq!(monitor_under(hidden, Some((2500, 500)), &[]), None);
 	}
 
@@ -1268,22 +1017,14 @@ mod tests {
 		let h3 = placed((0, 1080), (1280, 1024), 1.0);
 		let all = [h1, h2, h3];
 		let window = (1180.0, 496.0);
-		assert_eq!(
-			other_at_scale(0, &all, 2.0, window),
-			Some(1),
-			"the sliver drop"
-		);
+		assert_eq!(other_at_scale(0, &all, 2.0, window), Some(1), "the sliver drop");
 		// Back the other way, either 100% output could be it, since a 200%
 		// output may be a 150% one and extend further.
 		assert_eq!(other_at_scale(1, &all, 1.0, window), None);
 		// a 150% output says 2, and its window is drawn at 1.5
 		let frac = placed((3840, 0), (2560, 1440), 2.0);
 		assert_eq!(other_at_scale(0, &[h1, frac], 1.5, window), Some(1));
-		assert_eq!(
-			other_at_scale(0, &all, 3.0, window),
-			None,
-			"none at that scale"
-		);
+		assert_eq!(other_at_scale(0, &all, 3.0, window), None, "none at that scale");
 		// With 2 at 200% and the first at 100% between them: only the one the
 		// window can reach. The far one is past another 100% output.
 		let left = placed((0, 0), (2560, 1600), 2.0);
@@ -1292,11 +1033,7 @@ mod tests {
 		let far = placed((10240, 0), (2560, 1600), 2.0);
 		let row = [mid, left, gap, far];
 		assert_eq!(other_at_scale(0, &row, 2.0, (600.0, 400.0)), Some(1));
-		assert_eq!(
-			other_at_scale(0, &row, 2.0, (4000.0, 400.0)),
-			None,
-			"wide enough to reach both"
-		);
+		assert_eq!(other_at_scale(0, &row, 2.0, (4000.0, 400.0)), None, "wide enough to reach both");
 
 		assert!(at_scale(1.0, 1.0));
 		assert!(at_scale(2.0, 1.5), "Wayland's whole number");
@@ -1314,10 +1051,7 @@ mod tests {
 	// Test ID: de01p
 	#[test]
 	fn a_wayland_window_astride_outputs_that_round_alike_is_named_for_its_own() {
-		let laid = |at: (f64, f64), px: (f64, f64), scale: f64| Laid {
-			bounds: (at.0, at.1, (px.0 / scale).round(), (px.1 / scale).round()),
-			px,
-		};
+		let laid = |at: (f64, f64), px: (f64, f64), scale: f64| Laid { bounds: (at.0, at.1, (px.0 / scale).round(), (px.1 / scale).round()), px };
 		// the same mixed-scale layout
 		let h1 = laid((0.0, 0.0), (1920.0, 1080.0), 1.0);
 		let h2 = laid((1920.0, 0.0), (2560.0, 1600.0), 2.0);
@@ -1326,29 +1060,13 @@ mod tests {
 		let window = (560.0, 700.0);
 		assert!(h5.at_scale(1.5) && !h5.at_scale(2.0) && !h5.at_scale(1.25));
 		assert!(h2.at_scale(2.0) && !h2.at_scale(1.5));
-		assert_eq!(
-			laid_drawn_for(&[h2, h5], 1.5, window),
-			Some(1),
-			"150% after 200%"
-		);
-		assert_eq!(
-			laid_drawn_for(&[h5, h2], 2.0, window),
-			Some(1),
-			"200% after 150%"
-		);
+		assert_eq!(laid_drawn_for(&[h2, h5], 1.5, window), Some(1), "150% after 200%");
+		assert_eq!(laid_drawn_for(&[h5, h2], 2.0, window), Some(1), "200% after 150%");
 		assert_eq!(laid_drawn_for(&[h5, h2], 1.5, window), Some(0), "first");
 		let q = laid((0.0, 0.0), (2560.0, 1600.0), 1.25);
 		let r = laid((2048.0, 0.0), (2400.0, 1350.0), 1.5);
-		assert_eq!(
-			laid_drawn_for(&[q, r], 1.5, window),
-			Some(1),
-			"125% then 150%"
-		);
-		assert_eq!(
-			laid_drawn_for(&[r, q], 1.25, window),
-			Some(1),
-			"150% then 125%"
-		);
+		assert_eq!(laid_drawn_for(&[q, r], 1.5, window), Some(1), "125% then 150%");
+		assert_eq!(laid_drawn_for(&[r, q], 1.25, window), Some(1), "150% then 125%");
 		// The 200% one first, with 100% outputs either side. Only the one the
 		// window is on counts, different than before when every 100% output in
 		// the layout did.
@@ -1356,17 +1074,10 @@ mod tests {
 		// Wide enough to be on both, and either could have most of it.
 		let wide = (2600.0, 400.0);
 		assert_eq!(laid_drawn_for(&[h2, h1, h4], 1.0, wide), None);
-		assert_eq!(
-			laid_drawn_for(&[h2], 1.0, window),
-			None,
-			"none at that scale"
-		);
+		assert_eq!(laid_drawn_for(&[h2], 1.0, window), None, "none at that scale");
 		assert_eq!(laid_drawn_for(&[], 1.0, window), None, "on no output");
 		// turned 90 degrees: its pixels are turned with it
-		let turned = Laid {
-			bounds: (0.0, 0.0, 720.0, 1280.0),
-			px: (1080.0, 1920.0),
-		};
+		let turned = Laid { bounds: (0.0, 0.0, 720.0, 1280.0), px: (1080.0, 1920.0) };
 		assert!(turned.at_scale(1.5));
 	}
 
@@ -1376,29 +1087,10 @@ mod tests {
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn winit_links_the_wayland_crates_monitor_reads_its_state_with() {
-		let lock = std::fs::read_to_string(
-			std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../Cargo.lock"),
-		)
-		.unwrap();
+		let lock = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../Cargo.lock")).unwrap();
 		let deps = |package: &str| -> Vec<String> {
-			let block = lock
-				.split("[[package]]")
-				.find(|b| b.contains(&format!("\nname = \"{package}\"\n")))
-				.unwrap_or_else(|| panic!("no {package} in Cargo.lock"));
-			block
-				.lines()
-				.map(|l| l.trim().trim_matches(|c| c == '"' || c == ','))
-				.filter(|l| {
-					[
-						"smithay-client-toolkit",
-						"wayland-backend",
-						"wayland-client",
-					]
-					.iter()
-					.any(|name| l == name || l.starts_with(&format!("{name} ")))
-				})
-				.map(str::to_owned)
-				.collect()
+			let block = lock.split("[[package]]").find(|b| b.contains(&format!("\nname = \"{package}\"\n"))).unwrap_or_else(|| panic!("no {package} in Cargo.lock"));
+			block.lines().map(|l| l.trim().trim_matches(|c| c == '"' || c == ',')).filter(|l| ["smithay-client-toolkit", "wayland-backend", "wayland-client"].iter().any(|name| l == name || l.starts_with(&format!("{name} ")))).map(str::to_owned).collect()
 		};
 		let (ours, winit) = (deps("silkterm"), deps("winit"));
 		assert_eq!(ours.len(), 3, "{ours:?}");
@@ -1408,20 +1100,10 @@ mod tests {
 	// Test ID: ddq71
 	#[test]
 	fn a_monitor_read_again_to_the_cm_is_the_same_monitor() {
-		for key in [
-			"1600x2560_100pct_401x641mm",
-			"2560x1440_125pct_597x336mm",
-			"1920x1080_100pct",
-		] {
+		for key in ["1600x2560_100pct_401x641mm", "2560x1440_125pct_597x336mm", "1920x1080_100pct"] {
 			assert_eq!(MonitorId::from_key(key).unwrap().key(), key);
 		}
-		for odd in [
-			"",
-			"1920x1080",
-			"1920x1080_100",
-			"1920x1080_100pct_x",
-			"a_b_c_d",
-		] {
+		for odd in ["", "1920x1080", "1920x1080_100", "1920x1080_100pct_x", "a_b_c_d"] {
 			assert!(MonitorId::from_key(odd).is_none(), "{odd}");
 		}
 		// a portrait monitor, before and after a power save
@@ -1446,31 +1128,15 @@ mod tests {
 		let landscape = [(1600, 554, 3440, 1440)];
 		let window = (100, 100, 1300, 900);
 		assert_eq!(monitor_under(window, None, &landscape), None);
-		assert_eq!(
-			monitor_under((1500, 600, 300, 300), None, &landscape),
-			Some(0),
-			"partly on it"
-		);
+		assert_eq!(monitor_under((1500, 600, 300, 300), None, &landscape), Some(0), "partly on it");
 		// a window not shown yet still opens somewhere
-		assert_eq!(
-			monitor_under(window, Some((50, 50)), &landscape),
-			Some(0),
-			"pointer off every monitor"
-		);
+		assert_eq!(monitor_under(window, Some((50, 50)), &landscape), Some(0), "pointer off every monitor");
 	}
 
 	// Test ID: ddesp
 	#[test]
 	fn the_monitor_interface_name_points_at_its_edid_key() {
-		assert_eq!(
-			edid_key(
-				r"\\?\DISPLAY#DEL40F4#5&1a2b3c&0&UID4352#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}"
-			)
-			.as_deref(),
-			Some(
-				r"SYSTEM\CurrentControlSet\Enum\DISPLAY\DEL40F4\5&1a2b3c&0&UID4352\Device Parameters"
-			)
-		);
+		assert_eq!(edid_key(r"\\?\DISPLAY#DEL40F4#5&1a2b3c&0&UID4352#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}").as_deref(), Some(r"SYSTEM\CurrentControlSet\Enum\DISPLAY\DEL40F4\5&1a2b3c&0&UID4352\Device Parameters"));
 		assert_eq!(edid_key(r"DISPLAY#DEL40F4#x#{g}"), None);
 		assert_eq!(edid_key(r"\\?\DISPLAY##x#{g}"), None);
 	}
@@ -1481,13 +1147,7 @@ mod tests {
 
 		type Rect = (i64, i64, i64, i64);
 
-		const SIZES: [(i64, i64); 5] = [
-			(1920, 1080),
-			(1280, 800),
-			(1600, 900),
-			(2560, 1440),
-			(1080, 1920),
-		];
+		const SIZES: [(i64, i64); 5] = [(1920, 1080), (1280, 800), (1600, 900), (2560, 1440), (1080, 1920)];
 		const SCALES: [f64; 5] = [1.0, 1.25, 1.5, 2.0, 3.0];
 
 		// A Wayland layout as the compositor has it: outputs edge to edge in
@@ -1525,14 +1185,7 @@ mod tests {
 		// its pixels, and that whole number as its scale.
 		fn seen(rect: Rect, scale: f64) -> Placed {
 			let whole = scale.ceil();
-			Placed {
-				at: (rect.0 * whole as i64, rect.1 * whole as i64),
-				px: (
-					(rect.2 as f64 * scale).round() as i64,
-					(rect.3 as f64 * scale).round() as i64,
-				),
-				scale: whole,
-			}
+			Placed { at: (rect.0 * whole as i64, rect.1 * whole as i64), px: ((rect.2 as f64 * scale).round() as i64, (rect.3 as f64 * scale).round() as i64), scale: whole }
 		}
 
 		#[derive(Debug)]
@@ -1554,40 +1207,16 @@ mod tests {
 			let outs = layout(&mut rng);
 			let on = outs[rng.below(outs.len())].0;
 			let (w, h) = (300 + rng.below(2200) as i64, 200 + rng.below(1300) as i64);
-			let point = (
-				on.0 + rng.below(on.2 as usize) as i64,
-				on.1 + rng.below(on.3 as usize) as i64,
-			);
-			let window = (
-				point.0 - rng.below(w as usize) as i64,
-				point.1 - rng.below(h as usize) as i64,
-				w,
-				h,
-			);
+			let point = (on.0 + rng.below(on.2 as usize) as i64, on.1 + rng.below(on.3 as usize) as i64);
+			let window = (point.0 - rng.below(w as usize) as i64, point.1 - rng.below(h as usize) as i64, w, h);
 			let areas: Vec<i64> = outs.iter().map(|&(o, _)| overlap(window, o)).collect();
 			let touched: Vec<usize> = (0..outs.len()).filter(|&i| areas[i] > 0).collect();
-			let primary = touched
-				.iter()
-				.copied()
-				.max_by_key(|&i| (areas[i], std::cmp::Reverse(i)))
-				.unwrap();
+			let primary = touched.iter().copied().max_by_key(|&i| (areas[i], std::cmp::Reverse(i))).unwrap();
 			let first = touched[rng.below(touched.len())];
 			let scale = outs[primary].1;
 			let all: Vec<Placed> = outs.iter().map(|&(r, s)| seen(r, s)).collect();
-			let named = if at_scale(all[first].scale, scale) {
-				Some(first)
-			} else {
-				other_at_scale(first, &all, scale, (w as f64, h as f64))
-			};
-			Case {
-				outs,
-				size: (w, h),
-				areas,
-				touched,
-				first,
-				primary,
-				named,
-			}
+			let named = if at_scale(all[first].scale, scale) { Some(first) } else { other_at_scale(first, &all, scale, (w as f64, h as f64)) };
+			Case { outs, size: (w, h), areas, touched, first, primary, named }
 		}
 
 		fn check(seed: u64) {
@@ -1598,17 +1227,12 @@ mod tests {
 				assert!(at_scale(whole(i), scale), "another scale: {c:?}");
 				assert!(c.touched.contains(&i), "one it isn't on: {c:?}");
 			}
-			let alike = (0..c.outs.len())
-				.filter(|&i| at_scale(whole(i), scale))
-				.count();
+			let alike = (0..c.outs.len()).filter(|&i| at_scale(whole(i), scale)).count();
 			if !at_scale(whole(c.first), scale) && alike == 1 {
 				assert_eq!(c.named, Some(c.primary), "the only one at its scale: {c:?}");
 			}
 			if !at_scale(whole(c.first), scale) {
-				assert!(
-					c.named.is_none_or(|i| i == c.primary),
-					"another than the one most of it is on: {c:?}"
-				);
+				assert!(c.named.is_none_or(|i| i == c.primary), "another than the one most of it is on: {c:?}");
 			}
 		}
 
@@ -1625,12 +1249,7 @@ mod tests {
 		fn laid_case(seed: u64) -> (Case, Vec<usize>) {
 			let mut c = case(seed);
 			let mut rng = Rng::new(seed ^ 0x5eed);
-			let mut order: Vec<usize> = c
-				.touched
-				.iter()
-				.copied()
-				.filter(|&i| i != c.first)
-				.collect();
+			let mut order: Vec<usize> = c.touched.iter().copied().filter(|&i| i != c.first).collect();
 			for i in (1..order.len()).rev() {
 				order.swap(i, rng.below(i + 1));
 			}
@@ -1639,10 +1258,7 @@ mod tests {
 				.iter()
 				.map(|&i| {
 					let ((x, y, w, h), scale) = c.outs[i];
-					Laid {
-						bounds: (x as f64, y as f64, w as f64, h as f64),
-						px: ((w as f64 * scale).round(), (h as f64 * scale).round()),
-					}
+					Laid { bounds: (x as f64, y as f64, w as f64, h as f64), px: ((w as f64 * scale).round(), (h as f64 * scale).round()) }
 				})
 				.collect();
 			let scale = c.outs[c.primary].1;
@@ -1655,21 +1271,13 @@ mod tests {
 			let (c, _) = laid_case(seed);
 			let scale = c.outs[c.primary].1;
 			let most = c.touched.iter().map(|&i| c.areas[i]).max().unwrap();
-			let alike: Vec<usize> = c
-				.touched
-				.iter()
-				.copied()
-				.filter(|&i| c.outs[i].1 == scale)
-				.collect();
+			let alike: Vec<usize> = c.touched.iter().copied().filter(|&i| c.outs[i].1 == scale).collect();
 			if c.outs[c.first].1 == scale {
 				assert_eq!(c.named, Some(c.first), "the first, at its scale: {c:?}");
 				return;
 			}
 			if let Some(i) = c.named {
-				assert!(
-					c.areas[i] == most,
-					"another than one most of it is on: {c:?}"
-				);
+				assert!(c.areas[i] == most, "another than one most of it is on: {c:?}");
 			}
 			if alike.len() == 1 {
 				assert_eq!(c.named, Some(c.primary), "the only one at its scale: {c:?}");
@@ -1702,10 +1310,7 @@ mod tests {
 					None => unsure += 1,
 				}
 			}
-			assert!(
-				first > 0 && found > 0 && unsure > 0 && rounded > 0,
-				"{first} {found} {unsure} {rounded}"
-			);
+			assert!(first > 0 && found > 0 && unsure > 0 && rounded > 0, "{first} {found} {unsure} {rounded}");
 		}
 
 		// The generator still produces each way of naming one.
@@ -1721,10 +1326,7 @@ mod tests {
 					None => unsure += 1,
 				}
 			}
-			assert!(
-				first > 0 && found > 0 && unsure > 0,
-				"{first} {found} {unsure}"
-			);
+			assert!(first > 0 && found > 0 && unsure > 0, "{first} {found} {unsure}");
 		}
 	}
 }

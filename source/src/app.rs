@@ -20,10 +20,7 @@ use glyphon::{Buffer, Color as GColor, Shaping, TextArea, TextBounds};
 use crate::bgimage::{ImageRenderer, WpProbe};
 use crate::clipboard::Clipboard;
 use crate::config;
-use crate::gfx::{
-	Drawn, FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Gfx, NoFrame, QuadMode, Rebirth, RectInstance,
-	RectRenderer, Retry, VramProbe,
-};
+use crate::gfx::{Drawn, FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Gfx, NoFrame, QuadMode, Rebirth, RectInstance, RectRenderer, Retry, VramProbe};
 use crate::input::{self, ClickSelect, CopyFrom, Hotkey, WheelRoute, is_copy_chord};
 use crate::pane::{BarHit, Dir, Pane, Rect};
 use crate::settings_ui::EditCmd;
@@ -39,14 +36,10 @@ pub(crate) use menus::{Entry, MenuAction};
 #[cfg(any(test, target_os = "macos"))]
 pub(crate) use menus::{mac_entries, menu_hotkey, without_rows};
 #[cfg(test)]
-pub(crate) use menus::{
-	sample_window_menus, sample_window_menus_copying, sample_window_menus_with,
-};
+pub(crate) use menus::{sample_window_menus, sample_window_menus_copying, sample_window_menus_with};
 use rating::{RatingStep, rate_hardware, rating_step, remote_override_at_launch, session_step};
 use tab_edit::TabEdit;
-use tabs::{
-	TabLabels, TabLayout, TabTip, Tabs, tab_button_v, tab_close_box, tab_edit_box, tab_title_w,
-};
+use tabs::{TabLabels, TabLayout, TabTip, Tabs, tab_button_v, tab_close_box, tab_edit_box, tab_title_w};
 use vt::{VtHeal, spawn_vt_watch, vramdbg};
 pub(crate) use window_size::request_size;
 use window_size::{MonitorWatch, fit_px, launch_maximized, window_px};
@@ -158,10 +151,7 @@ impl App {
 			memdbg: crate::memdbg::Printer::default(),
 			memdbg_next: Instant::now(),
 			#[cfg(feature = "profiling")]
-			profile_secs: std::env::var("SILK_PROFILE_SECS")
-				.ok()
-				.and_then(|raw| raw.parse().ok())
-				.unwrap_or(8),
+			profile_secs: std::env::var("SILK_PROFILE_SECS").ok().and_then(|raw| raw.parse().ok()).unwrap_or(8),
 			#[cfg(feature = "profiling")]
 			profile_deadline: None,
 		}
@@ -173,25 +163,10 @@ impl App {
 		if let Some(state) = self.state.as_ref() {
 			let size = state.window.inner_size();
 			let panes: usize = state.tabs.list.iter().map(|pm| pm.panes.len()).sum();
-			self.memdbg.say(
-				"window",
-				format!(
-					"window: {}x{} px, {} tabs, {panes} panes",
-					size.width,
-					size.height,
-					state.tabs.len()
-				),
-			);
-			let main = state.gpu.as_ref().map_or_else(
-				|| "main: device let go".to_string(),
-				|gpu| crate::memdbg::gpu_line("main", &gpu.gfx.device),
-			);
+			self.memdbg.say("window", format!("window: {}x{} px, {} tabs, {panes} panes", size.width, size.height, state.tabs.len()));
+			let main = state.gpu.as_ref().map_or_else(|| "main: device let go".to_string(), |gpu| crate::memdbg::gpu_line("main", &gpu.gfx.device));
 			self.memdbg.say("main", main);
-			let wallpaper = state
-				.gpu
-				.as_ref()
-				.and_then(|gpu| gpu.wallpaper_img.as_ref())
-				.map_or_else(|| "wallpaper: none".to_string(), ImageRenderer::memdbg_line);
+			let wallpaper = state.gpu.as_ref().and_then(|gpu| gpu.wallpaper_img.as_ref()).map_or_else(|| "wallpaper: none".to_string(), ImageRenderer::memdbg_line);
 			self.memdbg.say("wallpaper", wallpaper);
 			let kept = state.wp_standin.as_ref().map_or_else(
 				|| "stand-in: none".to_string(),
@@ -540,14 +515,7 @@ pub(crate) enum EnvFlag {
 }
 impl EnvFlag {
 	#[cfg(test)]
-	const ALL: [EnvFlag; 6] = [
-		EnvFlag::Dump,
-		EnvFlag::DlgDbg,
-		EnvFlag::KeyDbg,
-		EnvFlag::IdleDbg,
-		EnvFlag::MemDbg,
-		EnvFlag::MonDbg,
-	];
+	const ALL: [EnvFlag; 6] = [EnvFlag::Dump, EnvFlag::DlgDbg, EnvFlag::KeyDbg, EnvFlag::IdleDbg, EnvFlag::MemDbg, EnvFlag::MonDbg];
 	fn var(self) -> &'static str {
 		match self {
 			EnvFlag::Dump => "SILK_DUMP",
@@ -592,22 +560,14 @@ pub(crate) fn env_flag(flag: EnvFlag) -> bool {
 fn max_fps() -> Option<f64> {
 	use std::sync::OnceLock;
 	static FPS: OnceLock<Option<f64>> = OnceLock::new();
-	*FPS.get_or_init(|| {
-		std::env::var("SILK_MAX_FPS")
-			.ok()
-			.and_then(|raw| raw.trim().parse::<f64>().ok())
-			.filter(|fps| *fps > 0.0 && fps.is_finite())
-	})
+	*FPS.get_or_init(|| std::env::var("SILK_MAX_FPS").ok().and_then(|raw| raw.trim().parse::<f64>().ok()).filter(|fps| *fps > 0.0 && fps.is_finite()))
 }
 
 // The display's refresh rate, which is what a scroll ease is paced against.
 // Unknown reads as 60: the common case, and a wrong guess only moves the
 // budget a little.
 fn refresh_hz(window: &Window) -> f32 {
-	window
-		.current_monitor()
-		.and_then(|m| m.refresh_rate_millihertz())
-		.map_or(60.0, |mhz| mhz as f32 / 1000.0)
+	window.current_monitor().and_then(|m| m.refresh_rate_millihertz()).map_or(60.0, |mhz| mhz as f32 / 1000.0)
 }
 
 // A wait that starts over once the wallpaper is on screen (the shell scan, the
@@ -667,16 +627,8 @@ impl PaneWakes for Pane {
 // The earliest pane wake still ahead of `now`, read after the frame, since
 // drawing is what sets them. One already due is left out: the pass before the
 // frame acts on those, and a window that isn't drawing would spin on one.
-fn pane_wake<'a, P: PaneWakes + 'a>(
-	panes: impl IntoIterator<Item = &'a P>,
-	now: Instant,
-) -> Option<Instant> {
-	panes
-		.into_iter()
-		.flat_map(|pane| [pane.cursor_wake_at(), pane.map_wake_at()])
-		.flatten()
-		.filter(|&wake| wake > now)
-		.min()
+fn pane_wake<'a, P: PaneWakes + 'a>(panes: impl IntoIterator<Item = &'a P>, now: Instant) -> Option<Instant> {
+	panes.into_iter().flat_map(|pane| [pane.cursor_wake_at(), pane.map_wake_at()]).flatten().filter(|&wake| wake > now).min()
 }
 
 // A double-click is 2 presses on a tab this close together.
@@ -700,13 +652,7 @@ impl Gpu {
 	// The renderers first and the device last: `Gfx::release` needs every
 	// handle on the device gone before it runs.
 	fn release(self) -> Rebirth {
-		let Self {
-			gfx,
-			rects,
-			minimap,
-			wallpaper_img,
-			scrim,
-		} = self;
+		let Self { gfx, rects, minimap, wallpaper_img, scrim } = self;
 		drop((wallpaper_img, minimap, scrim, rects));
 		gfx.release()
 	}
@@ -729,22 +675,22 @@ struct State {
 	mods: ModifiersState,
 	alt_sides: (bool, bool), // left and right Option or Alt held; only a Mac reports them
 	mouse: (f32, f32),
-	mouse_btn: Option<input::MouseBtn>, // button held after a reported press (mouse-tracking apps)
-	mouse_cell: Option<(usize, usize)>, // last cell reported, to de-dupe motion
-	selecting: Option<PaneId>,          // pane with an in-progress drag-select
-	select_edge_held: f32,              // seconds that drag has been past a pane edge
+	mouse_btn: Option<input::MouseBtn>,      // button held after a reported press (mouse-tracking apps)
+	mouse_cell: Option<(usize, usize)>,      // last cell reported, to de-dupe motion
+	selecting: Option<PaneId>,               // pane with an in-progress drag-select
+	select_edge_held: f32,                   // seconds that drag has been past a pane edge
 	last_click: Option<(Instant, f32, f32)>, // for multi-click detection
-	click_count: u32,                   // consecutive clicks in the same spot (2=double, 3=triple)
+	click_count: u32,                        // consecutive clicks in the same spot (2=double, 3=triple)
 	// (active tab, focused pane, window focused) at the last frame. A change
 	// while focused pokes the focused pane's cursor, so a cursor animation
 	// parked after a long idle starts again on any refocus.
 	cursor_focus_sig: Option<(usize, PaneId, bool)>,
 	// the pane whose program was last told it has the keyboard
 	focus_holder: Option<PaneId>,
-	resizing: Option<Vec<bool>>, // split-tree path of the divider being dragged
+	resizing: Option<Vec<bool>>,   // split-tree path of the divider being dragged
 	dragging_pane: Option<PaneId>, // pane being drag-reordered (Shift+drag)
-	bar_dragging: Option<PaneId>, // pane whose scrollbar thumb is being dragged
-	map_dragging: Option<PaneId>, // pane whose minimap marker is being dragged
+	bar_dragging: Option<PaneId>,  // pane whose scrollbar thumb is being dragged
+	map_dragging: Option<PaneId>,  // pane whose minimap marker is being dragged
 	// A Ctrl+press hit a hyperlink: the release over the same link opens it,
 	// a release anywhere else drops it (drag off to cancel, like the tab close
 	// button). The URL is taken at press time, since output can scroll it away
@@ -798,7 +744,7 @@ struct State {
 	pending_size_at: Instant,
 	zoom_kept: Option<window_size::ZoomKept>, // the grid `resize_on_zoom` holds to
 	menu: Option<ContextMenu>,
-	tab_close_arm: Option<usize>, // tab whose close button is held down (closes on release)
+	tab_close_arm: Option<usize>,        // tab whose close button is held down (closes on release)
 	tab_hover: crate::tip::Dwell<usize>, // tab under the pointer, and since when
 	// menu row under the pointer, as (how deep in the open chain, which row)
 	menu_tip: crate::tip::Dwell<(usize, usize)>,
@@ -823,20 +769,20 @@ struct State {
 	tab_dbl: Option<(Instant, usize)>, // last tab-strip click, for the double
 	decorated: bool,                   // window frame shown (winit has no getter, so track it)
 	menu_bar: bool,                    // window menu bar (File/Edit/...) shown
-	bare: bool, // frame, menu bar, and tab strip all off at once (View > Bare window); never written
-	bare_saved: (bool, bool), // (decorated, menu_bar) from before bare, to put back
-	bar_open: Option<usize>, // which top-level menu's dropdown is open, if any
-	quit: bool, // set by File->Quit; the event handler exits after applying
+	bare: bool,                        // frame, menu bar, and tab strip all off at once (View > Bare window); never written
+	bare_saved: (bool, bool),          // (decorated, menu_bar) from before bare, to put back
+	bar_open: Option<usize>,           // which top-level menu's dropdown is open, if any
+	quit: bool,                        // set by File->Quit; the event handler exits after applying
 	// a close waiting on the tmux question, which App puts up (closing.rs)
 	close_ask: Option<closing::Closing>,
-	win_opacity: Option<f32>, // CLI --background-opacity override (this window only)
-	win_title: Option<String>, // CLI --title override (else "AppName - <tab title>")
+	win_opacity: Option<f32>,               // CLI --background-opacity override (this window only)
+	win_title: Option<String>,              // CLI --title override (else "AppName - <tab title>")
 	kept_title: crate::tabtitle::KeptTitle, // what was last set on the window
-	focused: bool, // window has keyboard focus (gates copy-output: never copy from a background window)
-	pending_about: bool, // request to open the About window (App acts on it; needs the event loop)
-	pending_settings: Option<Instant>, // request to open the Settings window, and when
-	chrome: Option<ChromeCache>, // shaped menu/tab text, reused across frames
-	chrome_rev: u64, // bumped whenever a chrome buffer is (re)shaped
+	focused: bool,                          // window has keyboard focus (gates copy-output: never copy from a background window)
+	pending_about: bool,                    // request to open the About window (App acts on it; needs the event loop)
+	pending_settings: Option<Instant>,      // request to open the Settings window, and when
+	chrome: Option<ChromeCache>,            // shaped menu/tab text, reused across frames
+	chrome_rev: u64,                        // bumped whenever a chrome buffer is (re)shaped
 	// Signature of everything feeding the prepared text set, from the last frame
 	// that prepared. A frame where only the cursor changed matches it, and then
 	// the glyphon prepares, most of the CPU in a frame, and the atlas trim are
@@ -870,10 +816,10 @@ struct State {
 	// Rotation state as of the last scan. The folder, the shuffle history, and
 	// the picking are all in the worker (wallpaper.rs), so nothing here reads
 	// the filesystem.
-	wp_count: usize, // images the last scan found (<2 = nothing to rotate to)
+	wp_count: usize,             // images the last scan found (<2 = nothing to rotate to)
 	wp_current: Option<PathBuf>, // image showing now, so order mode advances from it
-	wp_next: Option<Instant>, // when to rotate next (None = no timer / startup-only)
-	wp_locked: bool, // a command-line wallpaper owns this session; don't rotate
+	wp_next: Option<Instant>,    // when to rotate next (None = no timer / startup-only)
+	wp_locked: bool,             // a command-line wallpaper owns this session; don't rotate
 	// Settings file writes the other windows on it have heard of (`config::saves`),
 	// and a reread they should follow too.
 	saves_told: u64,
@@ -902,12 +848,12 @@ struct State {
 	wp_shown: bool,
 	// The hard deadline for that wait (see SHELL_SCAN_MAX_WAIT).
 	shell_scan_cap: Option<Instant>,
-	vram_next: Instant, // next GL VRAM sentinel probe (VT-switch content-loss detection)
+	vram_next: Instant,  // next GL VRAM sentinel probe (VT-switch content-loss detection)
 	vramloss_test: bool, // SILK_VRAMLOSS one-shot: fake a loss to exercise the rebuild path
 	// The surface's size, kept here because layout still needs it while there
 	// is no surface to ask.
 	surface_px: (u32, u32),
-	gl: bool, // born on the glutin GL path (X11): the one with a VT watcher and sentinels
+	gl: bool,                        // born on the glutin GL path (X11): the one with a VT watcher and sentinels
 	adapter_info: wgpu::AdapterInfo, // for the About dialog, which may open before a rebuild
 	drawn: Drawn,
 	// the session's step to Low is this window's, for a software device
@@ -924,11 +870,7 @@ struct State {
 // being the new state. Coming back puts back only what is still off, so one
 // switched on in the meantime stays on.
 fn bare_chrome(bare: bool, saved: (bool, bool), now: (bool, bool)) -> ((bool, bool), (bool, bool)) {
-	if bare {
-		(now, (false, false))
-	} else {
-		(saved, (now.0 | saved.0, now.1 | saved.1))
-	}
+	if bare { (now, (false, false)) } else { (saved, (now.0 | saved.0, now.1 | saved.1)) }
 }
 
 impl State {
@@ -942,11 +884,7 @@ impl State {
 		self.text.ui_line_h + self.text.dip(TAB_BAR_VPAD)
 	}
 	fn menubar_h(&self) -> f32 {
-		if self.menu_bar {
-			self.menu_bar_h()
-		} else {
-			0.0
-		}
+		if self.menu_bar { self.menu_bar_h() } else { 0.0 }
 	}
 
 	// The tab bar always shows for more than one tab, and for a single tab
@@ -959,12 +897,7 @@ impl State {
 	// visible. A row count asks for the cells below this, so the launch sizing and
 	// save_window_size both have to account for it.
 	fn chrome_h(&self) -> f32 {
-		self.menubar_h()
-			+ if self.tab_bar_visible() {
-				self.tab_bar_h()
-			} else {
-				0.0
-			}
+		self.menubar_h() + if self.tab_bar_visible() { self.tab_bar_h() } else { 0.0 }
 	}
 
 	fn area(&self) -> Rect {
@@ -975,12 +908,7 @@ impl State {
 		// Panes sit below the menu bar (always when shown) and the tab bar
 		// (when visible), stacked in that order.
 		let bar = self.chrome_h();
-		Rect {
-			x: 0.0,
-			y: bar,
-			w: w as f32,
-			h: (h as f32 - bar).max(1.0),
-		}
+		Rect { x: 0.0, y: bar, w: w as f32, h: (h as f32 - bar).max(1.0) }
 	}
 
 	// Focus reports follow the pane that has the keyboard, so a pane or tab
@@ -1021,15 +949,7 @@ impl State {
 		// Shift is the bypass for local actions, the same one that lets a
 		// selection through a tracking app.
 		let shift = self.mods.shift_key();
-		let over = at
-			.and_then(|(x, y)| self.tabs.cur().pane_at(x, y))
-			.filter(|id| {
-				shift
-					|| !self.tabs.cur().panes.get(id).is_some_and(|p| {
-						p.mode
-							.intersects(TermMode::MOUSE_MOTION | TermMode::MOUSE_DRAG)
-					})
-			});
+		let over = at.and_then(|(x, y)| self.tabs.cur().pane_at(x, y)).filter(|id| shift || !self.tabs.cur().panes.get(id).is_some_and(|p| p.mode.intersects(TermMode::MOUSE_MOTION | TermMode::MOUSE_DRAG)));
 		let text = &self.text;
 		let mut probing = false;
 		for (id, p) in &mut self.tabs.cur_mut().panes {
@@ -1044,23 +964,14 @@ impl State {
 	// scans again through link_at_pointer rather than trusting a frame-old result.
 	fn hovering_link(&self) -> bool {
 		let (x, y) = self.mouse;
-		self.tabs
-			.cur()
-			.pane_at(x, y)
-			.and_then(|id| self.tabs.cur().panes.get(&id))
-			.is_some_and(|p| p.link_hover.is_some())
+		self.tabs.cur().pane_at(x, y).and_then(|id| self.tabs.cur().panes.get(&id)).is_some_and(|p| p.link_hover.is_some())
 	}
 
 	// Fresh scan for the link under the pointer, with the pane it belongs to.
 	fn link_at_pointer(&self) -> Option<(PaneId, crate::pane::LinkHit)> {
 		let (x, y) = self.mouse;
 		let id = self.tabs.cur().pane_at(x, y)?;
-		let hit = self
-			.tabs
-			.cur()
-			.panes
-			.get(&id)?
-			.link_at_px(x, y, &self.text)?;
+		let hit = self.tabs.cur().panes.get(&id)?.link_at_px(x, y, &self.text)?;
 		Some((id, hit))
 	}
 
@@ -1072,11 +983,7 @@ impl State {
 		let icon = if self.dragging_pane.is_some() {
 			CursorIcon::Grabbing
 		} else {
-			match self
-				.tabs
-				.cur()
-				.divider_at(x, y, self.area(), self.text.scale)
-			{
+			match self.tabs.cur().divider_at(x, y, self.area(), self.text.scale) {
 				Some((_, Dir::Vertical)) => CursorIcon::ColResize,
 				Some((_, Dir::Horizontal)) => CursorIcon::RowResize,
 				None if self.hovering_link() => CursorIcon::Pointer,
@@ -1155,8 +1062,7 @@ impl State {
 			if let Some(p) = cur.pane_at(x, y).and_then(|id| cur.panes.get(&id))
 				&& input::wants_mouse(p.mode)
 				&& let Some((col, row)) = p.screen_cell_at(x, y, &self.text)
-				&& let Some(seq) =
-					input::mouse_report(p.mode, btn, false, false, col, row, self.mods)
+				&& let Some(seq) = input::mouse_report(p.mode, btn, false, false, col, row, self.mods)
 			{
 				p.write_input(seq);
 			}
@@ -1218,9 +1124,7 @@ impl State {
 			for (id, pane) in &mut pm.panes {
 				// ids are unique across tabs, so this is the active tab's pane too
 				let in_use = *id == cur_focused;
-				if !(input::copy_allowed(CopyFrom::Output, self.focused, in_use)
-					&& pane.copy_output)
-				{
+				if !(input::copy_allowed(CopyFrom::Output, self.focused, in_use) && pane.copy_output) {
 					pane.disarm_capture();
 				}
 			}
@@ -1248,9 +1152,7 @@ impl State {
 		}
 		let focused_id = self.tabs.cur().focused;
 		let p = self.tabs.cur().panes.get(&focused_id)?;
-		p.copy_output
-			.then(|| p.capture_deadline(CAPTURE_SETTLE))
-			.flatten()
+		p.copy_output.then(|| p.capture_deadline(CAPTURE_SETTLE)).flatten()
 	}
 
 	// Every tip's clock in one place: raise one whose pointer has rested, and
@@ -1282,8 +1184,7 @@ impl State {
 		let Some(pane) = self.tabs.cur_mut().panes.get_mut(&id) else {
 			return false;
 		};
-		let rate =
-			crate::pane::edge_scroll_rate(y, pane.rect.y, pane.rect.y + pane.rect.h, cell_h, held);
+		let rate = crate::pane::edge_scroll_rate(y, pane.rect.y, pane.rect.y + pane.rect.h, cell_h, held);
 		if rate == 0.0 {
 			self.select_edge_held = 0.0;
 			return false;
@@ -1330,20 +1231,9 @@ impl State {
 		let suffix = match title_from(&self.tabs).filter(|_| !custom) {
 			None => None,
 			Some(Suffix::Said(said)) => Some(said),
-			Some(Suffix::Tab) => Some(
-				self.tab_labels
-					.forms(self.tabs.active)
-					.first()
-					.map_or(config::APP_NAME, String::as_str),
-			),
+			Some(Suffix::Tab) => Some(self.tab_labels.forms(self.tabs.active).first().map_or(config::APP_NAME, String::as_str)),
 		};
-		if let Some(title) = self.kept_title.update(
-			config::rights(),
-			self.win_title.as_deref(),
-			config::title_prefix(),
-			suffix,
-			note,
-		) {
+		if let Some(title) = self.kept_title.update(config::rights(), self.win_title.as_deref(), config::title_prefix(), suffix, note) {
 			self.window.set_title(&title);
 		}
 	}
@@ -1351,8 +1241,7 @@ impl State {
 	// Effective window opacity: a CLI --background-opacity override for this
 	// window, else the configured value.
 	fn opacity(&self) -> f32 {
-		self.win_opacity
-			.unwrap_or_else(|| config::settings().opacity)
+		self.win_opacity.unwrap_or_else(|| config::settings().opacity)
 	}
 
 	// lay out every tab again, not only the active one, for when the tab bar
@@ -1375,12 +1264,7 @@ impl State {
 	// startup, and a reaper thread waits on it so a closed window can't linger as
 	// a zombie.
 	fn new_window(&self) {
-		let cwd = self
-			.tabs
-			.cur()
-			.panes
-			.get(&self.tabs.cur().focused)
-			.and_then(crate::pane::Pane::inherit_cwd);
+		let cwd = self.tabs.cur().panes.get(&self.tabs.cur().focused).and_then(crate::pane::Pane::inherit_cwd);
 		let exe = match std::env::current_exe() {
 			Ok(p) => p,
 			Err(e) => {
@@ -1405,12 +1289,7 @@ impl State {
 	// since a background tab's shell exits the same way.
 	fn close_dead_pane(&mut self, id: PaneId) {
 		let area = self.area();
-		let Some(tab_idx) = self
-			.tabs
-			.list
-			.iter()
-			.position(|pm| pm.panes.contains_key(&id))
-		else {
+		let Some(tab_idx) = self.tabs.list.iter().position(|pm| pm.panes.contains_key(&id)) else {
 			return;
 		};
 		match close_scope(true, self.tabs.list[tab_idx].panes.len(), self.tabs.len()) {
@@ -1433,12 +1312,7 @@ impl State {
 			return;
 		};
 		let target = menu.target;
-		if !self
-			.tabs
-			.list
-			.iter()
-			.any(|pm| pm.panes.contains_key(&target))
-		{
+		if !self.tabs.list.iter().any(|pm| pm.panes.contains_key(&target)) {
 			self.menu = None;
 			self.bar_open = None;
 		}
@@ -1449,12 +1323,7 @@ impl State {
 	// knows not to close it. ChildExit has the status and Exit follows with
 	// nothing, so the second call finds it already held and leaves it alone.
 	fn hold_dead_pane(&mut self, id: PaneId, status: &str) -> bool {
-		let Some(p) = self
-			.tabs
-			.list
-			.iter_mut()
-			.find_map(|pm| pm.panes.get_mut(&id))
-		else {
+		let Some(p) = self.tabs.list.iter_mut().find_map(|pm| pm.panes.get_mut(&id)) else {
 			return false;
 		};
 		if p.held {
@@ -1465,13 +1334,7 @@ impl State {
 		}
 		p.held = true;
 		p.read_only = true;
-		p.term.feed(
-			format!(
-				"\r\n{}: exit {status} - press a key to close\r\n",
-				config::APP_NAME
-			)
-			.as_bytes(),
-		);
+		p.term.feed(format!("\r\n{}: exit {status} - press a key to close\r\n", config::APP_NAME).as_bytes());
 		self.dirty = true;
 		true
 	}
@@ -1540,12 +1403,7 @@ impl State {
 	// OK keeps it open rather than closing over an unsaved change. `unsaved` is
 	// that baseline from an earlier Apply, so a retry writes its changes too.
 	// The values apply live either way.
-	fn apply_settings_values(
-		&mut self,
-		orig: &config::Settings,
-		mut edited: config::Settings,
-		unsaved: Option<config::Settings>,
-	) -> Option<config::Settings> {
+	fn apply_settings_values(&mut self, orig: &config::Settings, mut edited: config::Settings, unsaved: Option<config::Settings>) -> Option<config::Settings> {
 		// The Shells tab edits the list, so this is the one path allowed to write
 		// it, and the dialog's copy wins. The baseline is the live list rather
 		// than the dialog's own `orig`. A scan that arrived while the dialog was
@@ -1582,12 +1440,7 @@ impl State {
 	// this window's view switches as it shows them.
 	fn settings_for_dialog(&self) -> config::Settings {
 		let live = config::settings();
-		let mut base = settings_after_reload(
-			&live,
-			config::reload_from_disk(),
-			&self.cli_style,
-			self.wp_locked,
-		);
+		let mut base = settings_after_reload(&live, config::reload_from_disk(), &self.cli_style, self.wp_locked);
 		config::keep_window_view(&live, &mut base);
 		base
 	}
@@ -1597,12 +1450,7 @@ impl State {
 	// back.
 	fn reload_config(&mut self) {
 		let orig = config::settings();
-		let edited = settings_after_reload(
-			&orig,
-			config::reload_from_disk(),
-			&self.cli_style,
-			self.wp_locked,
-		);
+		let edited = settings_after_reload(&orig, config::reload_from_disk(), &self.cli_style, self.wp_locked);
 		// Force the background image to re-read even when its path is unchanged:
 		// the user may have swapped the file contents under the same name (#167).
 		self.apply_new_settings(&orig, edited, true);
@@ -1629,12 +1477,7 @@ impl State {
 	pub(super) fn follow_peer(&mut self) {
 		self.tell_peers_if_due();
 		let live = config::settings();
-		let mut fresh = settings_after_reload(
-			&live,
-			config::reload_from_disk(),
-			&self.cli_style,
-			self.wp_locked,
-		);
+		let mut fresh = settings_after_reload(&live, config::reload_from_disk(), &self.cli_style, self.wp_locked);
 		config::keep_window_state(&live, &mut fresh);
 		config::keep_window_view(&live, &mut fresh);
 		self.apply_as(&live, fresh, Applied::Peer);
@@ -1708,12 +1551,7 @@ impl State {
 	fn retext(&mut self, scale: f32) {
 		self.text = TextCtx::new_cpu(scale);
 		if let Some(gpu) = &self.gpu {
-			self.text.attach_gpu(
-				&gpu.gfx.device,
-				&gpu.gfx.queue,
-				gpu.gfx.format,
-				&gpu.gfx.loss,
-			);
+			self.text.attach_gpu(&gpu.gfx.device, &gpu.gfx.queue, gpu.gfx.format, &gpu.gfx.loss);
 		}
 		self.chrome = None; // cached chrome buffers are tied to the old FontSystem
 		self.invalidate_prepared(); // fresh atlases have nothing to reuse
@@ -1725,17 +1563,8 @@ impl State {
 	// Swap in `edited` and rebuild what changed from `orig`, such as text metrics,
 	// the wallpaper, or window opacity. Shared by the dialog and the config
 	// reload. `force_bg` reads the image again even if its path didn't change.
-	fn apply_new_settings(
-		&mut self,
-		orig: &config::Settings,
-		edited: config::Settings,
-		force_bg: bool,
-	) {
-		let how = if force_bg {
-			Applied::Reread
-		} else {
-			Applied::Here
-		};
+	fn apply_new_settings(&mut self, orig: &config::Settings, edited: config::Settings, force_bg: bool) {
+		let how = if force_bg { Applied::Reread } else { Applied::Here };
 		self.apply_as(orig, edited, how);
 	}
 
@@ -1813,10 +1642,7 @@ impl State {
 		// asked for while hidden until after the map, too.
 		let mut states: Vec<&[u8]> = Vec::new();
 		if self.maximize_on_reveal {
-			states.extend([
-				b"_NET_WM_STATE_MAXIMIZED_VERT".as_slice(),
-				b"_NET_WM_STATE_MAXIMIZED_HORZ",
-			]);
+			states.extend([b"_NET_WM_STATE_MAXIMIZED_VERT".as_slice(), b"_NET_WM_STATE_MAXIMIZED_HORZ"]);
 		}
 		if self.window.fullscreen().is_some() {
 			states.push(b"_NET_WM_STATE_FULLSCREEN");
@@ -1856,9 +1682,7 @@ impl State {
 		// there panics in wgpu. The loop lets the device go before the retry.
 		if gpu.gfx.lost() {
 			self.gpu = Some(gpu);
-			let wait = self
-				.frame_retry
-				.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+			let wait = self.frame_retry.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
 			idledbg(&format!("frame refused (device lost), again in {wait:?}"));
 			return false;
 		}
@@ -1919,26 +1743,13 @@ impl State {
 
 		// translucent background only when the surface supports it and Transparency
 		// is on, and it only affects the background, never text or chrome
-		let bg_alpha = if gpu.gfx.transparent && cfg.transparent_background {
-			self.opacity()
-		} else {
-			1.0
-		};
+		let bg_alpha = if gpu.gfx.transparent && cfg.transparent_background { self.opacity() } else { 1.0 };
 
 		// Every list below comes out of the last frame's, emptied, and goes back at
 		// the end. `pane_fulls` is what each pane's fill covers: the light-mode
 		// wallpaper draws the fill itself and has to be clipped to it. Cursors are
 		// drawn separately, above the scrim, so its halo can't obscure them.
-		let FrameBufs {
-			mut instances,
-			mut pane_fulls,
-			mut cursors,
-			mut scrim_cursors,
-			mut group_ranges,
-			mut link_ranges,
-			mut cursor_ranges,
-			areas: mut kept_areas,
-		} = std::mem::take(&mut self.frame_bufs);
+		let FrameBufs { mut instances, mut pane_fulls, mut cursors, mut scrim_cursors, mut group_ranges, mut link_ranges, mut cursor_ranges, areas: mut kept_areas } = std::mem::take(&mut self.frame_bufs);
 		// the autoscroll runs every frame, so it goes first in the `||`
 		let mut animating = self.autoscroll_selection(dt) || bell > 0.0;
 		// The outline shares the scrim's source and composite, so the pass runs
@@ -1977,25 +1788,13 @@ impl State {
 			let force = force_rebuild || own;
 			let map = map_rebuild || own;
 			crate::perf::timed(&crate::perf::BUILD_NS, || {
-				pane.build(
-					&mut self.text,
-					dt,
-					bell,
-					force,
-					map,
-					win_focused && *id == active_pane,
-				);
+				pane.build(&mut self.text, dt, bell, force, map, win_focused && *id == active_pane);
 			});
 			if pane.scroll.animating() || pane.cursor_animating {
 				animating = true;
 			}
 			let draw = pane.draw();
-			instances.push(RectInstance {
-				pos: [pane.full.x, pane.full.y],
-				size: [pane.full.w, pane.full.h],
-				color: crate::gfx::see_through(pane_bg),
-				..Default::default()
-			});
+			instances.push(RectInstance { pos: [pane.full.x, pane.full.y], size: [pane.full.w, pane.full.h], color: crate::gfx::see_through(pane_bg), ..Default::default() });
 			pane_fulls.push(pane.full);
 			if let Some(cursor_quad) = draw.cursor {
 				cursors.push((rect, cursor_quad));
@@ -2046,12 +1845,7 @@ impl State {
 		{
 			let mut color = config::srgb_f32(config::DROP_TARGET);
 			color[3] = 0.30;
-			instances.push(RectInstance {
-				pos: [p.full.x, p.full.y],
-				size: [p.full.w, p.full.h],
-				color,
-				..Default::default()
-			});
+			instances.push(RectInstance { pos: [p.full.x, p.full.y], size: [p.full.w, p.full.h], color, ..Default::default() });
 		}
 		let ring_end = instances.len() as u32;
 
@@ -2126,8 +1920,7 @@ impl State {
 			// Alt held alone (no dropdown open): underline each title's
 			// accelerator letter, like the open-dropdown items do (press the
 			// letter to open).
-			let marks =
-				bar_title_underlines(input::opens_menu_title(self.mods), self.bar_open, &MENU_BAR);
+			let marks = bar_title_underlines(input::opens_menu_title(self.mods), self.bar_open, &MENU_BAR);
 			if !marks.is_empty() {
 				let attrs = crate::text::ui_attrs();
 				let rule = self.text.dip(CHROME_HAIRLINE);
@@ -2139,13 +1932,7 @@ impl State {
 					};
 					let mut buf = [0u8; 4];
 					let letter_w = self.text.measure_ui_text(c.encode_utf8(&mut buf), &attrs);
-					instances.push(rect_inst(
-						x + title_pad,
-						underline_y,
-						letter_w,
-						rule,
-						menu_fg_rgb,
-					));
+					instances.push(rect_inst(x + title_pad, underline_y, letter_w, rule, menu_fg_rgb));
 				}
 			}
 			// always-visible copy-mode checkboxes (right side): outlines always,
@@ -2153,38 +1940,17 @@ impl State {
 			// is never hidden. Dimmed when this window isn't focused, since the flags
 			// stay set but nothing copies until it has the focus again.
 			let fp = self.tabs.cur().panes.get(&self.tabs.cur().focused);
-			let checked = [
-				fp.is_some_and(|p| p.copy_select),
-				fp.is_some_and(|p| p.copy_output),
-			];
+			let checked = [fp.is_some_and(|p| p.copy_select), fp.is_some_and(|p| p.copy_output)];
 			if let Some(cb) = &copyboxes {
 				let border = copy_dim(menu_border_rgb, self.focused);
 				let fill = copy_dim(menu_fg_rgb, self.focused);
 				let box_rule = self.text.dip(CHROME_HAIRLINE);
 				let tick_inset = self.text.dip(COPYBOX_TICK_INSET);
 				for (checkbox, on) in cb.boxes.iter().zip(checked) {
-					instances.push(rect_inst(
-						checkbox.x - box_rule,
-						checkbox.y - box_rule,
-						checkbox.w + 2.0 * box_rule,
-						checkbox.h + 2.0 * box_rule,
-						border,
-					));
-					instances.push(rect_inst(
-						checkbox.x,
-						checkbox.y,
-						checkbox.w,
-						checkbox.h,
-						config::TAB_BAR_BG,
-					));
+					instances.push(rect_inst(checkbox.x - box_rule, checkbox.y - box_rule, checkbox.w + 2.0 * box_rule, checkbox.h + 2.0 * box_rule, border));
+					instances.push(rect_inst(checkbox.x, checkbox.y, checkbox.w, checkbox.h, config::TAB_BAR_BG));
 					if on {
-						instances.push(rect_inst(
-							checkbox.x + tick_inset,
-							checkbox.y + tick_inset,
-							checkbox.w - 2.0 * tick_inset,
-							checkbox.h - 2.0 * tick_inset,
-							fill,
-						));
+						instances.push(rect_inst(checkbox.x + tick_inset, checkbox.y + tick_inset, checkbox.w - 2.0 * tick_inset, checkbox.h - 2.0 * tick_inset, fill));
 					}
 				}
 			}
@@ -2223,20 +1989,10 @@ impl State {
 			let mut x = 0.0;
 			for (slot, tab_w) in self.tab_layout.widths.iter().copied().enumerate() {
 				let i = first + slot;
-				let color = if i == self.tabs.active {
-					config::TAB_ACTIVE
-				} else {
-					config::TAB_INACTIVE
-				};
+				let color = if i == self.tabs.active { config::TAB_ACTIVE } else { config::TAB_INACTIVE };
 				// the button sits inside the bar: a gap each side of the seam, and it
 				// runs to the bar's bottom edge less one hairline
-				instances.push(rect_inst(
-					x + tab_gap,
-					btn_y,
-					tab_w - 2.0 * tab_gap,
-					btn_h,
-					color,
-				));
+				instances.push(rect_inst(x + tab_gap, btn_y, tab_w - 2.0 * tab_gap, btn_h, color));
 				// A rename in progress draws a text box in place of the label: a
 				// recessed well, an outline in the focus color, then the selection
 				// and the caret. All of it goes down before the text pass, so the
@@ -2244,28 +2000,9 @@ impl State {
 				if let Some((edit_tab, sel_from, sel_to, caret)) = edit_marks
 					&& i == edit_tab
 				{
-					let field = tab_edit_box(
-						x,
-						tab_w,
-						tab_bar_y,
-						tab_h,
-						self.text.ui_line_h,
-						self.text.scale,
-					);
-					instances.push(rect_inst(
-						field.x - cb_rule,
-						field.y - cb_rule,
-						field.w + 2.0 * cb_rule,
-						field.h + 2.0 * cb_rule,
-						cfg.highlight,
-					));
-					instances.push(rect_inst(
-						field.x,
-						field.y,
-						field.w,
-						field.h,
-						mix_rgb(color, [0x00, 0x00, 0x00], 0.45),
-					));
+					let field = tab_edit_box(x, tab_w, tab_bar_y, tab_h, self.text.ui_line_h, self.text.scale);
+					instances.push(rect_inst(field.x - cb_rule, field.y - cb_rule, field.w + 2.0 * cb_rule, field.h + 2.0 * cb_rule, cfg.highlight));
+					instances.push(rect_inst(field.x, field.y, field.w, field.h, mix_rgb(color, [0x00, 0x00, 0x00], 0.45)));
 					let text_x = field.x + edit_pad;
 					let (top, h) = (field.y + cb_rule, field.h - 2.0 * cb_rule);
 					let inside = |at: f32| (text_x + at).clamp(field.x, field.x + field.w);
@@ -2273,25 +2010,13 @@ impl State {
 						let (from, to) = (inside(sel_from), inside(sel_to));
 						instances.push(rect_inst(from, top, to - from, h, config::SELECTION_BG));
 					}
-					instances.push(rect_inst(
-						inside(caret).min(field.x + field.w - caret_w),
-						top,
-						caret_w,
-						h,
-						x_rgb,
-					));
+					instances.push(rect_inst(inside(caret).min(field.x + field.w - caret_w), top, caret_w, h, x_rgb));
 				}
 				// close button box: a 1px outline, as a border rect and an inner fill.
 				// The active tab's box leans faintly toward a pastel red, so the
 				// current tab stands out without a clashing accent.
 				let cb = tab_close_box(x, tab_w, tab_bar_y, tab_h, self.text.scale);
-				instances.push(rect_inst(
-					cb.x - cb_rule,
-					cb.y - cb_rule,
-					cb.w + 2.0 * cb_rule,
-					cb.h + 2.0 * cb_rule,
-					menu_border_rgb,
-				));
+				instances.push(rect_inst(cb.x - cb_rule, cb.y - cb_rule, cb.w + 2.0 * cb_rule, cb.h + 2.0 * cb_rule, menu_border_rgb));
 				let box_fill = if self.tab_close_arm == Some(i) {
 					// held down: light the button (press feedback; closes on release)
 					mix_rgb(color, [0xff, 0xff, 0xff], 0.28)
@@ -2317,35 +2042,17 @@ impl State {
 			for menu in root.popups() {
 				let popup_h = menu.height();
 				let border = self.text.dip(CHROME_HAIRLINE);
-				instances.push(rect_inst(
-					menu.x - border,
-					menu.y - border,
-					menu.w + 2.0 * border,
-					popup_h + 2.0 * border,
-					menu_border_rgb,
-				));
+				instances.push(rect_inst(menu.x - border, menu.y - border, menu.w + 2.0 * border, popup_h + 2.0 * border, menu_border_rgb));
 				instances.push(rect_inst(menu.x, menu.y, menu.w, popup_h, menu_bg_rgb));
 				if let Some(i) = menu.hover {
-					instances.push(rect_inst(
-						menu.x,
-						menu.row_top(i),
-						menu.w,
-						menu.item_h,
-						menu_hover_rgb,
-					));
+					instances.push(rect_inst(menu.x, menu.row_top(i), menu.w, menu.item_h, menu_hover_rgb));
 				}
 				// faint separator lines between logical groups
 				for (i, entry) in menu.entries.iter().enumerate() {
 					if matches!(entry, Entry::Sep) {
 						let sep_y = menu.row_top(i) + menu.sep_h / 2.0;
 						let pad_x = self.text.dip(config::MENU_PAD_X);
-						instances.push(rect_inst(
-							menu.x + pad_x,
-							sep_y,
-							menu.w - pad_x * 2.0,
-							self.text.dip(CHROME_HAIRLINE),
-							config::menu_sep_of(menu_bg_rgb),
-						));
+						instances.push(rect_inst(menu.x + pad_x, sep_y, menu.w - pad_x * 2.0, self.text.dip(CHROME_HAIRLINE), config::menu_sep_of(menu_bg_rgb)));
 					}
 				}
 				// the arrow marking a row that opens a submenu, drawn rather than set
@@ -2356,12 +2063,7 @@ impl State {
 					if matches!(entry, Entry::Sub { .. }) {
 						let h = (menu.item_h * 0.38).round().max(4.0);
 						let w = (h * 0.62).round().max(3.0);
-						let arrow = Rect {
-							x: menu.x + menu.w - self.text.dip(config::MENU_PAD_X) - w,
-							y: menu.row_top(i) + (menu.item_h - h) / 2.0,
-							w,
-							h,
-						};
+						let arrow = Rect { x: menu.x + menu.w - self.text.dip(config::MENU_PAD_X) - w, y: menu.row_top(i) + (menu.item_h - h) / 2.0, w, h };
 						instances.push(sub_arrow_inst(arrow, menu_fg_rgb));
 					}
 				}
@@ -2370,25 +2072,16 @@ impl State {
 				let acc_attrs = crate::text::ui_attrs();
 				let line_h = self.text.ui_line_h;
 				let acc_rule = self.text.dip(CHROME_HAIRLINE);
-				let acc_x =
-					menu.x + self.text.dip(config::MENU_PAD_X) + self.text.dip(config::MENU_GUTTER);
+				let acc_x = menu.x + self.text.dip(config::MENU_PAD_X) + self.text.dip(config::MENU_GUTTER);
 				for (i, entry) in menu.entries.iter().enumerate() {
 					if let Some((label, pos)) = entry_accel(entry)
 						&& let Some(c) = label[pos..].chars().next()
 					{
 						let prefix_w = self.text.measure_ui_text(&label[..pos], &acc_attrs);
 						let mut buf = [0u8; 4];
-						let letter_w = self
-							.text
-							.measure_ui_text(c.encode_utf8(&mut buf), &acc_attrs);
+						let letter_w = self.text.measure_ui_text(c.encode_utf8(&mut buf), &acc_attrs);
 						let top = menu.row_top(i) + (menu.item_h - line_h) / 2.0;
-						instances.push(rect_inst(
-							acc_x + prefix_w,
-							top + line_h - self.text.dip(MENU_ACCEL_DROP),
-							letter_w,
-							acc_rule,
-							menu_fg_rgb,
-						));
+						instances.push(rect_inst(acc_x + prefix_w, top + line_h - self.text.dip(MENU_ACCEL_DROP), letter_w, acc_rule, menu_fg_rgb));
 					}
 				}
 			}
@@ -2407,56 +2100,28 @@ impl State {
 		let bench_banner = self.bench_layout();
 		// The words are borrowed from where they're kept, so nothing past here
 		// may take `&mut self`, only its fields.
-		let tip_layout = tip_at.zip(self.tab_tip.as_ref()).map(|(at, tip)| Overlay {
-			at,
-			words: OverlayWords::Kept(tip.shown()),
-		});
-		let menu_tip = menu_tip_at.map(|at| Overlay {
-			at,
-			words: OverlayWords::Kept(self.menu_tip_text.lines()),
-		});
+		let tip_layout = tip_at.zip(self.tab_tip.as_ref()).map(|(at, tip)| Overlay { at, words: OverlayWords::Kept(tip.shown()) });
+		let menu_tip = menu_tip_at.map(|at| Overlay { at, words: OverlayWords::Kept(self.menu_tip_text.lines()) });
 		let border = self.text.dip(CHROME_HAIRLINE);
-		let tip_range = (tip_layout.is_some() || menu_tip.is_some() || bench_banner.is_some())
-			.then(|| {
-				let start = instances.len() as u32;
-				// the banner dims the whole window first, which is the visible half of
-				// "this window is busy"
-				if bench_banner.is_some() {
-					instances.push(RectInstance {
-						pos: [0.0, 0.0],
-						size: [gpu.gfx.config.width as f32, gpu.gfx.config.height as f32],
-						color: [0.0, 0.0, 0.0, BENCH_SCRIM_ALPHA],
-						..Default::default()
-					});
-				}
-				// Flyover help has its own fill, a warmed lift off the menu color, so a
-				// tip doesn't read as more of the chrome it hangs off. The banner is
-				// a modal notice rather than a tip, so it keeps the menu's.
-				let tip_edge = config::tip_border_of(menu_bg_rgb);
-				let tip_fill = config::tip_bg_of(menu_bg_rgb);
-				let boxes = tip_layout
-					.iter()
-					.chain(menu_tip.iter())
-					.map(|tip| (tip.rect(), tip_edge, tip_fill))
-					.chain(
-						bench_banner
-							.iter()
-							.map(|banner| (banner.rect(), menu_border_rgb, menu_bg_rgb)),
-					);
-				for (box_rect, edge, fill) in boxes {
-					instances.push(rect_inst(
-						box_rect.x - border,
-						box_rect.y - border,
-						box_rect.w + 2.0 * border,
-						box_rect.h + 2.0 * border,
-						edge,
-					));
-					instances.push(rect_inst(
-						box_rect.x, box_rect.y, box_rect.w, box_rect.h, fill,
-					));
-				}
-				(start, instances.len() as u32)
-			});
+		let tip_range = (tip_layout.is_some() || menu_tip.is_some() || bench_banner.is_some()).then(|| {
+			let start = instances.len() as u32;
+			// the banner dims the whole window first, which is the visible half of
+			// "this window is busy"
+			if bench_banner.is_some() {
+				instances.push(RectInstance { pos: [0.0, 0.0], size: [gpu.gfx.config.width as f32, gpu.gfx.config.height as f32], color: [0.0, 0.0, 0.0, BENCH_SCRIM_ALPHA], ..Default::default() });
+			}
+			// Flyover help has its own fill, a warmed lift off the menu color, so a
+			// tip doesn't read as more of the chrome it hangs off. The banner is
+			// a modal notice rather than a tip, so it keeps the menu's.
+			let tip_edge = config::tip_border_of(menu_bg_rgb);
+			let tip_fill = config::tip_bg_of(menu_bg_rgb);
+			let boxes = tip_layout.iter().chain(menu_tip.iter()).map(|tip| (tip.rect(), tip_edge, tip_fill)).chain(bench_banner.iter().map(|banner| (banner.rect(), menu_border_rgb, menu_bg_rgb)));
+			for (box_rect, edge, fill) in boxes {
+				instances.push(rect_inst(box_rect.x - border, box_rect.y - border, box_rect.w + 2.0 * border, box_rect.h + 2.0 * border, edge));
+				instances.push(rect_inst(box_rect.x, box_rect.y, box_rect.w, box_rect.h, fill));
+			}
+			(start, instances.len() as u32)
+		});
 
 		let margin = self.text.margin;
 		let menu_fg = GColor::rgb(menu_fg_rgb[0], menu_fg_rgb[1], menu_fg_rgb[2]);
@@ -2467,18 +2132,10 @@ impl State {
 		};
 		// tab titles, as measured above. Each is fitted to the space its own tab
 		// has, which is where a path gets shortened.
-		let (tab_widths, tab_titles): (&[f32], &[String]) = if self.tab_bar_visible() {
-			(&self.tab_layout.widths, &self.tab_layout.labels)
-		} else {
-			(&[], &[])
-		};
+		let (tab_widths, tab_titles): (&[f32], &[String]) = if self.tab_bar_visible() { (&self.tab_layout.widths, &self.tab_layout.labels) } else { (&[], &[]) };
 		// keep the shaped chrome text current (see ChromeCache). A color change
 		// rebuilds it all, and otherwise only changed tab titles are shaped again.
-		if self
-			.chrome
-			.as_ref()
-			.is_some_and(|cache| cache.menu_fg != menu_fg_rgb)
-		{
+		if self.chrome.as_ref().is_some_and(|cache| cache.menu_fg != menu_fg_rgb) {
 			self.chrome = None;
 		}
 		if self.chrome.is_none() {
@@ -2500,11 +2157,7 @@ impl State {
 					shape_ui(&mut self.text, title, w, menu_h, menu_fg)
 				})
 				.collect();
-			self.chrome = Some(ChromeCache {
-				menu_fg: menu_fg_rgb,
-				menubar,
-				tabs: Vec::new(),
-			});
+			self.chrome = Some(ChromeCache { menu_fg: menu_fg_rgb, menubar, tabs: Vec::new() });
 			self.chrome_rev = self.chrome_rev.wrapping_add(1);
 		}
 		{
@@ -2517,22 +2170,14 @@ impl State {
 				let title_w = tab_title_w(tab_widths[i], scale);
 				// an unchanged title in an unchanged tab keeps its shaped buffer;
 				// a width change re-wraps it
-				if cache.tabs.get(i).is_some_and(|(cached, cached_w, _)| {
-					cached == title && (*cached_w - title_w).abs() < 0.01
-				}) {
+				if cache.tabs.get(i).is_some_and(|(cached, cached_w, _)| cached == title && (*cached_w - title_w).abs() < 0.01) {
 					continue;
 				}
 				reshaped = true;
 				let mut buf = self.text.new_ui_buffer(title_w, tab_h);
 				let mut attrs = crate::text::ui_attrs();
 				attrs.color_opt = Some(menu_fg);
-				buf.set_text(
-					&mut self.text.font_system,
-					title,
-					&attrs,
-					Shaping::Advanced,
-					None,
-				);
+				buf.set_text(&mut self.text.font_system, title, &attrs, Shaping::Advanced, None);
 				buf.shape_until_scroll(&mut self.text.font_system, false);
 				if i < cache.tabs.len() {
 					cache.tabs[i] = (title.clone(), title_w, buf);
@@ -2581,13 +2226,7 @@ impl State {
 						1u8.hash(&mut hasher);
 						s.has_band.hash(&mut hasher);
 						s.has_top_band.hash(&mut hasher);
-						for v in [
-							s.band_top,
-							s.split_y,
-							s.top_split_y,
-							s.region_clip_t,
-							s.region_clip_b,
-						] {
+						for v in [s.band_top, s.split_y, s.top_split_y, s.region_clip_t, s.region_clip_b] {
 							v.to_bits().hash(&mut hasher);
 						}
 					}
@@ -2604,29 +2243,18 @@ impl State {
 		// the menu and tab bars and would shift cell backgrounds and the cursor
 		// down from the text.
 		let (frame_w, frame_h) = (gpu.gfx.config.width as f32, gpu.gfx.config.height as f32);
-		self.text
-			.update_viewport(&gpu.gfx.queue, gpu.gfx.config.width, gpu.gfx.config.height);
-		self.text.set_text_blend(
-			&gpu.gfx.queue,
-			crate::text::text_blend(cfg.fg, cfg.bg, cfg.text_dark_on_light),
-		);
+		self.text.update_viewport(&gpu.gfx.queue, gpu.gfx.config.width, gpu.gfx.config.height);
+		self.text.set_text_blend(&gpu.gfx.queue, crate::text::text_blend(cfg.fg, cfg.bg, cfg.text_dark_on_light));
 		gpu.rects.set_resolution(&gpu.gfx.queue, frame_w, frame_h);
 		// How the picture is mixed with the background. Light mode needs a different
 		// blend, not a different number (visibility.rs). Re-read per frame: the mode
 		// can flip under a running window and nothing reloads a wallpaper for it.
-		let wp_mix = gpu.wallpaper_img.as_ref().map(|img| {
-			crate::visibility::wallpaper_mix(
-				&cfg,
-				img.opacity(),
-				cfg.wallpaper_summary.map(|s| s.picture()),
-			)
-		});
+		let wp_mix = gpu.wallpaper_img.as_ref().map(|img| crate::visibility::wallpaper_mix(&cfg, img.opacity(), cfg.wallpaper_summary.map(|s| s.picture())));
 		let wp_writes_fill = wp_mix.is_some_and(|m| m.perceptual);
 		if let (Some(img), Some(mix)) = (&gpu.wallpaper_img, wp_mix) {
 			img.set_look(&gpu.gfx.queue, frame_w, frame_h, mix, pane_bg);
 		}
-		gpu.rects
-			.upload(&gpu.gfx.device, &gpu.gfx.queue, &instances);
+		gpu.rects.upload(&gpu.gfx.device, &gpu.gfx.queue, &instances);
 
 		// Nothing that feeds the text changed, so glyphon's prepared buffers from
 		// the last frame still describe this one exactly. Skipping the area build
@@ -2634,10 +2262,7 @@ impl State {
 		// cache lookups are over half the cost of a frame, and an idle cursor
 		// pulse repeats them 30x a second for no visible change.
 		if !text_same {
-			#[allow(
-				clippy::unwrap_used,
-				reason = "set at the top of the frame when it was None"
-			)]
+			#[allow(clippy::unwrap_used, reason = "set at the top of the frame when it was None")]
 			let chrome = self.chrome.as_ref().unwrap();
 			let mut areas = crate::text::reuse_areas(std::mem::take(&mut kept_areas));
 			for p in self.tabs.cur().panes.values() {
@@ -2649,27 +2274,12 @@ impl State {
 						if let Some(strip) = p.strip_text_area(slide, margin) {
 							areas.push(strip);
 						}
-						areas.push(p.text_area_band(
-							draw.top,
-							margin,
-							slide.region_clip_t,
-							slide.region_clip_b,
-						));
+						areas.push(p.text_area_band(draw.top, margin, slide.region_clip_t, slide.region_clip_b));
 						if slide.has_top_band {
-							areas.push(p.text_area_band(
-								slide.band_top,
-								margin,
-								f32::MIN,
-								slide.top_split_y,
-							));
+							areas.push(p.text_area_band(slide.band_top, margin, f32::MIN, slide.top_split_y));
 						}
 						if slide.has_band {
-							areas.push(p.text_area_band(
-								slide.band_top,
-								margin,
-								slide.split_y,
-								f32::MAX,
-							));
+							areas.push(p.text_area_band(slide.band_top, margin, slide.split_y, f32::MAX));
 						}
 					}
 					None => areas.push(p.text_area(draw.top, margin)),
@@ -2679,31 +2289,12 @@ impl State {
 			}
 			if self.menu_bar {
 				for (i, buf) in chrome.menubar.iter().enumerate() {
-					let Some((left, left_bound, right_bound, top)) =
-						menubar_text_slot(&self.text, menu_h, &bar_layout, copyboxes.as_ref(), i)
-					else {
+					let Some((left, left_bound, right_bound, top)) = menubar_text_slot(&self.text, menu_h, &bar_layout, copyboxes.as_ref(), i) else {
 						continue;
 					};
 					// trailing buffers are the copy-mode labels, dimmed when unfocused
-					let color = if i < bar_layout.len() {
-						menu_fg
-					} else {
-						copy_label_fg
-					};
-					areas.push(TextArea {
-						buffer: buf,
-						left,
-						top,
-						scale: 1.0,
-						bounds: TextBounds {
-							left: left_bound as i32,
-							top: 0,
-							right: right_bound as i32,
-							bottom: menu_h as i32,
-						},
-						default_color: color,
-						custom_glyphs: &[],
-					});
+					let color = if i < bar_layout.len() { menu_fg } else { copy_label_fg };
+					areas.push(TextArea { buffer: buf, left, top, scale: 1.0, bounds: TextBounds { left: left_bound as i32, top: 0, right: right_bound as i32, bottom: menu_h as i32 }, default_color: color, custom_glyphs: &[] });
 				}
 			}
 			let editing = self.tab_edit.as_ref().map(|e| e.tab);
@@ -2713,22 +2304,9 @@ impl State {
 				let close_x = x + tab_w - self.text.dip(TAB_CLOSE_W);
 				// A tab being renamed reads inside its own box, at the same left
 				// inset as the label it replaced.
-				let field = (editing == Some(self.tab_layout.first + slot)).then(|| {
-					tab_edit_box(
-						x,
-						tab_w,
-						tab_bar_y,
-						tab_h,
-						self.text.ui_line_h,
-						self.text.scale,
-					)
-				});
+				let field = (editing == Some(self.tab_layout.first + slot)).then(|| tab_edit_box(x, tab_w, tab_bar_y, tab_h, self.text.ui_line_h, self.text.scale));
 				let (left, clip_l, clip_r) = match field {
-					Some(f) => (
-						f.x + self.text.dip(TAB_EDIT_PAD),
-						f.x + self.text.dip(TAB_EDIT_PAD),
-						f.x + f.w - self.text.dip(TAB_EDIT_PAD),
-					),
+					Some(f) => (f.x + self.text.dip(TAB_EDIT_PAD), f.x + self.text.dip(TAB_EDIT_PAD), f.x + f.w - self.text.dip(TAB_EDIT_PAD)),
 					None => (x + self.text.dip(TAB_TITLE_PAD), x, close_x),
 				};
 				let (btn_y, btn_h) = tab_button_v(tab_bar_y, tab_h, self.text.scale);
@@ -2751,9 +2329,7 @@ impl State {
 				x += tab_w;
 			}
 
-			let prepared = self
-				.text
-				.prepare(&gpu.gfx.device, &gpu.gfx.queue, areas.drain(..));
+			let prepared = self.text.prepare(&gpu.gfx.device, &gpu.gfx.queue, areas.drain(..));
 			kept_areas = crate::text::reuse_areas(areas);
 			if let Err(e) = prepared {
 				// Atlas full, after a long session of varied glyphs. The usual trim is
@@ -2761,10 +2337,7 @@ impl State {
 				// the atlas never recovers and all text goes black for good. Cursor and
 				// cell background quads use a separate renderer, so they still show.
 				// Trimming now frees space, and the next frame prepares again with room.
-				eprintln!(
-					"{}: text prepare failed; trimming atlas to recover: {e:?}",
-					config::APP_NAME
-				);
+				eprintln!("{}: text prepare failed; trimming atlas to recover: {e:?}", config::APP_NAME);
 				self.text.trim_atlas();
 				self.text_sig = None;
 				self.scrim_sig = None;
@@ -2786,27 +2359,12 @@ impl State {
 							if let Some(strip) = p.strip_text_area(slide, margin) {
 								scrim_areas.push(strip);
 							}
-							scrim_areas.push(p.scrim_text_area_band(
-								draw.top,
-								margin,
-								slide.region_clip_t,
-								slide.region_clip_b,
-							));
+							scrim_areas.push(p.scrim_text_area_band(draw.top, margin, slide.region_clip_t, slide.region_clip_b));
 							if slide.has_top_band {
-								scrim_areas.push(p.scrim_text_area_band(
-									slide.band_top,
-									margin,
-									f32::MIN,
-									slide.top_split_y,
-								));
+								scrim_areas.push(p.scrim_text_area_band(slide.band_top, margin, f32::MIN, slide.top_split_y));
 							}
 							if slide.has_band {
-								scrim_areas.push(p.scrim_text_area_band(
-									slide.band_top,
-									margin,
-									slide.split_y,
-									f32::MAX,
-								));
+								scrim_areas.push(p.scrim_text_area_band(slide.band_top, margin, slide.split_y, f32::MAX));
 							}
 						}
 						None => scrim_areas.push(p.scrim_text_area(draw.top, margin)),
@@ -2814,15 +2372,10 @@ impl State {
 					scrim_areas.extend(p.glyph_areas(margin));
 					scrim_areas.extend(p.emoji_area(margin));
 				}
-				let prepared =
-					self.text
-						.prepare_scrim(&gpu.gfx.device, &gpu.gfx.queue, scrim_areas.drain(..));
+				let prepared = self.text.prepare_scrim(&gpu.gfx.device, &gpu.gfx.queue, scrim_areas.drain(..));
 				kept_areas = crate::text::reuse_areas(scrim_areas);
 				if let Err(e) = prepared {
-					eprintln!(
-						"{}: scrim prepare failed; trimming atlas to recover: {e:?}",
-						config::APP_NAME
-					);
+					eprintln!("{}: scrim prepare failed; trimming atlas to recover: {e:?}", config::APP_NAME);
 					self.text.trim_atlas();
 					self.text_sig = None;
 					self.scrim_sig = None;
@@ -2839,11 +2392,7 @@ impl State {
 		// menu's geometry, labels, and color. Skip only alongside text_same. The
 		// end-of-frame atlas trim, which runs when !text_same, drops glyphs the
 		// kept overlay vertex buffers still use, so a trim frame has to prepare.
-		if self.menu.is_some()
-			|| tip_layout.is_some()
-			|| menu_tip.is_some()
-			|| bench_banner.is_some()
-		{
+		if self.menu.is_some() || tip_layout.is_some() || menu_tip.is_some() || bench_banner.is_some() {
 			let overlay_sig = {
 				use std::hash::{Hash, Hasher};
 				let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -2894,13 +2443,7 @@ impl State {
 					let line_h = self.text.cell_h;
 					for (left, top, line) in tip.placed() {
 						let mut buf = self.text.new_buffer(tip.rect().w, line_h);
-						buf.set_text(
-							&mut self.text.font_system,
-							line,
-							&tip_attrs,
-							Shaping::Advanced,
-							None,
-						);
+						buf.set_text(&mut self.text.font_system, line, &tip_attrs, Shaping::Advanced, None);
 						buf.shape_until_scroll(&mut self.text.font_system, false);
 						tip_specs.push((left, top, buf));
 					}
@@ -2908,24 +2451,13 @@ impl State {
 				// a menu row's tip and the benchmark banner shape in the interface
 				// font, like the rows and the chrome they sit among. The tip takes the
 				// tip's text color with its box; the banner stays with the menu.
-				let ui_lines = menu_tip
-					.iter()
-					.map(|tip| (tip, tip_col))
-					.chain(bench_banner.iter().map(|banner| (banner, attrs.color_opt)));
+				let ui_lines = menu_tip.iter().map(|tip| (tip, tip_col)).chain(bench_banner.iter().map(|banner| (banner, attrs.color_opt)));
 				for (overlay, color) in ui_lines {
 					let mut attrs = attrs.clone();
 					attrs.color_opt = color;
 					for (left, top, line) in overlay.placed() {
-						let mut buf = self
-							.text
-							.new_ui_buffer(overlay.rect().w, self.text.ui_line_h);
-						buf.set_text(
-							&mut self.text.font_system,
-							line,
-							&attrs,
-							Shaping::Advanced,
-							None,
-						);
+						let mut buf = self.text.new_ui_buffer(overlay.rect().w, self.text.ui_line_h);
+						buf.set_text(&mut self.text.font_system, line, &attrs, Shaping::Advanced, None);
 						buf.shape_until_scroll(&mut self.text.font_system, false);
 						tip_specs.push((left, top, buf));
 					}
@@ -2937,32 +2469,14 @@ impl State {
 						};
 						let top = menu.row_top(i) + (menu.item_h - self.text.ui_line_h) / 2.0;
 						let mut buf = self.text.new_ui_buffer(menu.w, menu.item_h);
-						buf.set_text(
-							&mut self.text.font_system,
-							label,
-							&attrs,
-							Shaping::Advanced,
-							None,
-						);
+						buf.set_text(&mut self.text.font_system, label, &attrs, Shaping::Advanced, None);
 						buf.shape_until_scroll(&mut self.text.font_system, false);
 						let pad_x = self.text.dip(config::MENU_PAD_X);
 						let gutter = self.text.dip(config::MENU_GUTTER);
 						specs.push((menu.x + pad_x + gutter, top, buf));
-						if matches!(
-							entry,
-							Entry::Item {
-								check: Some(true),
-								..
-							}
-						) {
+						if matches!(entry, Entry::Item { check: Some(true), .. }) {
 							let mut check_buf = self.text.new_ui_buffer(gutter, menu.item_h);
-							check_buf.set_text(
-								&mut self.text.font_system,
-								"\u{2713}",
-								&attrs,
-								Shaping::Advanced,
-								None,
-							);
+							check_buf.set_text(&mut self.text.font_system, "\u{2713}", &attrs, Shaping::Advanced, None);
 							check_buf.shape_until_scroll(&mut self.text.font_system, false);
 							specs.push((menu.x + pad_x, top, check_buf));
 						}
@@ -2971,9 +2485,7 @@ impl State {
 				let (sw, sh) = (gpu.gfx.config.width as i32, gpu.gfx.config.height as i32);
 				if !specs.is_empty() {
 					let menus = spec_areas(&specs, (sw, sh), menu_fg);
-					let _ = self
-						.text
-						.prepare_overlay(&gpu.gfx.device, &gpu.gfx.queue, menus);
+					let _ = self.text.prepare_overlay(&gpu.gfx.device, &gpu.gfx.queue, menus);
 				}
 				if !tip_specs.is_empty() {
 					let tips = spec_areas(&tip_specs, (sw, sh), menu_fg);
@@ -2991,21 +2503,14 @@ impl State {
 				// a frame that kept failing to acquire kept every one of them. A Mac
 				// lost tens of MB a second that way, until the driver hung.
 				gpu.gfx.queue.submit(std::iter::empty());
-				if !self.revealed
-					&& reveal_due(
-						false,
-						Instant::now() >= self.reveal_deadline,
-						why == NoFrame::Occluded,
-					) {
+				if !self.revealed && reveal_due(false, Instant::now() >= self.reveal_deadline, why == NoFrame::Occluded) {
 					self.reveal_window();
 				}
 				// The pass already cleared what asked for this frame, so it's asked for
 				// here or nothing asks again until the desktop does (a busy or full
 				// GPU times out the acquire). The backoff paces the retry, not the
 				// animation, so a surface that keeps refusing can't spin.
-				let wait =
-					self.frame_retry
-						.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+				let wait = self.frame_retry.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
 				idledbg(&format!("frame refused ({why:?}), again in {wait:?}"));
 				crate::perf::allocs_note("frame refused");
 				return false;
@@ -3014,12 +2519,7 @@ impl State {
 		crate::perf::since(&crate::perf::ACQUIRE_NS, acquire);
 		let encode = crate::perf::mark();
 		let view = gpu.gfx.frame_view(&frame);
-		let mut encoder = gpu
-			.gfx
-			.device
-			.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-				label: Some("frame"),
-			});
+		let mut encoder = gpu.gfx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("frame") });
 
 		// Text readability scrim: build the per-pixel color map, render the prepared
 		// text to the scrim texture, blur it, then composite under the crisp text.
@@ -3032,16 +2532,7 @@ impl State {
 		// and the same alpha moves that much further than in dark mode, so the
 		// composite redraws each alpha to match (visibility.rs). None in dark mode
 		// and with no picture up.
-		let halo_match = gpu.wallpaper_img.as_ref().and_then(|img| {
-			self.halo_memo.get(
-				&cfg,
-				img.opacity(),
-				cfg.wallpaper_summary.map(|s| s.picture()),
-				cfg.wallpaper_summary
-					.as_ref()
-					.map_or(&[][..], |s| &s.spread[..]),
-			)
-		});
+		let halo_match = gpu.wallpaper_img.as_ref().and_then(|img| self.halo_memo.get(&cfg, img.opacity(), cfg.wallpaper_summary.map(|s| s.picture()), cfg.wallpaper_summary.as_ref().map_or(&[][..], |s| &s.spread[..])));
 		// distance paths measure the halo extent in px; keep it a touch wider than
 		// the (sigma-based) gaussian look so switching functions doesn't shrink it.
 		let scrim_ext = crate::scrim::clamp_ext(cfg.text_scrim_radius * 2.0);
@@ -3055,69 +2546,24 @@ impl State {
 		let blur_cached = scrim_cached && !cfg.cursor_scrim;
 		if scrim_on {
 			if !scrim_cached {
-				gpu.scrim.render_bgcolor(
-					&gpu.gfx.device,
-					&gpu.gfx.queue,
-					&mut encoder,
-					&instances[under_len as usize..ring_start as usize],
-					config::srgb_f32(cfg.bg),
-				);
+				gpu.scrim.render_bgcolor(&gpu.gfx.device, &gpu.gfx.queue, &mut encoder, &instances[under_len as usize..ring_start as usize], config::srgb_f32(cfg.bg));
 			}
 			if cfg.cursor_scrim || cfg.cursor_outline {
-				gpu.scrim
-					.upload_cursors(&gpu.gfx.device, &gpu.gfx.queue, &scrim_cursors);
+				gpu.scrim.upload_cursors(&gpu.gfx.device, &gpu.gfx.queue, &scrim_cursors);
 			}
 			if !scrim_cached {
-				let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					label: Some("scrim text"),
-					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-						view: gpu.scrim.text_view(),
-						resolve_target: None,
-						depth_slice: None,
-						ops: wgpu::Operations {
-							load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-							store: wgpu::StoreOp::Store,
-						},
-					})],
-					depth_stencil_attachment: None,
-					timestamp_writes: None,
-					occlusion_query_set: None,
-					multiview_mask: None,
-				});
+				let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor { label: Some("scrim text"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: gpu.scrim.text_view(), resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None });
 				let _ = self.text.render_scrim(&mut pass);
 			}
 			// cursor coverage in its own texture, kept apart from the text so the
 			// halo and the outline can each include it. Skipped, full-res clear
 			// included, when neither flag samples it.
 			if cfg.cursor_scrim || cfg.cursor_outline {
-				let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					label: Some("scrim cursor"),
-					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-						view: gpu.scrim.cursor_view(),
-						resolve_target: None,
-						depth_slice: None,
-						ops: wgpu::Operations {
-							load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-							store: wgpu::StoreOp::Store,
-						},
-					})],
-					depth_stencil_attachment: None,
-					timestamp_writes: None,
-					occlusion_query_set: None,
-					multiview_mask: None,
-				});
+				let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor { label: Some("scrim cursor"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: gpu.scrim.cursor_view(), resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None });
 				gpu.scrim.draw_cursors(&mut pass);
 			}
 			if halo_on && !blur_cached {
-				gpu.scrim.blur(
-					&gpu.gfx.queue,
-					&mut encoder,
-					cfg.text_scrim_radius,
-					scrim_ext,
-					cfg.text_scrim_ramp,
-					if cfg.cursor_scrim { 1.0 } else { 0.0 },
-					cfg.text_scrim_function,
-				);
+				gpu.scrim.blur(&gpu.gfx.queue, &mut encoder, cfg.text_scrim_radius, scrim_ext, cfg.text_scrim_ramp, if cfg.cursor_scrim { 1.0 } else { 0.0 }, cfg.text_scrim_function);
 			}
 			self.scrim_sig = Some(text_sig);
 		} else {
@@ -3132,32 +2578,8 @@ impl State {
 			// an ARGB visual. Any pixel with alpha under 1, such as the 1px divider
 			// slits or the antialiased edges of fractional pane rects, lets the
 			// compositor show the desktop through as bright specks along the splits.
-			let clear = if gpu.gfx.transparent && cfg.transparent_background {
-				wgpu::Color::TRANSPARENT
-			} else {
-				wgpu::Color {
-					r: divider[0] as f64,
-					g: divider[1] as f64,
-					b: divider[2] as f64,
-					a: 1.0,
-				}
-			};
-			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-				label: Some("main pass"),
-				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-					view: &view,
-					resolve_target: None,
-					depth_slice: None,
-					ops: wgpu::Operations {
-						load: wgpu::LoadOp::Clear(clear),
-						store: wgpu::StoreOp::Store,
-					},
-				})],
-				depth_stencil_attachment: None,
-				timestamp_writes: None,
-				occlusion_query_set: None,
-				multiview_mask: None,
-			});
+			let clear = if gpu.gfx.transparent && cfg.transparent_background { wgpu::Color::TRANSPARENT } else { wgpu::Color { r: divider[0] as f64, g: divider[1] as f64, b: divider[2] as f64, a: 1.0 } };
+			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor { label: Some("main pass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &view, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(clear), store: wgpu::StoreOp::Store } })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None });
 
 			let (sw, sh) = (gpu.gfx.config.width, gpu.gfx.config.height);
 			// pane backgrounds, exactly pane-sized so no clip is needed, skipped where
@@ -3213,18 +2635,7 @@ impl State {
 			// menu bar or tab titles above it.
 			if scrim_on {
 				// frame-invariant composite args: upload the uniform once, not per pane
-				gpu.scrim.write_comp_uniform(
-					&gpu.gfx.queue,
-					scrim_intensity,
-					cfg.text_outline,
-					if cfg.cursor_outline { 1.0 } else { 0.0 },
-					cfg.text_scrim_function,
-					cfg.text_scrim_ramp,
-					scrim_ext,
-					scrim_strength,
-					if halo_on { 1.0 } else { 0.0 },
-					halo_match,
-				);
+				gpu.scrim.write_comp_uniform(&gpu.gfx.queue, scrim_intensity, cfg.text_outline, if cfg.cursor_outline { 1.0 } else { 0.0 }, cfg.text_scrim_function, cfg.text_scrim_ramp, scrim_ext, scrim_strength, if halo_on { 1.0 } else { 0.0 }, halo_match);
 				// The scrim is a full-frame blur, and each glyph's halo spreads about
 				// scrim_ext px every way. It's composited per pane and clipped per side.
 				// An edge next to another pane clips at the content edge, the rect inset
@@ -3237,32 +2648,11 @@ impl State {
 				for (rect, _, _) in &group_ranges {
 					// an edge on the content area's boundary is the window edge. Otherwise
 					// it borders a gap or another pane, so the clip comes in by the margin.
-					let l = if rect.x <= area.x + 0.5 {
-						rect.x
-					} else {
-						rect.x + margin
-					};
-					let t = if rect.y <= area.y + 0.5 {
-						rect.y
-					} else {
-						rect.y + margin
-					};
-					let r = if rect.x + rect.w >= area.x + area.w - 0.5 {
-						rect.x + rect.w
-					} else {
-						rect.x + rect.w - margin
-					};
-					let b = if rect.y + rect.h >= area.y + area.h - 0.5 {
-						rect.y + rect.h
-					} else {
-						rect.y + rect.h - margin
-					};
-					let clip = Rect {
-						x: l,
-						y: t,
-						w: (r - l).max(0.0),
-						h: (b - t).max(0.0),
-					};
+					let l = if rect.x <= area.x + 0.5 { rect.x } else { rect.x + margin };
+					let t = if rect.y <= area.y + 0.5 { rect.y } else { rect.y + margin };
+					let r = if rect.x + rect.w >= area.x + area.w - 0.5 { rect.x + rect.w } else { rect.x + rect.w - margin };
+					let b = if rect.y + rect.h >= area.y + area.h - 0.5 { rect.y + rect.h } else { rect.y + rect.h - margin };
+					let clip = Rect { x: l, y: t, w: (r - l).max(0.0), h: (b - t).max(0.0) };
 					let (cx, cy, cw, ch) = scissor(clip, sw, sh);
 					if cw == 0 || ch == 0 {
 						continue;
@@ -3301,22 +2691,7 @@ impl State {
 		// main pass, then any tip over that. Each layer's text draws before the
 		// next layer's rects, which keeps menu text off a tip's box.
 		if menu_range.is_some() || tip_range.is_some() {
-			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-				label: Some("overlay pass"),
-				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-					view: &view,
-					resolve_target: None,
-					depth_slice: None,
-					ops: wgpu::Operations {
-						load: wgpu::LoadOp::Load,
-						store: wgpu::StoreOp::Store,
-					},
-				})],
-				depth_stencil_attachment: None,
-				timestamp_writes: None,
-				occlusion_query_set: None,
-				multiview_mask: None,
-			});
+			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor { label: Some("overlay pass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &view, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None });
 			if let Some((start, end)) = menu_range {
 				gpu.rects.draw(&mut pass, start..end);
 				let _ = self.text.render_overlay(&mut pass);
@@ -3337,9 +2712,7 @@ impl State {
 		if presented {
 			self.frame_retry = Retry::default();
 		} else {
-			let wait = self
-				.frame_retry
-				.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+			let wait = self.frame_retry.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
 			idledbg(&format!("frame not presented, again in {wait:?}"));
 			crate::perf::allocs_note("frame not presented");
 		}
@@ -3351,9 +2724,7 @@ impl State {
 		// grid size. The deadline is the fallback, so a window manager that grants
 		// another size can't leave it hidden.
 		if !self.revealed {
-			let settled = self.reveal_want.is_none_or(|w| {
-				gpu.gfx.config.width == w.width && gpu.gfx.config.height == w.height
-			});
+			let settled = self.reveal_want.is_none_or(|w| gpu.gfx.config.width == w.width && gpu.gfx.config.height == w.height);
 			if reveal_due(settled, Instant::now() >= self.reveal_deadline, false) {
 				self.reveal_window();
 			}
@@ -3366,11 +2737,7 @@ impl State {
 		// wallpaper mustn't start a second one.
 		if self.revealed && self.wp_answered && !self.wp_shown {
 			self.wp_shown = true;
-			self.shell_scan_at = push_back(
-				self.shell_scan_at,
-				self.shell_scan_cap,
-				Instant::now() + SHELL_SCAN_DELAY,
-			);
+			self.shell_scan_at = push_back(self.shell_scan_at, self.shell_scan_cap, Instant::now() + SHELL_SCAN_DELAY);
 			self.bench_at = push_back(self.bench_at, self.bench_cap, Instant::now() + BENCH_DELAY);
 		}
 		if env_flag(EnvFlag::Dump) {
@@ -3383,17 +2750,7 @@ impl State {
 		if !text_same {
 			self.text.trim_atlas();
 		}
-		self.frame_bufs = FrameBufs {
-			instances,
-			pane_fulls,
-			cursors,
-			scrim_cursors,
-			group_ranges,
-			link_ranges,
-			cursor_ranges,
-			areas: kept_areas,
-		}
-		.emptied();
+		self.frame_bufs = FrameBufs { instances, pane_fulls, cursors, scrim_cursors, group_ranges, link_ranges, cursor_ranges, areas: kept_areas }.emptied();
 		animating && presented
 	}
 }
@@ -3404,47 +2761,24 @@ fn title_from(tabs: &Tabs) -> Option<crate::tabtitle::Suffix<'_>> {
 	let pm = tabs.cur();
 	let pane = pm.panes.get(&pm.focused);
 	// a program that never asked for a title, or asked for a blank one
-	let program = pane
-		.map(|pane| pane.title.as_str())
-		.filter(|title| !title.trim().is_empty());
-	crate::tabtitle::suffix_from(
-		config::rights(),
-		pm.title_override.as_deref(),
-		program,
-		pane.and_then(Pane::launched),
-		config::settings().title_shows_tab,
-	)
+	let program = pane.map(|pane| pane.title.as_str()).filter(|title| !title.trim().is_empty());
+	crate::tabtitle::suffix_from(config::rights(), pm.title_override.as_deref(), program, pane.and_then(Pane::launched), config::settings().title_shows_tab)
 }
 
 fn rect_inst(x: f32, y: f32, w: f32, h: f32, color: [u8; 3]) -> RectInstance {
-	RectInstance {
-		pos: [x, y],
-		size: [w, h],
-		color: config::srgb_f32(color),
-		..Default::default()
-	}
+	RectInstance { pos: [x, y], size: [w, h], color: config::srgb_f32(color), ..Default::default() }
 }
 
 // The close-"X" mark: a shader-drawn quad (mode 1) whose 2 diagonal bars
 // center exactly in `cb` at any size and DPI. The stroke scales with the box.
 fn close_x_inst(cb: Rect, color: [u8; 3]) -> RectInstance {
-	RectInstance {
-		pos: [cb.x, cb.y],
-		size: [cb.w, cb.h],
-		color: config::srgb_f32(color),
-		params: [QuadMode::CloseMark.code(), (cb.w * 0.14).max(1.4)],
-	}
+	RectInstance { pos: [cb.x, cb.y], size: [cb.w, cb.h], color: config::srgb_f32(color), params: [QuadMode::CloseMark.code(), (cb.w * 0.14).max(1.4)] }
 }
 
 // The submenu arrow: a shader-drawn quad (mode 3) with a right-pointing
 // triangle that centers exactly in `at` at any size and DPI.
 fn sub_arrow_inst(at: Rect, color: [u8; 3]) -> RectInstance {
-	RectInstance {
-		pos: [at.x, at.y],
-		size: [at.w, at.h],
-		color: config::srgb_f32(color),
-		params: [QuadMode::Triangle.code(), 0.0],
-	}
+	RectInstance { pos: [at.x, at.y], size: [at.w, at.h], color: config::srgb_f32(color), params: [QuadMode::Triangle.code(), 0.0] }
 }
 
 // One scrollbar piece: a rounded quad (mode 2) with the pill radius its short
@@ -3452,27 +2786,14 @@ fn sub_arrow_inst(at: Rect, color: [u8; 3]) -> RectInstance {
 fn bar_inst(r: Rect, color: [u8; 3], alpha: f32) -> RectInstance {
 	let mut c = config::srgb_f32(color);
 	c[3] = alpha;
-	RectInstance {
-		pos: [r.x, r.y],
-		size: [r.w, r.h],
-		color: c,
-		params: [QuadMode::Rounded.code(), r.w.min(r.h) * 0.5],
-	}
+	RectInstance { pos: [r.x, r.y], size: [r.w, r.h], color: c, params: [QuadMode::Rounded.code(), r.w.min(r.h) * 0.5] }
 }
 
 // The minimap's viewport marker. The pane's own scrollbar sits at the far edge,
 // over the preview, so the column draws no bar of its own.
-fn minimap_insts(
-	g: &crate::minimap::Geom,
-	active: bool,
-	cfg: &config::Settings,
-) -> Option<RectInstance> {
+fn minimap_insts(g: &crate::minimap::Geom, active: bool, cfg: &config::Settings) -> Option<RectInstance> {
 	let handle = g.handle?;
-	let alpha = if active {
-		config::SCROLLBAR_ACTIVE_A
-	} else {
-		config::SCROLLBAR_IDLE_A
-	};
+	let alpha = if active { config::SCROLLBAR_ACTIVE_A } else { config::SCROLLBAR_IDLE_A };
 	// a faint wash, so it marks the view without hiding what's under it
 	Some(RectInstance {
 		pos: [handle.x, handle.y],
@@ -3488,25 +2809,9 @@ fn minimap_insts(
 
 // The scrollbar's quads for one pane: a faint track with the handle on it. The
 // thumb brightens while hovered or dragged, the usual affordance.
-fn scrollbar_insts(
-	bar: &crate::pane::Bar,
-	fade: f32,
-	active: bool,
-	cfg: &config::Settings,
-) -> [RectInstance; 2] {
-	let thumb_a = if active {
-		config::SCROLLBAR_ACTIVE_A
-	} else {
-		config::SCROLLBAR_IDLE_A
-	};
-	[
-		bar_inst(
-			bar.track,
-			cfg.scrollbar_trough,
-			fade * config::SCROLLBAR_TROUGH_A,
-		),
-		bar_inst(bar.thumb, cfg.scrollbar_thumb, fade * thumb_a),
-	]
+fn scrollbar_insts(bar: &crate::pane::Bar, fade: f32, active: bool, cfg: &config::Settings) -> [RectInstance; 2] {
+	let thumb_a = if active { config::SCROLLBAR_ACTIVE_A } else { config::SCROLLBAR_IDLE_A };
+	[bar_inst(bar.track, cfg.scrollbar_trough, fade * config::SCROLLBAR_TROUGH_A), bar_inst(bar.thumb, cfg.scrollbar_thumb, fade * thumb_a)]
 }
 
 // close-"X" stroke color: menu fg dimmed toward the tab bg (~0.6), so it reads
@@ -3523,25 +2828,8 @@ fn mix_rgb(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
 }
 
 // Shaped overlay text as glyphon wants it, clipped to the window.
-fn spec_areas(
-	specs: &[(f32, f32, Buffer)],
-	(right, bottom): (i32, i32),
-	default_color: GColor,
-) -> impl Iterator<Item = TextArea<'_>> {
-	specs.iter().map(move |(left, top, buffer)| TextArea {
-		buffer,
-		left: *left,
-		top: *top,
-		scale: 1.0,
-		bounds: TextBounds {
-			left: 0,
-			top: 0,
-			right,
-			bottom,
-		},
-		default_color,
-		custom_glyphs: &[],
-	})
+fn spec_areas(specs: &[(f32, f32, Buffer)], (right, bottom): (i32, i32), default_color: GColor) -> impl Iterator<Item = TextArea<'_>> {
+	specs.iter().map(move |(left, top, buffer)| TextArea { buffer, left: *left, top: *top, scale: 1.0, bounds: TextBounds { left: 0, top: 0, right, bottom }, default_color, custom_glyphs: &[] })
 }
 
 // Dim a chrome color toward the bar background when the window isn't focused.
@@ -3554,11 +2842,7 @@ fn copy_dim(color: [u8; 3], focused: bool) -> [u8; 3] {
 	}
 	let bg = config::TAB_BAR_BG;
 	let mix = |a: u8, b: u8| (a as f32 * 0.4 + b as f32 * 0.6) as u8;
-	[
-		mix(color[0], bg[0]),
-		mix(color[1], bg[1]),
-		mix(color[2], bg[2]),
-	]
+	[mix(color[0], bg[0]), mix(color[1], bg[1]), mix(color[2], bg[2])]
 }
 
 // Whether this is an X11 session. Per-pixel transparency needs the glutin GL
@@ -3566,14 +2850,7 @@ fn copy_dim(color: [u8; 3], focused: bool) -> [u8; 3] {
 // alpha.
 fn is_x11(el: &ActiveEventLoop) -> bool {
 	use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
-	el.owned_display_handle()
-		.display_handle()
-		.is_ok_and(|handle| {
-			matches!(
-				handle.as_raw(),
-				RawDisplayHandle::Xlib(_) | RawDisplayHandle::Xcb(_)
-			)
-		})
+	el.owned_display_handle().display_handle().is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Xlib(_) | RawDisplayHandle::Xcb(_)))
 }
 
 // A stable X11 WM_CLASS and Wayland app_id, so the window manager and taskbar
@@ -3656,26 +2933,15 @@ fn preset_wm_state(window: &Window, states: &[&[u8]]) {
 	let Ok((conn, _)) = x11rb::connect(None) else {
 		return;
 	};
-	let atom = |name: &[u8]| {
-		conn.intern_atom(false, name)
-			.ok()
-			.and_then(|cookie| cookie.reply().ok())
-			.map(|reply| reply.atom)
-	};
+	let atom = |name: &[u8]| conn.intern_atom(false, name).ok().and_then(|cookie| cookie.reply().ok()).map(|reply| reply.atom);
 	let Some(property) = atom(b"_NET_WM_STATE") else {
 		return;
 	};
-	let Some(values) = states
-		.iter()
-		.map(|name| atom(name))
-		.collect::<Option<Vec<_>>>()
-	else {
+	let Some(values) = states.iter().map(|name| atom(name)).collect::<Option<Vec<_>>>() else {
 		return;
 	};
 	// checked, so the server has it before winit's own connection maps the window
-	if let Ok(cookie) =
-		conn.change_property32(PropMode::APPEND, xid, property, AtomEnum::ATOM, &values)
-	{
+	if let Ok(cookie) = conn.change_property32(PropMode::APPEND, xid, property, AtomEnum::ATOM, &values) {
 		let _ = cookie.check();
 	}
 }
@@ -3693,9 +2959,7 @@ const SAFE_MAX_DIM: u32 = 8192;
 /// rather than left floating in a band of nothing. None if it can't be decoded.
 pub fn load_icon() -> Option<winit::window::Icon> {
 	let img = image::load_from_memory(include_bytes!("../assets/logo.png")).ok()?;
-	let img = img
-		.resize_exact(64, 64, image::imageops::FilterType::Lanczos3)
-		.into_rgba8();
+	let img = img.resize_exact(64, 64, image::imageops::FilterType::Lanczos3).into_rgba8();
 	let (w, h) = img.dimensions();
 	winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
 }
@@ -3725,11 +2989,7 @@ fn open_link(url: &str) {
 	let cfg = config::settings();
 	// with none set it goes to the desktop's own opener, which takes the URL its
 	// own way
-	let command = if crate::fields::by_hand(&cfg, crate::ui_spec::Key::LinkOpenCommand) {
-		cfg.hyperlink_open_command.as_str()
-	} else {
-		""
-	};
+	let command = if crate::fields::by_hand(&cfg, crate::ui_spec::Key::LinkOpenCommand) { cfg.hyperlink_open_command.as_str() } else { "" };
 	if let Err(e) = crate::links::open(url, command) {
 		eprintln!("{}: couldn't open {url}: {e}", config::APP_NAME);
 	}
@@ -3755,32 +3015,7 @@ fn focus_ring(rect: Rect, scale: f32, cfg: &config::Settings) -> [RectInstance; 
 	// sliders and revert arrows, rather than the single keyboard-focused control
 	let color = config::srgb_f32(cfg.highlight);
 	let thickness = config::dip(config::FOCUS_RING_PX, scale);
-	[
-		RectInstance {
-			pos: [rect.x, rect.y],
-			size: [rect.w, thickness],
-			color,
-			..Default::default()
-		},
-		RectInstance {
-			pos: [rect.x, rect.y + rect.h - thickness],
-			size: [rect.w, thickness],
-			color,
-			..Default::default()
-		},
-		RectInstance {
-			pos: [rect.x, rect.y],
-			size: [thickness, rect.h],
-			color,
-			..Default::default()
-		},
-		RectInstance {
-			pos: [rect.x + rect.w - thickness, rect.y],
-			size: [thickness, rect.h],
-			color,
-			..Default::default()
-		},
-	]
+	[RectInstance { pos: [rect.x, rect.y], size: [rect.w, thickness], color, ..Default::default() }, RectInstance { pos: [rect.x, rect.y + rect.h - thickness], size: [rect.w, thickness], color, ..Default::default() }, RectInstance { pos: [rect.x, rect.y], size: [thickness, rect.h], color, ..Default::default() }, RectInstance { pos: [rect.x + rect.w - thickness, rect.y], size: [thickness, rect.h], color, ..Default::default() }]
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -3798,11 +3033,7 @@ impl ApplicationHandler<UserEvent> for App {
 		}
 		let cli_win = &self.cli.win;
 		let decorated = !cli_win.hide_frame.unwrap_or(false);
-		let menu_bar = menu_bar_at_launch(
-			cli_win.hide_menu,
-			config::settings().menu_bar,
-			cfg!(target_os = "macos"),
-		);
+		let menu_bar = menu_bar_at_launch(cli_win.hide_menu, config::settings().menu_bar, cfg!(target_os = "macos"));
 		let win_title = cli_win.title.clone();
 		let win_opacity = cli_win.opacity;
 		// When both pixel dims are given, the window must be born at that size, not
@@ -3824,19 +3055,8 @@ impl ApplicationHandler<UserEvent> for App {
 		// so an always-transparent window gains nothing when Transparency is off.
 		// It's asked for only when in use. X11 and Wayland always ask for it so
 		// the live toggle works, with no such side effect there.
-		let want_transparent =
-			!cfg!(windows) || config::settings().transparent_background || win_opacity.is_some();
-		let attrs = Window::default_attributes()
-			.with_title(crate::tabtitle::window_title(
-				config::rights(),
-				win_title.as_deref(),
-				config::title_prefix(),
-				None,
-			))
-			.with_window_icon(load_icon())
-			.with_decorations(decorated)
-			.with_transparent(want_transparent)
-			.with_inner_size(initial_size);
+		let want_transparent = !cfg!(windows) || config::settings().transparent_background || win_opacity.is_some();
+		let attrs = Window::default_attributes().with_title(crate::tabtitle::window_title(config::rights(), win_title.as_deref(), config::title_prefix(), None)).with_window_icon(load_icon()).with_decorations(decorated).with_transparent(want_transparent).with_inner_size(initial_size);
 		let attrs = with_app_id(attrs); // stable WM_CLASS/app_id
 		// Option as Alt: winit hands over the plain key, and encode adds the ESC
 		#[cfg(target_os = "macos")]
@@ -3867,32 +3087,24 @@ impl ApplicationHandler<UserEvent> for App {
 		let want_gl = is_x11(event_loop);
 		cli_win.apply_renderer();
 		let want = crate::gfx::wanted();
-		let (mut gfx, window) =
-			match want_gl.then(|| Gfx::new_gl_transparent(event_loop, attrs.clone(), want)) {
-				Some(Ok(pair)) => pair,
-				other => {
-					if let Some(Err(e)) = other {
-						eprintln!(
-							"{}: GL backend unavailable ({e}); using native surface (no transparency)",
-							config::APP_NAME
-						);
-					}
-					let window = Arc::new(event_loop.create_window(attrs).unwrap_or_else(|e| {
-						eprintln!("{}: couldn't create a window: {e}", config::APP_NAME);
-						std::process::exit(2);
-					}));
-					#[cfg(windows)]
-					let gfx = if want_transparent {
-						Gfx::new_composited(window.clone(), want)
-					} else {
-						Gfx::new(window.clone(), want)
-					};
-					#[cfg(not(windows))]
-					let gfx = Gfx::new(window.clone(), want);
-					let gfx = gfx.unwrap_or_else(|e| dialogs::no_device(&e));
-					(gfx, window)
+		let (mut gfx, window) = match want_gl.then(|| Gfx::new_gl_transparent(event_loop, attrs.clone(), want)) {
+			Some(Ok(pair)) => pair,
+			other => {
+				if let Some(Err(e)) = other {
+					eprintln!("{}: GL backend unavailable ({e}); using native surface (no transparency)", config::APP_NAME);
 				}
-			};
+				let window = Arc::new(event_loop.create_window(attrs).unwrap_or_else(|e| {
+					eprintln!("{}: couldn't create a window: {e}", config::APP_NAME);
+					std::process::exit(2);
+				}));
+				#[cfg(windows)]
+				let gfx = if want_transparent { Gfx::new_composited(window.clone(), want) } else { Gfx::new(window.clone(), want) };
+				#[cfg(not(windows))]
+				let gfx = Gfx::new(window.clone(), want);
+				let gfx = gfx.unwrap_or_else(|e| dialogs::no_device(&e));
+				(gfx, window)
+			}
+		};
 		// System theme mode: seed the OS dark/light bit before the first frame so a
 		// system-mode theme resolves to the right palette immediately (no flash).
 		config::reapply_for_os(!matches!(window.theme(), Some(winit::window::Theme::Light)));
@@ -3941,8 +3153,7 @@ impl ApplicationHandler<UserEvent> for App {
 		let mut text = TextCtx::new(&gfx.device, &gfx.queue, gfx.format, &gfx.loss, scale);
 		let rects = RectRenderer::new(&gfx.device, gfx.format);
 		let minimap = crate::minimap::MapRenderer::new(&gfx.device, gfx.format);
-		let scrim =
-			crate::scrim::Scrim::new(&gfx.device, gfx.format, gfx.config.width, gfx.config.height);
+		let scrim = crate::scrim::Scrim::new(&gfx.device, gfx.format, gfx.config.width, gfx.config.height);
 
 		// Resize to the configured grid now that cell metrics are known. cell_w,
 		// cell_h, and margin are physical px, and floor() in content_dims gives the
@@ -3952,87 +3163,24 @@ impl ApplicationHandler<UserEvent> for App {
 		// and rows override the config, and --pixel-width and --pixel-height
 		// override either one. The menu bar and tab strip heights are added where
 		// they show, so the content still gets the row count asked for.
-		let watch = MonitorWatch {
-			key: monitor,
-			check_at: None,
-			moved_at: None,
-			ignore_resize_until: Instant::now(),
-			ignore_moves_until: Instant::now(),
-			layout: Vec::new(),
-			layout_looked: crate::monitor::layout(&window, &x11),
-			home: None,
-			place: None,
-			herd: None,
-			size_pinned: cli_win.columns.is_some()
-				|| cli_win.rows.is_some()
-				|| cli_win.pixel_width.is_some()
-				|| cli_win.pixel_height.is_some(),
-			font_pinned,
-			positionless: window.outer_position().is_err(),
-			pointer: window_size::Pointer::Away,
-			heard_at: None,
-			stirred_at: None,
-			put_off: false,
-			opening: false,
-			noted: window_size::Noted::default(),
-			take_owed: false,
-			set_on: None,
-			took: None,
-			drifted: false,
-			asked: None,
-		};
-		let menu_bar_h = if menu_bar {
-			text.ui_line_h + text.dip(MENU_BAR_VPAD)
-		} else {
-			0.0
-		};
-		let n_tabs = if self.cli.hierarchical() {
-			self.cli.tabs.len().max(1)
-		} else {
-			1
-		};
+		let watch = MonitorWatch { key: monitor, check_at: None, moved_at: None, ignore_resize_until: Instant::now(), ignore_moves_until: Instant::now(), layout: Vec::new(), layout_looked: crate::monitor::layout(&window, &x11), home: None, place: None, herd: None, size_pinned: cli_win.columns.is_some() || cli_win.rows.is_some() || cli_win.pixel_width.is_some() || cli_win.pixel_height.is_some(), font_pinned, positionless: window.outer_position().is_err(), pointer: window_size::Pointer::Away, heard_at: None, stirred_at: None, put_off: false, opening: false, noted: window_size::Noted::default(), take_owed: false, set_on: None, took: None, drifted: false, asked: None };
+		let menu_bar_h = if menu_bar { text.ui_line_h + text.dip(MENU_BAR_VPAD) } else { 0.0 };
+		let n_tabs = if self.cli.hierarchical() { self.cli.tabs.len().max(1) } else { 1 };
 		// The strip shows for more than one tab, and for a single one unless
 		// hide_single_tab is on, as in State::tab_bar_visible.
-		let tab_bar_h = if n_tabs > 1 || !settings.hide_single_tab {
-			text.ui_line_h + text.dip(TAB_BAR_VPAD)
-		} else {
-			0.0
-		};
+		let tab_bar_h = if n_tabs > 1 || !settings.hide_single_tab { text.ui_line_h + text.dip(TAB_BAR_VPAD) } else { 0.0 };
 		let mut grid = crate::fields::grid(&settings, watch.key.as_deref());
 		// A window that can't see its monitor yet takes the size kept there
 		// once it does, and that take fits it to the screen.
 		let looks_first = watch.key.is_none() && settings.remember_per_monitor;
 		if settings.remember_size && !watch.size_pinned && !looks_first {
-			grid = window_size::kept_grid_here(
-				&mut text,
-				&window,
-				watch.key.as_deref(),
-				menu_bar_h + tab_bar_h,
-				grid,
-				kept.font_zoom,
-			);
+			grid = window_size::kept_grid_here(&mut text, &window, watch.key.as_deref(), menu_bar_h + tab_bar_h, grid, kept.font_zoom);
 		}
 		let cols = cli_win.columns.unwrap_or(grid.0);
 		let rows = cli_win.rows.unwrap_or(grid.1);
-		window_size::mondbg(
-			"open",
-			watch.key.as_deref(),
-			Some((cols, rows)),
-			Some(config::font_zoom_px()),
-		);
-		let (grid_w, grid_h) = window_px(
-			cols,
-			rows,
-			text.cell_w,
-			text.cell_h,
-			text.margin,
-			menu_bar_h + tab_bar_h,
-		);
-		let (want_w, want_h) = fit_px(
-			cli_win.pixel_width.unwrap_or(grid_w),
-			cli_win.pixel_height.unwrap_or(grid_h),
-			gfx.max_side(),
-		);
+		window_size::mondbg("open", watch.key.as_deref(), Some((cols, rows)), Some(config::font_zoom_px()));
+		let (grid_w, grid_h) = window_px(cols, rows, text.cell_w, text.cell_h, text.margin, menu_bar_h + tab_bar_h);
+		let (want_w, want_h) = fit_px(cli_win.pixel_width.unwrap_or(grid_w), cli_win.pixel_height.unwrap_or(grid_h), gfx.max_side());
 		let want = winit::dpi::PhysicalSize::new(want_w, want_h);
 		let maximize_on_reveal = launch_maximized(&settings, cli_win);
 		let mut scrim = scrim;
@@ -4052,23 +3200,14 @@ impl ApplicationHandler<UserEvent> for App {
 		// initial content area, inset by the menu bar and the tab strip where each
 		// shows, so panes start correctly sized.
 		let top = menu_bar_h + tab_bar_h;
-		let area = Rect {
-			x: 0.0,
-			y: top,
-			w: gfx.config.width as f32,
-			h: (gfx.config.height as f32 - top).max(1.0),
-		};
+		let area = Rect { x: 0.0, y: top, w: gfx.config.width as f32, h: (gfx.config.height as f32 - top).max(1.0) };
 		let list = build_layout(&self.cli, &mut text, &self.proxy, area);
 		let frame_budget = crate::profile::FrameBudget::new(Instant::now(), refresh_hz(&window));
 		let surface_px = (gfx.config.width, gfx.config.height);
 		let gl = gfx.on_glutin_window();
 		let adapter_info = gfx.adapter_info.clone();
 		let drawn = gfx.drawn;
-		let clipboard = Clipboard::new(
-			raw_window_handle::HasDisplayHandle::display_handle(&*window)
-				.ok()
-				.map(|handle| handle.as_raw()),
-		);
+		let clipboard = Clipboard::new(raw_window_handle::HasDisplayHandle::display_handle(&*window).ok().map(|handle| handle.as_raw()));
 
 		self.state = Some(State {
 			window,
@@ -4392,15 +3531,7 @@ impl ApplicationHandler<UserEvent> for App {
 		}
 		// The startup benchmark owns the window while its banner is up: anything
 		// typed or clicked would change what is being timed. Closing still works.
-		if state.bench_banner.is_some()
-			&& matches!(
-				event,
-				WindowEvent::KeyboardInput { .. }
-					| WindowEvent::MouseInput { .. }
-					| WindowEvent::MouseWheel { .. }
-					| WindowEvent::CursorMoved { .. }
-					| WindowEvent::Ime(_)
-			) {
+		if state.bench_banner.is_some() && matches!(event, WindowEvent::KeyboardInput { .. } | WindowEvent::MouseInput { .. } | WindowEvent::MouseWheel { .. } | WindowEvent::CursorMoved { .. } | WindowEvent::Ime(_)) {
 			return;
 		}
 		state.note_presence(&event);
@@ -4424,12 +3555,7 @@ impl ApplicationHandler<UserEvent> for App {
 				// The surface follows the window, not the event. macOS sends the
 				// creation size after the real one is in place (2026100517535929).
 				let now = state.window.inner_size();
-				window_size::mondbg(
-					&format!("resized {}x{}", now.width, now.height),
-					state.watch.key.as_deref(),
-					None,
-					None,
-				);
+				window_size::mondbg(&format!("resized {}x{}", now.width, now.height), state.watch.key.as_deref(), None, None);
 				state.no_area = now.width == 0 || now.height == 0;
 				state.resize_surface(now.width, now.height);
 				state.note_wallpaper_size();
@@ -4448,16 +3574,8 @@ impl ApplicationHandler<UserEvent> for App {
 			// (`rescale`). A Resized event follows to reconfigure the surface and
 			// scrim. That resize is the system's, not the user's, and the new scale
 			// may mean another monitor.
-			WindowEvent::ScaleFactorChanged {
-				scale_factor,
-				mut inner_size_writer,
-			} => {
-				window_size::mondbg(
-					&format!("scale {scale_factor}"),
-					state.watch.key.as_deref(),
-					None,
-					None,
-				);
+			WindowEvent::ScaleFactorChanged { scale_factor, mut inner_size_writer } => {
+				window_size::mondbg(&format!("scale {scale_factor}"), state.watch.key.as_deref(), None, None);
 				state.rescale(config::display_scale(scale_factor), &mut inner_size_writer);
 				state.dirty = true;
 				state.watch.ignore_resize_until = Instant::now() + OWN_RESIZE_GRACE;
@@ -4471,10 +3589,7 @@ impl ApplicationHandler<UserEvent> for App {
 
 			WindowEvent::ModifiersChanged(mods) => {
 				state.mods = mods.state();
-				state.alt_sides = (
-					mods.lalt_state() == ModifiersKeyState::Pressed,
-					mods.ralt_state() == ModifiersKeyState::Pressed,
-				);
+				state.alt_sides = (mods.lalt_state() == ModifiersKeyState::Pressed, mods.ralt_state() == ModifiersKeyState::Pressed);
 				if env_flag(EnvFlag::KeyDbg) {
 					eprintln!("[mods] {:?}", mods.state());
 				}
@@ -4538,8 +3653,7 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 
 			WindowEvent::CursorMoved { position, .. } => {
-				let from =
-					std::mem::replace(&mut state.mouse, (position.x as f32, position.y as f32));
+				let from = std::mem::replace(&mut state.mouse, (position.x as f32, position.y as f32));
 				// some platforms report the pointer where it was as focus changes
 				if from != state.mouse {
 					state.tip_focus = state.tip_focus.moved();
@@ -4599,10 +3713,7 @@ impl ApplicationHandler<UserEvent> for App {
 				} else if let Some(path) = &state.resizing {
 					// drag a pane divider
 					let area = state.area();
-					state
-						.tabs
-						.cur_mut()
-						.drag_divider(&mut state.text, path, area, x, y);
+					state.tabs.cur_mut().drag_divider(&mut state.text, path, area, x, y);
 					state.dirty = true;
 				} else if let Some(id) = state.selecting {
 					// extend an in-progress drag-selection. Clamped, not bounded: a
@@ -4621,11 +3732,7 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 			}
 
-			WindowEvent::MouseInput {
-				state: ElementState::Pressed,
-				button,
-				..
-			} => {
+			WindowEvent::MouseInput { state: ElementState::Pressed, button, .. } => {
 				// First, since every branch below reads the button: a Ctrl+click
 				// on a Mac must go to the rename menu, and must not be reported
 				// to an app tracking the mouse, as a right press isn't.
@@ -4635,12 +3742,8 @@ impl ApplicationHandler<UserEvent> for App {
 				// the tab being renamed (the tab-strip branch below handles a left
 				// press there) or to a menu, whose Copy and Paste act on the name.
 				if state.tab_edit.is_some() {
-					let on_edited = state.tab_bar_visible()
-						&& y >= state.menubar_h()
-						&& y < state.menubar_h() + state.tab_bar_h()
-						&& state.tab_at(x) == state.tab_edit.as_ref().map(|e| e.tab);
-					let on_menu = state.menu.as_ref().is_some_and(|m| m.hit_any(x, y))
-						|| (state.menu_bar && y < state.menu_bar_h());
+					let on_edited = state.tab_bar_visible() && y >= state.menubar_h() && y < state.menubar_h() + state.tab_bar_h() && state.tab_at(x) == state.tab_edit.as_ref().map(|e| e.tab);
+					let on_menu = state.menu.as_ref().is_some_and(|m| m.hit_any(x, y)) || (state.menu_bar && y < state.menu_bar_h());
 					if !on_menu {
 						match (on_edited, button) {
 							(false, _) => state.commit_tab_edit(),
@@ -4669,10 +3772,7 @@ impl ApplicationHandler<UserEvent> for App {
 				// branch below stands aside for an open menu.
 				let on_popup = state.menu.as_ref().is_some_and(|m| m.hit_any(x, y));
 				// click on the menu bar: open or close the top-level menu's dropdown
-				if button == MouseButton::Left
-					&& state.menu_bar
-					&& !on_popup && y < state.menu_bar_h()
-				{
+				if button == MouseButton::Left && state.menu_bar && !on_popup && y < state.menu_bar_h() {
 					// the always-visible copy-mode checkboxes toggle the focused pane
 					if let Some(kind) = state.copybox_hit(x) {
 						let focused_id = state.tabs.cur().focused;
@@ -4698,28 +3798,17 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 				// click on the tab bar selects a tab
 				let tab_bar_y = state.menubar_h();
-				if button == MouseButton::Left
-					&& input::tab_bar_takes_press(
-						state.menu.is_some(),
-						state.tab_bar_visible(),
-						y,
-						tab_bar_y,
-						state.tab_bar_h(),
-					) {
+				if button == MouseButton::Left && input::tab_bar_takes_press(state.menu.is_some(), state.tab_bar_visible(), y, tab_bar_y, state.tab_bar_h()) {
 					if let Some(i) = state.tab_at(x) {
 						// press in the close-button column only arms the close (the
 						// button lights up); the close itself fires on release over
 						// the same box, so a slipped press can be dragged off to
 						// cancel, as buttons usually work. Elsewhere it selects the tab.
 						let bar_h = state.tab_bar_h();
-						let on_close = state
-							.tab_close_box_at(i, tab_bar_y, bar_h)
-							.is_some_and(|cb| x >= cb.x);
+						let on_close = state.tab_close_box_at(i, tab_bar_y, bar_h).is_some_and(|cb| x >= cb.x);
 						// second click on the same tab, soon enough: rename it
 						let now = Instant::now();
-						let again = state.tab_dbl.is_some_and(|(when, was)| {
-							was == i && now.duration_since(when) < TAB_DBL_CLICK
-						});
+						let again = state.tab_dbl.is_some_and(|(when, was)| was == i && now.duration_since(when) < TAB_DBL_CLICK);
 						state.tab_dbl = Some((now, i));
 						let renaming = state.tab_edit.as_ref().is_some_and(|e| e.tab == i);
 						if on_close {
@@ -4807,12 +3896,7 @@ impl ApplicationHandler<UserEvent> for App {
 							// anywhere else to dismiss
 							state.menu_click(x, y, &self.proxy);
 							state.dirty = true;
-						} else if let Some((path, _)) =
-							state
-								.tabs
-								.cur()
-								.divider_at(x, y, state.area(), state.text.scale)
-						{
+						} else if let Some((path, _)) = state.tabs.cur().divider_at(x, y, state.area(), state.text.scale) {
 							// grab a divider to resize instead of selecting
 							state.resizing = Some(path);
 						} else if state.mods.shift_key() {
@@ -4823,11 +3907,7 @@ impl ApplicationHandler<UserEvent> for App {
 								state.window.set_cursor(CursorIcon::Grabbing);
 								state.cursor_icon = CursorIcon::Grabbing;
 							}
-						} else if let Some((id, link)) =
-							input::shortcut_held(state.mods, cfg!(target_os = "macos"))
-								.then(|| state.link_at_pointer())
-								.flatten()
-						{
+						} else if let Some((id, link)) = input::shortcut_held(state.mods, cfg!(target_os = "macos")).then(|| state.link_at_pointer()).flatten() {
 							// Ctrl+click a link, Command+click on a Mac: arm here, open
 							// on the release over the same link, so a slipped press can
 							// be dragged off to cancel. The same key elsewhere still
@@ -4837,23 +3917,10 @@ impl ApplicationHandler<UserEvent> for App {
 						} else {
 							state.focus_at(x, y);
 							let now = Instant::now();
-							state.click_count = input::click_count(
-								state.last_click,
-								state.click_count,
-								now,
-								(x, y),
-								(state.text.cell_w, state.text.cell_h),
-							);
+							state.click_count = input::click_count(state.last_click, state.click_count, now, (x, y), (state.text.cell_w, state.text.cell_h));
 							state.last_click = Some((now, x, y));
-							let kind = input::click_select(
-								state.click_count,
-								input::shortcut_held(state.mods, cfg!(target_os = "macos")),
-							);
-							let pairs = if kind == ClickSelect::Word {
-								config::selection_pairs()
-							} else {
-								Vec::new()
-							};
+							let kind = input::click_select(state.click_count, input::shortcut_held(state.mods, cfg!(target_os = "macos")));
+							let pairs = if kind == ClickSelect::Word { config::selection_pairs() } else { Vec::new() };
 							let started = state.tabs.cur().pane_at(x, y).and_then(|id| {
 								let p = state.tabs.cur().panes.get(&id)?;
 								let (point, side) = p.point_at(x, y, &state.text)?;
@@ -4866,17 +3933,9 @@ impl ApplicationHandler<UserEvent> for App {
 									// a URL or a path wins, else the contents of a
 									// matched pair, else a bracket to its partner,
 									// else the word
-									match p
-										.shape_span(point)
-										.or_else(|| p.pair_span(point, &pairs))
-										.or_else(|| p.bracket_span(point))
-									{
+									match p.shape_span(point).or_else(|| p.pair_span(point, &pairs)).or_else(|| p.bracket_span(point)) {
 										Some((start, end)) => {
-											p.begin_selection(
-												start,
-												Side::Left,
-												SelectionType::Simple,
-											);
+											p.begin_selection(start, Side::Left, SelectionType::Simple);
 											p.update_selection(end, Side::Right);
 										}
 										None => {
@@ -4884,11 +3943,7 @@ impl ApplicationHandler<UserEvent> for App {
 										}
 									}
 								} else {
-									let sel_type = if kind == ClickSelect::Block {
-										SelectionType::Block
-									} else {
-										SelectionType::Simple
-									};
+									let sel_type = if kind == ClickSelect::Block { SelectionType::Block } else { SelectionType::Simple };
 									p.begin_selection(point, side, sel_type);
 								}
 								Some(id)
@@ -4902,11 +3957,7 @@ impl ApplicationHandler<UserEvent> for App {
 					MouseButton::Middle => {
 						// paste the primary selection into the pane under the cursor
 						if let Some(text) = state.clipboard.get_primary() {
-							let id = state
-								.tabs
-								.cur()
-								.pane_at(x, y)
-								.unwrap_or(state.tabs.cur().focused);
+							let id = state.tabs.cur().pane_at(x, y).unwrap_or(state.tabs.cur().focused);
 							if let Some(p) = state.tabs.cur_mut().panes.get_mut(&id) {
 								p.paste(&text);
 							}
@@ -4926,30 +3977,20 @@ impl ApplicationHandler<UserEvent> for App {
 			// the reported press, and only for that button. Releasing another one
 			// mustn't clear the held state, which would leave the app a press with no
 			// release, or take that button's local release handling below.
-			WindowEvent::MouseInput {
-				state: ElementState::Released,
-				button,
-				..
-			} if input::release_is_reported(state.mouse_btn, button) => {
+			WindowEvent::MouseInput { state: ElementState::Released, button, .. } if input::release_is_reported(state.mouse_btn, button) => {
 				if state.report_mouse_button(button, ElementState::Released) {
 					state.dirty = true;
 				}
 			}
 
-			WindowEvent::MouseInput {
-				state: ElementState::Released,
-				button: MouseButton::Left,
-				..
-			} => {
+			WindowEvent::MouseInput { state: ElementState::Released, button: MouseButton::Left, .. } => {
 				state.resizing = None;
 				if let Some(edit) = state.tab_edit.as_mut() {
 					edit.dragging = false;
 				}
 				// armed link: open only if the release is still on the same one
 				if let Some((armed_id, url)) = state.link_arm.take() {
-					let same = state
-						.link_at_pointer()
-						.is_some_and(|(id, link)| id == armed_id && link.url == url);
+					let same = state.link_at_pointer().is_some_and(|(id, link)| id == armed_id && link.url == url);
 					if same {
 						open_link(&url);
 					}
@@ -4973,10 +4014,7 @@ impl ApplicationHandler<UserEvent> for App {
 					let tab_bar_y = state.menubar_h();
 					let bar_h = state.tab_bar_h();
 					let in_bar = y >= tab_bar_y && y < tab_bar_y + bar_h;
-					let close_x = (in_bar && i < state.tabs.len())
-						.then(|| state.tab_close_box_at(i, tab_bar_y, bar_h))
-						.flatten()
-						.map(|cb| cb.x);
+					let close_x = (in_bar && i < state.tabs.len()).then(|| state.tab_close_box_at(i, tab_bar_y, bar_h)).flatten().map(|cb| cb.x);
 					if input::close_on_release(i, x, in_bar, close_x, state.tab_at(x)) {
 						state.request_close_tab(i);
 					}
@@ -4987,10 +4025,7 @@ impl ApplicationHandler<UserEvent> for App {
 					let (x, y) = state.mouse;
 					let area = state.area();
 					if let Some(target_id) = state.tabs.cur().pane_at(x, y) {
-						state
-							.tabs
-							.cur_mut()
-							.swap_panes(&mut state.text, src, target_id, area);
+						state.tabs.cur_mut().swap_panes(&mut state.text, src, target_id, area);
 					}
 					state.window.set_cursor(CursorIcon::Default);
 					state.cursor_icon = CursorIcon::Default;
@@ -5010,14 +4045,7 @@ impl ApplicationHandler<UserEvent> for App {
 							// copy-on-select: a finished selection also goes to the
 							// desktop clipboard when the pane opted in
 							let in_use = id == state.tabs.cur().focused;
-							if input::copy_allowed(CopyFrom::Select, state.focused, in_use)
-								&& state
-									.tabs
-									.cur()
-									.panes
-									.get(&id)
-									.is_some_and(|p| p.copy_select)
-							{
+							if input::copy_allowed(CopyFrom::Select, state.focused, in_use) && state.tabs.cur().panes.get(&id).is_some_and(|p| p.copy_select) {
 								// the clipboard and the primary each keep their own
 								state.clipboard.set_clipboard(sel_text.clone());
 							}
@@ -5042,11 +4070,7 @@ impl ApplicationHandler<UserEvent> for App {
 					state.scroll_tab_strip(if up { 1.0 } else { -1.0 });
 					return;
 				}
-				let id = state
-					.tabs
-					.cur()
-					.pane_at(x, y)
-					.unwrap_or(state.tabs.cur().focused);
+				let id = state.tabs.cur().pane_at(x, y).unwrap_or(state.tabs.cur().focused);
 				let cell_h = state.text.cell_h;
 				// A mouse-tracking app (muffer, tmux, vim with mouse on, ...) wants
 				// the wheel as button 64/65 reports rather than scrolling back here.
@@ -5054,28 +4078,15 @@ impl ApplicationHandler<UserEvent> for App {
 				let shift = state.mods.shift_key();
 				let (up, notches) = match delta {
 					MouseScrollDelta::LineDelta(_, y) => (y > 0.0, (y.abs().round() as u32).max(1)),
-					MouseScrollDelta::PixelDelta(pos) => (
-						(pos.y as f32) > 0.0,
-						((pos.y.abs() as f32 / cell_h).round() as u32).max(1),
-					),
+					MouseScrollDelta::PixelDelta(pos) => ((pos.y as f32) > 0.0, ((pos.y.abs() as f32 / cell_h).round() as u32).max(1)),
 				};
 				if let Some(p) = state.tabs.cur().panes.get(&id) {
 					// No cell under the pointer means it's over the minimap column
 					// rather than the text, so fall through and scroll the buffer.
-					if let Some((col, row)) = (input::wheel_route(p.mode, shift)
-						== WheelRoute::Report)
-						.then(|| p.screen_cell_at(x, y, &state.text))
-						.flatten()
-					{
-						let btn = if up {
-							input::MouseBtn::WheelUp
-						} else {
-							input::MouseBtn::WheelDown
-						};
+					if let Some((col, row)) = (input::wheel_route(p.mode, shift) == WheelRoute::Report).then(|| p.screen_cell_at(x, y, &state.text)).flatten() {
+						let btn = if up { input::MouseBtn::WheelUp } else { input::MouseBtn::WheelDown };
 						for _ in 0..notches.min(8) {
-							if let Some(seq) =
-								input::mouse_report(p.mode, btn, true, false, col, row, state.mods)
-							{
+							if let Some(seq) = input::mouse_report(p.mode, btn, true, false, col, row, state.mods) {
 								p.write_input(seq);
 							}
 						}
@@ -5103,8 +4114,7 @@ impl ApplicationHandler<UserEvent> for App {
 						let n = alt_lines.abs().round() as i32;
 						if n > 0 {
 							let letter = if alt_lines > 0.0 { b'A' } else { b'B' };
-							let seq =
-								input::cursor_seq(letter, mode.contains(TermMode::APP_CURSOR));
+							let seq = input::cursor_seq(letter, mode.contains(TermMode::APP_CURSOR));
 							p.write_input(seq.repeat(n as usize));
 						}
 					} else {
@@ -5117,22 +4127,10 @@ impl ApplicationHandler<UserEvent> for App {
 				state.dirty = true;
 			}
 
-			WindowEvent::KeyboardInput {
-				event: key,
-				is_synthetic,
-				..
-			} => {
+			WindowEvent::KeyboardInput { event: key, is_synthetic, .. } => {
 				let key_at = crate::perf::key_mark();
 				if env_flag(EnvFlag::KeyDbg) {
-					eprintln!(
-						"[key] {:?} {:?} synthetic={is_synthetic} focused={} mods=[{}{}{}]",
-						key.logical_key,
-						key.state,
-						state.focused,
-						if state.mods.control_key() { "C" } else { "" },
-						if state.mods.alt_key() { "A" } else { "" },
-						if state.mods.shift_key() { "S" } else { "" },
-					);
+					eprintln!("[key] {:?} {:?} synthetic={is_synthetic} focused={} mods=[{}{}{}]", key.logical_key, key.state, state.focused, if state.mods.control_key() { "C" } else { "" }, if state.mods.alt_key() { "A" } else { "" }, if state.mods.shift_key() { "S" } else { "" });
 				}
 				// A replayed press is focus bookkeeping, and a release is the
 				// shell's business, so neither is typing.
@@ -5146,9 +4144,7 @@ impl ApplicationHandler<UserEvent> for App {
 				// the bare arrow that gate is for, and a flag lagging the WM must not
 				// eat it while right-click Copy works.
 				if IGNORE_KEYS_WHILE_UNFOCUSED && !state.focused {
-					if state.menu.is_none()
-						&& is_copy_chord(&config::settings().keys, state.mods, &key.logical_key)
-					{
+					if state.menu.is_none() && is_copy_chord(&config::settings().keys, state.mods, &key.logical_key) {
 						state.copy_selection();
 					}
 					return;
@@ -5189,11 +4185,7 @@ impl ApplicationHandler<UserEvent> for App {
 								&& let Some(open_idx) = state.bar_open
 							{
 								let n = MENU_BAR.len();
-								let next = if left {
-									(open_idx + n - 1) % n
-								} else {
-									(open_idx + 1) % n
-								};
+								let next = if left { (open_idx + n - 1) % n } else { (open_idx + 1) % n };
 								state.open_bar_menu(next);
 							}
 						}
@@ -5206,11 +4198,7 @@ impl ApplicationHandler<UserEvent> for App {
 						// It's unique per menu, and some items have none. A chord
 						// such as Ctrl+Shift+C picks nothing and stays in the menu.
 						Key::Character(typed) => {
-							let hit = state
-								.menu
-								.as_ref()
-								.and_then(|menu| menu.popups().last())
-								.and_then(|inner| accel_row(&inner.entries, typed, state.mods));
+							let hit = state.menu.as_ref().and_then(|menu| menu.popups().last()).and_then(|inner| accel_row(&inner.entries, typed, state.mods));
 							if let Some(row) = hit {
 								state.menu_activate(row, &self.proxy);
 							}
@@ -5327,15 +4315,8 @@ impl ApplicationHandler<UserEvent> for App {
 					return;
 				}
 				let focused = state.tabs.cur().focused;
-				let app_cursor = state
-					.tabs
-					.cur()
-					.panes
-					.get(&focused)
-					.is_some_and(|p| p.mode.contains(TermMode::APP_CURSOR));
-				let as_alt = config::settings()
-					.option_as_alt
-					.held(state.mods, state.alt_sides);
+				let app_cursor = state.tabs.cur().panes.get(&focused).is_some_and(|p| p.mode.contains(TermMode::APP_CURSOR));
+				let as_alt = config::settings().option_as_alt.held(state.mods, state.alt_sides);
 				if let Some(bytes) = input::encode(&key, state.mods, app_cursor, as_alt) {
 					// a held pane has no shell left to type at, so any key that
 					// would have gone to one closes it instead
@@ -5409,20 +4390,14 @@ impl ApplicationHandler<UserEvent> for App {
 		}
 		#[cfg(target_os = "macos")]
 		if let Some(state) = self.state.as_ref() {
-			crate::macmenu::refresh(
-				state.bar_menus_key(),
-				|| crate::macmenu::layout(state.bar_menus(), &config::settings().keys),
-				&self.proxy,
-			);
+			crate::macmenu::refresh(state.bar_menus_key(), || crate::macmenu::layout(state.bar_menus(), &config::settings().keys), &self.proxy);
 		}
 		// cicd profiler: in profile mode run for SILK_PROFILE_SECS then exit, so
 		// main can dump the flamegraph (the workload runs in the startup pane).
 		#[cfg(feature = "profiling")]
 		if std::env::var_os("SILK_PROFILE_OUT").is_some() {
 			let now = std::time::Instant::now();
-			let deadline = *self
-				.profile_deadline
-				.get_or_insert_with(|| now + std::time::Duration::from_secs(self.profile_secs));
+			let deadline = *self.profile_deadline.get_or_insert_with(|| now + std::time::Duration::from_secs(self.profile_secs));
 			if now >= deadline {
 				event_loop.exit();
 				return;
@@ -5431,12 +4406,7 @@ impl ApplicationHandler<UserEvent> for App {
 
 		// Warm the dialogs' GPU context once the terminal is on screen,
 		// so building it can't slow the path to the first frame. Idempotent.
-		if WARM_DIALOG_GPU
-			&& self
-				.state
-				.as_ref()
-				.is_some_and(|state| state.revealed && state.gpu.is_some())
-		{
+		if WARM_DIALOG_GPU && self.state.as_ref().is_some_and(|state| state.revealed && state.gpu.is_some()) {
 			self.gpu_warm.start();
 		}
 
@@ -5465,28 +4435,14 @@ impl ApplicationHandler<UserEvent> for App {
 
 		// Open the About window if asked for. Window creation needs the event
 		// loop, so State only flags it and it's done here.
-		let open_about = self
-			.state
-			.as_mut()
-			.is_some_and(|state| std::mem::take(&mut state.pending_about));
+		let open_about = self.state.as_mut().is_some_and(|state| std::mem::take(&mut state.pending_about));
 		// parent handle so the WM ties the dialog to the terminal window
 		// (transient-for / owner)
-		let parent = self
-			.state
-			.as_ref()
-			.and_then(|state| crate::dialog::Parent::of(&state.window));
+		let parent = self.state.as_ref().and_then(|state| crate::dialog::Parent::of(&state.window));
 		// cloned (all wgpu handles, so refcount bumps) rather than borrowed: the
 		// open arms below also take `&mut self` to store the dialog
-		let warm = (open_about
-			|| self
-				.state
-				.as_ref()
-				.is_some_and(|s| s.pending_settings.is_some()))
-		.then(|| self.gpu_warm.get())
-		.flatten();
-		if open_about
-			&& let Some(info) = self.state.as_ref().map(|state| state.adapter_info.clone())
-		{
+		let warm = (open_about || self.state.as_ref().is_some_and(|s| s.pending_settings.is_some())).then(|| self.gpu_warm.get()).flatten();
+		if open_about && let Some(info) = self.state.as_ref().map(|state| state.adapter_info.clone()) {
 			match crate::dialog::DialogWin::new_about(event_loop, &info, parent, warm.as_ref()) {
 				Ok(d) => {
 					self.dialog = Some(d);
@@ -5504,20 +4460,9 @@ impl ApplicationHandler<UserEvent> for App {
 		if let Some((asked, base)) = settings_base {
 			// a view older than the resume window is dead either way, so take it
 			// unconditionally and discard it if it has expired
-			let resume = self
-				.settings_view
-				.take()
-				.filter(|(closed, _)| closed.elapsed() <= SETTINGS_RESUME)
-				.map(|(_, view)| view);
+			let resume = self.settings_view.take().filter(|(closed, _)| closed.elapsed() <= SETTINGS_RESUME).map(|(_, view)| view);
 			let sized = self.settings_size;
-			match crate::dialog::DialogWin::new_settings(
-				event_loop,
-				parent,
-				resume,
-				sized,
-				warm.as_ref(),
-				base,
-			) {
+			match crate::dialog::DialogWin::new_settings(event_loop, parent, resume, sized, warm.as_ref(), base) {
 				Ok(d) => {
 					self.dialog = Some(d);
 					self.center_dialog();
@@ -5531,18 +4476,10 @@ impl ApplicationHandler<UserEvent> for App {
 		// a dialog with an animating field edit, such as a view scroll, caret, or
 		// blink, or a tip coming due gets its frame when due rather than on every
 		// pass, or each pointer move would draw it again (see dlg_wake below)
-		if self
-			.dialog
-			.as_ref()
-			.is_some_and(|d| d.owes_frame(Instant::now()))
-		{
+		if self.dialog.as_ref().is_some_and(|d| d.owes_frame(Instant::now())) {
 			self.dialog_dirty = true;
 		}
-		if self
-			.dialog
-			.as_mut()
-			.is_some_and(|d| d.refused.take_due(Instant::now()))
-		{
+		if self.dialog.as_mut().is_some_and(|d| d.refused.take_due(Instant::now())) {
 			self.dialog_dirty = true;
 		}
 		if self.dialog_dirty {
@@ -5553,11 +4490,7 @@ impl ApplicationHandler<UserEvent> for App {
 			if let Some((asked, warm)) = self.settings_asked.take()
 				&& env_flag(EnvFlag::DlgDbg)
 			{
-				eprintln!(
-					"[dlg] Settings drawn {:.1} ms after it was asked for, on the {} context",
-					asked.elapsed().as_secs_f64() * 1e3,
-					if warm { "warm" } else { "cold" }
-				);
+				eprintln!("[dlg] Settings drawn {:.1} ms after it was asked for, on the {} context", asked.elapsed().as_secs_f64() * 1e3, if warm { "warm" } else { "cold" });
 			}
 		}
 		// A save that couldn't be written. Asked for from Settings, it was
@@ -5579,18 +4512,10 @@ impl ApplicationHandler<UserEvent> for App {
 		if self.notice_owed.is_some() || self.loss_owed.is_some() {
 			self.show_notice(event_loop);
 		}
-		if self
-			.state
-			.as_ref()
-			.is_some_and(|state| state.close_ask.is_some())
-		{
+		if self.state.as_ref().is_some_and(|state| state.close_ask.is_some()) {
 			self.show_close_ask(event_loop);
 		}
-		if self
-			.notice
-			.as_mut()
-			.is_some_and(|n| n.refused.take_due(Instant::now()))
-		{
+		if self.notice.as_mut().is_some_and(|n| n.refused.take_due(Instant::now())) {
 			self.notice_dirty = true;
 		}
 		if self.notice_dirty {
@@ -5599,10 +4524,7 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 			self.notice_dirty = false;
 		}
-		let dlg_wake = self
-			.dialog
-			.as_ref()
-			.and_then(super::dialog::DialogWin::wake_at);
+		let dlg_wake = self.dialog.as_ref().and_then(super::dialog::DialogWin::wake_at);
 
 		// put the terminal back under the dialog a few times after focus (see the
 		// field comment). Cleared when the dialog closes.
@@ -5620,12 +4542,7 @@ impl ApplicationHandler<UserEvent> for App {
 		let Some(state) = self.state.as_mut() else {
 			return;
 		};
-		let scroll_anim = state
-			.tabs
-			.cur()
-			.panes
-			.values()
-			.any(|p| p.scroll.animating());
+		let scroll_anim = state.tabs.cur().panes.values().any(|p| p.scroll.animating());
 		let cursor_anim = state.tabs.cur().panes.values().any(|p| p.cursor_animating);
 		let content = state.tabs.cur().panes.values().any(|p| p.content_dirty);
 		// Parked cursor resume: no frames come while a cursor is parked at full,
@@ -5700,11 +4617,7 @@ impl ApplicationHandler<UserEvent> for App {
 			let mut lost = None;
 			match gpu.gfx.vram_check_poll() {
 				Some(VramProbe::Lost { uploaded, rendered }) => {
-					lost = Some(format!(
-						"sentinel uploaded={} rendered={}",
-						if uploaded { "gone" } else { "ok" },
-						if rendered { "gone" } else { "ok" }
-					));
+					lost = Some(format!("sentinel uploaded={} rendered={}", if uploaded { "gone" } else { "ok" }, if rendered { "gone" } else { "ok" }));
 				}
 				// not logged: every window every 2 seconds filled the log's
 				// cap within a day, and it then missed the switches it was for
@@ -5730,10 +4643,7 @@ impl ApplicationHandler<UserEvent> for App {
 				state.vram_next = Instant::now() + VRAM_CHECK_IVL;
 			}
 			if let Some(what) = lost {
-				eprintln!(
-					"{}: GPU texture contents lost, probably to a console switch or resume, so rebuilding",
-					config::APP_NAME
-				);
+				eprintln!("{}: GPU texture contents lost, probably to a console switch or resume, so rebuilding", config::APP_NAME);
 				vramdbg(&format!("probe: LOST ({what}) -> recover_gpu"));
 				state.recover_gpu();
 			}
@@ -5755,10 +4665,7 @@ impl ApplicationHandler<UserEvent> for App {
 			if max_fps().is_none() {
 				state.bench_from = Some(crate::profile::current(&config::settings()));
 				state.bench = Some(crate::profile::Bench::new());
-				let rung = state
-					.bench
-					.as_ref()
-					.map_or(crate::profile::Profile::Max, crate::profile::Bench::profile);
+				let rung = state.bench.as_ref().map_or(crate::profile::Profile::Max, crate::profile::Bench::profile);
 				state.set_live_profile(rung);
 			} else {
 				// nothing will be measured, so the banner has nothing to cover
@@ -5770,10 +4677,7 @@ impl ApplicationHandler<UserEvent> for App {
 		if state.bench.is_some() {
 			state.dirty = true;
 		}
-		if state
-			.bench_banner_wake()
-			.is_some_and(|wake| Instant::now() >= wake)
-		{
+		if state.bench_banner_wake().is_some_and(|wake| Instant::now() >= wake) {
 			state.bench_banner = None;
 			state.bench_kept = None;
 			state.bench_stalled = false;
@@ -5793,10 +4697,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// the rebuild waits for the dialogs to close, since a dialog's context
 		// can't outlive the terminal's there.
 		if (!dialog_up || !state.gl) && state.gpu.as_ref().is_some_and(|gpu| gpu.gfx.lost()) {
-			eprintln!(
-				"{}: the GPU device was lost, so it's being built again",
-				config::APP_NAME
-			);
+			eprintln!("{}: the GPU device was lost, so it's being built again", config::APP_NAME);
 			idledbg("device lost");
 			state.release_gpu();
 			state.idle.owe(true);
@@ -5804,12 +4705,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// Software rendering turned on or off: the device goes and comes back
 		// on what the setting now asks, the dialogs' context with it. Not while
 		// a dialog is up, since it draws on that context.
-		if !dialog_up
-			&& state
-				.gpu
-				.as_ref()
-				.is_some_and(|gpu| gpu.gfx.want != crate::gfx::wanted())
-		{
+		if !dialog_up && state.gpu.as_ref().is_some_and(|gpu| gpu.gfx.want != crate::gfx::wanted()) {
 			idledbg("software rendering setting changed");
 			state.release_gpu();
 			self.gpu_warm.release();
@@ -5822,11 +4718,7 @@ impl ApplicationHandler<UserEvent> for App {
 			if state.idle.rebuild_due(hidden, Instant::now()) {
 				state.rebuild_gpu();
 			}
-		} else if !dialog_up
-			&& state
-				.release_deadline(&config::settings())
-				.is_some_and(|due| Instant::now() >= due)
-		{
+		} else if !dialog_up && state.release_deadline(&config::settings()).is_some_and(|due| Instant::now() >= due) {
 			state.release_gpu();
 			// the dialogs' warm context is a second device; it comes back
 			// with the first (see the warm-up at the top of this pass)
@@ -5841,13 +4733,7 @@ impl ApplicationHandler<UserEvent> for App {
 		let flow = if hidden || state.gpu.is_none() {
 			state.rating.pause();
 			ControlFlow::Wait
-		} else if state.dirty
-			|| state.marks_moved
-			|| content
-			|| scroll_anim
-			|| cursor_anim
-			|| bell_anim
-		{
+		} else if state.dirty || state.marks_moved || content || scroll_anim || cursor_anim || bell_anim {
 			// Chrome changes and the bell make every pane shape again. New output
 			// and scroll eases are scoped per pane inside render, and a frame where
 			// only the cursor animates lets every pane reuse its cached frame.
@@ -5857,31 +4743,14 @@ impl ApplicationHandler<UserEvent> for App {
 			state.marks_moved = false;
 			crate::perf::bump(&crate::perf::FRAMES);
 			let allocs = crate::perf::thread_allocs();
-			let animating =
-				crate::perf::timed(&crate::perf::RENDER_NS, || state.render(force, map));
-			crate::perf::frame_allocs(
-				allocs,
-				crate::perf::FrameCause {
-					rebuild: force,
-					output: content,
-					scroll: scroll_anim,
-					cursor: cursor_anim,
-					bell: bell_anim,
-				},
-			);
+			let animating = crate::perf::timed(&crate::perf::RENDER_NS, || state.render(force, map));
+			crate::perf::frame_allocs(allocs, crate::perf::FrameCause { rebuild: force, output: content, scroll: scroll_anim, cursor: cursor_anim, bell: bell_anim });
 			// how the ease is paced tells whether the display keeps up
-			let step = rating_step(
-				state.bench.is_some(),
-				scroll_anim,
-				max_fps().is_some(),
-				state.focused,
-			);
+			let step = rating_step(state.bench.is_some(), scroll_anim, max_fps().is_some(), state.focused);
 			if state.bench.is_some() {
 				// a run is timing the rungs itself; the step-down would be reading
 				// the same frames and moving the profile out from under it
-				let budget = state
-					.frame_budget
-					.at(Instant::now(), || refresh_hz(&state.window));
+				let budget = state.frame_budget.at(Instant::now(), || refresh_hz(&state.window));
 				match state.bench.as_mut().map(|b| b.note(Instant::now(), budget)) {
 					Some(crate::profile::Step::Rung(next)) => state.set_live_profile(next),
 					Some(crate::profile::Step::Done(pick)) => state.finish_bench(pick),
@@ -5891,9 +4760,7 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 			match step {
 				RatingStep::Note => {
-					let budget = state
-						.frame_budget
-						.at(Instant::now(), || refresh_hz(&state.window));
+					let budget = state.frame_budget.at(Instant::now(), || refresh_hz(&state.window));
 					state.rating.note(Instant::now(), budget);
 					if state.rating.verdict(budget) == Some(true) {
 						state.step_down_profile();
@@ -5976,30 +4843,15 @@ impl ApplicationHandler<UserEvent> for App {
 			cursor_wake = Some(cursor_wake.map_or(wake, |w| w.min(wake)));
 		}
 		let flow = wake_by(flow, state.tabs.task_wake(Instant::now()));
-		let flow = wake_by(
-			flow,
-			((state.dirty || state.marks_moved) && !hidden && state.gpu.is_some())
-				.then(Instant::now),
-		);
+		let flow = wake_by(flow, ((state.dirty || state.marks_moved) && !hidden && state.gpu.is_some()).then(Instant::now));
 		// a frame or a device the GPU refused is tried again on its backoff
-		let refused = if state.gpu.is_some() {
-			state.frame_retry.at.filter(|_| !hidden)
-		} else {
-			state.idle.rebuild_wake(hidden)
-		};
-		let refused = [self.dialog.as_ref(), self.notice.as_ref()]
-			.into_iter()
-			.flatten()
-			.filter_map(|d| d.refused.at)
-			.chain(refused)
-			.min();
+		let refused = if state.gpu.is_some() { state.frame_retry.at.filter(|_| !hidden) } else { state.idle.rebuild_wake(hidden) };
+		let refused = [self.dialog.as_ref(), self.notice.as_ref()].into_iter().flatten().filter_map(|d| d.refused.at).chain(refused).min();
 		let flow = wake_by(flow, refused);
 		// wake a parked cursor at its scheduled resume time, even when idle
 		let flow = wake_by(flow, cursor_wake);
 		// wake to let the device go once the window has sat idle long enough
-		let idle_wake = (state.gpu.is_some() && !dialog_up)
-			.then(|| state.release_deadline(&config::settings()))
-			.flatten();
+		let idle_wake = (state.gpu.is_some() && !dialog_up).then(|| state.release_deadline(&config::settings())).flatten();
 		let flow = wake_by(flow, idle_wake);
 		let memdbg_wake = env_flag(EnvFlag::MemDbg).then_some(self.memdbg_next);
 		let flow = wake_by(flow, memdbg_wake);
@@ -6029,17 +4881,10 @@ impl ApplicationHandler<UserEvent> for App {
 		// post-resize frame arrives
 		let flow = wake_by(flow, (!state.revealed).then_some(state.reveal_deadline));
 		// slow-tick wake so the VRAM sentinel probe runs even while fully idle
-		let flow = wake_by(
-			flow,
-			(state.gl && state.gpu.is_some()).then_some(state.vram_next),
-		);
+		let flow = wake_by(flow, (state.gl && state.gpu.is_some()).then_some(state.vram_next));
 		// Profiling keeps the loop hot so the workload is continuously exercised.
 		#[cfg(feature = "profiling")]
-		let flow = if std::env::var_os("SILK_PROFILE_OUT").is_some() {
-			ControlFlow::Poll
-		} else {
-			flow
-		};
+		let flow = if std::env::var_os("SILK_PROFILE_OUT").is_some() { ControlFlow::Poll } else { flow };
 		event_loop.set_control_flow(flow);
 	}
 }
@@ -6051,13 +4896,7 @@ impl State {
 			return;
 		}
 		let focused = self.tabs.cur().focused;
-		if let Some(text) = self
-			.tabs
-			.cur()
-			.panes
-			.get(&focused)
-			.and_then(super::pane::Pane::selection_text)
-		{
+		if let Some(text) = self.tabs.cur().panes.get(&focused).and_then(super::pane::Pane::selection_text) {
 			self.clipboard.set_clipboard(text);
 		}
 	}
@@ -6067,10 +4906,7 @@ impl State {
 mod tests {
 	use super::push_back;
 	use super::tabs::tab_close_box;
-	use super::{
-		CloseScope, PaneWakes, SCRIM_PCT_PER_DOUBLING, TAB_CLOSE_M, close_scope, focus_moves,
-		focus_ring, is_copy_chord, key_is_typed, pace_frame, pane_wake, reveal_due, wake_by,
-	};
+	use super::{CloseScope, PaneWakes, SCRIM_PCT_PER_DOUBLING, TAB_CLOSE_M, close_scope, focus_moves, focus_ring, is_copy_chord, key_is_typed, pace_frame, pane_wake, reveal_due, wake_by};
 	use crate::config;
 	use crate::gfx::{FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Retry};
 	use crate::shells::ShellEntry;
@@ -6085,11 +4921,7 @@ mod tests {
 	fn focus_goes_out_of_one_pane_and_into_the_next() {
 		assert_eq!(focus_moves(None, Some(1)), (None, Some(1)), "window in");
 		assert_eq!(focus_moves(Some(1), None), (Some(1), None), "window out");
-		assert_eq!(
-			focus_moves(Some(1), Some(2)),
-			(Some(1), Some(2)),
-			"pane or tab switch"
-		);
+		assert_eq!(focus_moves(Some(1), Some(2)), (Some(1), Some(2)), "pane or tab switch");
 		assert_eq!(focus_moves(Some(2), Some(2)), (None, None), "no change");
 		assert_eq!(focus_moves(None, None), (None, None));
 	}
@@ -6107,17 +4939,9 @@ mod tests {
 			for flag in super::EnvFlag::ALL {
 				child.env_remove(flag.var());
 			}
-			let out = child
-				.env("SILK_DEBUG_SWITCH_CHILD", set.var())
-				.env(set.var(), "1")
-				.output()
-				.unwrap();
+			let out = child.env("SILK_DEBUG_SWITCH_CHILD", set.var()).env(set.var(), "1").output().unwrap();
 			let text = String::from_utf8_lossy(&out.stdout);
-			assert!(
-				out.status.success(),
-				"{set:?}: {text}{}",
-				String::from_utf8_lossy(&out.stderr)
-			);
+			assert!(out.status.success(), "{set:?}: {text}{}", String::from_utf8_lossy(&out.stderr));
 			assert!(text.contains("debug switches checked"), "{set:?}: {text}");
 		}
 	}
@@ -6133,11 +4957,7 @@ mod tests {
 		let set = EnvFlag::ALL.into_iter().find(|f| set == f.var()).unwrap();
 		assert!(env_flag(set), "{set:?}");
 		for flag in EnvFlag::ALL {
-			assert_eq!(
-				env_flag(flag),
-				flag.var() == set.var(),
-				"{flag:?} with {set:?} set"
-			);
+			assert_eq!(env_flag(flag), flag.var() == set.var(), "{flag:?} with {set:?} set");
 		}
 		println!("debug switches checked");
 	}
@@ -6149,34 +4969,19 @@ mod tests {
 	#[test]
 	fn the_docs_quote_the_scrim_strength_scale_the_code_uses() {
 		let pct = SCRIM_PCT_PER_DOUBLING;
-		let spelled = [
-			"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-		];
+		let spelled = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 		let doublings = spelled[(100.0 / pct) as usize];
 		let read = |rel: &str| {
 			let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
 			std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
 		};
-		let said =
-			format!("each {pct:.0}% doubles its opacity, up to {doublings} doublings at 100%");
+		let said = format!("each {pct:.0}% doubles its opacity, up to {doublings} doublings at 100%");
 		// the doc's name starts with the time it was written, so find it by its tail
 		let docs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../project/design_docs");
-		let doc = std::fs::read_dir(&docs)
-			.unwrap_or_else(|e| panic!("{}: {e}", docs.display()))
-			.filter_map(Result::ok)
-			.map(|e| e.path())
-			.find(|p| p.to_string_lossy().ends_with("_scrim.md"))
-			.expect("no scrim design doc");
-		assert!(
-			std::fs::read_to_string(&doc).unwrap().contains(&said),
-			"{} does not say: {said}",
-			doc.display()
-		);
+		let doc = std::fs::read_dir(&docs).unwrap_or_else(|e| panic!("{}: {e}", docs.display())).filter_map(Result::ok).map(|e| e.path()).find(|p| p.to_string_lossy().ends_with("_scrim.md")).expect("no scrim design doc");
+		assert!(std::fs::read_to_string(&doc).unwrap().contains(&said), "{} does not say: {said}", doc.display());
 		let commented = format!("each {pct:.0}% is one doubling");
-		assert!(
-			read("src/settings_ui.shcl").contains(&commented),
-			"settings_ui.shcl does not say: {commented}"
-		);
+		assert!(read("src/settings_ui.shcl").contains(&commented), "settings_ui.shcl does not say: {commented}");
 	}
 
 	// A menu outlives the pane it was opened for when that pane's shell ends, and
@@ -6216,17 +5021,10 @@ mod tests {
 			assert!(wait <= FRAME_RETRY_MAX);
 			last = wait;
 		}
-		assert_eq!(
-			last, FRAME_RETRY_MAX,
-			"a GPU that stays busy is asked at the cap"
-		);
+		assert_eq!(last, FRAME_RETRY_MAX, "a GPU that stays busy is asked at the cap");
 
 		retry = Retry::default();
-		assert_eq!(
-			retry.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX),
-			FRAME_RETRY_FIRST,
-			"a drawn frame starts the backoff over"
-		);
+		assert_eq!(retry.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX), FRAME_RETRY_FIRST, "a drawn frame starts the backoff over");
 	}
 
 	// The window starts hidden and is shown once a frame is drawn. Metal won't
@@ -6256,28 +5054,10 @@ mod tests {
 			texts.push(std::fs::read_to_string(entry.path()).unwrap());
 		}
 		assert!(texts.len() > 1, "found nothing under app/");
-		let body: String = texts
-			.iter()
-			.map(|text| {
-				text.split("\nmod tests {")
-					.next()
-					.expect("the file above its own tests")
-			})
-			.collect();
-		let direct: Vec<&str> = body
-			.lines()
-			.filter(|l| l.contains("term.write("))
-			.map(str::trim)
-			.collect();
-		assert_eq!(
-			direct.len(),
-			1,
-			"these bypass the read-only gate: {direct:?}"
-		);
-		assert!(
-			body.matches("write_input(").count() >= 5,
-			"the mouse and wheel writes go through the gate"
-		);
+		let body: String = texts.iter().map(|text| text.split("\nmod tests {").next().expect("the file above its own tests")).collect();
+		let direct: Vec<&str> = body.lines().filter(|l| l.contains("term.write(")).map(str::trim).collect();
+		assert_eq!(direct.len(), 1, "these bypass the read-only gate: {direct:?}");
+		assert!(body.matches("write_input(").count() >= 5, "the mouse and wheel writes go through the gate");
 	}
 
 	// Chrome geometry is in DIP, and every piece is converted where it's used, as
@@ -6299,12 +5079,7 @@ mod tests {
 		assert_eq!(one.y, TAB_CLOSE_M, "1x must still be the DIP value itself");
 
 		// the live pane's focus ring
-		let rect = super::Rect {
-			x: 0.0,
-			y: 0.0,
-			w: 100.0,
-			h: 100.0,
-		};
+		let rect = super::Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 };
 		let cfg = config::settings();
 		let thin = focus_ring(rect, 1.0, &cfg)[0].size[1];
 		let thick = focus_ring(rect, 2.0, &cfg)[0].size[1];
@@ -6335,23 +5110,11 @@ mod tests {
 		let keys = crate::keys::Bindings::defaults(false);
 		assert!(is_copy_chord(&keys, both, &Key::Character("c".into())));
 		assert!(is_copy_chord(&keys, both, &Key::Character("C".into())));
-		assert!(!is_copy_chord(
-			&keys,
-			ModifiersState::empty(),
-			&Key::Character("c".into())
-		));
-		assert!(!is_copy_chord(
-			&keys,
-			ModifiersState::CONTROL,
-			&Key::Character("c".into())
-		));
+		assert!(!is_copy_chord(&keys, ModifiersState::empty(), &Key::Character("c".into())));
+		assert!(!is_copy_chord(&keys, ModifiersState::CONTROL, &Key::Character("c".into())));
 		assert!(!is_copy_chord(&keys, both, &Key::Character("v".into())));
 		assert!(!is_copy_chord(&keys, both, &Key::Named(NamedKey::ArrowUp)));
-		assert!(!is_copy_chord(
-			&crate::keys::Bindings::defaults(true),
-			ModifiersState::empty(),
-			&Key::Character("c".into())
-		));
+		assert!(!is_copy_chord(&crate::keys::Bindings::defaults(true), ModifiersState::empty(), &Key::Character("c".into())));
 	}
 
 	// The demo capture samples on a fixed clock, so a pinned rate that drifts is
@@ -6377,10 +5140,7 @@ mod tests {
 		let behind = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
 		let mut late = Some(behind);
 		pace_frame(&mut late, ivl);
-		assert!(
-			late.unwrap() > Instant::now(),
-			"a stale deadline must be dropped"
-		);
+		assert!(late.unwrap() > Instant::now(), "a stale deadline must be dropped");
 	}
 
 	struct Wakes {
@@ -6407,39 +5167,12 @@ mod tests {
 		let now = Instant::now();
 		let soon = now + Duration::from_millis(300);
 		let later = now + Duration::from_secs(2);
-		let parked = [Wakes {
-			cursor: Some(soon),
-			map: None,
-		}];
-		assert_eq!(
-			pane_wake(&parked, now),
-			Some(soon),
-			"a parked cursor's wake"
-		);
-		let mixed = [
-			Wakes {
-				cursor: Some(later),
-				map: None,
-			},
-			Wakes {
-				cursor: None,
-				map: Some(soon),
-			},
-			Wakes {
-				cursor: Some(soon + Duration::from_millis(1)),
-				map: Some(later),
-			},
-		];
-		assert_eq!(
-			pane_wake(&mixed, now),
-			Some(soon),
-			"the earliest, any pane or kind"
-		);
+		let parked = [Wakes { cursor: Some(soon), map: None }];
+		assert_eq!(pane_wake(&parked, now), Some(soon), "a parked cursor's wake");
+		let mixed = [Wakes { cursor: Some(later), map: None }, Wakes { cursor: None, map: Some(soon) }, Wakes { cursor: Some(soon + Duration::from_millis(1)), map: Some(later) }];
+		assert_eq!(pane_wake(&mixed, now), Some(soon), "the earliest, any pane or kind");
 		// due ones belong to the pass before the frame, or an idle window spins
-		let due = [Wakes {
-			cursor: Some(now),
-			map: now.checked_sub(Duration::from_millis(1)),
-		}];
+		let due = [Wakes { cursor: Some(now), map: now.checked_sub(Duration::from_millis(1)) }];
 		assert_eq!(pane_wake(&due, now), None);
 	}
 
@@ -6456,37 +5189,15 @@ mod tests {
 			ControlFlow::Wait | ControlFlow::Poll => None,
 		};
 		assert_eq!(until(wake_by(ControlFlow::Wait, Some(soon))), Some(soon));
-		assert_eq!(
-			until(wake_by(ControlFlow::WaitUntil(later), Some(soon))),
-			Some(soon)
-		);
-		assert_eq!(
-			until(wake_by(ControlFlow::WaitUntil(soon), Some(later))),
-			Some(soon)
-		);
-		assert!(matches!(
-			wake_by(ControlFlow::Poll, Some(soon)),
-			ControlFlow::Poll
-		));
-		assert!(matches!(
-			wake_by(ControlFlow::Wait, None),
-			ControlFlow::Wait
-		));
-		assert_eq!(
-			until(wake_by(ControlFlow::WaitUntil(later), None)),
-			Some(later)
-		);
+		assert_eq!(until(wake_by(ControlFlow::WaitUntil(later), Some(soon))), Some(soon));
+		assert_eq!(until(wake_by(ControlFlow::WaitUntil(soon), Some(later))), Some(soon));
+		assert!(matches!(wake_by(ControlFlow::Poll, Some(soon)), ControlFlow::Poll));
+		assert!(matches!(wake_by(ControlFlow::Wait, None), ControlFlow::Wait));
+		assert_eq!(until(wake_by(ControlFlow::WaitUntil(later), None)), Some(later));
 	}
 
 	pub(super) fn shell(title: &str, active: bool) -> ShellEntry {
-		ShellEntry {
-			slug: title.to_lowercase(),
-			title: title.into(),
-			command: title.to_lowercase(),
-			active,
-			comment: String::new(),
-			last_seen: String::new(),
-		}
+		ShellEntry { slug: title.to_lowercase(), title: title.into(), command: title.to_lowercase(), active, comment: String::new(), last_seen: String::new() }
 	}
 
 	// Test ID: dd5pz
@@ -6499,16 +5210,8 @@ mod tests {
 		assert_eq!(push_back(armed, Some(cap), due), Some(due));
 		assert_eq!(push_back(armed, None, due), Some(due));
 		let late = now + Duration::from_secs(30);
-		assert_eq!(
-			push_back(armed, Some(cap), late),
-			Some(cap),
-			"past the backstop"
-		);
-		assert_eq!(
-			push_back(None, Some(cap), due),
-			None,
-			"the scan already ran"
-		);
+		assert_eq!(push_back(armed, Some(cap), late), Some(cap), "past the backstop");
+		assert_eq!(push_back(None, Some(cap), due), None, "the scan already ran");
 	}
 
 	// The default shell is the first entry switched on, not the first entry.
@@ -6519,22 +5222,12 @@ mod tests {
 		let _store = config::test_store_lock();
 		let saved = config::settings();
 		let with = |shells: Vec<ShellEntry>| {
-			config::update(config::Settings {
-				shells,
-				..(*saved).clone()
-			});
+			config::update(config::Settings { shells, ..(*saved).clone() });
 			config::default_shell_argv()
 		};
-		let mut listed = vec![
-			shell("fish", false),
-			shell("Bash", true),
-			shell("zsh", true),
-		];
+		let mut listed = vec![shell("fish", false), shell("Bash", true), shell("zsh", true)];
 		listed[1].command = "bash -l".into();
-		assert_eq!(
-			with(listed),
-			Some(vec!["bash".to_string(), "-l".to_string()])
-		);
+		assert_eq!(with(listed), Some(vec!["bash".to_string(), "-l".to_string()]));
 		assert_eq!(with(vec![shell("fish", false)]), None);
 		config::update((*saved).clone());
 	}
@@ -6544,24 +5237,12 @@ mod tests {
 	fn leaving_a_bare_window_puts_back_only_what_was_on() {
 		use super::bare_chrome;
 		// going bare saves what was on and hides both
-		assert_eq!(
-			bare_chrome(true, (false, false), (true, true)),
-			((true, true), (false, false))
-		);
-		assert_eq!(
-			bare_chrome(false, (true, true), (false, false)).1,
-			(true, true)
-		);
+		assert_eq!(bare_chrome(true, (false, false), (true, true)), ((true, true), (false, false)));
+		assert_eq!(bare_chrome(false, (true, true), (false, false)).1, (true, true));
 		// the frame was already off, so it stays off
-		assert_eq!(
-			bare_chrome(false, (false, true), (false, false)).1,
-			(false, true)
-		);
+		assert_eq!(bare_chrome(false, (false, true), (false, false)).1, (false, true));
 		// a menu bar switched on while bare stays on
-		assert_eq!(
-			bare_chrome(false, (true, false), (false, true)).1,
-			(true, true)
-		);
+		assert_eq!(bare_chrome(false, (true, false), (false, true)).1, (true, true));
 	}
 
 	// The tab tip and the benchmark banner copied every line out for each
@@ -6573,21 +5254,8 @@ mod tests {
 		use crate::pane::Rect;
 		const SAID: &[&str] = &["Testing performance", "This takes a few seconds."];
 		let kept = vec!["Shell name:  sh".to_string(), "Open:        3s".to_string()];
-		let rect = Rect {
-			x: 10.0,
-			y: 20.0,
-			w: 200.0,
-			h: 60.0,
-		};
-		let tip = Overlay {
-			at: OverlayAt {
-				rect,
-				top: 28.0,
-				line_h: 18.0,
-				lefts: OverlayLefts::Even(18.0),
-			},
-			words: OverlayWords::Kept(&kept),
-		};
+		let rect = Rect { x: 10.0, y: 20.0, w: 200.0, h: 60.0 };
+		let tip = Overlay { at: OverlayAt { rect, top: 28.0, line_h: 18.0, lefts: OverlayLefts::Even(18.0) }, words: OverlayWords::Kept(&kept) };
 		let before = crate::perf::thread_allocs();
 		let mut lines = 0;
 		for (i, (left, top, line)) in tip.placed().enumerate() {
@@ -6596,22 +5264,10 @@ mod tests {
 			lines += 1;
 		}
 		assert_eq!(lines, kept.len());
-		assert_eq!(
-			crate::perf::thread_allocs() - before,
-			0,
-			"placing the lines allocated"
-		);
+		assert_eq!(crate::perf::thread_allocs() - before, 0, "placing the lines allocated");
 		let mut lefts = [0.0; BENCH_BANNER_MAX_LINES];
 		lefts[..2].copy_from_slice(&[40.0, 31.0]);
-		let banner = Overlay {
-			at: OverlayAt {
-				rect,
-				top: 42.0,
-				line_h: 20.0,
-				lefts: OverlayLefts::Each(lefts),
-			},
-			words: OverlayWords::Fixed(SAID),
-		};
+		let banner = Overlay { at: OverlayAt { rect, top: 42.0, line_h: 20.0, lefts: OverlayLefts::Each(lefts) }, words: OverlayWords::Fixed(SAID) };
 		let before = crate::perf::thread_allocs();
 		let placed: Vec<_> = banner.placed().collect();
 		// collecting them does allocate, which shows the counter counts

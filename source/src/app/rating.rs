@@ -4,10 +4,7 @@
 //! The performance benchmark and the profile it picks, and the display watch
 //! that steps a slow session down.
 
-use super::{
-	BENCH_BANNER_MAX_LINES, BENCH_BANNER_MIN, BENCH_BANNER_PAD, Overlay, OverlayAt, OverlayLefts,
-	OverlayWords, State, set_live,
-};
+use super::{BENCH_BANNER_MAX_LINES, BENCH_BANNER_MIN, BENCH_BANNER_PAD, Overlay, OverlayAt, OverlayLefts, OverlayWords, State, set_live};
 use crate::config;
 use crate::gfx::Drawn;
 use crate::pane::Rect;
@@ -40,21 +37,9 @@ pub(super) enum RatingStep {
 /// rendering paced it. A benchmark is timing the same frames itself, a pinned
 /// rate paces itself, and a window without focus is one nobody is watching, so
 /// it gets no say in the profile.
-#[allow(
-	clippy::fn_params_excessive_bools,
-	reason = "the 4 gates are independent, and all 16 cases are tested"
-)]
-pub(super) fn rating_step(
-	bench: bool,
-	scroll_anim: bool,
-	pinned_fps: bool,
-	focused: bool,
-) -> RatingStep {
-	if !bench && scroll_anim && !pinned_fps && focused {
-		RatingStep::Note
-	} else {
-		RatingStep::Pause
-	}
+#[allow(clippy::fn_params_excessive_bools, reason = "the 4 gates are independent, and all 16 cases are tested")]
+pub(super) fn rating_step(bench: bool, scroll_anim: bool, pinned_fps: bool, focused: bool) -> RatingStep {
+	if !bench && scroll_anim && !pinned_fps && focused { RatingStep::Note } else { RatingStep::Pause }
 }
 
 /// With the profile on automatic, hardware the config hasn't seen gets a fresh
@@ -74,16 +59,10 @@ pub(super) fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 	// The one-shot check counts as new hardware, and clears itself here rather
 	// than with the answer: a window closed mid-run has still had its run.
 	if live.performance_check_next_run {
-		let kept = config::keep_rating(config::RatingLines {
-			check_next_run: Some(false),
-		});
+		let kept = config::keep_rating(config::RatingLines { check_next_run: Some(false) });
 		note_rating_not_kept(&kept);
 		set_live(|live| {
-			crate::fields::store(
-				live,
-				crate::ui_spec::Key::PerfCheckNext,
-				knobs::Value::Bool(false),
-			);
+			crate::fields::store(live, crate::ui_spec::Key::PerfCheckNext, knobs::Value::Bool(false));
 		});
 	}
 	if crate::profile::worth_measuring(info) {
@@ -124,19 +103,13 @@ fn rating_due(live: &config::Settings, hardware: &str) -> bool {
 /// its rating and the session steps down to Low, the way a remote screen takes
 /// Remote. A step made here (`ours`) comes off when the card draws again, and
 /// a deeper step the display watch took since stays.
-pub(super) fn session_step(
-	live: &config::Settings,
-	drawn: Drawn,
-	ours: bool,
-) -> Option<Option<crate::profile::Profile>> {
+pub(super) fn session_step(live: &config::Settings, drawn: Drawn, ours: bool) -> Option<Option<crate::profile::Profile>> {
 	use crate::profile::Profile;
 	if !live.performance_automatic {
 		return None;
 	}
 	if drawn.instead_of_card() {
-		let deeper = live
-			.stepped_profile
-			.is_some_and(|step| step.index() >= Profile::Low.index());
+		let deeper = live.stepped_profile.is_some_and(|step| step.index() >= Profile::Low.index());
 		return (!deeper).then_some(Some(Profile::Low));
 	}
 	(ours && live.stepped_profile == Some(Profile::Low)).then_some(None)
@@ -156,15 +129,10 @@ fn note_rating_not_kept(kept: &config::Kept) {
 		config::Kept::Written => return,
 		config::Kept::Busy => "the settings file is open in another program",
 		config::Kept::Unreadable => "the settings file has a line that can't be read",
-		config::Kept::Unplaced => {
-			"the performance section of the settings file couldn't be updated"
-		}
+		config::Kept::Unplaced => "the performance section of the settings file couldn't be updated",
 		config::Kept::Unwritable(why) => why.as_str(),
 	};
-	eprintln!(
-		"{}: performance rating not saved ({reason}); the test runs again at the next launch",
-		config::APP_NAME
-	);
+	eprintln!("{}: performance rating not saved ({reason}); the test runs again at the next launch", config::APP_NAME);
 }
 
 // What the benchmark's banner says: that a run is on, or, for its last few
@@ -173,44 +141,21 @@ fn bench_banner_lines(kept: Option<&config::Kept>) -> &'static [&'static str] {
 	const AGAIN: &str = "The test runs again at the next launch.";
 	match kept {
 		None | Some(config::Kept::Written) => &["Testing performance", "This takes a few seconds."],
-		Some(config::Kept::Busy) => &[
-			"Couldn't save the result",
-			"The settings file is open in another program.",
-			AGAIN,
-		],
-		Some(config::Kept::Unreadable) => &[
-			"Couldn't save the result",
-			"The settings file has a line that can't be read.",
-			AGAIN,
-		],
-		Some(config::Kept::Unplaced) => &[
-			"Couldn't save the result",
-			"The performance section of the settings file couldn't be updated.",
-			AGAIN,
-		],
-		Some(config::Kept::Unwritable(_)) => &[
-			"Couldn't save the result",
-			"The settings file can't be written.",
-			AGAIN,
-		],
+		Some(config::Kept::Busy) => &["Couldn't save the result", "The settings file is open in another program.", AGAIN],
+		Some(config::Kept::Unreadable) => &["Couldn't save the result", "The settings file has a line that can't be read.", AGAIN],
+		Some(config::Kept::Unplaced) => &["Couldn't save the result", "The performance section of the settings file couldn't be updated.", AGAIN],
+		Some(config::Kept::Unwritable(_)) => &["Couldn't save the result", "The settings file can't be written.", AGAIN],
 	}
 }
 
 // What the banner says after a run the display stalled.
-const BENCH_STALLED_LINES: &[&str] = &[
-	"Couldn't test performance",
-	"The display wasn't drawing at its usual rate.",
-	"The test runs again at the next launch.",
-];
+const BENCH_STALLED_LINES: &[&str] = &["Couldn't test performance", "The display wasn't drawing at its usual rate.", "The test runs again at the next launch."];
 
 // The user's own settings with a measured profile stored in them: a benchmark
 // rung while it is timed, or the answer once the run ends. A measurement replaces
 // any step the display watch took, and a step left in place would sit over the
 // rung and time the wrong one.
-fn with_measured_profile(
-	live: &config::Settings,
-	profile: crate::profile::Profile,
-) -> config::Settings {
+fn with_measured_profile(live: &config::Settings, profile: crate::profile::Profile) -> config::Settings {
 	let mut next = live.clone();
 	next.tested_profile = Some(profile);
 	next.stepped_profile = None;
@@ -236,11 +181,7 @@ impl State {
 	/// what is timed, but takes no input while the banner is up.
 	pub(super) fn bench_layout(&mut self) -> Option<Overlay<'static>> {
 		self.bench_banner.as_ref()?;
-		let lines = if self.bench_stalled {
-			BENCH_STALLED_LINES
-		} else {
-			bench_banner_lines(self.bench_kept.as_ref())
-		};
+		let lines = if self.bench_stalled { BENCH_STALLED_LINES } else { bench_banner_lines(self.bench_kept.as_ref()) };
 		let attrs = crate::text::ui_attrs();
 		let pad = self.text.dip(BENCH_BANNER_PAD);
 		let line_h = self.text.ui_line_h;
@@ -252,21 +193,10 @@ impl State {
 		let w = text_w + 2.0 * pad;
 		let h = line_h * lines.len() as f32 + 2.0 * pad;
 		let (win_w, win_h) = (self.surface_px.0 as f32, self.surface_px.1 as f32);
-		let (x, y) = (
-			((win_w - w) / 2.0).max(0.0).round(),
-			((win_h - h) / 2.0).max(0.0).round(),
-		);
+		let (x, y) = (((win_w - w) / 2.0).max(0.0).round(), ((win_h - h) / 2.0).max(0.0).round());
 		let lefts = widths.map(|width| (x + (w - width) / 2.0).round());
 		// the words are fixed, so the frame borrows them for as long as it likes
-		Some(Overlay {
-			at: OverlayAt {
-				rect: Rect { x, y, w, h },
-				top: y + pad,
-				line_h,
-				lefts: OverlayLefts::Each(lefts),
-			},
-			words: OverlayWords::Fixed(lines),
-		})
+		Some(Overlay { at: OverlayAt { rect: Rect { x, y, w, h }, top: y + pad, line_h, lefts: OverlayLefts::Each(lefts) }, words: OverlayWords::Fixed(lines) })
 	}
 
 	/// The rating waits for the wallpaper, since that is part of what it times,
@@ -278,9 +208,7 @@ impl State {
 	/// The banner comes down once the run is over and it has been up long
 	/// enough to read.
 	pub(super) fn bench_banner_wake(&self) -> Option<Instant> {
-		self.bench_banner
-			.filter(|_| self.bench.is_none() && self.bench_at.is_none())
-			.map(|up| up + BENCH_BANNER_MIN)
+		self.bench_banner.filter(|_| self.bench.is_none() && self.bench_at.is_none()).map(|up| up + BENCH_BANNER_MIN)
 	}
 
 	/// The Remote profile on or off by hand. Live only: nothing about it is
@@ -306,11 +234,7 @@ impl State {
 	pub(super) fn finish_bench(&mut self, pick: crate::profile::Profile) {
 		self.bench = None;
 		self.rating.reset();
-		eprintln!(
-			"{}: performance profile measured for this hardware: {}",
-			config::APP_NAME,
-			pick.label()
-		);
+		eprintln!("{}: performance profile measured for this hardware: {}", config::APP_NAME, pick.label());
 		let orig = config::settings();
 		let mut new = with_measured_profile(&orig, pick);
 		let id = self.bench_id.take();
@@ -339,10 +263,7 @@ impl State {
 		self.bench = None;
 		self.bench_id = None;
 		self.rating.reset();
-		eprintln!(
-			"{}: performance test gave no answer (the display wasn't drawing at its usual rate); it runs again at the next launch",
-			config::APP_NAME
-		);
+		eprintln!("{}: performance test gave no answer (the display wasn't drawing at its usual rate); it runs again at the next launch", config::APP_NAME);
 		self.bench_stalled = true;
 		self.bench_kept = None;
 		self.bench_banner = Some(Instant::now());
@@ -360,12 +281,7 @@ impl State {
 		let Some(next) = watch_step_down(&live) else {
 			return;
 		};
-		eprintln!(
-			"{}: the display isn't keeping up; performance profile stepped down to {} until {} restarts",
-			config::APP_NAME,
-			crate::profile::current(&next).label(),
-			config::APP_NAME
-		);
+		eprintln!("{}: the display isn't keeping up; performance profile stepped down to {} until {} restarts", config::APP_NAME, crate::profile::current(&next).label(), config::APP_NAME);
 		self.apply_new_settings(&live, next, false);
 	}
 }
@@ -382,18 +298,13 @@ mod tests {
 		use super::RatingStep;
 		let mut notes = 0;
 		for bits in 0..16u8 {
-			let (bench, scroll, pinned, focused) =
-				(bits & 1 != 0, bits & 2 != 0, bits & 4 != 0, bits & 8 != 0);
+			let (bench, scroll, pinned, focused) = (bits & 1 != 0, bits & 2 != 0, bits & 4 != 0, bits & 8 != 0);
 			let step = rating_step(bench, scroll, pinned, focused);
 			if (bench, scroll, pinned, focused) == (false, true, false, true) {
 				assert_eq!(step, RatingStep::Note);
 				notes += 1;
 			} else {
-				assert_eq!(
-					step,
-					RatingStep::Pause,
-					"bench {bench} scroll {scroll} pinned {pinned} focused {focused}"
-				);
+				assert_eq!(step, RatingStep::Pause, "bench {bench} scroll {scroll} pinned {pinned} focused {focused}");
 			}
 		}
 		assert_eq!(notes, 1);
@@ -406,11 +317,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_measured_profile_replaces_a_session_step() {
 		use crate::profile::Profile;
-		let mut live = config::Settings {
-			tested_profile: Some(Profile::Max),
-			stepped_profile: Some(Profile::Low),
-			..config::Settings::default()
-		};
+		let mut live = config::Settings { tested_profile: Some(Profile::Max), stepped_profile: Some(Profile::Low), ..config::Settings::default() };
 		crate::fields::fill(&mut live, None);
 		assert_eq!(crate::profile::current(&live), Profile::Low);
 		let next = super::with_measured_profile(&live, Profile::High);
@@ -429,72 +336,32 @@ mod tests {
 		use crate::profile::Profile;
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_appstep_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_appstep_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
 		config::set_config_override(path.clone());
-		let cases = [
-			(true, "max", Some(Profile::High)),
-			(true, "high", Some(Profile::Low)),
-			(true, "low", None),
-			(true, "standard", None),
-			(true, "custom", None),
-			(false, "max", None),
-		];
+		let cases = [(true, "max", Some(Profile::High)), (true, "high", Some(Profile::Low)), (true, "low", None), (true, "standard", None), (true, "custom", None), (false, "max", None)];
 		for (automatic, stored, want) in cases {
-			std::fs::write(
-				&path,
-				format!("performance:\n\tautomatic: {automatic}\n\tprofile: \"{stored}\"\n"),
-			)
-			.unwrap();
+			std::fs::write(&path, format!("performance:\n\tautomatic: {automatic}\n\tprofile: \"{stored}\"\n")).unwrap();
 			let live = config::reload_from_disk();
 			let before = std::fs::read_to_string(&path).unwrap();
 			let next = super::watch_step_down(&live);
-			assert_eq!(
-				std::fs::read_to_string(&path).unwrap(),
-				before,
-				"automatic {automatic}, stored {stored}: taking the step writes nothing"
-			);
-			assert_eq!(
-				next.as_ref().and_then(|n| n.stepped_profile),
-				want,
-				"automatic {automatic}, stored {stored}"
-			);
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), before, "automatic {automatic}, stored {stored}: taking the step writes nothing");
+			assert_eq!(next.as_ref().and_then(|n| n.stepped_profile), want, "automatic {automatic}, stored {stored}");
 			let Some(next) = next else {
 				continue;
 			};
-			assert_eq!(
-				next.performance_profile.key(),
-				stored,
-				"the stored profile stays"
-			);
+			assert_eq!(next.performance_profile.key(), stored, "the stored profile stays");
 			assert_eq!(Some(crate::profile::current(&next)), want);
 			assert!(config::persist(&live, &next));
-			assert_eq!(
-				std::fs::read_to_string(&path).unwrap(),
-				before,
-				"stored {stored}: nor does saving the settings it is in"
-			);
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), before, "stored {stored}: nor does saving the settings it is in");
 		}
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
 	fn adapter(name: &str, device_type: wgpu::DeviceType) -> wgpu::AdapterInfo {
-		wgpu::AdapterInfo {
-			name: name.to_string(),
-			vendor: 0,
-			device: 0,
-			device_type,
-			device_pci_bus_id: String::new(),
-			driver: String::new(),
-			driver_info: String::new(),
-			backend: wgpu::Backend::Gl,
-			subgroup_min_size: 0,
-			subgroup_max_size: 0,
-			transient_saves_memory: false,
-		}
+		wgpu::AdapterInfo { name: name.to_string(), vendor: 0, device: 0, device_type, device_pci_bus_id: String::new(), driver: String::new(), driver_info: String::new(), backend: wgpu::Backend::Gl, subgroup_min_size: 0, subgroup_max_size: 0, transient_saves_memory: false }
 	}
 
 	// Which launches need a rating. Pulled out of the launch path when every write
@@ -508,46 +375,21 @@ mod tests {
 		use super::session_step;
 		use crate::gfx::Drawn;
 		use crate::profile::Profile;
-		let live = |automatic: bool, stepped: Option<Profile>| config::Settings {
-			performance_automatic: automatic,
-			stepped_profile: stepped,
-			..config::Settings::default()
-		};
+		let live = |automatic: bool, stepped: Option<Profile>| config::Settings { performance_automatic: automatic, stepped_profile: stepped, ..config::Settings::default() };
 		for drawn in [Drawn::Software, Drawn::Fallback] {
-			assert_eq!(
-				session_step(&live(true, None), drawn, false),
-				Some(Some(Profile::Low))
-			);
-			assert_eq!(
-				session_step(&live(true, Some(Profile::High)), drawn, false),
-				Some(Some(Profile::Low))
-			);
+			assert_eq!(session_step(&live(true, None), drawn, false), Some(Some(Profile::Low)));
+			assert_eq!(session_step(&live(true, Some(Profile::High)), drawn, false), Some(Some(Profile::Low)));
 			// the display watch already went deeper
-			assert_eq!(
-				session_step(&live(true, Some(Profile::Standard)), drawn, false),
-				None
-			);
-			assert_eq!(
-				session_step(&live(true, Some(Profile::Low)), drawn, true),
-				None
-			);
+			assert_eq!(session_step(&live(true, Some(Profile::Standard)), drawn, false), None);
+			assert_eq!(session_step(&live(true, Some(Profile::Low)), drawn, true), None);
 			// a profile picked by hand is left alone
 			assert_eq!(session_step(&live(false, None), drawn, false), None);
 		}
 		for drawn in [Drawn::Card, Drawn::NoCard] {
-			assert_eq!(
-				session_step(&live(true, Some(Profile::Low)), drawn, true),
-				Some(None)
-			);
+			assert_eq!(session_step(&live(true, Some(Profile::Low)), drawn, true), Some(None));
 			// the watch's own step, or a deeper one since, stays
-			assert_eq!(
-				session_step(&live(true, Some(Profile::Low)), drawn, false),
-				None
-			);
-			assert_eq!(
-				session_step(&live(true, Some(Profile::Standard)), drawn, true),
-				None
-			);
+			assert_eq!(session_step(&live(true, Some(Profile::Low)), drawn, false), None);
+			assert_eq!(session_step(&live(true, Some(Profile::Standard)), drawn, true), None);
 			assert_eq!(session_step(&live(true, None), drawn, true), None);
 		}
 	}
@@ -561,10 +403,7 @@ mod tests {
 		let on = config::Settings::default();
 		assert!(super::takes_remote(&on, || true), "on by default");
 		assert!(!super::takes_remote(&on, || false));
-		let off = config::Settings {
-			performance_detect_remote: false,
-			..on
-		};
+		let off = config::Settings { performance_detect_remote: false, ..on };
 		let asked = std::cell::Cell::new(false);
 		assert!(!super::takes_remote(&off, || {
 			asked.set(true);
@@ -578,26 +417,10 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn rating_due_matches_the_launch_rules() {
 		let hardware = "0123456789abcdef";
-		let base = config::Settings {
-			performance_automatic: true,
-			performance_check_hardware: true,
-			performance_check_next_run: false,
-			rated_hardware: "fedcba9876543210".to_string(),
-			..config::Settings::default()
-		};
-		let matching = config::Settings {
-			rated_hardware: hardware.to_string(),
-			..base.clone()
-		};
+		let base = config::Settings { performance_automatic: true, performance_check_hardware: true, performance_check_next_run: false, rated_hardware: "fedcba9876543210".to_string(), ..config::Settings::default() };
+		let matching = config::Settings { rated_hardware: hardware.to_string(), ..base.clone() };
 		let cases = [
-			(
-				"automatic off",
-				config::Settings {
-					performance_automatic: false,
-					..base.clone()
-				},
-				false,
-			),
+			("automatic off", config::Settings { performance_automatic: false, ..base.clone() }, false),
 			(
 				"a remote screen",
 				{
@@ -607,33 +430,11 @@ mod tests {
 				},
 				false,
 			),
-			(
-				"asked for, even on the same hardware",
-				config::Settings {
-					performance_check_next_run: true,
-					..matching.clone()
-				},
-				true,
-			),
+			("asked for, even on the same hardware", config::Settings { performance_check_next_run: true, ..matching.clone() }, true),
 			("the same hardware", matching.clone(), false),
 			("other hardware, checked", base.clone(), true),
-			(
-				"other hardware, not checked",
-				config::Settings {
-					performance_check_hardware: false,
-					..base.clone()
-				},
-				false,
-			),
-			(
-				"never rated, not checked",
-				config::Settings {
-					performance_check_hardware: false,
-					rated_hardware: String::new(),
-					..base.clone()
-				},
-				true,
-			),
+			("other hardware, not checked", config::Settings { performance_check_hardware: false, ..base.clone() }, false),
+			("never rated, not checked", config::Settings { performance_check_hardware: false, rated_hardware: String::new(), ..base.clone() }, true),
 		];
 		for (what, live, due) in cases {
 			assert_eq!(super::rating_due(&live, hardware), due, "{what}");
@@ -651,8 +452,7 @@ mod tests {
 		let _guard = config::test_config_lock();
 		let saved = config::settings();
 		let _store = config::test_store_lock();
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_ratingkept_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_ratingkept_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -662,74 +462,30 @@ mod tests {
 		// what a launch does before it rates: read the file and put it live
 		let install = || config::update(config::reload_from_disk());
 		let read = || std::fs::read_to_string(&path).unwrap();
-		let files = [
-			(
-				"clean",
-				"performance:\n\t# rated_hardware: \"\"  ## Default\n",
-			),
-			(
-				"an unreadable line",
-				"window:\n\topacity: 1.0\n    margin: 4\n\nperformance:\n\t# rated_hardware: \"\"  ## Default\n",
-			),
-			(
-				"the key twice",
-				"performance:\n\trated_hardware: 0000000000000000\n\trated_hardware: 0000000000000000\n",
-			),
-		];
+		let files = [("clean", "performance:\n\t# rated_hardware: \"\"  ## Default\n"), ("an unreadable line", "window:\n\topacity: 1.0\n    margin: 4\n\nperformance:\n\t# rated_hardware: \"\"  ## Default\n"), ("the key twice", "performance:\n\trated_hardware: 0000000000000000\n\trated_hardware: 0000000000000000\n")];
 		for (name, file) in files {
 			std::fs::write(&path, file).unwrap();
 			install();
-			let id = super::rate_hardware(&card)
-				.unwrap_or_else(|| panic!("{name}: a card with no rating on file is measured"));
-			assert_eq!(
-				super::keep_measured(Profile::High, Some(&id)),
-				config::Kept::Written,
-				"{name}"
-			);
+			let id = super::rate_hardware(&card).unwrap_or_else(|| panic!("{name}: a card with no rating on file is measured"));
+			assert_eq!(super::keep_measured(Profile::High, Some(&id)), config::Kept::Written, "{name}");
 			install();
-			assert_eq!(
-				super::rate_hardware(&card),
-				None,
-				"{name}: the next launch keeps the card's rating"
-			);
+			assert_eq!(super::rate_hardware(&card), None, "{name}: the next launch keeps the card's rating");
 
 			std::fs::write(&path, file).unwrap();
 			install();
 			match super::rate_hardware(&soft) {
-				Some(id) if crate::profile::worth_measuring(&soft) => assert_eq!(
-					super::keep_measured(Profile::Low, Some(&id)),
-					config::Kept::Written,
-					"{name}"
-				),
-				answer => assert_eq!(
-					answer, None,
-					"{name}: a software adapter is decided at launch"
-				),
+				Some(id) if crate::profile::worth_measuring(&soft) => assert_eq!(super::keep_measured(Profile::Low, Some(&id)), config::Kept::Written, "{name}"),
+				answer => assert_eq!(answer, None, "{name}: a software adapter is decided at launch"),
 			}
 			install();
 			let stored = config::reload_from_disk();
-			assert_eq!(
-				stored.performance_profile,
-				crate::profile::Profile::Low,
-				"{name}"
-			);
-			assert_eq!(
-				stored.rated_hardware,
-				crate::profile::hardware_id(&soft),
-				"{name}"
-			);
+			assert_eq!(stored.performance_profile, crate::profile::Profile::Low, "{name}");
+			assert_eq!(stored.rated_hardware, crate::profile::hardware_id(&soft), "{name}");
 			let before = read();
-			assert_eq!(
-				super::rate_hardware(&soft),
-				None,
-				"{name}: the next launch keeps the software adapter's rating"
-			);
+			assert_eq!(super::rate_hardware(&soft), None, "{name}: the next launch keeps the software adapter's rating");
 			assert_eq!(read(), before, "{name}: and writes nothing");
 			if name == "an unreadable line" {
-				assert!(
-					before.contains("\n    margin: 4\n"),
-					"the unreadable line is still there:\n{before}"
-				);
+				assert!(before.contains("\n    margin: 4\n"), "the unreadable line is still there:\n{before}");
 			}
 		}
 		config::update((*saved).clone());
@@ -744,33 +500,9 @@ mod tests {
 		const AGAIN: &str = "The test runs again at the next launch.";
 		let running = ["Testing performance", "This takes a few seconds."];
 		assert_eq!(super::bench_banner_lines(None), running);
-		assert_eq!(
-			super::bench_banner_lines(Some(&config::Kept::Written)),
-			running
-		);
-		for (kept, why) in [
-			(
-				config::Kept::Busy,
-				"The settings file is open in another program.",
-			),
-			(
-				config::Kept::Unreadable,
-				"The settings file has a line that can't be read.",
-			),
-			(
-				config::Kept::Unplaced,
-				"The performance section of the settings file couldn't be updated.",
-			),
-			(
-				config::Kept::Unwritable("could not write x: denied".to_string()),
-				"The settings file can't be written.",
-			),
-		] {
-			assert_eq!(
-				super::bench_banner_lines(Some(&kept)),
-				["Couldn't save the result", why, AGAIN],
-				"{kept:?}"
-			);
+		assert_eq!(super::bench_banner_lines(Some(&config::Kept::Written)), running);
+		for (kept, why) in [(config::Kept::Busy, "The settings file is open in another program."), (config::Kept::Unreadable, "The settings file has a line that can't be read."), (config::Kept::Unplaced, "The performance section of the settings file couldn't be updated."), (config::Kept::Unwritable("could not write x: denied".to_string()), "The settings file can't be written.")] {
+			assert_eq!(super::bench_banner_lines(Some(&kept)), ["Couldn't save the result", why, AGAIN], "{kept:?}");
 		}
 	}
 
@@ -779,14 +511,7 @@ mod tests {
 	// Test ID: dfe5w
 	#[test]
 	fn every_banner_fits_its_kept_lefts() {
-		let all = [
-			None,
-			Some(config::Kept::Written),
-			Some(config::Kept::Busy),
-			Some(config::Kept::Unreadable),
-			Some(config::Kept::Unplaced),
-			Some(config::Kept::Unwritable(String::new())),
-		];
+		let all = [None, Some(config::Kept::Written), Some(config::Kept::Busy), Some(config::Kept::Unreadable), Some(config::Kept::Unplaced), Some(config::Kept::Unwritable(String::new()))];
 		for kept in &all {
 			let lines = super::bench_banner_lines(kept.as_ref());
 			assert!(lines.len() <= super::BENCH_BANNER_MAX_LINES, "{kept:?}");

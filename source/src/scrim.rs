@@ -78,29 +78,9 @@ struct Layer {
 }
 
 impl Layer {
-	fn new(
-		device: &wgpu::Device,
-		label: &str,
-		format: wgpu::TextureFormat,
-		(w, h): (u32, u32),
-	) -> Self {
-		let tex = device.create_texture(&wgpu::TextureDescriptor {
-			label: Some(label),
-			size: wgpu::Extent3d {
-				width: w.max(1),
-				height: h.max(1),
-				depth_or_array_layers: 1,
-			},
-			mip_level_count: 1,
-			sample_count: 1,
-			dimension: wgpu::TextureDimension::D2,
-			format,
-			usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-			view_formats: &[],
-		});
-		Self {
-			view: tex.create_view(&Default::default()),
-		}
+	fn new(device: &wgpu::Device, label: &str, format: wgpu::TextureFormat, (w, h): (u32, u32)) -> Self {
+		let tex = device.create_texture(&wgpu::TextureDescriptor { label: Some(label), size: wgpu::Extent3d { width: w.max(1), height: h.max(1), depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[] });
+		Self { view: tex.create_view(&Default::default()) }
 	}
 }
 
@@ -122,13 +102,7 @@ struct Layers {
 
 impl Layers {
 	fn new(device: &wgpu::Device, crisp: (u32, u32), halo: (u32, u32)) -> Self {
-		Self {
-			text: Layer::new(device, "scrim text", TEXT_FMT, crisp),
-			halo_a: Layer::new(device, "scrim halo a", HALO_FMT, halo),
-			halo_b: Layer::new(device, "scrim halo b", HALO_FMT, halo),
-			cursor: Layer::new(device, "scrim cursor", CURSOR_FMT, crisp),
-			bgcolor: Layer::new(device, "scrim bgcolor", BG_FMT, crisp),
-		}
+		Self { text: Layer::new(device, "scrim text", TEXT_FMT, crisp), halo_a: Layer::new(device, "scrim halo a", HALO_FMT, halo), halo_b: Layer::new(device, "scrim halo b", HALO_FMT, halo), cursor: Layer::new(device, "scrim cursor", CURSOR_FMT, crisp), bgcolor: Layer::new(device, "scrim bgcolor", BG_FMT, crisp) }
 	}
 }
 
@@ -209,13 +183,7 @@ pub enum Ramp {
 }
 
 impl Choice for Ramp {
-	const ALL: &'static [Self] = &[
-		Self::Exp,
-		Self::HalfNormal,
-		Self::Log,
-		Self::Sigmoid,
-		Self::Linear,
-	];
+	const ALL: &'static [Self] = &[Self::Exp, Self::HalfNormal, Self::Log, Self::Sigmoid, Self::Linear];
 
 	fn key(self) -> &'static str {
 		match self {
@@ -237,10 +205,7 @@ impl Choice for Ramp {
 		} else if text.eq_ignore_ascii_case("gaussian") {
 			Some(Self::HalfNormal)
 		} else {
-			Self::ALL
-				.iter()
-				.copied()
-				.find(|ramp| ramp.key().eq_ignore_ascii_case(text))
+			Self::ALL.iter().copied().find(|ramp| ramp.key().eq_ignore_ascii_case(text))
 		}
 	}
 }
@@ -314,120 +279,33 @@ fn alloc_size(what: Use, surface: (u32, u32)) -> ((u32, u32), (u32, u32)) {
 
 impl Scrim {
 	pub fn new(device: &wgpu::Device, target: wgpu::TextureFormat, w: u32, h: u32) -> Self {
-		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-			label: Some("scrim shader"),
-			source: wgpu::ShaderSource::Wgsl(WGSL.into()),
-		});
-		let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-			label: Some("scrim sampler"),
-			mag_filter: wgpu::FilterMode::Linear,
-			min_filter: wgpu::FilterMode::Linear,
-			address_mode_u: wgpu::AddressMode::ClampToEdge,
-			address_mode_v: wgpu::AddressMode::ClampToEdge,
-			..Default::default()
-		});
+		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("scrim shader"), source: wgpu::ShaderSource::Wgsl(WGSL.into()) });
+		let sampler = device.create_sampler(&wgpu::SamplerDescriptor { label: Some("scrim sampler"), mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, address_mode_u: wgpu::AddressMode::ClampToEdge, address_mode_v: wgpu::AddressMode::ClampToEdge, ..Default::default() });
 		// blur: uniform + sampled texture + sampler
 		let blur_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 			label: Some("scrim blur bgl"),
 			// binding 3 = the bgcolor map, whose alpha is an "own-bg" mask (see fs_blur);
 			// binding 4 = the crisp cursor coverage (folded in when cursor_scrim)
-			entries: &[
-				ubuf_entry(0),
-				tex_entry(1),
-				samp_entry(2),
-				tex_entry(3),
-				tex_entry(4),
-			],
+			entries: &[ubuf_entry(0), tex_entry(1), samp_entry(2), tex_entry(3), tex_entry(4)],
 		});
-		let make_uniform_buf = |label| {
-			device.create_buffer(&wgpu::BufferDescriptor {
-				label: Some(label),
-				size: std::mem::size_of::<BlurU>() as u64,
-				usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-				mapped_at_creation: false,
-			})
-		};
+		let make_uniform_buf = |label| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: std::mem::size_of::<BlurU>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
 		let blur_u_h = make_uniform_buf("scrim blur u h");
 		let blur_u_v = make_uniform_buf("scrim blur u v");
-		let blur_pipe = pipeline(
-			device,
-			&shader,
-			"fs_blur",
-			HALO_FMT,
-			&blur_bgl,
-			"scrim blur",
-		);
-		let dist_a_pipe = pipeline(
-			device,
-			&shader,
-			"fs_dist_a",
-			HALO_FMT,
-			&blur_bgl,
-			"scrim dist a",
-		);
-		let dist_b_pipe = pipeline(
-			device,
-			&shader,
-			"fs_dist_b",
-			HALO_FMT,
-			&blur_bgl,
-			"scrim dist b",
-		);
+		let blur_pipe = pipeline(device, &shader, "fs_blur", HALO_FMT, &blur_bgl, "scrim blur");
+		let dist_a_pipe = pipeline(device, &shader, "fs_dist_a", HALO_FMT, &blur_bgl, "scrim dist a");
+		let dist_b_pipe = pipeline(device, &shader, "fs_dist_b", HALO_FMT, &blur_bgl, "scrim dist b");
 
-		let comp_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("scrim comp bgl"),
-			entries: &[
-				ubuf_entry(0),
-				tex_entry(1),
-				samp_entry(2),
-				tex_entry(3),
-				tex_entry(4),
-				tex_entry(5),
-			],
-		});
-		let comp_u = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("scrim comp u"),
-			size: std::mem::size_of::<CompU>() as u64,
-			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			mapped_at_creation: false,
-		});
+		let comp_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("scrim comp bgl"), entries: &[ubuf_entry(0), tex_entry(1), samp_entry(2), tex_entry(3), tex_entry(4), tex_entry(5)] });
+		let comp_u = device.create_buffer(&wgpu::BufferDescriptor { label: Some("scrim comp u"), size: std::mem::size_of::<CompU>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
 		let comp_pipe = pipeline_blend(device, &shader, "fs_comp", target, &comp_bgl, "scrim comp");
 
 		// nothing is drawn until something asks for it (see `set_use`)
 		let layers = Layers::new(device, (1, 1), (1, 1));
 		let bg_rects = RectRenderer::new(device, BG_FMT);
 		let cursor_rects = RectRenderer::new(device, CURSOR_FMT);
-		let (blur_t2b, blur_b2a, comp_bind) = binds(
-			device, &blur_bgl, &comp_bgl, &blur_u_h, &blur_u_v, &comp_u, &sampler, &layers,
-		);
+		let (blur_t2b, blur_b2a, comp_bind) = binds(device, &blur_bgl, &comp_bgl, &blur_u_h, &blur_u_v, &comp_u, &sampler, &layers);
 
-		Self {
-			layers,
-			sampler,
-			blur_pipe,
-			dist_a_pipe,
-			dist_b_pipe,
-			blur_bgl,
-			blur_u_h,
-			blur_u_v,
-			blur_t2b,
-			blur_b2a,
-			comp_pipe,
-			comp_bgl,
-			comp_u,
-			comp_bind,
-			bg_rects,
-			cursor_rects,
-			cursor_count: 0,
-			white_cursors: Vec::new(),
-			encoded_cells: Vec::new(),
-			w: 1,
-			h: 1,
-			halo_size: (1, 1),
-			surf_w: w,
-			surf_h: h,
-			use_: Use::Nothing,
-		}
+		Self { layers, sampler, blur_pipe, dist_a_pipe, dist_b_pipe, blur_bgl, blur_u_h, blur_u_v, blur_t2b, blur_b2a, comp_pipe, comp_bgl, comp_u, comp_bind, bg_rects, cursor_rects, cursor_count: 0, white_cursors: Vec::new(), encoded_cells: Vec::new(), w: 1, h: 1, halo_size: (1, 1), surf_w: w, surf_h: h, use_: Use::Nothing }
 	}
 
 	/// Returns whether anything was reallocated, which is the caller's cue that
@@ -460,16 +338,7 @@ impl Scrim {
 
 	fn rebuild(&mut self, device: &wgpu::Device, crisp: (u32, u32), halo: (u32, u32)) {
 		self.layers = Layers::new(device, crisp, halo);
-		let (blur_t2b, blur_b2a, comp_bind) = binds(
-			device,
-			&self.blur_bgl,
-			&self.comp_bgl,
-			&self.blur_u_h,
-			&self.blur_u_v,
-			&self.comp_u,
-			&self.sampler,
-			&self.layers,
-		);
+		let (blur_t2b, blur_b2a, comp_bind) = binds(device, &self.blur_bgl, &self.comp_bgl, &self.blur_u_h, &self.blur_u_v, &self.comp_u, &self.sampler, &self.layers);
 		self.blur_t2b = blur_t2b;
 		self.blur_b2a = blur_b2a;
 		self.comp_bind = comp_bind;
@@ -484,28 +353,16 @@ impl Scrim {
 	/// solid bg (reverse video, colored bg, selection). A halo there is only an
 	/// artifact, such as the jumping drop shadow under nano's reverse header. See
 	/// `fs_blur`.
-	pub fn render_bgcolor(
-		&mut self,
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		encoder: &mut wgpu::CommandEncoder,
-		cells: &[RectInstance],
-		global_bg: [f32; 4],
-	) {
+	pub fn render_bgcolor(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cells: &[RectInstance], global_bg: [f32; 4]) {
 		// Cell rects are opaque (alpha 1), so writing the encoded color is exact.
 		let encode = |c: [f32; 4]| {
 			let e = crate::config::from_linear;
 			[e(c[0]), e(c[1]), e(c[2]), c[3]]
 		};
 		self.encoded_cells.clear();
-		self.encoded_cells
-			.extend(cells.iter().map(|cell| RectInstance {
-				color: encode(cell.color),
-				..*cell
-			}));
+		self.encoded_cells.extend(cells.iter().map(|cell| RectInstance { color: encode(cell.color), ..*cell }));
 		let clear = encode(global_bg);
-		self.bg_rects
-			.set_resolution(queue, self.w as f32, self.h as f32);
+		self.bg_rects.set_resolution(queue, self.w as f32, self.h as f32);
 		self.bg_rects.upload(device, queue, &self.encoded_cells);
 		let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 			label: Some("scrim bgcolor"),
@@ -546,22 +403,12 @@ impl Scrim {
 
 	/// Upload the cursor quads destined for the cursor layer. Call before the
 	/// cursor pass; draw with `draw_cursors`.
-	pub fn upload_cursors(
-		&mut self,
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		quads: &[RectInstance],
-	) {
+	pub fn upload_cursors(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, quads: &[RectInstance]) {
 		// The layer is one red channel, and a quad writes its color times its
 		// coverage. White makes that the coverage alone, fades included.
 		self.white_cursors.clear();
-		self.white_cursors
-			.extend(quads.iter().map(|quad| RectInstance {
-				color: [1.0, 1.0, 1.0, quad.color[3]],
-				..*quad
-			}));
-		self.cursor_rects
-			.set_resolution(queue, self.w as f32, self.h as f32);
+		self.white_cursors.extend(quads.iter().map(|quad| RectInstance { color: [1.0, 1.0, 1.0, quad.color[3]], ..*quad }));
+		self.cursor_rects.set_resolution(queue, self.w as f32, self.h as f32);
 		self.cursor_rects.upload(device, queue, &self.white_cursors);
 		self.cursor_count = quads.len() as u32;
 	}
@@ -580,16 +427,7 @@ impl Scrim {
 	/// to `radius`. `sigma` is the gaussian sigma and `radius` the distance extent.
 	/// `cursor` (0 or 1) folds the cursor coverage in during the first pass only,
 	/// since the second reads `halo_b`, which already has it.
-	pub fn blur(
-		&self,
-		queue: &wgpu::Queue,
-		encoder: &mut wgpu::CommandEncoder,
-		sigma: f32,
-		radius: f32,
-		ramp: Ramp,
-		cursor: f32,
-		function: Function,
-	) {
+	pub fn blur(&self, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, sigma: f32, radius: f32, ramp: Ramp, cursor: f32, function: Function) {
 		let res = [self.halo_size.0 as f32, self.halo_size.1 as f32];
 		// dilate is chebyshev, the other distance paths euclidean
 		let (gaussian, metric) = match function {
@@ -600,61 +438,11 @@ impl Scrim {
 		let ramp = ramp.code();
 		// write both uniforms up front (they target different buffers, so neither
 		// overwrites the other when the queue applies them before the passes run)
-		queue.write_buffer(
-			&self.blur_u_h,
-			0,
-			bytemuck::bytes_of(&BlurU {
-				resolution: res,
-				dir: [1.0, 0.0],
-				sigma,
-				ramp,
-				cursor,
-				radius,
-				metric,
-				source: 1.0,
-				_pad: [0.0; 2],
-			}),
-		);
-		queue.write_buffer(
-			&self.blur_u_v,
-			0,
-			bytemuck::bytes_of(&BlurU {
-				resolution: res,
-				dir: [0.0, 1.0],
-				sigma,
-				ramp,
-				cursor: 0.0,
-				radius,
-				metric,
-				source: 0.0,
-				_pad: [0.0; 2],
-			}),
-		);
-		let (pipe_a, pipe_b) = if gaussian {
-			(&self.blur_pipe, &self.blur_pipe)
-		} else {
-			(&self.dist_a_pipe, &self.dist_b_pipe)
-		};
-		for (pipe, src_bind, dst) in [
-			(pipe_a, &self.blur_t2b, &self.layers.halo_b.view),
-			(pipe_b, &self.blur_b2a, &self.layers.halo_a.view),
-		] {
-			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-				label: Some("scrim blur pass"),
-				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-					view: dst,
-					resolve_target: None,
-					depth_slice: None,
-					ops: wgpu::Operations {
-						load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-						store: wgpu::StoreOp::Store,
-					},
-				})],
-				depth_stencil_attachment: None,
-				timestamp_writes: None,
-				occlusion_query_set: None,
-				multiview_mask: None,
-			});
+		queue.write_buffer(&self.blur_u_h, 0, bytemuck::bytes_of(&BlurU { resolution: res, dir: [1.0, 0.0], sigma, ramp, cursor, radius, metric, source: 1.0, _pad: [0.0; 2] }));
+		queue.write_buffer(&self.blur_u_v, 0, bytemuck::bytes_of(&BlurU { resolution: res, dir: [0.0, 1.0], sigma, ramp, cursor: 0.0, radius, metric, source: 0.0, _pad: [0.0; 2] }));
+		let (pipe_a, pipe_b) = if gaussian { (&self.blur_pipe, &self.blur_pipe) } else { (&self.dist_a_pipe, &self.dist_b_pipe) };
+		for (pipe, src_bind, dst) in [(pipe_a, &self.blur_t2b, &self.layers.halo_b.view), (pipe_b, &self.blur_b2a, &self.layers.halo_a.view)] {
+			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor { label: Some("scrim blur pass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: dst, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None });
 			pass.set_pipeline(pipe);
 			pass.set_bind_group(0, src_bind, &[]);
 			pass.draw(0..3, 0..1);
@@ -664,41 +452,12 @@ impl Scrim {
 	/// Upload the composite uniform. Split from `composite()`: the draw runs once
 	/// per pane (scissored), but the args are frame-invariant, so the render loop
 	/// writes this once instead of staging an identical write per pane.
-	pub fn write_comp_uniform(
-		&self,
-		queue: &wgpu::Queue,
-		intensity: f32,
-		border_px: f32,
-		cursor: f32,
-		function: Function,
-		ramp: Ramp,
-		radius: f32,
-		strength: f32,
-		halo: f32,
-		matched: Option<crate::visibility::HaloMatch>,
-	) {
+	pub fn write_comp_uniform(&self, queue: &wgpu::Queue, intensity: f32, border_px: f32, cursor: f32, function: Function, ramp: Ramp, radius: f32, strength: f32, halo: f32, matched: Option<crate::visibility::HaloMatch>) {
 		let mut curve = [0.0f32; 12];
 		if let Some(m) = matched {
 			curve[..m.curve.len()].copy_from_slice(&m.curve);
 		}
-		queue.write_buffer(
-			&self.comp_u,
-			0,
-			bytemuck::bytes_of(&CompU {
-				resolution: [self.w as f32, self.h as f32],
-				intensity,
-				border_px,
-				cursor,
-				function: function.code(),
-				ramp: ramp.code(),
-				radius,
-				strength,
-				halo,
-				matched: if matched.is_some() { 1.0 } else { 0.0 },
-				_pad: 0.0,
-				curve,
-			}),
-		);
+		queue.write_buffer(&self.comp_u, 0, bytemuck::bytes_of(&CompU { resolution: [self.w as f32, self.h as f32], intensity, border_px, cursor, function: function.code(), ramp: ramp.code(), radius, strength, halo, matched: if matched.is_some() { 1.0 } else { 0.0 }, _pad: 0.0, curve }));
 	}
 
 	/// Draw the scrim into the current pass, under the text: the halo from `halo_a`,
@@ -712,185 +471,35 @@ impl Scrim {
 	}
 }
 
-fn binds(
-	device: &wgpu::Device,
-	blur_bgl: &wgpu::BindGroupLayout,
-	comp_bgl: &wgpu::BindGroupLayout,
-	blur_u_h: &wgpu::Buffer,
-	blur_u_v: &wgpu::Buffer,
-	comp_u: &wgpu::Buffer,
-	sampler: &wgpu::Sampler,
-	layers: &Layers,
-) -> (wgpu::BindGroup, wgpu::BindGroup, wgpu::BindGroup) {
+fn binds(device: &wgpu::Device, blur_bgl: &wgpu::BindGroupLayout, comp_bgl: &wgpu::BindGroupLayout, blur_u_h: &wgpu::Buffer, blur_u_v: &wgpu::Buffer, comp_u: &wgpu::Buffer, sampler: &wgpu::Sampler, layers: &Layers) -> (wgpu::BindGroup, wgpu::BindGroup, wgpu::BindGroup) {
 	let bgcolor_view = &layers.bgcolor.view;
 	let view_cur = &layers.cursor.view;
-	let mk_blur = |ubuf: &wgpu::Buffer, view| {
-		device.create_bind_group(&wgpu::BindGroupDescriptor {
-			label: Some("scrim blur bind"),
-			layout: blur_bgl,
-			entries: &[
-				wgpu::BindGroupEntry {
-					binding: 0,
-					resource: ubuf.as_entire_binding(),
-				},
-				wgpu::BindGroupEntry {
-					binding: 1,
-					resource: wgpu::BindingResource::TextureView(view),
-				},
-				wgpu::BindGroupEntry {
-					binding: 2,
-					resource: wgpu::BindingResource::Sampler(sampler),
-				},
-				wgpu::BindGroupEntry {
-					binding: 3,
-					resource: wgpu::BindingResource::TextureView(bgcolor_view),
-				},
-				wgpu::BindGroupEntry {
-					binding: 4,
-					resource: wgpu::BindingResource::TextureView(view_cur),
-				},
-			],
-		})
-	};
-	let comp = device.create_bind_group(&wgpu::BindGroupDescriptor {
-		label: Some("scrim comp bind"),
-		layout: comp_bgl,
-		entries: &[
-			wgpu::BindGroupEntry {
-				binding: 0,
-				resource: comp_u.as_entire_binding(),
-			},
-			wgpu::BindGroupEntry {
-				binding: 1,
-				resource: wgpu::BindingResource::TextureView(&layers.halo_a.view),
-			},
-			wgpu::BindGroupEntry {
-				binding: 2,
-				resource: wgpu::BindingResource::Sampler(sampler),
-			},
-			wgpu::BindGroupEntry {
-				binding: 3,
-				resource: wgpu::BindingResource::TextureView(bgcolor_view),
-			},
-			wgpu::BindGroupEntry {
-				binding: 4,
-				resource: wgpu::BindingResource::TextureView(&layers.text.view),
-			},
-			wgpu::BindGroupEntry {
-				binding: 5,
-				resource: wgpu::BindingResource::TextureView(view_cur),
-			},
-		],
-	});
+	let mk_blur = |ubuf: &wgpu::Buffer, view| device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("scrim blur bind"), layout: blur_bgl, entries: &[wgpu::BindGroupEntry { binding: 0, resource: ubuf.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(view) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(sampler) }, wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(bgcolor_view) }, wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(view_cur) }] });
+	let comp = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("scrim comp bind"), layout: comp_bgl, entries: &[wgpu::BindGroupEntry { binding: 0, resource: comp_u.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&layers.halo_a.view) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(sampler) }, wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(bgcolor_view) }, wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&layers.text.view) }, wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(view_cur) }] });
 	// t2b: H pass samples the text (horizontal uniform); b2a: V pass samples halo_b.
-	(
-		mk_blur(blur_u_h, &layers.text.view),
-		mk_blur(blur_u_v, &layers.halo_b.view),
-		comp,
-	)
+	(mk_blur(blur_u_h, &layers.text.view), mk_blur(blur_u_v, &layers.halo_b.view), comp)
 }
 
 fn ubuf_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
-	wgpu::BindGroupLayoutEntry {
-		binding,
-		visibility: wgpu::ShaderStages::FRAGMENT,
-		ty: wgpu::BindingType::Buffer {
-			ty: wgpu::BufferBindingType::Uniform,
-			has_dynamic_offset: false,
-			min_binding_size: None,
-		},
-		count: None,
-	}
+	wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None }
 }
 fn tex_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
-	wgpu::BindGroupLayoutEntry {
-		binding,
-		visibility: wgpu::ShaderStages::FRAGMENT,
-		ty: wgpu::BindingType::Texture {
-			sample_type: wgpu::TextureSampleType::Float { filterable: true },
-			view_dimension: wgpu::TextureViewDimension::D2,
-			multisampled: false,
-		},
-		count: None,
-	}
+	wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }, count: None }
 }
 fn samp_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
-	wgpu::BindGroupLayoutEntry {
-		binding,
-		visibility: wgpu::ShaderStages::FRAGMENT,
-		ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-		count: None,
-	}
+	wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None }
 }
 
-fn pipeline(
-	device: &wgpu::Device,
-	shader: &wgpu::ShaderModule,
-	fs: &str,
-	format: wgpu::TextureFormat,
-	bgl: &wgpu::BindGroupLayout,
-	label: &str,
-) -> wgpu::RenderPipeline {
+fn pipeline(device: &wgpu::Device, shader: &wgpu::ShaderModule, fs: &str, format: wgpu::TextureFormat, bgl: &wgpu::BindGroupLayout, label: &str) -> wgpu::RenderPipeline {
 	make_pipeline(device, shader, fs, format, bgl, label, None)
 }
-fn pipeline_blend(
-	device: &wgpu::Device,
-	shader: &wgpu::ShaderModule,
-	fs: &str,
-	format: wgpu::TextureFormat,
-	bgl: &wgpu::BindGroupLayout,
-	label: &str,
-) -> wgpu::RenderPipeline {
-	make_pipeline(
-		device,
-		shader,
-		fs,
-		format,
-		bgl,
-		label,
-		Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-	)
+fn pipeline_blend(device: &wgpu::Device, shader: &wgpu::ShaderModule, fs: &str, format: wgpu::TextureFormat, bgl: &wgpu::BindGroupLayout, label: &str) -> wgpu::RenderPipeline {
+	make_pipeline(device, shader, fs, format, bgl, label, Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING))
 }
 
-fn make_pipeline(
-	device: &wgpu::Device,
-	shader: &wgpu::ShaderModule,
-	fs: &str,
-	format: wgpu::TextureFormat,
-	bgl: &wgpu::BindGroupLayout,
-	label: &str,
-	blend: Option<wgpu::BlendState>,
-) -> wgpu::RenderPipeline {
-	let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-		label: Some(label),
-		bind_group_layouts: &[Some(bgl)],
-		immediate_size: 0,
-	});
-	device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-		label: Some(label),
-		layout: Some(&layout),
-		vertex: wgpu::VertexState {
-			module: shader,
-			entry_point: Some("vs"),
-			compilation_options: Default::default(),
-			buffers: &[],
-		},
-		fragment: Some(wgpu::FragmentState {
-			module: shader,
-			entry_point: Some(fs),
-			compilation_options: Default::default(),
-			targets: &[Some(wgpu::ColorTargetState {
-				format,
-				blend,
-				write_mask: wgpu::ColorWrites::ALL,
-			})],
-		}),
-		primitive: wgpu::PrimitiveState::default(),
-		depth_stencil: None,
-		multisample: wgpu::MultisampleState::default(),
-		multiview_mask: None,
-		cache: None,
-	})
+fn make_pipeline(device: &wgpu::Device, shader: &wgpu::ShaderModule, fs: &str, format: wgpu::TextureFormat, bgl: &wgpu::BindGroupLayout, label: &str, blend: Option<wgpu::BlendState>) -> wgpu::RenderPipeline {
+	let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some(label), bind_group_layouts: &[Some(bgl)], immediate_size: 0 });
+	device.create_render_pipeline(&wgpu::RenderPipelineDescriptor { label: Some(label), layout: Some(&layout), vertex: wgpu::VertexState { module: shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] }, fragment: Some(wgpu::FragmentState { module: shader, entry_point: Some(fs), compilation_options: Default::default(), targets: &[Some(wgpu::ColorTargetState { format, blend, write_mask: wgpu::ColorWrites::ALL })] }), primitive: wgpu::PrimitiveState::default(), depth_stencil: None, multisample: wgpu::MultisampleState::default(), multiview_mask: None, cache: None })
 }
 
 const WGSL: &str = r"
@@ -1105,10 +714,7 @@ fn fs_comp(in: VsOut) -> @location(0) vec4<f32> {
 
 #[cfg(test)]
 mod tests {
-	use super::{
-		BG_FMT, CURSOR_FMT, EXT_MAX, Function, HALO_FMT, Ramp, TEXT_FMT, Use, WGSL, alloc_size,
-		clamp_ext,
-	};
+	use super::{BG_FMT, CURSOR_FMT, EXT_MAX, Function, HALO_FMT, Ramp, TEXT_FMT, Use, WGSL, alloc_size, clamp_ext};
 	use crate::config::Choice;
 
 	// The shader tells the curves apart by `ramp < N`, and each branch names its
@@ -1116,28 +722,15 @@ mod tests {
 	// Test ID: ddj81
 	#[test]
 	fn each_ramp_code_reaches_the_shader_branch_for_that_curve() {
-		let body = WGSL
-			.split("fn falloff(")
-			.nth(1)
-			.and_then(|rest| rest.split("\n}\n").next())
-			.expect("the falloff function");
-		let named = |note: &str| {
-			note.split_whitespace()
-				.next()
-				.unwrap_or("")
-				.trim_end_matches(':')
-				.to_string()
-		};
+		let body = WGSL.split("fn falloff(").nth(1).and_then(|rest| rest.split("\n}\n").next()).expect("the falloff function");
+		let named = |note: &str| note.split_whitespace().next().unwrap_or("").trim_end_matches(':').to_string();
 		let mut ladder: Vec<(f32, String)> = Vec::new();
 		for line in body.lines() {
 			let Some((code, note)) = line.split_once("//") else {
 				continue;
 			};
 			if let Some(rest) = code.split("ramp < ").nth(1) {
-				let bound = rest
-					.trim_end_matches(|c: char| c == ')' || c == '{' || c.is_whitespace())
-					.parse::<f32>()
-					.expect("a number");
+				let bound = rest.trim_end_matches(|c: char| c == ')' || c == '{' || c.is_whitespace()).parse::<f32>().expect("a number");
 				ladder.push((bound, named(note)));
 			} else if code.contains("} else {") {
 				ladder.push((f32::INFINITY, named(note)));
@@ -1152,10 +745,7 @@ mod tests {
 				Ramp::Sigmoid => "sigmoid",
 				Ramp::Linear => "linear",
 			};
-			let (_, got) = ladder
-				.iter()
-				.find(|(bound, _)| ramp.code() < *bound)
-				.expect("a branch");
+			let (_, got) = ladder.iter().find(|(bound, _)| ramp.code() < *bound).expect("a branch");
 			assert_eq!(got, want, "{ramp:?}");
 		}
 	}
@@ -1165,16 +755,7 @@ mod tests {
 	// Test ID: ddj82
 	#[test]
 	fn each_function_code_takes_its_own_path_in_the_composite() {
-		let gates: Vec<f32> = WGSL
-			.split("cu.function >= ")
-			.skip(1)
-			.map(|rest| {
-				rest.split(')')
-					.next()
-					.and_then(|n| n.trim().parse().ok())
-					.expect("a number")
-			})
-			.collect();
+		let gates: Vec<f32> = WGSL.split("cu.function >= ").skip(1).map(|rest| rest.split(')').next().and_then(|n| n.trim().parse().ok()).expect("a number")).collect();
 		let [blur, harden] = gates[..] else {
 			panic!("two gates, got {gates:?}");
 		};
@@ -1187,11 +768,7 @@ mod tests {
 		}
 		// the shader can't tell 2 paths with one number apart
 		let codes: Vec<f32> = Function::ALL.iter().map(|f| f.code()).collect();
-		assert!(
-			codes
-				.iter()
-				.all(|c| codes.iter().filter(|o| *o == c).count() == 1)
-		);
+		assert!(codes.iter().all(|c| codes.iter().filter(|o| *o == c).count() == 1));
 	}
 
 	// The exponential arm's exponent, mirrored so the curve can be checked
@@ -1216,8 +793,7 @@ mod tests {
 	// Bytes the set costs, read off the formats themselves.
 	fn bytes(what: Use, surface: (u32, u32)) -> u64 {
 		let (crisp, halo) = alloc_size(what, surface);
-		pixels(crisp) * (texel(TEXT_FMT) + texel(CURSOR_FMT) + texel(BG_FMT))
-			+ pixels(halo) * 2 * texel(HALO_FMT)
+		pixels(crisp) * (texel(TEXT_FMT) + texel(CURSOR_FMT) + texel(BG_FMT)) + pixels(halo) * 2 * texel(HALO_FMT)
 	}
 
 	// The outline's 8 taps are 3 texture samples each, on every pixel of
@@ -1225,23 +801,13 @@ mod tests {
 	// Test ID: dcbep
 	#[test]
 	fn the_outline_taps_only_run_when_there_is_an_outline() {
-		let comp = WGSL
-			.split("fn fs_comp")
-			.nth(1)
-			.expect("the composite shader");
+		let comp = WGSL.split("fn fs_comp").nth(1).expect("the composite shader");
 		let guard = comp.find("if (cu.border_px > 0.001)").expect("no guard");
 		let first_tap = comp.find("border_tap(").expect("no taps");
 		assert!(guard < first_tap, "the taps run before the guard");
 		// and the cursor coverage is only sampled when the cursor outline is on
-		let tap = WGSL
-			.split("fn border_tap")
-			.nth(1)
-			.expect("the tap function");
-		assert!(
-			tap.find("if (cu.cursor > 0.5)")
-				.is_some_and(|at| at < tap.find("textureSample(ccur").expect("the cursor sample")),
-			"the cursor texture is sampled with the cursor outline off"
-		);
+		let tap = WGSL.split("fn border_tap").nth(1).expect("the tap function");
+		assert!(tap.find("if (cu.cursor > 0.5)").is_some_and(|at| at < tap.find("textureSample(ccur").expect("the cursor sample")), "the cursor texture is sampled with the cursor outline off");
 	}
 
 	// Past the tap window the distance saturates while the composite kept dividing
@@ -1252,10 +818,7 @@ mod tests {
 	#[test]
 	fn a_halo_wider_than_the_taps_is_held_to_them() {
 		// the shader owns the tap window; this is the other half of that number
-		assert!(
-			WGSL.contains(&format!("const DIST_MAX: i32 = {};", EXT_MAX as i32)),
-			"EXT_MAX and the shader's tap window have drifted apart"
-		);
+		assert!(WGSL.contains(&format!("const DIST_MAX: i32 = {};", EXT_MAX as i32)), "EXT_MAX and the shader's tap window have drifted apart");
 		// the default, doubled: unchanged
 		assert!((clamp_ext(5.0 * 2.0) - 10.0).abs() < f32::EPSILON);
 		// the slider's own ceiling, doubled: exactly the tap window
@@ -1272,10 +835,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri's exp is inexact on purpose")]
 	fn the_exponential_falloff_drops_away_hard() {
-		assert!(
-			WGSL.contains(&format!("let k = {EXP_K:.1};")),
-			"the exponent and the shader's own have drifted apart"
-		);
+		assert!(WGSL.contains(&format!("let k = {EXP_K:.1};")), "the exponent and the shader's own have drifted apart");
 		assert!((exp_falloff(0.0) - 1.0).abs() < 1e-6);
 		assert_eq!(exp_falloff(1.0), 0.0);
 		// a quarter of the way out it's already under a quarter, and halfway
@@ -1298,12 +858,7 @@ mod tests {
 	fn the_scrim_shader_compiles() {
 		use wgpu::naga;
 		let module = naga::front::wgsl::parse_str(WGSL).expect("the scrim shader parses");
-		naga::valid::Validator::new(
-			naga::valid::ValidationFlags::all(),
-			naga::valid::Capabilities::empty(),
-		)
-		.validate(&module)
-		.expect("the scrim shader validates");
+		naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::empty()).validate(&module).expect("the scrim shader validates");
 	}
 
 	// Dark mode is the reference and must draw what it always has, so the light
@@ -1312,10 +867,7 @@ mod tests {
 	// Test ID: ddj1r
 	#[test]
 	fn only_a_matched_halo_is_redrawn() {
-		let comp = WGSL
-			.split("fn fs_comp")
-			.nth(1)
-			.expect("the composite shader");
+		let comp = WGSL.split("fn fs_comp").nth(1).expect("the composite shader");
 		let guard = comp.find("if (cu.matched > 0.5)").expect("no guard");
 		let call = comp.find("matched_alpha(").expect("no call");
 		assert!(guard < call, "the match runs unguarded");
@@ -1324,10 +876,7 @@ mod tests {
 		assert_eq!(std::mem::size_of::<super::CompU>(), 96);
 		assert_eq!(std::mem::offset_of!(super::CompU, curve), 48);
 		assert_eq!(crate::visibility::HALO_NODES, 12);
-		assert!(
-			WGSL.contains(&format!("* {}.0;", crate::visibility::HALO_NODES - 1)),
-			"the shader's span count and HALO_NODES have drifted apart"
-		);
+		assert!(WGSL.contains(&format!("* {}.0;", crate::visibility::HALO_NODES - 1)), "the shader's span count and HALO_NODES have drifted apart");
 	}
 
 	// The scrim used to build its 5 full-screen textures whether or not it drew
@@ -1341,10 +890,7 @@ mod tests {
 		// the layers were made smaller (2026100418225502), so the full set at 4K is
 		// about 100 MiB
 		assert!(bytes(Use::Halo, uhd) > 100 << 20, "the real cost");
-		assert!(
-			bytes(Use::Nothing, uhd) < 1 << 10,
-			"switched off it should cost nothing"
-		);
+		assert!(bytes(Use::Nothing, uhd) < 1 << 10, "switched off it should cost nothing");
 		// the outline alone never runs the blur, so its 2 layers stay a pixel
 		assert_eq!(alloc_size(Use::OutlineOnly, uhd), (uhd, (1, 1)));
 	}
@@ -1356,16 +902,8 @@ mod tests {
 	fn the_scrim_costs_at_most_13_bytes_a_pixel() {
 		let qhd = (2560, 1440);
 		let per_pixel = |what| bytes(what, qhd) as f64 / pixels(qhd) as f64;
-		assert!(
-			per_pixel(Use::Halo) <= 13.0,
-			"{} bytes a pixel",
-			per_pixel(Use::Halo)
-		);
-		assert!(
-			per_pixel(Use::OutlineOnly) <= 9.01,
-			"{} bytes a pixel with only the outline",
-			per_pixel(Use::OutlineOnly)
-		);
+		assert!(per_pixel(Use::Halo) <= 13.0, "{} bytes a pixel", per_pixel(Use::Halo));
+		assert!(per_pixel(Use::OutlineOnly) <= 9.01, "{} bytes a pixel with only the outline", per_pixel(Use::OutlineOnly));
 	}
 
 	// The color map is drawn from cell colors that started as sRGB bytes, and
@@ -1375,18 +913,11 @@ mod tests {
 	#[test]
 	fn the_color_map_keeps_every_byte_color_exactly() {
 		assert_eq!(texel(BG_FMT), 4);
-		assert!(
-			!BG_FMT.is_srgb(),
-			"the GL path writes an sRGB target unencoded"
-		);
+		assert!(!BG_FMT.is_srgb(), "the GL path writes an sRGB target unencoded");
 		for byte in 0..=255u8 {
-			let stored =
-				(crate::config::from_linear(crate::config::to_linear(byte)) * 255.0).round();
+			let stored = (crate::config::from_linear(crate::config::to_linear(byte)) * 255.0).round();
 			assert_eq!(stored as u8, byte);
 		}
-		assert!(
-			WGSL.contains("srgb_decode(textureSample(bgtex"),
-			"the composite reads it back encoded"
-		);
+		assert!(WGSL.contains("srgb_decode(textureSample(bgtex"), "the composite reads it back encoded");
 	}
 }

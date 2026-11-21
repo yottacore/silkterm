@@ -14,11 +14,7 @@ use std::time::{Duration, Instant};
 // comes back with no picture, since a configured folder replaces the built-in
 // stand-in. A command-line wallpaper keeps rotation out of the session, so it's
 // exempt.
-fn needs_folder_read(
-	locked: bool,
-	showing: Option<&std::path::Path>,
-	folder: Option<&std::path::PathBuf>,
-) -> bool {
+fn needs_folder_read(locked: bool, showing: Option<&std::path::Path>, folder: Option<&std::path::PathBuf>) -> bool {
 	!locked && showing.is_none() && folder.is_some()
 }
 
@@ -63,12 +59,7 @@ impl State {
 	// `summary` is set when this only re-sizes the picture showing now.
 	fn post_wallpaper(&mut self, scan: bool, summary: Option<crate::autotheme::Summary>) {
 		let settings = config::settings();
-		let scan = scan
-			|| needs_folder_read(
-				self.wp_locked,
-				self.wp_current.as_deref(),
-				settings.rotation_folder(),
-			);
+		let scan = scan || needs_folder_read(self.wp_locked, self.wp_current.as_deref(), settings.rotation_folder());
 		// a scan can pick another picture, which needs its own summary
 		let summary = summary.filter(|_| !scan);
 		self.wp_resize_at = None;
@@ -77,35 +68,15 @@ impl State {
 		// the new stamp retires anything already in flight. A result that comes in after
 		// a newer request is dropped, and the worker sees the new stamp and stops at its
 		// next stage
-		let seq = self
-			.wp_seq
-			.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-			.wrapping_add(1);
+		let seq = self.wp_seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed).wrapping_add(1);
 		self.wp_pacing.sent(seq);
-		crate::wallpaper::spawn(
-			&self.proxy,
-			crate::wallpaper::Request {
-				seq,
-				newest: self.wp_seq.clone(),
-				settings,
-				scan,
-				current: self.wp_current.clone(),
-				cleared,
-				window: self.surface_px,
-				summary,
-				kept: config::cache_dir().map(|dir| dir.join("wallpaper")),
-			},
-		);
+		crate::wallpaper::spawn(&self.proxy, crate::wallpaper::Request { seq, newest: self.wp_seq.clone(), settings, scan, current: self.wp_current.clone(), cleared, window: self.surface_px, summary, kept: config::cache_dir().map(|dir| dir.join("wallpaper")) });
 	}
 
 	/// The window changed size, or a picture arrived prepared for an older one.
 	/// Each call pushes the wait back, so a drag prepares it once, at the end.
 	pub(super) fn note_wallpaper_size(&mut self) {
-		let off_size = self
-			.gpu
-			.as_ref()
-			.and_then(|gpu| gpu.wallpaper_img.as_ref())
-			.is_some_and(|img| img.needs_resize(self.surface_px));
+		let off_size = self.gpu.as_ref().and_then(|gpu| gpu.wallpaper_img.as_ref()).is_some_and(|img| img.needs_resize(self.surface_px));
 		self.wp_resize_at = off_size.then(|| Instant::now() + WP_RESIZE_WAIT);
 	}
 
@@ -116,11 +87,7 @@ impl State {
 		if self.wp_pacing.busy() {
 			return;
 		}
-		let held = self
-			.gpu
-			.as_ref()
-			.and_then(|gpu| gpu.wallpaper_img.as_ref())
-			.filter(|img| img.needs_resize(self.surface_px));
+		let held = self.gpu.as_ref().and_then(|gpu| gpu.wallpaper_img.as_ref()).filter(|img| img.needs_resize(self.surface_px));
 		if held.is_some() {
 			self.post_wallpaper(false, config::settings().wallpaper_summary);
 		}
@@ -136,11 +103,7 @@ impl State {
 	}
 
 	pub(super) fn can_rotate(&self) -> bool {
-		rotation_live(
-			self.wp_locked,
-			self.wp_count,
-			config::settings().rotation_folder().is_some(),
-		)
+		rotation_live(self.wp_locked, self.wp_count, config::settings().rotation_folder().is_some())
 	}
 
 	/// Rotate to the next image. The worker re-scans, so images added to or removed
@@ -188,8 +151,7 @@ impl State {
 				// image setting stays automatic, since the folder chose it
 				set_live(|live| live.wallpaper = Some(rot.current.clone()));
 				let ivl = config::settings().wallpaper_rotate_interval_s;
-				self.wp_next = (ivl > 0.0 && rot.count > 1)
-					.then(|| Instant::now() + Duration::from_secs_f32(ivl));
+				self.wp_next = (ivl > 0.0 && rot.count > 1).then(|| Instant::now() + Duration::from_secs_f32(ivl));
 			}
 		}
 		// The derived text and cursor colors follow the picture (autotheme.rs), so this
@@ -213,9 +175,7 @@ impl State {
 			idledbg("wallpaper prepared again");
 		}
 		if let Some(gpu) = self.gpu.as_mut() {
-			gpu.wallpaper_img = loaded.image.map(|img| {
-				ImageRenderer::new(&gpu.gfx.device, &gpu.gfx.queue, gpu.gfx.format, &img)
-			});
+			gpu.wallpaper_img = loaded.image.map(|img| ImageRenderer::new(&gpu.gfx.device, &gpu.gfx.queue, gpu.gfx.format, &img));
 		}
 		// prepared for the size the window had when it was asked for
 		self.note_wallpaper_size();
@@ -250,12 +210,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_a_new_folder_picks_a_new_picture() {
-		let at = |folder: &str| crate::config::Settings {
-			wallpaper_enabled: true,
-			wallpaper_rotate_enabled: true,
-			wallpaper_folder: Some(std::path::PathBuf::from(folder)),
-			..Default::default()
-		};
+		let at = |folder: &str| crate::config::Settings { wallpaper_enabled: true, wallpaper_rotate_enabled: true, wallpaper_folder: Some(std::path::PathBuf::from(folder)), ..Default::default() };
 		let a = at("/w/a");
 		let mut dimmer = a.clone();
 		dimmer.wallpaper_opacity /= 2.0;

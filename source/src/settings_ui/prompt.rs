@@ -41,10 +41,7 @@ impl Prompt {
 	// Derived rather than stored: only a confirmation asks nothing, so a separate
 	// flag could only ever disagree with the button that opened the box.
 	fn has_field(&self) -> bool {
-		matches!(
-			self.job,
-			PromptJob::Theme(ThemeBtn::SaveAs | ThemeBtn::Rename)
-		)
+		matches!(self.job, PromptJob::Theme(ThemeBtn::SaveAs | ThemeBtn::Rename))
 	}
 	/// A notice has nothing to cancel, so it has no Cancel.
 	pub(super) fn parts(&self) -> &'static [PromptFocus] {
@@ -65,9 +62,7 @@ impl SettingsDialog {
 			return;
 		};
 		let job = prompt.job;
-		let typed = prompt
-			.has_field()
-			.then(|| self.edit.as_ref().map_or(String::new(), |e| e.buf.clone()));
+		let typed = prompt.has_field().then(|| self.edit.as_ref().map_or(String::new(), |e| e.buf.clone()));
 		match (job, typed) {
 			(PromptJob::Theme(which), Some(name)) => {
 				if let Some(warn) = self.name_problem(which, &name) {
@@ -113,12 +108,7 @@ impl SettingsDialog {
 			h += row;
 		}
 		h += self.btn_h();
-		Rect {
-			x: self.rect.x + (self.rect.w - w) / 2.0,
-			y: self.rect.y + (self.rect.h - h) / 2.0,
-			w,
-			h,
-		}
+		Rect { x: self.rect.x + (self.rect.w - w) / 2.0, y: self.rect.y + (self.rect.h - h) / 2.0, w, h }
 	}
 
 	pub(super) fn prompt_field_rect(&self) -> Option<Rect> {
@@ -127,28 +117,14 @@ impl SettingsDialog {
 			return None;
 		}
 		let r = self.prompt_rect();
-		Some(Rect {
-			x: r.x + lay().pad,
-			y: r.y + lay().pad + self.line_h + lay().row_pad,
-			w: r.w - lay().pad * 2.0,
-			h: self.field_h(),
-		})
+		Some(Rect { x: r.x + lay().pad, y: r.y + lay().pad + self.line_h + lay().row_pad, w: r.w - lay().pad * 2.0, h: self.field_h() })
 	}
 
 	fn prompt_btn_rect(&self, part: PromptFocus) -> Rect {
 		let r = self.prompt_rect();
 		let h = self.btn_h();
 		let x_ok = r.x + r.w - lay().pad - self.btn_w;
-		Rect {
-			x: if part == PromptFocus::Ok {
-				x_ok
-			} else {
-				x_ok - lay().button_gap - self.btn_w
-			},
-			y: r.y + r.h - lay().pad - h,
-			w: self.btn_w,
-			h,
-		}
+		Rect { x: if part == PromptFocus::Ok { x_ok } else { x_ok - lay().button_gap - self.btn_w }, y: r.y + r.h - lay().pad - h, w: self.btn_w, h }
 	}
 
 	/// Tab / arrows walk field -> Cancel -> OK, wrapping; a confirmation has no field.
@@ -164,12 +140,7 @@ impl SettingsDialog {
 
 	/// Every click while the box is up belongs to it: its own controls act, and
 	/// anything outside is swallowed rather than reaching the panel behind.
-	pub(super) fn prompt_mouse_down(
-		&mut self,
-		x: f32,
-		y: f32,
-		measure: &mut impl FnMut(&str) -> f32,
-	) {
+	pub(super) fn prompt_mouse_down(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) {
 		if self.emenu.is_some() {
 			return;
 		}
@@ -200,11 +171,7 @@ impl SettingsDialog {
 	/// The name / confirm box, drawn over everything the panel just drew. Its own
 	/// field caret uses the same edit state the rows use, so it blinks and eases
 	/// the same way.
-	pub(super) fn prompt_overlay(
-		&self,
-		colors: &Dlg,
-		measure: &mut impl FnMut(&str) -> f32,
-	) -> (Vec<RectInstance>, Vec<TextItem>) {
+	pub(super) fn prompt_overlay(&self, colors: &Dlg, measure: &mut impl FnMut(&str) -> f32) -> (Vec<RectInstance>, Vec<TextItem>) {
 		let mut rects = Vec::new();
 		let mut texts = Vec::new();
 		let Some(prompt) = &self.prompt else {
@@ -213,24 +180,12 @@ impl SettingsDialog {
 		let mk = |text: Cow<'static, str>, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - self.line_h) / 2.0;
 		// dim the panel behind, so it is plain that it isn't taking input
-		rects.push(RectInstance {
-			pos: [self.rect.x, self.rect.y],
-			size: [self.rect.w, self.rect.h],
-			color: [0.0, 0.0, 0.0, 0.45],
-			..Default::default()
-		});
+		rects.push(RectInstance { pos: [self.rect.x, self.rect.y], size: [self.rect.w, self.rect.h], color: [0.0, 0.0, 0.0, 0.45], ..Default::default() });
 		let box_r = self.prompt_rect();
 		rects.push(quad(box_r.x, box_r.y, box_r.w, box_r.h, colors.panel_bg));
 		border(&mut rects, box_r, 1.0, colors.panel_border);
 		// a long message is cut at the box's edge rather than drawn past it
-		texts.push(TextItem {
-			clip: Some(box_r),
-			..mk(
-				prompt.title.clone().into(),
-				box_r.x + lay().pad,
-				box_r.y + lay().pad + (self.line_h + lay().row_pad - self.line_h) / 2.0,
-			)
-		});
+		texts.push(TextItem { clip: Some(box_r), ..mk(prompt.title.clone().into(), box_r.x + lay().pad, box_r.y + lay().pad + (self.line_h + lay().row_pad - self.line_h) / 2.0) });
 		if let Some(field) = self.prompt_field_rect() {
 			rects.push(quad(field.x, field.y, field.w, field.h, colors.field_bg));
 			if prompt.focus == PromptFocus::Field {
@@ -240,24 +195,11 @@ impl SettingsDialog {
 			}
 			self.caret_quad(colors, &mut rects, field, measure);
 			let view = self.edit.as_ref().map_or(0.0, |e| e.view);
-			texts.push(TextItem {
-				clip: Some(field),
-				..mk(
-					self.edit
-						.as_ref()
-						.map_or(Cow::Borrowed(""), |e| e.buf.clone().into()),
-					field.x + lay().field_pad - view,
-					row_text_y(field.y, field.h),
-				)
-			});
+			texts.push(TextItem { clip: Some(field), ..mk(self.edit.as_ref().map_or(Cow::Borrowed(""), |e| e.buf.clone().into()), field.x + lay().field_pad - view, row_text_y(field.y, field.h)) });
 		}
 		if let Some(warn) = &prompt.warn {
 			let y = self.prompt_btn_rect(PromptFocus::Ok).y - (self.line_h + lay().row_pad);
-			texts.push(TextItem {
-				color: colors.btn_hl,
-				clip: Some(box_r),
-				..mk(warn.clone().into(), box_r.x + lay().pad, y)
-			});
+			texts.push(TextItem { color: colors.btn_hl, clip: Some(box_r), ..mk(warn.clone().into(), box_r.x + lay().pad, y) });
 		}
 		for (part, caption) in [(PromptFocus::Cancel, "Cancel"), (PromptFocus::Ok, "OK")] {
 			if !prompt.parts().contains(&part) {
@@ -296,27 +238,17 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_prompt_swallows_every_input_path() {
 		let mut m = |s: &str| s.chars().count() as f32;
-		for which in [
-			super::super::ThemeBtn::SaveAs,
-			super::super::ThemeBtn::Delete,
-		] {
+		for which in [super::super::ThemeBtn::SaveAs, super::super::ThemeBtn::Delete] {
 			let mut d = on_theme("Matrix");
 			d.save_theme_as("Mine"); // Rename and Delete need a theme of the user's own
 			d.reverted.clear();
-			d.focus = Some(super::super::Focus::Row(
-				d.specs.iter().position(|s| s.key == Key::ColFg).unwrap(),
-				0,
-			));
+			d.focus = Some(super::super::Focus::Row(d.specs.iter().position(|s| s.key == Key::ColFg).unwrap(), 0));
 			let before = d.get_col(Key::ColFg);
 			d.theme_action(which);
 			assert!(d.prompt.is_some(), "{which:?} opens the box");
 
 			for c in ['o', 'a', 'c'] {
-				assert_eq!(
-					d.alt_key(c),
-					super::super::Action::None,
-					"Alt+{c} must not reach OK"
-				);
+				assert_eq!(d.alt_key(c), super::super::Action::None, "Alt+{c} must not reach OK");
 			}
 			d.char_input('f');
 			d.select_all();
@@ -324,12 +256,7 @@ mod tests {
 
 			assert!(d.prompt.is_some(), "the box is still up");
 			assert_eq!(d.get_col(Key::ColFg), before, "the row behind is untouched");
-			assert!(
-				d.edit
-					.as_ref()
-					.is_none_or(|e| e.row == super::super::PROMPT_ROW),
-				"no edit opened on a panel row"
-			);
+			assert!(d.edit.as_ref().is_none_or(|e| e.row == super::super::PROMPT_ROW), "no edit opened on a panel row");
 		}
 	}
 
@@ -383,13 +310,7 @@ mod tests {
 		assert_eq!(d.key_enter(), super::super::Action::None);
 		assert!(d.prompt.is_none());
 		assert_eq!(d.edited.theme, "My Theme");
-		assert_eq!(
-			crate::theme::find_user(&d.edited.user_themes, "My Theme")
-				.unwrap()
-				.dark
-				.fg,
-			[7, 7, 7]
-		);
+		assert_eq!(crate::theme::find_user(&d.edited.user_themes, "My Theme").unwrap().dark.fg, [7, 7, 7]);
 	}
 
 	// A name OK can't take keeps the box open and says why, instead of closing

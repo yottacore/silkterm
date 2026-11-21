@@ -150,20 +150,11 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_build_inputs_cover_every_included_file_and_the_lock() {
 		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-		let real = |path: &std::path::Path| {
-			path.canonicalize()
-				.unwrap_or_else(|e| panic!("{}: {e}", path.display()))
-		};
-		let inputs: Vec<std::path::PathBuf> = BUILD_INPUTS
-			.iter()
-			.map(|input| real(&crate_dir.join(input)))
-			.collect();
+		let real = |path: &std::path::Path| path.canonicalize().unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+		let inputs: Vec<std::path::PathBuf> = BUILD_INPUTS.iter().map(|input| real(&crate_dir.join(input))).collect();
 		let covered = |file: &std::path::Path| inputs.iter().any(|input| file.starts_with(input));
 		for needed in ["Cargo.toml", "../Cargo.toml", "../Cargo.lock"] {
-			assert!(
-				covered(&real(&crate_dir.join(needed))),
-				"{needed} is not watched"
-			);
+			assert!(covered(&real(&crate_dir.join(needed))), "{needed} is not watched");
 		}
 		let mut dirs = vec![crate_dir.join("src")];
 		let mut seen = 0;
@@ -183,12 +174,7 @@ mod tests {
 						let rest = &text[at + macro_name.len()..];
 						let Some(end) = rest.find('"') else { continue };
 						let included = real(&path.parent().unwrap().join(&rest[..end]));
-						assert!(
-							covered(&included),
-							"{} includes {}, which no build input covers",
-							path.display(),
-							included.display()
-						);
+						assert!(covered(&included), "{} includes {}, which no build input covers", path.display(), included.display());
 						seen += 1;
 					}
 				}
@@ -221,29 +207,13 @@ mod tests {
 	fn every_source_file_has_the_license_header() {
 		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
 		let manifest = std::fs::read_to_string(crate_dir.join("Cargo.toml")).unwrap();
-		assert!(
-			manifest
-				.lines()
-				.any(|line| line.trim() == "license = \"GPL-2.0-or-later\""),
-			"Cargo.toml names another license"
-		);
+		assert!(manifest.lines().any(|line| line.trim() == "license = \"GPL-2.0-or-later\""), "Cargo.toml names another license");
 		let mut seen = 0;
 		for path in rust_sources() {
 			let text = std::fs::read_to_string(&path).unwrap();
 			let mut lines = text.lines();
-			assert_eq!(
-				lines.next(),
-				Some("// SPDX-License-Identifier: GPL-2.0-or-later"),
-				"{}",
-				path.display()
-			);
-			assert!(
-				lines
-					.next()
-					.is_some_and(|line| line.starts_with("// Copyright © ")),
-				"{} has no copyright line under the license",
-				path.display()
-			);
+			assert_eq!(lines.next(), Some("// SPDX-License-Identifier: GPL-2.0-or-later"), "{}", path.display());
+			assert!(lines.next().is_some_and(|line| line.starts_with("// Copyright © ")), "{} has no copyright line under the license", path.display());
 			seen += 1;
 		}
 		assert!(seen > 0, "found no source files, so the scan is broken");
@@ -264,10 +234,7 @@ mod tests {
 		let mut by_hand = std::collections::HashSet::new();
 		for (_, text) in &texts {
 			for (at, _) in text.match_indices("Debug for ") {
-				let name: String = text[at + "Debug for ".len()..]
-					.chars()
-					.take_while(|c| c.is_alphanumeric() || *c == '_')
-					.collect();
+				let name: String = text[at + "Debug for ".len()..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
 				by_hand.insert(name);
 			}
 		}
@@ -283,37 +250,19 @@ mod tests {
 					Some(scoped) => scoped.split_once(')').map_or("", |(_, after)| after),
 					None => rest,
 				};
-				let Some(rest) = rest
-					.strip_prefix(" struct ")
-					.or_else(|| rest.strip_prefix(" enum "))
-				else {
+				let Some(rest) = rest.strip_prefix(" struct ").or_else(|| rest.strip_prefix(" enum ")) else {
 					continue;
 				};
-				let name: String = rest
-					.chars()
-					.take_while(|c| c.is_alphanumeric() || *c == '_')
-					.collect();
+				let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
 				seen += 1;
-				let derived = lines[..number]
-					.iter()
-					.rev()
-					.map(|line| line.trim_start())
-					.take_while(|line| line.starts_with("#[") || line.starts_with("//"))
-					.any(|line| {
-						line.strip_prefix("#[derive(").is_some_and(|list| {
-							list.split([',', ')']).any(|item| item.trim() == "Debug")
-						})
-					});
+				let derived = lines[..number].iter().rev().map(|line| line.trim_start()).take_while(|line| line.starts_with("#[") || line.starts_with("//")).any(|line| line.strip_prefix("#[derive(").is_some_and(|list| list.split([',', ')']).any(|item| item.trim() == "Debug")));
 				if !derived && !by_hand.contains(&name) {
 					let file = path.file_name().unwrap().to_string_lossy();
 					missing.push(format!("{file}:{} {name}", number + 1));
 				}
 			}
 		}
-		assert!(
-			seen > 100,
-			"found only {seen} public types, so the scan is broken"
-		);
+		assert!(seen > 100, "found only {seen} public types, so the scan is broken");
 		assert!(missing.is_empty(), "no Debug on:\n{}", missing.join("\n"));
 	}
 
@@ -323,8 +272,7 @@ mod tests {
 		if let Some(rest) = line.strip_prefix("//").or_else(|| line.strip_prefix("::")) {
 			return Some(rest.trim_start());
 		}
-		line.starts_with('#')
-			.then(|| line.trim_start_matches('#').trim_start())
+		line.starts_with('#').then(|| line.trim_start_matches('#').trim_start())
 	}
 
 	fn is_history_heading(text: &str) -> bool {
@@ -347,8 +295,7 @@ mod tests {
 			return Err(format!("copyright sign in neither form: {text}"));
 		};
 		let (years, holder) = rest.split_once(' ').unwrap_or_default();
-		let year_ok =
-			|year: &str| year.len() == 4 && year.bytes().all(|byte| byte.is_ascii_digit());
+		let year_ok = |year: &str| year.len() == 4 && year.bytes().all(|byte| byte.is_ascii_digit());
 		if !years.split('-').all(year_ok) {
 			return Err(format!("copyright year {years:?}"));
 		}
@@ -372,9 +319,7 @@ mod tests {
 
 	// What's wrong with one script's header and History, if anything.
 	fn script_header_faults(lines: &[&str], cmd: bool, ps1: bool, marker: &str) -> Vec<String> {
-		let at = lines
-			.iter()
-			.position(|line| comment_text(line).is_some_and(is_copyright_line));
+		let at = lines.iter().position(|line| comment_text(line).is_some_and(is_copyright_line));
 		let Some(at) = at else {
 			return vec!["no copyright line".into()];
 		};
@@ -383,16 +328,10 @@ mod tests {
 			let preamble = cmd && (line.starts_with('@') || line.eq_ignore_ascii_case("setlocal"));
 			match comment_text(line) {
 				None if !line.trim().is_empty() && !preamble => {
-					faults.push(format!(
-						"line {} is code above the copyright line",
-						number + 1
-					));
+					faults.push(format!("line {} is code above the copyright line", number + 1));
 				}
 				Some(text) if is_history_heading(text) && !text.contains("bottom") => {
-					faults.push(format!(
-						"line {} starts a History in the header",
-						number + 1
-					));
+					faults.push(format!("line {} starts a History in the header", number + 1));
 				}
 				_ => {}
 			}
@@ -405,25 +344,17 @@ mod tests {
 				false
 			}
 		};
-		let license = lines[at + 1..lines.len().min(at + 5)]
-			.iter()
-			.filter_map(|line| comment_text(line))
-			.find_map(|text| text.strip_prefix("SPDX-License-Identifier: "));
+		let license = lines[at + 1..lines.len().min(at + 5)].iter().filter_map(|line| comment_text(line)).find_map(|text| text.strip_prefix("SPDX-License-Identifier: "));
 		match license {
 			Some("MIT") => {}
 			Some("GPL-2.0-or-later") if !bubbles => {}
 			other => faults.push(format!("license under the copyright line is {other:?}")),
 		}
-		let history = lines
-			.iter()
-			.rposition(|line| comment_text(line).is_some_and(is_history_heading))
-			.filter(|&history| history > at);
+		let history = lines.iter().rposition(|line| comment_text(line).is_some_and(is_history_heading)).filter(|&history| history > at);
 		match history {
 			None => faults.push("no History at the bottom".into()),
 			Some(history) => {
-				let code_after = lines[history..]
-					.iter()
-					.any(|line| !line.trim().is_empty() && comment_text(line).is_none());
+				let code_after = lines[history..].iter().any(|line| !line.trim().is_empty() && comment_text(line).is_none());
 				if code_after {
 					faults.push("code after the History".into());
 				}
@@ -446,10 +377,7 @@ mod tests {
 			return manifest
 				.lines()
 				.find_map(|line| {
-					let value = line
-						.strip_prefix("license")?
-						.trim_start()
-						.strip_prefix('=')?;
+					let value = line.strip_prefix("license")?.trim_start().strip_prefix('=')?;
 					Some(value.trim().trim_matches('"').to_string())
 				})
 				.unwrap_or(gpl);
@@ -474,21 +402,12 @@ mod tests {
 		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
 		let repo = crate_dir.parent().unwrap();
 		let own = std::fs::read_to_string(crate_dir.join("src/buildnum.rs")).unwrap();
-		let marker = own
-			.lines()
-			.nth(1)
-			.and_then(|line| line.split_once(" Jim Collier "))
-			.map(|(_, marker)| marker.to_string())
-			.unwrap();
+		let marker = own.lines().nth(1).and_then(|line| line.split_once(" Jim Collier ")).map(|(_, marker)| marker.to_string()).unwrap();
 		if !repo.join(".git").exists() {
 			eprintln!("not a git checkout, so there is no list of tracked scripts");
 			return;
 		}
-		let listing = std::process::Command::new("git")
-			.args(["ls-files", "-z"])
-			.current_dir(repo)
-			.output()
-			.unwrap();
+		let listing = std::process::Command::new("git").args(["ls-files", "-z"]).current_dir(repo).output().unwrap();
 		assert!(listing.status.success(), "git ls-files failed");
 		let mut faults = Vec::new();
 		let mut seen = 0;
@@ -501,23 +420,14 @@ mod tests {
 			let Ok(text) = std::fs::read_to_string(&path) else {
 				continue;
 			};
-			let lines: Vec<&str> = text
-				.lines()
-				.map(|line| line.trim_end_matches('\r'))
-				.collect();
+			let lines: Vec<&str> = text.lines().map(|line| line.trim_end_matches('\r')).collect();
 			if ext == "rs" {
 				let license = crate_license(repo, &path);
-				if lines
-					.first()
-					.and_then(|line| line.strip_prefix("// SPDX-License-Identifier: "))
-					!= Some(license.as_str())
-				{
+				if lines.first().and_then(|line| line.strip_prefix("// SPDX-License-Identifier: ")) != Some(license.as_str()) {
 					faults.push(format!("{name}: line 1 is not the {license} license"));
 				}
 				let mit = license == "MIT";
-				let copyright = lines
-					.get(1)
-					.and_then(|line| line.strip_prefix("// Copyright "));
+				let copyright = lines.get(1).and_then(|line| line.strip_prefix("// Copyright "));
 				match copyright.map(|text| copyright_form(text, &marker, false)) {
 					Some(Ok(false)) => {}
 					Some(Ok(true)) if mit => {}
@@ -538,15 +448,7 @@ mod tests {
 			}
 			seen += 1;
 		}
-		assert!(
-			seen > 100,
-			"found only {seen} scripts, so the scan is broken"
-		);
-		assert!(
-			faults.is_empty(),
-			"{} header faults:\n{}",
-			faults.len(),
-			faults.join("\n")
-		);
+		assert!(seen > 100, "found only {seen} scripts, so the scan is broken");
+		assert!(faults.is_empty(), "{} header faults:\n{}", faults.len(), faults.join("\n"));
 	}
 }

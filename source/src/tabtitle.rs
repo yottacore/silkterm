@@ -47,11 +47,7 @@ pub enum Style {
 impl Style {
 	/// The style of the platform this build runs on.
 	pub fn native() -> Self {
-		if cfg!(windows) {
-			Self::Windows
-		} else {
-			Self::Posix
-		}
+		if cfg!(windows) { Self::Windows } else { Self::Posix }
 	}
 
 	fn sep(self) -> char {
@@ -113,10 +109,7 @@ pub fn shell_forms(name: &str) -> Vec<String> {
 		return Vec::new();
 	}
 	let mut forms = vec![name.to_string()];
-	if let Some((_, short, tiny)) = SHORT_SHELLS
-		.iter()
-		.find(|(full, _, _)| full.eq_ignore_ascii_case(name))
-	{
+	if let Some((_, short, tiny)) = SHORT_SHELLS.iter().find(|(full, _, _)| full.eq_ignore_ascii_case(name)) {
 		push_shorter(&mut forms, (*short).to_string());
 		push_shorter(&mut forms, (*tiny).to_string());
 	} else {
@@ -142,11 +135,7 @@ fn core_name(name: &str) -> (&str, bool) {
 fn derived_short(name: &str) -> String {
 	let (core, varied) = core_name(name);
 	let star = if varied { "*" } else { "" };
-	if core.chars().count() <= 6 {
-		format!("{core}{star}")
-	} else {
-		format!("{}{star}", initials(core, usize::MAX))
-	}
+	if core.chars().count() <= 6 { format!("{core}{star}") } else { format!("{}{star}", initials(core, usize::MAX)) }
 }
 
 fn derived_tiny(name: &str) -> String {
@@ -160,18 +149,9 @@ fn initials(core: &str, words: usize) -> String {
 	let digit_count = core.chars().rev().take_while(char::is_ascii_digit).count();
 	// ASCII digits are a byte each
 	let digits = &core[core.len() - digit_count..];
-	let mut out: String = core
-		.split(|c: char| !c.is_alphanumeric())
-		.filter(|word| !word.is_empty() && !word.chars().all(|c| c.is_ascii_digit()))
-		.take(words)
-		.filter_map(|word| word.chars().next())
-		.collect();
+	let mut out: String = core.split(|c: char| !c.is_alphanumeric()).filter(|word| !word.is_empty() && !word.chars().all(|c| c.is_ascii_digit())).take(words).filter_map(|word| word.chars().next()).collect();
 	out.push_str(digits);
-	if out.is_empty() {
-		core.chars().take(1).collect()
-	} else {
-		out
-	}
+	if out.is_empty() { core.chars().take(1).collect() } else { out }
 }
 
 /// A program's name, longest first: as it is, then cut from its tail. Which
@@ -226,10 +206,7 @@ impl Rights {
 /// any file name can ask for the same reordering, and refusing it would also
 /// refuse the joiners that hold an emoji together.
 pub fn plain(title: &str) -> String {
-	let kept: String = title
-		.chars()
-		.filter(|&c| !c.is_control() && !('\u{80}'..='\u{9f}').contains(&c))
-		.collect();
+	let kept: String = title.chars().filter(|&c| !c.is_control() && !('\u{80}'..='\u{9f}').contains(&c)).collect();
 	let trimmed = kept.trim();
 	if trimmed.len() == kept.len() {
 		return kept;
@@ -282,8 +259,7 @@ fn is_program_name(title: &str) -> bool {
 	// A file name with a space in it could be anything, and so could a sentence
 	// ending in one. Only a path may have a space, and only above its last part.
 	let last = &title[title.rfind(['\\', '/']).map_or(0, |at| at + 1)..];
-	!last.contains(char::is_whitespace)
-		&& (is_absolute(title) || !title.contains(char::is_whitespace))
+	!last.contains(char::is_whitespace) && (is_absolute(title) || !title.contains(char::is_whitespace))
 }
 
 // Where the extension's dot is, if the name ends in one a program runs from.
@@ -291,10 +267,7 @@ fn is_program_name(title: &str) -> bool {
 // one of the 3 DOS-era programs that still use that extension.
 fn program_ext(name: &str) -> Option<usize> {
 	let dot = name.rfind('.')?;
-	["exe", "bat", "cmd"]
-		.iter()
-		.any(|known| name[dot + 1..].eq_ignore_ascii_case(known))
-		.then_some(dot)
+	["exe", "bat", "cmd"].iter().any(|known| name[dot + 1..].eq_ignore_ascii_case(known)).then_some(dot)
 }
 
 // A program's file name without its extension, so the bare `pwsh` a pane was
@@ -309,28 +282,18 @@ fn program_stem(path: &str) -> &str {
 // path of the program this pane was started with. Only the file name counts,
 // since a console spells the folders its own way (`C:\WINDOWS\system32`).
 fn foreign_marker_off<'a>(title: &'a str, launched: &str) -> &'a str {
-	let Some(at) = title
-		.char_indices()
-		.skip(1)
-		.map(|(at, _)| at)
-		.find(|&at| is_absolute(&title[at..]) && !title[at..].starts_with('/'))
-	else {
+	let Some(at) = title.char_indices().skip(1).map(|(at, _)| at).find(|&at| is_absolute(&title[at..]) && !title[at..].starts_with('/')) else {
 		return title;
 	};
 	let (word, rest) = title.split_at(at);
 	let head = rest.split_once(" - ").map_or(rest, |(head, _)| head).trim();
-	let named = !word.trim().is_empty()
-		&& !word.contains(['\\', '/'])
-		&& is_program_name(head)
-		&& program_stem(head).to_lowercase() == program_stem(launched).to_lowercase();
+	let named = !word.trim().is_empty() && !word.contains(['\\', '/']) && is_program_name(head) && program_stem(head).to_lowercase() == program_stem(launched).to_lowercase();
 	if named { rest } else { title }
 }
 
 // Rooted the way either platform spells it: a drive, a UNC share, or `/`.
 fn is_absolute(path: &str) -> bool {
-	path.starts_with('/')
-		|| path.starts_with("\\\\")
-		|| matches!(path.as_bytes(), [drive, b':', b'\\' | b'/', ..] if drive.is_ascii_alphabetic())
+	path.starts_with('/') || path.starts_with("\\\\") || matches!(path.as_bytes(), [drive, b':', b'\\' | b'/', ..] if drive.is_ascii_alphabetic())
 }
 
 /// What a program's own title is worth showing, if anything: a console's own
@@ -340,11 +303,7 @@ fn is_absolute(path: &str) -> bool {
 ///
 /// `launched` is the program the pane was started with, which is how a console
 /// marker written in another language is recognized.
-pub fn program_title<'a>(
-	rights: Rights,
-	title: &'a str,
-	launched: Option<&str>,
-) -> Option<&'a str> {
+pub fn program_title<'a>(rights: Rights, title: &'a str, launched: Option<&str>) -> Option<&'a str> {
 	let marker = rights.console_marker();
 	let title = match (marker, launched) {
 		(Some(_), Some(launched)) => foreign_marker_off(title, launched),
@@ -363,13 +322,7 @@ pub fn program_title<'a>(
 /// started with, which is how that marker is known in any language. The tab's
 /// own label is named as the source rather than read, because building it costs
 /// something. Nothing is copied, since this runs on every frame.
-pub fn suffix_from<'a>(
-	rights: Rights,
-	typed: Option<&'a str>,
-	program: Option<&'a str>,
-	launched: Option<&str>,
-	show_tab: bool,
-) -> Option<Suffix<'a>> {
+pub fn suffix_from<'a>(rights: Rights, typed: Option<&'a str>, program: Option<&'a str>, launched: Option<&str>, show_tab: bool) -> Option<Suffix<'a>> {
 	let program = program.and_then(|title| program_title(rights, title, launched));
 	// With the tab switched off as a source, both of its answers go: the name
 	// typed on it and the text it works out for itself. A program's own title
@@ -397,14 +350,7 @@ pub enum Suffix<'a> {
 /// `suffix_from` with the tab's label worked out by `tab`, only when it's the
 /// one used.
 #[cfg(test)]
-pub fn window_suffix(
-	rights: Rights,
-	typed: Option<&str>,
-	program: Option<&str>,
-	launched: Option<&str>,
-	show_tab: bool,
-	tab: impl FnOnce() -> String,
-) -> Option<String> {
+pub fn window_suffix(rights: Rights, typed: Option<&str>, program: Option<&str>, launched: Option<&str>, show_tab: bool, tab: impl FnOnce() -> String) -> Option<String> {
 	suffix_from(rights, typed, program, launched, show_tab).map(|from| match from {
 		Suffix::Said(said) => said.to_string(),
 		Suffix::Tab => tab(),
@@ -422,26 +368,12 @@ impl KeptTitle {
 	/// The title to set, or None when it would read as it does now. The rights,
 	/// a `--title` and the prefix are fixed for a window, so only the suffix and
 	/// the note are compared.
-	pub fn update(
-		&mut self,
-		rights: Rights,
-		custom: Option<&str>,
-		prefix: &str,
-		suffix: Option<&str>,
-		note: Option<&'static str>,
-	) -> Option<String> {
-		if self
-			.made_from
-			.as_ref()
-			.is_some_and(|(said, was)| said.as_deref() == suffix && *was == note)
-		{
+	pub fn update(&mut self, rights: Rights, custom: Option<&str>, prefix: &str, suffix: Option<&str>, note: Option<&'static str>) -> Option<String> {
+		if self.made_from.as_ref().is_some_and(|(said, was)| said.as_deref() == suffix && *was == note) {
 			return None;
 		}
 		self.made_from = Some((suffix.map(str::to_string), note));
-		Some(with_note(
-			window_title(rights, custom, prefix, suffix),
-			note,
-		))
+		Some(with_note(window_title(rights, custom, prefix, suffix), note))
 	}
 }
 
@@ -450,12 +382,7 @@ impl KeptTitle {
 ///
 /// The rights the terminal is running with come first and no flag turns them
 /// off, since the absence of the word has to mean something.
-pub fn window_title(
-	rights: Rights,
-	custom: Option<&str>,
-	prefix: &str,
-	suffix: Option<&str>,
-) -> String {
+pub fn window_title(rights: Rights, custom: Option<&str>, prefix: &str, suffix: Option<&str>) -> String {
 	let said = match (custom, suffix) {
 		(Some(custom), _) => custom.to_string(),
 		(None, Some(suffix)) => format!("{prefix} - {suffix}"),
@@ -484,14 +411,7 @@ pub fn with_note(title: String, note: Option<&str>) -> String {
 }
 
 /// The macros a tab's text knows, in the order `label_forms` fills them in.
-pub const TAB_MACROS: [&str; 6] = [
-	"USER_DEFINED",
-	"PROGRAM_DEFINED",
-	"SHELL",
-	"PROGRAM",
-	"LAST_PROGRAM",
-	"CURRENT_DIRECTORY",
-];
+pub const TAB_MACROS: [&str; 6] = ["USER_DEFINED", "PROGRAM_DEFINED", "SHELL", "PROGRAM", "LAST_PROGRAM", "CURRENT_DIRECTORY"];
 const TYPED: usize = 0;
 const TITLE: usize = 1;
 const SHELL: usize = 2;
@@ -532,12 +452,7 @@ pub struct Parts {
 
 impl Default for Parts {
 	fn default() -> Self {
-		Self {
-			title: true,
-			shell: true,
-			program: true,
-			directory: true,
-		}
+		Self { title: true, shell: true, program: true, directory: true }
 	}
 }
 
@@ -614,24 +529,13 @@ pub fn label_forms(template: &Template, facts: Facts, style: Style) -> Vec<Strin
 	let cwd = facts.cwd.map(plain);
 	let home = facts.home.map(plain);
 	let shells = shell_forms(&friendly);
-	let tasks = task_name
-		.as_deref()
-		.map(task_name_forms)
-		.unwrap_or_default();
-	let paths = cwd
-		.as_deref()
-		.filter(|dir| !dir.trim().is_empty())
-		.map(|dir| path_forms(dir, home.as_deref(), style))
-		.unwrap_or_default();
+	let tasks = task_name.as_deref().map(task_name_forms).unwrap_or_default();
+	let paths = cwd.as_deref().filter(|dir| !dir.trim().is_empty()).map(|dir| path_forms(dir, home.as_deref(), style)).unwrap_or_default();
 	let full_name = shells.first().map_or("", String::as_str);
 	// The last form is always the shortest; the middle rung only exists when
 	// there are 3 of them, and a name with no middle rung keeps its own.
 	let tiny_name = (shells.len() > 1).then(|| shells[shells.len() - 1].as_str());
-	let short_name = if shells.len() >= 3 {
-		shells[1].as_str()
-	} else {
-		full_name
-	};
+	let short_name = if shells.len() >= 3 { shells[1].as_str() } else { full_name };
 	let first_task = tasks.first().map(String::as_str);
 	let last_task = tasks.last().map(String::as_str);
 	let first_path = paths.first().map(String::as_str);
@@ -725,10 +629,7 @@ pub fn path_forms(raw: &str, home: Option<&str>, style: Style) -> Vec<String> {
 }
 
 fn push_shorter(forms: &mut Vec<String>, candidate: String) {
-	if forms
-		.last()
-		.is_some_and(|prev| candidate.chars().count() < prev.chars().count())
-	{
+	if forms.last().is_some_and(|prev| candidate.chars().count() < prev.chars().count()) {
 		forms.push(candidate);
 	}
 }
@@ -737,10 +638,7 @@ fn push_shorter(forms: &mut Vec<String>, candidate: String) {
 // abbreviates to the same thing.
 fn initial(part: &str) -> &str {
 	let take = if part.starts_with('.') { 2 } else { 1 };
-	let end = part
-		.char_indices()
-		.nth(take)
-		.map_or(part.len(), |(at, _)| at);
+	let end = part.char_indices().nth(take).map_or(part.len(), |(at, _)| at);
 	&part[..end]
 }
 
@@ -753,18 +651,12 @@ fn split<'a>(raw: &'a str, home: Option<&str>, style: Style) -> (String, Vec<&'a
 		Style::Posix => posix_anchor(trimmed, home),
 		Style::Windows => windows_anchor(trimmed),
 	};
-	let parts = rest
-		.split(|c| style.is_sep(c))
-		.filter(|part| !part.is_empty())
-		.collect();
+	let parts = rest.split(|c| style.is_sep(c)).filter(|part| !part.is_empty()).collect();
 	(anchor, parts)
 }
 
 fn posix_anchor<'a>(path: &'a str, home: Option<&str>) -> (String, &'a str) {
-	if let Some(home) = home
-		.map(|h| h.trim_end_matches('/'))
-		.filter(|h| !h.is_empty())
-	{
+	if let Some(home) = home.map(|h| h.trim_end_matches('/')).filter(|h| !h.is_empty()) {
 		if path == home {
 			return ("~/".to_string(), "");
 		}
@@ -847,13 +739,7 @@ fn bounds(total: f32, regular_pct: f32, max_pct: f32) -> (f32, f32) {
 /// what the row can spare before any other tab grows past its ordinary width,
 /// and it isn't held to the maximum, since room it doesn't take is no use to
 /// tabs that are already at the cap.
-pub fn widths(
-	total: f32,
-	demands: &[Demand],
-	regular_pct: f32,
-	max_pct: f32,
-	active: Option<usize>,
-) -> Vec<f32> {
+pub fn widths(total: f32, demands: &[Demand], regular_pct: f32, max_pct: f32, active: Option<usize>) -> Vec<f32> {
 	let (regular, max) = bounds(total, regular_pct, max_pct);
 	let floors: Vec<f32> = demands.iter().map(|d| d.floor.clamp(0.0, max)).collect();
 	let mut spare = total.max(0.0) - floors.iter().sum::<f32>();
@@ -888,11 +774,7 @@ fn spread(alloc: &mut [f32], upto: &[f32], spare: &mut f32) {
 	if *spare <= 0.0 {
 		return;
 	}
-	let asked: f32 = alloc
-		.iter()
-		.zip(upto)
-		.map(|(have, want)| (want - have).max(0.0))
-		.sum();
+	let asked: f32 = alloc.iter().zip(upto).map(|(have, want)| (want - have).max(0.0)).sum();
 	if asked <= 0.0 {
 		return;
 	}
@@ -1003,11 +885,7 @@ pub fn tip_value(value: &str) -> String {
 /// to the right and the box grows for it instead of the column moving, up to the
 /// window's width (see `fit_tip_line`).
 pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
-	let key_w = rows
-		.iter()
-		.map(|(key, _)| key.chars().count())
-		.max()
-		.unwrap_or(0);
+	let key_w = rows.iter().map(|(key, _)| key.chars().count()).max().unwrap_or(0);
 	rows.iter()
 		.map(|(key, value)| {
 			let pad = key_w - key.chars().count();
@@ -1020,38 +898,23 @@ pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
 /// that's too wide goes on over more lines, each indented to the value column,
 /// so the keys still read down the left and the whole path still shows. None
 /// when it already fits, which is nearly always, so the caller keeps its own.
-pub fn fit_tip_line(
-	line: &str,
-	budget: f32,
-	mut measure: impl FnMut(&str) -> f32,
-) -> (Option<Vec<String>>, f32) {
+pub fn fit_tip_line(line: &str, budget: f32, mut measure: impl FnMut(&str) -> f32) -> (Option<Vec<String>>, f32) {
 	let w = measure(line);
 	if w <= budget {
 		return (None, w);
 	}
 	let mut pieces = Vec::new();
 	wrap_tip_line(line, budget, &mut measure, &mut pieces);
-	let widest = pieces
-		.iter()
-		.fold(0.0f32, |widest, piece| widest.max(measure(piece)));
+	let widest = pieces.iter().fold(0.0f32, |widest, piece| widest.max(measure(piece)));
 	(Some(pieces), widest)
 }
 
 // A line over the budget breaks after a path separator or a space in the back
 // half of the room, or anywhere when there isn't one, since a path or a command
 // can go a long way without either.
-fn wrap_tip_line(
-	line: &str,
-	budget: f32,
-	measure: &mut impl FnMut(&str) -> f32,
-	out: &mut Vec<String>,
-) {
+fn wrap_tip_line(line: &str, budget: f32, measure: &mut impl FnMut(&str) -> f32, out: &mut Vec<String>) {
 	// the value starts after the key's colon and its padding (tip_lines)
-	let col = line.find(':').map_or(0, |colon| {
-		line[colon + 1..]
-			.find(|c: char| c != ' ')
-			.map_or(line.len(), |i| colon + 1 + i)
-	});
+	let col = line.find(':').map_or(0, |colon| line[colon + 1..].find(|c: char| c != ' ').map_or(line.len(), |i| colon + 1 + i));
 	let (mut key, mut rest) = line.split_at(col);
 	let mut indent = " ".repeat(key.chars().count());
 	// a window too narrow for the key column wraps the whole line flush left
@@ -1121,34 +984,13 @@ pub fn elapsed(secs: u64) -> String {
 
 #[cfg(test)]
 mod tests {
-	use super::{
-		DEFAULT_TAB_TEXT, Demand, Facts, Parts, Rights, Style, Task, clamp_page, elapsed,
-		fit_tip_line, page_for, path_forms, plain, program_says, program_title, shell_forms,
-		slot_at_x, slot_x, tab_template, tab_template_or_default, tab_text_for, tabs_that_fit,
-		task_name_forms, tip_lines, tip_value, widths, window_suffix, window_title, with_note,
-	};
+	use super::{DEFAULT_TAB_TEXT, Demand, Facts, Parts, Rights, Style, Task, clamp_page, elapsed, fit_tip_line, page_for, path_forms, plain, program_says, program_title, shell_forms, slot_at_x, slot_x, tab_template, tab_template_or_default, tab_text_for, tabs_that_fit, task_name_forms, tip_lines, tip_value, widths, window_suffix, window_title, with_note};
 
 	// The tests below were written against the 4 check boxes, so they ask in
 	// those terms and get the template that says the same.
-	pub(super) fn label_forms(
-		friendly: &str,
-		program: Option<&str>,
-		task: Option<Task>,
-		cwd: Option<&str>,
-		home: Option<&str>,
-		style: Style,
-		parts: Parts,
-	) -> Vec<String> {
-		let template =
-			tab_template(&tab_text_for(parts)).expect("the template for the check boxes");
-		let facts = Facts {
-			typed: None,
-			shell: friendly,
-			title: program,
-			task,
-			cwd,
-			home,
-		};
+	pub(super) fn label_forms(friendly: &str, program: Option<&str>, task: Option<Task>, cwd: Option<&str>, home: Option<&str>, style: Style, parts: Parts) -> Vec<String> {
+		let template = tab_template(&tab_text_for(parts)).expect("the template for the check boxes");
+		let facts = Facts { typed: None, shell: friendly, title: program, task, cwd, home };
 		super::label_forms(&template, facts, style)
 	}
 
@@ -1158,10 +1000,7 @@ mod tests {
 			Some(Task::Last(program)) => ("last: ", program),
 			None => return Vec::new(),
 		};
-		task_name_forms(program)
-			.into_iter()
-			.map(|form| format!("[{marker}{form}]"))
-			.collect()
+		task_name_forms(program).into_iter().map(|form| format!("[{marker}{form}]")).collect()
 	}
 
 	// Most of what follows is the same question either way, so it is asked with
@@ -1180,10 +1019,7 @@ mod tests {
 		assert_eq!(tip_value("/bin/bash"), "/bin/bash");
 		assert_eq!(tip_value("PowerShell 7"), "\"PowerShell 7\"");
 		// a command line already full of double quotes reads inside single ones
-		assert_eq!(
-			tip_value(r#""C:\Program Files\pwsh.exe" -NoLogo"#),
-			r#"'"C:\Program Files\pwsh.exe" -NoLogo'"#
-		);
+		assert_eq!(tip_value(r#""C:\Program Files\pwsh.exe" -NoLogo"#), r#"'"C:\Program Files\pwsh.exe" -NoLogo'"#);
 		// both kinds present: escape, rather than pick a quote that can't close
 		assert_eq!(tip_value(r#"say "it's""#), r#""say \"it's\"""#);
 		// a lone apostrophe still needs a boundary drawn around it
@@ -1195,21 +1031,14 @@ mod tests {
 	// Test ID: dbjnd
 	#[test]
 	fn tip_keys_pad_so_every_value_starts_in_one_column() {
-		let lines = tip_lines(&[
-			("Shell name", "Bash".to_string()),
-			("Shell command", "/bin/bash".to_string()),
-			("Open", "1m 26s".to_string()),
-		]);
+		let lines = tip_lines(&[("Shell name", "Bash".to_string()), ("Shell command", "/bin/bash".to_string()), ("Open", "1m 26s".to_string())]);
 		assert_eq!(lines[0], "Shell name:    Bash");
 		assert_eq!(lines[1], "Shell command: /bin/bash");
 		assert_eq!(lines[2], "Open:          1m 26s");
 		// and as the property rather than 3 strings: one column for them all
 		let value_col = |line: &str| {
 			let colon = line.find(':').expect("a key");
-			line[colon..]
-				.find(|c: char| c != ':' && c != ' ')
-				.map(|i| colon + i)
-				.expect("a value")
+			line[colon..].find(|c: char| c != ':' && c != ' ').map(|i| colon + i).expect("a value")
 		};
 		let first = value_col(&lines[0]);
 		for line in &lines {
@@ -1224,11 +1053,7 @@ mod tests {
 	#[test]
 	fn a_tip_line_too_wide_wraps_under_its_value() {
 		// every line fitted, as the tab tip does it
-		fn fit_tip_lines(
-			lines: &[String],
-			budget: f32,
-			measure: &dyn Fn(&str) -> f32,
-		) -> (Option<Vec<String>>, f32) {
+		fn fit_tip_lines(lines: &[String], budget: f32, measure: &dyn Fn(&str) -> f32) -> (Option<Vec<String>>, f32) {
 			let mut widest = 0.0f32;
 			let mut fitted = Vec::new();
 			let mut wrapped = false;
@@ -1241,32 +1066,12 @@ mod tests {
 			(wrapped.then_some(fitted), widest)
 		}
 		let mono = |line: &str| line.chars().count() as f32 * 10.0;
-		let lines = tip_lines(&[
-			(
-				"Shell command",
-				"/home/someone/a/b/c/dddddddddd/eeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string(),
-			),
-			("Open", "3s".to_string()),
-		]);
-		assert_eq!(
-			fit_tip_lines(&lines, 1000.0, &mono),
-			(None, 760.0),
-			"all fit"
-		);
+		let lines = tip_lines(&[("Shell command", "/home/someone/a/b/c/dddddddddd/eeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string()), ("Open", "3s".to_string())]);
+		assert_eq!(fit_tip_lines(&lines, 1000.0, &mono), (None, 760.0), "all fit");
 		let (fitted, widest) = fit_tip_lines(&lines, 300.0, &mono);
 		let fitted = fitted.expect("a line wraps");
 		assert!(widest <= 300.0);
-		assert_eq!(
-			fitted,
-			[
-				"Shell command: /home/someone/",
-				"               a/b/c/ddddddddd",
-				"               d/eeeeeeeeeeeee",
-				"               eeeeeeeeeeeeeee",
-				"               ee",
-				"Open:          3s",
-			]
-		);
+		assert_eq!(fitted, ["Shell command: /home/someone/", "               a/b/c/ddddddddd", "               d/eeeeeeeeeeeee", "               eeeeeeeeeeeeeee", "               ee", "Open:          3s",]);
 		// a window too narrow for the key column still shows every character, and
 		// each line takes at least one
 		let (fitted, _) = fit_tip_lines(&lines, 40.0, &mono);
@@ -1275,11 +1080,7 @@ mod tests {
 		let joined: String = fitted.concat().replace(' ', "");
 		assert_eq!(joined, lines.concat().replace(' ', ""));
 		// a value with spaces breaks after one, wide characters measured as such
-		let wide = |line: &str| {
-			line.chars()
-				.map(|c| if c.is_ascii() { 10.0 } else { 20.0 })
-				.sum::<f32>()
-		};
+		let wide = |line: &str| line.chars().map(|c| if c.is_ascii() { 10.0 } else { 20.0 }).sum::<f32>();
 		let lines = tip_lines(&[("Running", "\"日本語 のプログラム です\"".to_string())]);
 		let (fitted, widest) = fit_tip_lines(&lines, 200.0, &wide);
 		let fitted = fitted.expect("it wraps");
@@ -1313,15 +1114,9 @@ mod tests {
 		assert_eq!(path_forms("/home/jim", home, Style::Posix), vec!["~/"]);
 		assert_eq!(path_forms("/home/jim/dev", home, Style::Posix)[0], "~/dev/");
 		// A path that merely shares the prefix isn't inside it.
-		assert_eq!(
-			path_forms("/home/jimbo/dev", home, Style::Posix)[0],
-			"/home/jimbo/dev/"
-		);
+		assert_eq!(path_forms("/home/jimbo/dev", home, Style::Posix)[0], "/home/jimbo/dev/");
 		// Windows keeps the drive, since the shells there never print a tilde.
-		assert_eq!(
-			path_forms(r"C:\Users\jim\dev", Some(r"C:\Users\jim"), Style::Windows)[0],
-			r"C:\Users\jim\dev\"
-		);
+		assert_eq!(path_forms(r"C:\Users\jim\dev", Some(r"C:\Users\jim"), Style::Windows)[0], r"C:\Users\jim\dev\");
 	}
 
 	// The ellipsis eats the middle first, so what is left of the path keeps its
@@ -1336,17 +1131,11 @@ mod tests {
 		//     assert_eq!(forms[1], r"C:\U\j\d\p\dev\");
 		assert_eq!(forms[1], r"C:\Users\jim\...\dev\");
 		assert_eq!(forms[2], r"C:\Users\...\dev\");
-		assert!(
-			!forms.iter().any(|form| form == r"C:\U\j\d\p\dev\"),
-			"a deep path has no room for a column of initials: {forms:?}"
-		);
+		assert!(!forms.iter().any(|form| form == r"C:\U\j\d\p\dev\"), "a deep path has no room for a column of initials: {forms:?}");
 
 		// One directory above the current one, and the ellipsis is no shorter
 		// than the name it covers, so the initial is what shortens it.
-		assert_eq!(
-			path_forms("/Documents/x", None, Style::Posix),
-			["/Documents/x/", "/.../x/", "/D/x/"]
-		);
+		assert_eq!(path_forms("/Documents/x", None, Style::Posix), ["/Documents/x/", "/.../x/", "/D/x/"]);
 		// A hidden directory keeps the letter after its dot, or every one of them
 		// would abbreviate to a bare dot.
 		assert_eq!(path_forms("/.config/x", None, Style::Posix)[2], "/.c/x/");
@@ -1358,16 +1147,9 @@ mod tests {
 	#[test]
 	fn an_ellipsis_only_appears_where_it_shortens() {
 		let forms = path_forms(r"C:\a\b\c\d\e\project", None, Style::Windows);
-		let first_ellipsis = forms
-			.iter()
-			.position(|form| form.contains("..."))
-			.expect("expected an ellipsis form");
+		let first_ellipsis = forms.iter().position(|form| form.contains("...")).expect("expected an ellipsis form");
 		let before = &forms[first_ellipsis - 1];
-		assert!(
-			forms[first_ellipsis].chars().count() < before.chars().count(),
-			"{} is not shorter than {before}",
-			forms[first_ellipsis]
-		);
+		assert!(forms[first_ellipsis].chars().count() < before.chars().count(), "{} is not shorter than {before}", forms[first_ellipsis]);
 		// With 2 directories an ellipsis can't win, so none is offered
 		// until the anchor-only form at the end.
 		let shallow = path_forms(r"C:\a\project", None, Style::Windows);
@@ -1377,19 +1159,10 @@ mod tests {
 	// Test ID: dbje3
 	#[test]
 	fn the_forms_only_ever_get_shorter() {
-		for raw in [
-			r"C:\Users\jim\data\prs\dev\github.com\jim-collier\silkterm",
-			r"C:\a\project",
-			r"C:\",
-		] {
+		for raw in [r"C:\Users\jim\data\prs\dev\github.com\jim-collier\silkterm", r"C:\a\project", r"C:\"] {
 			let forms = path_forms(raw, None, Style::Windows);
 			for pair in forms.windows(2) {
-				assert!(
-					pair[1].chars().count() < pair[0].chars().count(),
-					"{:?} is not shorter than {:?}",
-					pair[1],
-					pair[0]
-				);
+				assert!(pair[1].chars().count() < pair[0].chars().count(), "{:?} is not shorter than {:?}", pair[1], pair[0]);
 			}
 		}
 	}
@@ -1409,10 +1182,7 @@ mod tests {
 	fn a_path_reported_with_forward_slashes_still_reads_as_windows() {
 		// OSC 7 sends a URL, so a Windows shell reporting through it sends
 		// forward slashes for a path the tab must still draw with backslashes.
-		assert_eq!(
-			path_forms("C:/Users/jim/dev", None, Style::Windows)[0],
-			r"C:\Users\jim\dev\"
-		);
+		assert_eq!(path_forms("C:/Users/jim/dev", None, Style::Windows)[0], r"C:\Users\jim\dev\");
 	}
 
 	// A built-in name is shortened the way a person would write it; "Cmd" isn't
@@ -1432,10 +1202,7 @@ mod tests {
 	#[test]
 	fn a_renamed_shell_falls_back_to_derived_forms() {
 		assert_eq!(shell_forms("Bash"), ["Bash", "B"]);
-		assert_eq!(
-			shell_forms("My Build Shell"),
-			["My Build Shell", "MBS", "MB"]
-		);
+		assert_eq!(shell_forms("My Build Shell"), ["My Build Shell", "MBS", "MB"]);
 		// the version digits survive, since they're what tell a family apart,
 		// and a name whose 2 derived forms agree yields only one rung
 		assert_eq!(shell_forms("Fancy Shell 9"), ["Fancy Shell 9", "FS9"]);
@@ -1451,14 +1218,7 @@ mod tests {
 	// Test ID: dbnj8
 	#[test]
 	fn a_task_is_cut_from_its_tail_and_keeps_its_marker() {
-		assert_eq!(
-			task_forms(Some(Task::Last("docker-compose"))),
-			[
-				"[last: docker-compose]",
-				"[last: docker-...]",
-				"[last: doc...]"
-			]
-		);
+		assert_eq!(task_forms(Some(Task::Last("docker-compose"))), ["[last: docker-compose]", "[last: docker-...]", "[last: doc...]"]);
 		// a name too short to cut offers nothing to cut: 3 dots cost more
 		// than the letters they replace
 		assert_eq!(task_forms(Some(Task::Running("cargo"))), ["[cargo]"]);
@@ -1471,27 +1231,8 @@ mod tests {
 	// Test ID: dbnj9
 	#[test]
 	fn a_tab_says_the_shell_the_task_and_the_path_and_gives_them_up_in_order() {
-		let forms = label_forms(
-			"PowerShell 7",
-			None,
-			Some(Task::Running("cargo")),
-			Some(r"C:\Users\jim\dev"),
-			None,
-			Style::Windows,
-			Parts::default(),
-		);
-		assert_eq!(
-			forms,
-			[
-				r"PowerShell 7 [cargo] C:\Users\jim\dev\",
-				r"PS 7 [cargo] C:\Users\jim\dev\",
-				r"PS 7 [cargo] C:\...\dev\",
-				r"PS 7 [cargo] C:\...\",
-				r"PS 7 - C:\...\",
-				"PS 7",
-				"P7",
-			]
-		);
+		let forms = label_forms("PowerShell 7", None, Some(Task::Running("cargo")), Some(r"C:\Users\jim\dev"), None, Style::Windows, Parts::default());
+		assert_eq!(forms, [r"PowerShell 7 [cargo] C:\Users\jim\dev\", r"PS 7 [cargo] C:\Users\jim\dev\", r"PS 7 [cargo] C:\...\dev\", r"PS 7 [cargo] C:\...\", r"PS 7 - C:\...\", "PS 7", "P7",]);
 	}
 
 	// An idle tab keeps the dash, since there's no bracket to separate the name
@@ -1499,30 +1240,11 @@ mod tests {
 	// Test ID: dbnja
 	#[test]
 	fn a_tab_with_nothing_running_still_says_where_it_is() {
-		let idle = label_forms(
-			"PowerShell 7",
-			None,
-			None,
-			Some(r"C:\Users\jim\dev"),
-			None,
-			Style::Windows,
-			Parts::default(),
-		);
+		let idle = label_forms("PowerShell 7", None, None, Some(r"C:\Users\jim\dev"), None, Style::Windows, Parts::default());
 		assert_eq!(idle[0], r"PowerShell 7 - C:\Users\jim\dev\");
 		assert_eq!(idle.last().map(String::as_str), Some("P7"));
 		// Nothing to say about a directory either: the shell's name stands alone.
-		assert_eq!(
-			label_forms(
-				"bash",
-				None,
-				None,
-				None,
-				None,
-				Style::Posix,
-				Parts::default()
-			),
-			["bash", "b"]
-		);
+		assert_eq!(label_forms("bash", None, None, None, None, Style::Posix, Parts::default()), ["bash", "b"]);
 	}
 
 	// Each of the 3 parts can be switched off on its own, and the rungs are
@@ -1530,68 +1252,20 @@ mod tests {
 	// Test ID: dcwj7
 	#[test]
 	fn a_tab_says_only_the_parts_that_are_switched_on() {
-		let label = |parts: Parts| {
-			label_forms(
-				"PowerShell 7",
-				None,
-				Some(Task::Running("cargo")),
-				Some(r"C:\Users\jim\dev"),
-				None,
-				Style::Windows,
-				parts,
-			)[0]
-			.clone()
-		};
+		let label = |parts: Parts| label_forms("PowerShell 7", None, Some(Task::Running("cargo")), Some(r"C:\Users\jim\dev"), None, Style::Windows, parts)[0].clone();
 		let all = Parts::default();
 		assert_eq!(label(all), r"PowerShell 7 [cargo] C:\Users\jim\dev\");
-		assert_eq!(
-			label(Parts {
-				shell: false,
-				..all
-			}),
-			r"[cargo] C:\Users\jim\dev\"
-		);
-		assert_eq!(
-			label(Parts {
-				program: false,
-				..all
-			}),
-			r"PowerShell 7 - C:\Users\jim\dev\"
-		);
-		assert_eq!(
-			label(Parts {
-				directory: false,
-				..all
-			}),
-			"PowerShell 7 [cargo]"
-		);
+		assert_eq!(label(Parts { shell: false, ..all }), r"[cargo] C:\Users\jim\dev\");
+		assert_eq!(label(Parts { program: false, ..all }), r"PowerShell 7 - C:\Users\jim\dev\");
+		assert_eq!(label(Parts { directory: false, ..all }), "PowerShell 7 [cargo]");
 		// Every part off still names the shell. A tab with no text at all can't
 		// be told from the one beside it.
-		let none = Parts {
-			title: false,
-			shell: false,
-			program: false,
-			directory: false,
-		};
+		let none = Parts { title: false, shell: false, program: false, directory: false };
 		assert_eq!(label(none), "PowerShell 7");
 		// and the ladder is built from what is left rather than cut down from the
 		// full label. With the directory off there's no path rung to give up
-		let kept = label_forms(
-			"PowerShell 7",
-			None,
-			Some(Task::Running("cargo")),
-			Some(r"C:\Users\jim\dev"),
-			None,
-			Style::Windows,
-			Parts {
-				directory: false,
-				..all
-			},
-		);
-		assert!(
-			kept.iter().all(|form| !form.contains('\\')),
-			"a rung still names the directory: {kept:?}"
-		);
+		let kept = label_forms("PowerShell 7", None, Some(Task::Running("cargo")), Some(r"C:\Users\jim\dev"), None, Style::Windows, Parts { directory: false, ..all });
+		assert!(kept.iter().all(|form| !form.contains('\\')), "a rung still names the directory: {kept:?}");
 	}
 
 	// A program that sets its own title names the tab, and the tab's own ladder
@@ -1599,39 +1273,16 @@ mod tests {
 	// Test ID: dcwyz
 	#[test]
 	fn a_program_title_heads_the_tabs_forms() {
-		let forms = |parts| {
-			label_forms(
-				"PowerShell 7",
-				Some("build - release"),
-				Some(Task::Running("cargo")),
-				Some(r"C:\Users\jim\dev"),
-				None,
-				Style::Windows,
-				parts,
-			)
-		};
+		let forms = |parts| label_forms("PowerShell 7", Some("build - release"), Some(Task::Running("cargo")), Some(r"C:\Users\jim\dev"), None, Style::Windows, parts);
 		let on = forms(Parts::default());
 		assert_eq!(on[0], "build - release");
-		assert_eq!(
-			on[1], r"PowerShell 7 [cargo] C:\Users\jim\dev\",
-			"the tab's own longest form is still there: {on:?}"
-		);
-		assert_eq!(
-			on.last().map(String::as_str),
-			Some("P7"),
-			"and the floor is still the shell: {on:?}"
-		);
+		assert_eq!(on[1], r"PowerShell 7 [cargo] C:\Users\jim\dev\", "the tab's own longest form is still there: {on:?}");
+		assert_eq!(on.last().map(String::as_str), Some("P7"), "and the floor is still the shell: {on:?}");
 
 		// Switched off, the tab says only what it worked out for itself.
-		let off = forms(Parts {
-			title: false,
-			..Parts::default()
-		});
+		let off = forms(Parts { title: false, ..Parts::default() });
 		assert_eq!(off[0], r"PowerShell 7 [cargo] C:\Users\jim\dev\");
-		assert!(
-			off.iter().all(|form| form != "build - release"),
-			"the title got through with its switch off: {off:?}"
-		);
+		assert!(off.iter().all(|form| form != "build - release"), "the title got through with its switch off: {off:?}");
 	}
 
 	// The tab reads a program's title through the same filter the window title
@@ -1643,29 +1294,13 @@ mod tests {
 		let rights = Rights::default();
 		let console = r"C:\Windows\System32\cmd.exe";
 		assert_eq!(program_title(rights, console, None), None);
-		let forms = label_forms(
-			"Windows Cmd",
-			program_title(rights, console, None),
-			None,
-			Some(r"C:\Users\jim"),
-			None,
-			Style::Windows,
-			Parts::default(),
-		);
+		let forms = label_forms("Windows Cmd", program_title(rights, console, None), None, Some(r"C:\Users\jim"), None, Style::Windows, Parts::default());
 		assert_eq!(forms[0], r"Windows Cmd - C:\Users\jim\");
 
 		// One that says something does get through, control characters off it.
 		let said = program_title(rights, "vim: \u{1b}[31mnotes.md", None);
 		assert_eq!(said, Some("vim: \u{1b}[31mnotes.md"));
-		let forms = label_forms(
-			"Windows Cmd",
-			said,
-			None,
-			Some(r"C:\Users\jim"),
-			None,
-			Style::Windows,
-			Parts::default(),
-		);
+		let forms = label_forms("Windows Cmd", said, None, Some(r"C:\Users\jim"), None, Style::Windows, Parts::default());
 		assert_eq!(forms[0], "vim: [31mnotes.md");
 	}
 
@@ -1677,66 +1312,21 @@ mod tests {
 	fn a_window_title_can_stop_naming_its_tab() {
 		let rights = Rights::default();
 		let tab = || "Bash - ~/src".to_string();
-		assert_eq!(
-			window_suffix(rights, None, None, None, false, tab),
-			None,
-			"nothing else to say, so nothing is said"
-		);
-		assert_eq!(
-			window_suffix(rights, Some("build box"), None, None, false, tab),
-			None,
-			"a name typed on the tab is the tab talking too"
-		);
-		assert_eq!(
-			window_suffix(
-				rights,
-				Some("build box"),
-				Some("vim README"),
-				None,
-				false,
-				tab
-			),
-			Some("vim README".to_string()),
-			"the program still reaches the title bar"
-		);
+		assert_eq!(window_suffix(rights, None, None, None, false, tab), None, "nothing else to say, so nothing is said");
+		assert_eq!(window_suffix(rights, Some("build box"), None, None, false, tab), None, "a name typed on the tab is the tab talking too");
+		assert_eq!(window_suffix(rights, Some("build box"), Some("vim README"), None, false, tab), Some("vim README".to_string()), "the program still reaches the title bar");
 		// and with it on, nothing about the old order moved
-		assert_eq!(
-			window_suffix(rights, None, None, None, true, tab),
-			Some("Bash - ~/src".to_string())
-		);
-		assert_eq!(
-			window_suffix(
-				rights,
-				Some("build box"),
-				Some("vim README"),
-				None,
-				true,
-				tab
-			),
-			Some("build box".to_string())
-		);
+		assert_eq!(window_suffix(rights, None, None, None, true, tab), Some("Bash - ~/src".to_string()));
+		assert_eq!(window_suffix(rights, Some("build box"), Some("vim README"), None, true, tab), Some("build box".to_string()));
 	}
 
 	// Test ID: dbnjb
 	#[test]
 	fn the_forms_of_a_label_only_ever_get_shorter() {
-		let forms = label_forms(
-			"Bash (MSYS2's full)",
-			None,
-			Some(Task::Last("docker-compose")),
-			Some("/home/jim/data/prs/dev/silkterm"),
-			Some("/home/jim"),
-			Style::Posix,
-			Parts::default(),
-		);
+		let forms = label_forms("Bash (MSYS2's full)", None, Some(Task::Last("docker-compose")), Some("/home/jim/data/prs/dev/silkterm"), Some("/home/jim"), Style::Posix, Parts::default());
 		assert!(forms.len() > 5, "expected a full ladder: {forms:?}");
 		for pair in forms.windows(2) {
-			assert!(
-				pair[1].chars().count() < pair[0].chars().count(),
-				"{:?} is not shorter than {:?}",
-				pair[1],
-				pair[0]
-			);
+			assert!(pair[1].chars().count() < pair[0].chars().count(), "{:?} is not shorter than {:?}", pair[1], pair[0]);
 		}
 	}
 
@@ -1745,17 +1335,8 @@ mod tests {
 	// Test ID: dbnjc
 	#[test]
 	fn a_tab_with_nothing_pressing_it_sits_at_the_regular_width() {
-		let demands = vec![
-			Demand {
-				natural: 100.0,
-				floor: 40.0
-			};
-			3
-		];
-		assert_eq!(
-			widths(1000.0, &demands, 10.0, 100.0, None),
-			[100.0, 100.0, 100.0]
-		);
+		let demands = vec![Demand { natural: 100.0, floor: 40.0 }; 3];
+		assert_eq!(widths(1000.0, &demands, 10.0, 100.0, None), [100.0, 100.0, 100.0]);
 	}
 
 	// A label that wants more gets more, and only after every other tab has its
@@ -1763,16 +1344,7 @@ mod tests {
 	// Test ID: dbnjd
 	#[test]
 	fn a_long_label_grows_its_own_tab_and_no_other() {
-		let demands = [
-			Demand {
-				natural: 400.0,
-				floor: 40.0,
-			},
-			Demand {
-				natural: 100.0,
-				floor: 40.0,
-			},
-		];
+		let demands = [Demand { natural: 400.0, floor: 40.0 }, Demand { natural: 100.0, floor: 40.0 }];
 		assert_eq!(widths(1000.0, &demands, 10.0, 100.0, None), [400.0, 100.0]);
 		// the maximum still caps it
 		assert_eq!(widths(1000.0, &demands, 10.0, 25.0, None), [250.0, 100.0]);
@@ -1784,25 +1356,9 @@ mod tests {
 	// Test ID: dcwr8
 	#[test]
 	fn the_tab_in_front_takes_what_the_row_can_spare() {
-		let demands = [
-			Demand {
-				natural: 200.0,
-				floor: 40.0,
-			},
-			Demand {
-				natural: 900.0,
-				floor: 40.0,
-			},
-			Demand {
-				natural: 200.0,
-				floor: 40.0,
-			},
-		];
+		let demands = [Demand { natural: 200.0, floor: 40.0 }, Demand { natural: 900.0, floor: 40.0 }, Demand { natural: 200.0, floor: 40.0 }];
 		// Held to the cap with nothing in front: 250 apiece and the rest bare.
-		assert_eq!(
-			widths(1000.0, &demands, 10.0, 25.0, None),
-			[200.0, 250.0, 200.0]
-		);
+		assert_eq!(widths(1000.0, &demands, 10.0, 25.0, None), [200.0, 250.0, 200.0]);
 		// In front, it takes the bar less the other 2 at their regular width.
 		let w = widths(1000.0, &demands, 10.0, 25.0, Some(1));
 		assert_eq!(w, [100.0, 800.0, 100.0]);
@@ -1810,10 +1366,7 @@ mod tests {
 		assert!(w[0] >= 100.0 && w[2] >= 100.0);
 		// A short label in front takes only what it wants, so the rest of the
 		// row still grows to its own.
-		assert_eq!(
-			widths(1000.0, &demands, 10.0, 25.0, Some(0)),
-			[200.0, 250.0, 200.0]
-		);
+		assert_eq!(widths(1000.0, &demands, 10.0, 25.0, Some(0)), [200.0, 250.0, 200.0]);
 	}
 
 	// Being in front buys nothing the label doesn't ask for, and nothing the
@@ -1821,34 +1374,16 @@ mod tests {
 	// Test ID: dcwr9
 	#[test]
 	fn the_tab_in_front_asks_for_no_more_than_its_label_wants() {
-		let demands = vec![
-			Demand {
-				natural: 100.0,
-				floor: 40.0
-			};
-			3
-		];
-		assert_eq!(
-			widths(1000.0, &demands, 10.0, 100.0, Some(0)),
-			[100.0, 100.0, 100.0]
-		);
+		let demands = vec![Demand { natural: 100.0, floor: 40.0 }; 3];
+		assert_eq!(widths(1000.0, &demands, 10.0, 100.0, Some(0)), [100.0, 100.0, 100.0]);
 		// a crowded bar shares the shortfall as before
-		let crowded = vec![
-			Demand {
-				natural: 100.0,
-				floor: 40.0
-			};
-			12
-		];
+		let crowded = vec![Demand { natural: 100.0, floor: 40.0 }; 12];
 		let w = widths(600.0, &crowded, 10.0, 100.0, Some(3));
 		for one in &w {
 			assert!((one - 50.0).abs() < 0.01, "{w:?} is not an even share");
 		}
 		// a slot off the page is no slot at all
-		assert_eq!(
-			widths(1000.0, &demands, 10.0, 100.0, Some(9)),
-			widths(1000.0, &demands, 10.0, 100.0, None)
-		);
+		assert_eq!(widths(1000.0, &demands, 10.0, 100.0, Some(9)), widths(1000.0, &demands, 10.0, 100.0, None));
 	}
 
 	// A crowded bar pushes every tab back below the regular width by the same
@@ -1856,13 +1391,7 @@ mod tests {
 	// Test ID: dbnje
 	#[test]
 	fn a_crowded_bar_shrinks_every_tab_alike_and_stops_at_the_floor() {
-		let demands = vec![
-			Demand {
-				natural: 100.0,
-				floor: 40.0
-			};
-			12
-		];
+		let demands = vec![Demand { natural: 100.0, floor: 40.0 }; 12];
 		let w = widths(600.0, &demands, 10.0, 100.0, None);
 		for one in &w {
 			assert!((one - 50.0).abs() < 0.01, "{w:?} is not an even share");
@@ -1885,11 +1414,7 @@ mod tests {
 			for want in 0..12 {
 				let first = page_for(want, active, &floors, total);
 				let fit = tabs_that_fit(total, &floors, first);
-				assert!(
-					(first..first + fit).contains(&active),
-					"active {active} off the page {first}..{} (wanted {want})",
-					first + fit
-				);
+				assert!((first..first + fit).contains(&active), "active {active} off the page {first}..{} (wanted {want})", first + fit);
 				assert!(first + fit <= 12, "page runs past the last tab");
 			}
 		}
@@ -1935,26 +1460,14 @@ mod tests {
 	// Test ID: dbje9
 	#[test]
 	fn the_two_percentages_are_read_as_a_range_either_way_round() {
-		let demands = vec![
-			Demand {
-				natural: 500.0,
-				floor: 40.0
-			};
-			3
-		];
-		assert_eq!(
-			widths(1000.0, &demands, 30.0, 10.0, None),
-			widths(1000.0, &demands, 10.0, 30.0, None)
-		);
+		let demands = vec![Demand { natural: 500.0, floor: 40.0 }; 3];
+		assert_eq!(widths(1000.0, &demands, 30.0, 10.0, None), widths(1000.0, &demands, 10.0, 30.0, None));
 	}
 
 	// Test ID: dbjea
 	#[test]
 	fn a_bar_with_no_width_still_answers() {
-		let demands = [Demand {
-			natural: 100.0,
-			floor: 40.0,
-		}];
+		let demands = [Demand { natural: 100.0, floor: 40.0 }];
 		assert!(widths(0.0, &demands, 12.0, 26.0, None)[0] >= 0.0);
 		assert!(widths(-5.0, &demands, 12.0, 26.0, None)[0] >= 0.0);
 		assert!(widths(100.0, &[], 12.0, 26.0, None).is_empty());
@@ -1976,10 +1489,7 @@ mod tests {
 	// Test ID: dcd5j
 	#[test]
 	fn a_console_title_that_only_names_a_program_is_dropped() {
-		assert_eq!(
-			says("C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
-			None
-		);
+		assert_eq!(says("C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"), None);
 		// A path with a space in it is still a path.
 		assert_eq!(says("C:\\Program Files\\PowerShell\\7\\pwsh.exe"), None);
 		assert_eq!(says("powershell.exe"), None);
@@ -2020,21 +1530,12 @@ mod tests {
 	// Test ID: dcd5m
 	#[test]
 	fn a_console_that_names_the_command_it_is_running_keeps_the_command() {
-		assert_eq!(
-			says("C:\\WINDOWS\\system32\\cmd.exe - ping 8.8.8.8"),
-			Some("ping 8.8.8.8")
-		);
+		assert_eq!(says("C:\\WINDOWS\\system32\\cmd.exe - ping 8.8.8.8"), Some("ping 8.8.8.8"));
 		// Spacing around the dash is the console's, not anybody's choice.
-		assert_eq!(
-			says("C:\\WINDOWS\\system32\\cmd.exe  -  build.bat "),
-			Some("build.bat")
-		);
+		assert_eq!(says("C:\\WINDOWS\\system32\\cmd.exe  -  build.bat "), Some("build.bat"));
 		// A command given as a full path is shown as one. It's still what's
 		// running, which is the thing the title is for.
-		assert_eq!(
-			says("C:\\WINDOWS\\system32\\cmd.exe - C:\\tools\\build.exe"),
-			Some("C:\\tools\\build.exe")
-		);
+		assert_eq!(says("C:\\WINDOWS\\system32\\cmd.exe - C:\\tools\\build.exe"), Some("C:\\tools\\build.exe"));
 		// Not a program on the left, so both halves stand.
 		assert_eq!(says("foo - bar"), Some("foo - bar"));
 	}
@@ -2059,10 +1560,7 @@ mod tests {
 		assert_eq!(says("/home/jim/games/setup.exe"), None);
 		assert_eq!(says("/home/jim/my games/setup.exe"), None);
 		assert_eq!(says("/usr/bin/bash"), Some("/usr/bin/bash"));
-		assert_eq!(
-			says("/opt/powershell/7/pwsh"),
-			Some("/opt/powershell/7/pwsh")
-		);
+		assert_eq!(says("/opt/powershell/7/pwsh"), Some("/opt/powershell/7/pwsh"));
 	}
 
 	// Test ID: dcd5p
@@ -2079,26 +1577,13 @@ mod tests {
 	// Test ID: dcd4x
 	#[test]
 	fn the_window_title_takes_the_typed_name_then_the_program_then_the_tab() {
-		let suffix = |typed, program| {
-			window_suffix(Rights::default(), typed, program, None, true, || {
-				"Bash - ~/src".to_string()
-			})
-		};
-		assert_eq!(
-			suffix(Some("build"), Some("vim foo.rs")).as_deref(),
-			Some("build")
-		);
-		assert_eq!(
-			suffix(None, Some("vim foo.rs")).as_deref(),
-			Some("vim foo.rs")
-		);
+		let suffix = |typed, program| window_suffix(Rights::default(), typed, program, None, true, || "Bash - ~/src".to_string());
+		assert_eq!(suffix(Some("build"), Some("vim foo.rs")).as_deref(), Some("build"));
+		assert_eq!(suffix(None, Some("vim foo.rs")).as_deref(), Some("vim foo.rs"));
 		assert_eq!(suffix(None, None).as_deref(), Some("Bash - ~/src"));
 		// A tab blanked on purpose lets the program through, and says nothing when
 		// the program has nothing to say either.
-		assert_eq!(
-			suffix(Some(" "), Some("vim foo.rs")).as_deref(),
-			Some("vim foo.rs")
-		);
+		assert_eq!(suffix(Some(" "), Some("vim foo.rs")).as_deref(), Some("vim foo.rs"));
 		assert_eq!(suffix(Some(""), None), None);
 		// A typed title is shown as typed; a program's is trimmed.
 		assert_eq!(suffix(Some(" build "), None).as_deref(), Some(" build "));
@@ -2126,11 +1611,7 @@ mod tests {
 	#[test]
 	fn a_program_naming_only_itself_falls_through_to_the_tab() {
 		let exe = Some("C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
-		let suffix = |typed, program| {
-			window_suffix(Rights::default(), typed, program, None, true, || {
-				"Windows PowerShell".to_string()
-			})
-		};
+		let suffix = |typed, program| window_suffix(Rights::default(), typed, program, None, true, || "Windows PowerShell".to_string());
 		assert_eq!(suffix(None, exe).as_deref(), Some("Windows PowerShell"));
 		assert_eq!(suffix(Some(""), exe), None);
 	}
@@ -2141,45 +1622,15 @@ mod tests {
 	// Test ID: dcnwn
 	#[test]
 	fn a_foreign_elevated_marker_goes_with_the_program_it_names() {
-		let admin = Rights {
-			say: Some("Administrator"),
-			decorated: true,
-		};
-		let suffix = |program, launched| {
-			window_suffix(admin, None, Some(program), launched, true, || {
-				"Cmd".to_string()
-			})
-		};
-		for title in [
-			"Administrador: C:\\Windows\\System32\\cmd.exe",
-			"Administrateur : C:\\WINDOWS\\system32\\cmd.exe",
-			"\u{7ba1}\u{7406}\u{8005}: C:\\Windows\\System32\\cmd.exe",
-			"Administrator: C:\\WINDOWS\\system32\\cmd.exe",
-		] {
+		let admin = Rights { say: Some("Administrator"), decorated: true };
+		let suffix = |program, launched| window_suffix(admin, None, Some(program), launched, true, || "Cmd".to_string());
+		for title in ["Administrador: C:\\Windows\\System32\\cmd.exe", "Administrateur : C:\\WINDOWS\\system32\\cmd.exe", "\u{7ba1}\u{7406}\u{8005}: C:\\Windows\\System32\\cmd.exe", "Administrator: C:\\WINDOWS\\system32\\cmd.exe"] {
 			for launched in ["cmd", "CMD.EXE", "C:\\Windows\\System32\\cmd.exe"] {
-				assert_eq!(
-					suffix(title, Some(launched)).as_deref(),
-					Some("Cmd"),
-					"{title:?} from {launched:?}"
-				);
+				assert_eq!(suffix(title, Some(launched)).as_deref(), Some("Cmd"), "{title:?} from {launched:?}");
 			}
 		}
-		assert_eq!(
-			suffix(
-				"Administrador: C:\\Windows\\System32\\cmd.exe - ping 8.8.8.8",
-				Some("cmd")
-			)
-			.as_deref(),
-			Some("ping 8.8.8.8")
-		);
-		assert_eq!(
-			suffix(
-				"Administrador: C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-				Some("pwsh")
-			)
-			.as_deref(),
-			Some("Cmd")
-		);
+		assert_eq!(suffix("Administrador: C:\\Windows\\System32\\cmd.exe - ping 8.8.8.8", Some("cmd")).as_deref(), Some("ping 8.8.8.8"));
+		assert_eq!(suffix("Administrador: C:\\Program Files\\PowerShell\\7\\pwsh.exe", Some("pwsh")).as_deref(), Some("Cmd"));
 	}
 
 	// Only the program this pane was started with counts, and only where a console
@@ -2188,76 +1639,32 @@ mod tests {
 	#[test]
 	fn a_word_in_front_of_another_program_survives() {
 		let title = "Administrador: C:\\Windows\\System32\\cmd.exe";
-		let admin = Rights {
-			say: Some("Administrator"),
-			decorated: true,
-		};
-		let root = Rights {
-			say: Some("Root"),
-			decorated: false,
-		};
-		for (rights, launched) in [
-			(admin, Some("pwsh")),
-			(admin, Some("cmd.com")),
-			(admin, None),
-			(root, Some("cmd")),
-			(Rights::default(), Some("cmd")),
-		] {
-			assert_eq!(
-				window_suffix(rights, None, Some(title), launched, true, || "Cmd".into())
-					.as_deref(),
-				Some(title),
-				"{launched:?}"
-			);
+		let admin = Rights { say: Some("Administrator"), decorated: true };
+		let root = Rights { say: Some("Root"), decorated: false };
+		for (rights, launched) in [(admin, Some("pwsh")), (admin, Some("cmd.com")), (admin, None), (root, Some("cmd")), (Rights::default(), Some("cmd"))] {
+			assert_eq!(window_suffix(rights, None, Some(title), launched, true, || "Cmd".into()).as_deref(), Some(title), "{launched:?}");
 		}
 		// A word with a path of its own isn't a console's.
 		let copied = "copy a/b C:\\Windows\\System32\\cmd.exe";
-		assert_eq!(
-			window_suffix(admin, None, Some(copied), Some("cmd"), true, || "Cmd"
-				.into())
-			.as_deref(),
-			Some(copied)
-		);
+		assert_eq!(window_suffix(admin, None, Some(copied), Some("cmd"), true, || "Cmd".into()).as_deref(), Some(copied));
 	}
 
 	// Test ID: dcd5q
 	#[test]
 	fn a_title_on_the_command_line_is_the_whole_answer() {
-		assert_eq!(
-			window_title(Rights::default(), Some("mine"), "SilkTerm", Some("Bash")),
-			"mine"
-		);
+		assert_eq!(window_title(Rights::default(), Some("mine"), "SilkTerm", Some("Bash")), "mine");
 		// Even against nothing to say, and even when it's empty.
-		assert_eq!(
-			window_title(Rights::default(), Some("mine"), "SilkTerm", None),
-			"mine"
-		);
-		assert_eq!(
-			window_title(Rights::default(), Some(""), "SilkTerm", Some("Bash")),
-			""
-		);
-		assert_eq!(
-			window_title(Rights::default(), None, "SilkTerm", Some("Bash")),
-			"SilkTerm - Bash"
-		);
-		assert_eq!(
-			window_title(Rights::default(), None, "SilkTerm", None),
-			"SilkTerm"
-		);
+		assert_eq!(window_title(Rights::default(), Some("mine"), "SilkTerm", None), "mine");
+		assert_eq!(window_title(Rights::default(), Some(""), "SilkTerm", Some("Bash")), "");
+		assert_eq!(window_title(Rights::default(), None, "SilkTerm", Some("Bash")), "SilkTerm - Bash");
+		assert_eq!(window_title(Rights::default(), None, "SilkTerm", None), "SilkTerm");
 	}
 
 	// Test ID: dcd65
 	#[test]
 	fn nothing_the_title_rules_answer_is_blank() {
 		// A blank answer would draw "SilkTerm - " with nothing after it.
-		for title in [
-			" - ",
-			"C:\\WINDOWS\\system32\\cmd.exe - ",
-			"   ",
-			"x.exe - \t ",
-			"Administrator: ",
-			"Administrator: C:\\WINDOWS\\system32\\cmd.exe - ",
-		] {
+		for title in [" - ", "C:\\WINDOWS\\system32\\cmd.exe - ", "   ", "x.exe - \t ", "Administrator: ", "Administrator: C:\\WINDOWS\\system32\\cmd.exe - "] {
 			for strip in [None, Some("Administrator")] {
 				let said = program_says(title, strip);
 				assert!(said.is_none_or(|said| !said.trim().is_empty()), "{title:?}");
@@ -2271,17 +1678,8 @@ mod tests {
 	// Test ID: dcdar
 	#[test]
 	fn a_title_ending_on_the_separator_is_shown_whole() {
-		assert_eq!(
-			says("C:\\WINDOWS\\system32\\cmd.exe - "),
-			Some("C:\\WINDOWS\\system32\\cmd.exe -")
-		);
-		assert_eq!(
-			program_says(
-				"Administrator: C:\\WINDOWS\\system32\\cmd.exe - ",
-				Some("Administrator")
-			),
-			Some("C:\\WINDOWS\\system32\\cmd.exe -")
-		);
+		assert_eq!(says("C:\\WINDOWS\\system32\\cmd.exe - "), Some("C:\\WINDOWS\\system32\\cmd.exe -"));
+		assert_eq!(program_says("Administrator: C:\\WINDOWS\\system32\\cmd.exe - ", Some("Administrator")), Some("C:\\WINDOWS\\system32\\cmd.exe -"));
 	}
 
 	// An elevated Windows console puts its own rights in front of every title it
@@ -2291,23 +1689,12 @@ mod tests {
 	#[test]
 	fn an_elevated_console_marker_is_not_repeated() {
 		let elevated = |title| program_says(title, Some("Administrator"));
-		assert_eq!(
-			elevated(
-				"Administrator: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
-			),
-			None
-		);
+		assert_eq!(elevated("Administrator: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"), None);
 		assert_eq!(elevated("Administrator: vim foo.rs"), Some("vim foo.rs"));
-		assert_eq!(
-			elevated("Administrator: C:\\WINDOWS\\system32\\cmd.exe - ping 8.8.8.8"),
-			Some("ping 8.8.8.8")
-		);
+		assert_eq!(elevated("Administrator: C:\\WINDOWS\\system32\\cmd.exe - ping 8.8.8.8"), Some("ping 8.8.8.8"));
 		assert_eq!(elevated("Administrator: "), None);
 		// A path with a space in it takes the other half of the program-name test.
-		assert_eq!(
-			elevated("Administrator: C:\\Program Files\\PowerShell\\7\\pwsh.exe"),
-			None
-		);
+		assert_eq!(elevated("Administrator: C:\\Program Files\\PowerShell\\7\\pwsh.exe"), None);
 	}
 
 	// The word is matched exactly, and only where a console would have written
@@ -2316,21 +1703,12 @@ mod tests {
 	#[test]
 	fn a_marker_the_console_did_not_write_survives() {
 		let elevated = |title| program_says(title, Some("Administrator"));
-		assert_eq!(
-			elevated("Administrator:Backup"),
-			Some("Administrator:Backup")
-		);
+		assert_eq!(elevated("Administrator:Backup"), Some("Administrator:Backup"));
 		assert_eq!(elevated("Administrator"), Some("Administrator"));
-		assert_eq!(
-			elevated("ADMINISTRATOR: vim foo.rs"),
-			Some("ADMINISTRATOR: vim foo.rs")
-		);
+		assert_eq!(elevated("ADMINISTRATOR: vim foo.rs"), Some("ADMINISTRATOR: vim foo.rs"));
 		// A console that speaks another language writes another word, which isn't
 		// known here. `window_suffix` finds it by the program after it.
-		assert_eq!(
-			elevated("Administrador: C:\\Windows\\System32\\cmd.exe"),
-			Some("Administrador: C:\\Windows\\System32\\cmd.exe")
-		);
+		assert_eq!(elevated("Administrador: C:\\Windows\\System32\\cmd.exe"), Some("Administrador: C:\\Windows\\System32\\cmd.exe"));
 	}
 
 	// Nothing on unix writes a marker into a title, so running as root mustn't
@@ -2338,16 +1716,8 @@ mod tests {
 	// Test ID: dcdav
 	#[test]
 	fn root_alone_does_not_strip_anything() {
-		let rights = Rights {
-			say: Some("Root"),
-			decorated: false,
-		};
-		assert_eq!(
-			window_suffix(rights, None, Some("Root: kernel notes"), None, true, || {
-				"Bash".to_string()
-			}),
-			Some("Root: kernel notes".to_string())
-		);
+		let rights = Rights { say: Some("Root"), decorated: false };
+		assert_eq!(window_suffix(rights, None, Some("Root: kernel notes"), None, true, || { "Bash".to_string() }), Some("Root: kernel notes".to_string()));
 	}
 
 	// Only the word that is about to be put back is taken off. Anything else is
@@ -2355,18 +1725,9 @@ mod tests {
 	// Test ID: dcdaw
 	#[test]
 	fn a_marker_that_was_never_added_is_left_alone() {
-		assert_eq!(
-			program_says("Administrator: setup.log", Some("Root")),
-			Some("Administrator: setup.log")
-		);
-		assert_eq!(
-			program_says("Root: notes", Some("Administrator")),
-			Some("Root: notes")
-		);
-		assert_eq!(
-			program_says("Administrators: three of them", Some("Administrator")),
-			Some("Administrators: three of them")
-		);
+		assert_eq!(program_says("Administrator: setup.log", Some("Root")), Some("Administrator: setup.log"));
+		assert_eq!(program_says("Root: notes", Some("Administrator")), Some("Root: notes"));
+		assert_eq!(program_says("Administrators: three of them", Some("Administrator")), Some("Administrators: three of them"));
 	}
 
 	// A word to take off that nothing would put back could only lose text, so the
@@ -2384,37 +1745,14 @@ mod tests {
 	// Test ID: dcday
 	#[test]
 	fn a_privileged_window_says_so_before_anything_else() {
-		let root = Rights {
-			say: Some("Root"),
-			decorated: false,
-		};
-		assert_eq!(
-			window_title(root, None, "SilkTerm", Some("Bash")),
-			"Root: SilkTerm - Bash"
-		);
-		assert_eq!(
-			window_title(
-				Rights {
-					say: Some("Administrator"),
-					decorated: true
-				},
-				None,
-				"SilkTerm",
-				None
-			),
-			"Administrator: SilkTerm"
-		);
+		let root = Rights { say: Some("Root"), decorated: false };
+		assert_eq!(window_title(root, None, "SilkTerm", Some("Bash")), "Root: SilkTerm - Bash");
+		assert_eq!(window_title(Rights { say: Some("Administrator"), decorated: true }, None, "SilkTerm", None), "Administrator: SilkTerm");
 		// A --title is otherwise the whole answer, but it doesn't get to drop this.
-		assert_eq!(
-			window_title(root, Some("deploy"), "SilkTerm", Some("Bash")),
-			"Root: deploy"
-		);
+		assert_eq!(window_title(root, Some("deploy"), "SilkTerm", Some("Bash")), "Root: deploy");
 		// A title that already starts with the word isn't given a second one,
 		// and an empty one isn't given a dangling colon either.
-		assert_eq!(
-			window_title(root, Some("Root: deploy"), "SilkTerm", None),
-			"Root: deploy"
-		);
+		assert_eq!(window_title(root, Some("Root: deploy"), "SilkTerm", None), "Root: deploy");
 		assert_eq!(window_title(root, Some(""), "SilkTerm", None), "Root");
 		assert_eq!(window_title(root, Some("   "), "SilkTerm", None), "Root");
 	}
@@ -2422,15 +1760,9 @@ mod tests {
 	// Test ID: dcsvv
 	#[test]
 	fn a_note_follows_the_whole_title_even_a_custom_one() {
-		let root = Rights {
-			say: Some("Root"),
-			decorated: false,
-		};
+		let root = Rights { say: Some("Root"), decorated: false };
 		let title = window_title(root, Some("deploy"), "SilkTerm", None);
-		assert_eq!(
-			with_note(title, Some("restoring resources ...")),
-			"Root: deploy (restoring resources ...)"
-		);
+		assert_eq!(with_note(title, Some("restoring resources ...")), "Root: deploy (restoring resources ...)");
 		let title = window_title(Rights::default(), None, "SilkTerm", Some("Bash"));
 		assert_eq!(with_note(title.clone(), None), title);
 	}
@@ -2446,10 +1778,7 @@ mod tests {
 		assert_eq!(plain("  spaced  "), "spaced");
 		assert_eq!(plain("\u{1}\u{2}\u{3}"), "");
 		// Ordinary text, emoji and CJK are left exactly as they came.
-		assert_eq!(
-			plain("~/src \u{1f600} \u{4e2d}"),
-			"~/src \u{1f600} \u{4e2d}"
-		);
+		assert_eq!(plain("~/src \u{1f600} \u{4e2d}"), "~/src \u{1f600} \u{4e2d}");
 	}
 
 	// A program's title isn't the only untrusted text on a tab. Any program can
@@ -2458,39 +1787,19 @@ mod tests {
 	// Test ID: dcq4v
 	#[test]
 	fn a_program_name_or_a_directory_cannot_put_control_characters_in_a_label() {
-		let forms = label_forms(
-			"Bash",
-			None,
-			Some(Task::Running("py\u{1b}[2Jx")),
-			Some("/tmp/a\u{1b}[31mb"),
-			Some("/home/u"),
-			Style::Posix,
-			Parts::default(),
-		);
+		let forms = label_forms("Bash", None, Some(Task::Running("py\u{1b}[2Jx")), Some("/tmp/a\u{1b}[31mb"), Some("/home/u"), Style::Posix, Parts::default());
 		assert!(!forms.is_empty());
 		for form in &forms {
-			assert!(
-				!form.chars().any(char::is_control),
-				"a tab label came out {form:?}"
-			);
+			assert!(!form.chars().any(char::is_control), "a tab label came out {form:?}");
 		}
 		// the text still arrives, only without the escape
-		assert!(
-			forms.iter().any(|f| f.contains("py[2Jx")),
-			"the program name is gone: {forms:?}"
-		);
+		assert!(forms.iter().any(|f| f.contains("py[2Jx")), "the program name is gone: {forms:?}");
 
 		// and the window title, which falls back to that same label
-		let rights = Rights {
-			say: None,
-			decorated: false,
-		};
+		let rights = Rights { say: None, decorated: false };
 		let suffix = window_suffix(rights, None, None, None, true, || forms[0].clone());
 		let title = window_title(rights, None, "SilkTerm", suffix.as_deref());
-		assert!(
-			!title.chars().any(char::is_control),
-			"the window title came out {title:?}"
-		);
+		assert!(!title.chars().any(char::is_control), "the window title came out {title:?}");
 	}
 
 	// Test ID: de2zj
@@ -2499,12 +1808,7 @@ mod tests {
 		assert!(tab_template(DEFAULT_TAB_TEXT).is_ok());
 		assert_eq!(tab_text_for(Parts::default()), DEFAULT_TAB_TEXT);
 		for bits in 0..16u8 {
-			let parts = Parts {
-				title: bits & 1 != 0,
-				shell: bits & 2 != 0,
-				program: bits & 4 != 0,
-				directory: bits & 8 != 0,
-			};
+			let parts = Parts { title: bits & 1 != 0, shell: bits & 2 != 0, program: bits & 4 != 0, directory: bits & 8 != 0 };
 			let text = tab_text_for(parts);
 			assert!(tab_template(&text).is_ok(), "{parts:?} gave {text:?}");
 		}
@@ -2517,50 +1821,19 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_template_says_what_the_check_boxes_said() {
-		const SHELLS: [&str; 5] = [
-			"PowerShell 7",
-			"bash",
-			"Bash (MSYS2's full)",
-			"",
-			"Zsh (no rc)",
-		];
-		const TITLES: [Option<&str>; 4] =
-			[None, Some("build - release"), Some(""), Some("vi\u{1b}m")];
-		const TASKS: [Option<Task>; 5] = [
-			None,
-			Some(Task::Running("cargo")),
-			Some(Task::Last("docker-compose")),
-			Some(Task::Running(" ")),
-			Some(Task::Last("py\u{1b}[2Jx")),
-		];
-		const CWDS: [Option<&str>; 7] = [
-			None,
-			Some(""),
-			Some("/home/jim/data/prs/dev/silkterm"),
-			Some("/"),
-			Some("/tmp/a\u{1b}[31mb"),
-			Some(r"C:\Users\jim\dev"),
-			Some("~"),
-		];
+		const SHELLS: [&str; 5] = ["PowerShell 7", "bash", "Bash (MSYS2's full)", "", "Zsh (no rc)"];
+		const TITLES: [Option<&str>; 4] = [None, Some("build - release"), Some(""), Some("vi\u{1b}m")];
+		const TASKS: [Option<Task>; 5] = [None, Some(Task::Running("cargo")), Some(Task::Last("docker-compose")), Some(Task::Running(" ")), Some(Task::Last("py\u{1b}[2Jx"))];
+		const CWDS: [Option<&str>; 7] = [None, Some(""), Some("/home/jim/data/prs/dev/silkterm"), Some("/"), Some("/tmp/a\u{1b}[31mb"), Some(r"C:\Users\jim\dev"), Some("~")];
 		let mut cases = 0;
 		for bits in 0..16u8 {
-			let parts = Parts {
-				title: bits & 1 != 0,
-				shell: bits & 2 != 0,
-				program: bits & 4 != 0,
-				directory: bits & 8 != 0,
-			};
+			let parts = Parts { title: bits & 1 != 0, shell: bits & 2 != 0, program: bits & 4 != 0, directory: bits & 8 != 0 };
 			for shell in SHELLS {
 				for title in TITLES {
 					for task in TASKS {
 						for cwd in CWDS {
-							for (home, style) in [
-								(None, Style::Posix),
-								(Some("/home/jim"), Style::Posix),
-								(None, Style::Windows),
-							] {
-								let mut was =
-									old::label_forms(shell, title, task, cwd, home, style, parts);
+							for (home, style) in [(None, Style::Posix), (Some("/home/jim"), Style::Posix), (None, Style::Windows)] {
+								let mut was = old::label_forms(shell, title, task, cwd, home, style, parts);
 								let now = label_forms(shell, title, task, cwd, home, style, parts);
 								// A path that reads as nothing, such as a bare / under
 								// Windows rules, used to leave a dash or a space hanging
@@ -2571,10 +1844,7 @@ mod tests {
 									}
 									was.dedup();
 								}
-								assert_eq!(
-									now, was,
-									"{parts:?} {shell:?} {title:?} {task:?} {cwd:?} {home:?} {style:?}"
-								);
+								assert_eq!(now, was, "{parts:?} {shell:?} {title:?} {task:?} {cwd:?} {home:?} {style:?}");
 								cases += 1;
 							}
 						}
@@ -2587,14 +1857,7 @@ mod tests {
 		// boxes said. One typed blank made a blank tab.
 		let template = tab_template(DEFAULT_TAB_TEXT).expect("the default");
 		for typed in ["my tab", "  spaced  out ", "", "  "] {
-			let facts = Facts {
-				typed: Some(typed),
-				shell: "bash",
-				title: Some("build"),
-				task: Some(Task::Running("cargo")),
-				cwd: Some("/srv/x/y"),
-				home: None,
-			};
+			let facts = Facts { typed: Some(typed), shell: "bash", title: Some("build"), task: Some(Task::Running("cargo")), cwd: Some("/srv/x/y"), home: None };
 			assert_eq!(super::label_forms(&template, facts, Style::Posix), [typed]);
 		}
 	}
@@ -2609,40 +1872,15 @@ mod tests {
 	// Test ID: de2zm
 	#[test]
 	fn a_template_says_what_the_tab_says_and_the_ladder_how_short() {
-		let facts = Facts {
-			typed: None,
-			shell: "PowerShell 7",
-			title: Some("notes.md - vim"),
-			task: Some(Task::Running("cargo")),
-			cwd: Some("/srv/work/project/src"),
-			home: None,
-		};
-		assert_eq!(
-			forms_of("%SHELL% at %CURRENT_DIRECTORY%", facts),
-			[
-				"PowerShell 7 at /srv/work/project/src/",
-				"PS 7 at /srv/work/project/src/",
-				"PS 7 at /srv/work/.../src/",
-				"PS 7 at /srv/.../src/",
-				"PS 7 at /.../src/",
-				"PS 7 at /.../",
-				"PS 7",
-				"P7",
-			]
-		);
+		let facts = Facts { typed: None, shell: "PowerShell 7", title: Some("notes.md - vim"), task: Some(Task::Running("cargo")), cwd: Some("/srv/work/project/src"), home: None };
+		assert_eq!(forms_of("%SHELL% at %CURRENT_DIRECTORY%", facts), ["PowerShell 7 at /srv/work/project/src/", "PS 7 at /srv/work/project/src/", "PS 7 at /srv/work/.../src/", "PS 7 at /srv/.../src/", "PS 7 at /.../src/", "PS 7 at /.../", "PS 7", "P7",]);
 		// a program's own title gives way first, to the rest of the template
 		let titled = forms_of("%PROGRAM_DEFINED% {(%SHELL%)}", facts);
 		assert_eq!(titled[0], "notes.md - vim (PowerShell 7)");
 		assert_eq!(titled[1], "(PowerShell 7)");
 		// a name typed on the tab never shortens, and wherever it is put
-		let typed = Facts {
-			typed: Some("build box"),
-			..facts
-		};
-		assert_eq!(
-			forms_of("%USER_DEFINED%: %PROGRAM%", typed),
-			["build box: cargo", "build box"]
-		);
+		let typed = Facts { typed: Some("build box"), ..facts };
+		assert_eq!(forms_of("%USER_DEFINED%: %PROGRAM%", typed), ["build box: cargo", "build box"]);
 		// a template with no room for a typed name leaves it off
 		assert_eq!(forms_of("%SHELL%", typed), ["PowerShell 7", "PS 7", "P7"]);
 		// a template naming nothing the tab has still names the shell
@@ -2656,17 +1894,11 @@ mod tests {
 	fn a_malformed_or_blank_tab_text_reads_as_the_shipped_one() {
 		let shipped = tab_template(DEFAULT_TAB_TEXT).expect("the default");
 		for text in ["", "   ", "{ %SHELL%", "%SHELL", "%DIRECTORY%", "%SHELL% ]"] {
-			assert!(
-				text.trim().is_empty() || tab_template(text).is_err(),
-				"{text:?}"
-			);
+			assert!(text.trim().is_empty() || tab_template(text).is_err(), "{text:?}");
 			assert_eq!(tab_template_or_default(text), shipped, "{text:?}");
 		}
 		// macro names are words of ours, so their case doesn't matter
-		assert_eq!(
-			tab_template_or_default("%shell% %Current_Directory%"),
-			tab_template("%SHELL% %CURRENT_DIRECTORY%").expect("reads")
-		);
+		assert_eq!(tab_template_or_default("%shell% %Current_Directory%"), tab_template("%SHELL% %CURRENT_DIRECTORY%").expect("reads"));
 	}
 
 	// A frame drawn with the window title's parts as they were. Its suffix used
@@ -2675,12 +1907,7 @@ mod tests {
 	#[test]
 	fn an_unchanged_window_title_builds_nothing() {
 		use super::{KeptTitle, Suffix, suffix_from};
-		fn frame(
-			kept: &mut KeptTitle,
-			typed: Option<&str>,
-			program: Option<&str>,
-			note: Option<&'static str>,
-		) -> Option<String> {
+		fn frame(kept: &mut KeptTitle, typed: Option<&str>, program: Option<&str>, note: Option<&'static str>) -> Option<String> {
 			let rights = Rights::default();
 			let suffix = match suffix_from(rights, typed, program, None, true) {
 				Some(Suffix::Said(said)) => Some(said),
@@ -2690,10 +1917,7 @@ mod tests {
 			kept.update(rights, None, "SilkTerm", suffix, note)
 		}
 		let mut kept = KeptTitle::default();
-		assert_eq!(
-			frame(&mut kept, None, Some("vim notes.md"), None).as_deref(),
-			Some("SilkTerm - vim notes.md")
-		);
+		assert_eq!(frame(&mut kept, None, Some("vim notes.md"), None).as_deref(), Some("SilkTerm - vim notes.md"));
 		let before = crate::perf::thread_allocs();
 		for _ in 0..240 {
 			assert_eq!(frame(&mut kept, None, Some("vim notes.md"), None), None);
@@ -2701,18 +1925,9 @@ mod tests {
 		let spent = crate::perf::thread_allocs() - before;
 		assert_eq!(spent, 0, "allocations over 240 frames, title unchanged");
 		// A change to any part builds a new title.
-		let moves: [(Option<&str>, Option<&str>, Option<&'static str>, &str); 5] = [
-			(None, Some("htop"), None, "SilkTerm - htop"),
-			(None, None, None, "SilkTerm - Work shell - ~/src"),
-			(Some("Logs"), None, None, "SilkTerm - Logs"),
-			(Some("Logs"), None, Some("idle"), "SilkTerm - Logs (idle)"),
-			(Some("Logs"), None, None, "SilkTerm - Logs"),
-		];
+		let moves: [(Option<&str>, Option<&str>, Option<&'static str>, &str); 5] = [(None, Some("htop"), None, "SilkTerm - htop"), (None, None, None, "SilkTerm - Work shell - ~/src"), (Some("Logs"), None, None, "SilkTerm - Logs"), (Some("Logs"), None, Some("idle"), "SilkTerm - Logs (idle)"), (Some("Logs"), None, None, "SilkTerm - Logs")];
 		for (typed, program, note, want) in moves {
-			assert_eq!(
-				frame(&mut kept, typed, program, note).as_deref(),
-				Some(want)
-			);
+			assert_eq!(frame(&mut kept, typed, program, note).as_deref(), Some(want));
 			assert_eq!(frame(&mut kept, typed, program, note), None, "{want}");
 		}
 		// The count above means something only where the counter counts.
@@ -2727,9 +1942,7 @@ mod tests {
 	// template and the one written for an older config's check boxes can be checked
 	// against it (`the_template_says_what_the_check_boxes_said`).
 	mod old {
-		use super::super::{
-			ELLIPSIS, Parts, Style, Task, path_forms, plain, push_shorter, shell_forms,
-		};
+		use super::super::{ELLIPSIS, Parts, Style, Task, path_forms, plain, push_shorter, shell_forms};
 
 		fn task_forms(task: Option<Task>) -> Vec<String> {
 			let (marker, program) = match task {
@@ -2753,15 +1966,7 @@ mod tests {
 			forms
 		}
 
-		pub fn label_forms(
-			friendly: &str,
-			program: Option<&str>,
-			task: Option<Task>,
-			cwd: Option<&str>,
-			home: Option<&str>,
-			style: Style,
-			parts: Parts,
-		) -> Vec<String> {
+		pub fn label_forms(friendly: &str, program: Option<&str>, task: Option<Task>, cwd: Option<&str>, home: Option<&str>, style: Style, parts: Parts) -> Vec<String> {
 			// Every part of a label is a program's own text: a process can rename itself
 			// and a directory name arrives in an archive or a checkout. None of it has
 			// been through `plain` on the way here, and a label is drawn by the tab
@@ -2771,12 +1976,7 @@ mod tests {
 			let friendly = plain(friendly);
 			// A part the user turned off is dropped here rather than at each rung, so
 			// the ladder below is built out of what will be drawn.
-			let program = parts
-				.title
-				.then_some(program)
-				.flatten()
-				.map(plain)
-				.filter(|title| !title.is_empty());
+			let program = parts.title.then_some(program).flatten().map(plain).filter(|title| !title.is_empty());
 			let task = parts.program.then_some(task).flatten();
 			let cwd = parts.directory.then_some(cwd).flatten();
 			let (running, task_name) = match task {
@@ -2784,35 +1984,17 @@ mod tests {
 				Some(Task::Last(name)) => (false, Some(plain(name))),
 				None => (false, None),
 			};
-			let task = task_name.as_deref().map(|name| {
-				if running {
-					Task::Running(name)
-				} else {
-					Task::Last(name)
-				}
-			});
+			let task = task_name.as_deref().map(|name| if running { Task::Running(name) } else { Task::Last(name) });
 			let cwd = cwd.map(plain);
 			let home = home.map(plain);
-			let shells = if parts.shell {
-				shell_forms(&friendly)
-			} else {
-				Vec::new()
-			};
+			let shells = if parts.shell { shell_forms(&friendly) } else { Vec::new() };
 			let tasks = task_forms(task);
-			let paths = cwd
-				.as_deref()
-				.filter(|dir| !dir.trim().is_empty())
-				.map(|dir| path_forms(dir, home.as_deref(), style))
-				.unwrap_or_default();
+			let paths = cwd.as_deref().filter(|dir| !dir.trim().is_empty()).map(|dir| path_forms(dir, home.as_deref(), style)).unwrap_or_default();
 			let full_name = shells.first().map_or("", String::as_str);
 			// The last form is always the shortest; the middle rung only exists when
 			// there are 3 of them, and a name with no middle rung keeps its own.
 			let tiny_name = (shells.len() > 1).then(|| shells[shells.len() - 1].clone());
-			let short_name = if shells.len() >= 3 {
-				shells[1].as_str()
-			} else {
-				full_name
-			};
+			let short_name = if shells.len() >= 3 { shells[1].as_str() } else { full_name };
 			let first_task = tasks.first().map(String::as_str);
 			let last_task = tasks.last().map(String::as_str);
 			let first_path = paths.first().map(String::as_str);
@@ -2906,45 +2088,21 @@ mod tests {
 		}
 
 		fn tame(text: &str) -> bool {
-			!text
-				.chars()
-				.any(|c| c.is_control() || ('\u{80}'..='\u{9f}').contains(&c))
+			!text.chars().any(|c| c.is_control() || ('\u{80}'..='\u{9f}').contains(&c))
 		}
 
 		fn check(case: &[u8]) {
 			let raw = String::from_utf8_lossy(case);
 			let said = plain(&raw);
 			assert!(tame(&said), "a program's title came through as {said:?}");
-			for rights in [
-				Rights {
-					say: None,
-					decorated: false,
-				},
-				Rights {
-					say: Some("Administrator"),
-					decorated: true,
-				},
-				Rights {
-					say: Some("Root"),
-					decorated: false,
-				},
-			] {
-				let suffix =
-					window_suffix(rights, None, Some(&said), Some("x"), true, || "bash".into());
+			for rights in [Rights { say: None, decorated: false }, Rights { say: Some("Administrator"), decorated: true }, Rights { say: Some("Root"), decorated: false }] {
+				let suffix = window_suffix(rights, None, Some(&said), Some("x"), true, || "bash".into());
 				let title = window_title(rights, None, "SilkTerm", suffix.as_deref());
 				assert!(tame(&title), "the window title came out {title:?}");
 			}
 			// Raw, not `said`: a shell name, a program's own name and a
 			// directory all reach a label without passing a title parser.
-			for form in label_forms(
-				&raw,
-				Some(&raw),
-				Some(Task::Running(&raw)),
-				Some(&raw),
-				Some("/home/u"),
-				Style::Posix,
-				Parts::default(),
-			) {
+			for form in label_forms(&raw, Some(&raw), Some(Task::Running(&raw)), Some(&raw), Some("/home/u"), Style::Posix, Parts::default()) {
 				assert!(tame(&form), "a tab label came out {form:?}");
 			}
 		}

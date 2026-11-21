@@ -43,10 +43,7 @@ pub(super) fn remembered(end: bool) -> OnClose {
 }
 
 /// The question's window title and paragraphs.
-#[cfg_attr(
-	target_os = "windows",
-	allow(dead_code, reason = "Windows has no tmux to ask about")
-)]
+#[cfg_attr(target_os = "windows", allow(dead_code, reason = "Windows has no tmux to ask about"))]
 pub(super) fn ask_text(closing: Closing, names: &[String]) -> (String, Vec<String>) {
 	let (title, what) = match closing {
 		Closing::Pane(_) => ("Close pane", "this pane"),
@@ -58,43 +55,19 @@ pub(super) fn ask_text(closing: Closing, names: &[String]) -> (String, Vec<Strin
 		[] => format!("SilkTerm started a tmux session in {what}."),
 		[one] => format!("SilkTerm started the tmux session {one} in {what}."),
 		[a, b] => format!("SilkTerm started 2 tmux sessions in {what}: {a} and {b}."),
-		[many @ .., last] => format!(
-			"SilkTerm started {} tmux sessions in {what}: {}, and {last}.",
-			quoted.len(),
-			many.join(", ")
-		),
+		[many @ .., last] => format!("SilkTerm started {} tmux sessions in {what}: {}, and {last}.", quoted.len(), many.join(", ")),
 	};
 	let it = if names.len() > 1 { "them" } else { "it" };
-	(
-		title.to_string(),
-		vec![
-			first,
-			format!(
-				"Detach leaves {it} running, so you can attach to {it} again later. End kills {it}, and everything running in {it}."
-			),
-		],
-	)
+	(title.to_string(), vec![first, format!("Detach leaves {it} running, so you can attach to {it} again later. End kills {it}, and everything running in {it}.")])
 }
 
 impl State {
 	fn sessions_closing(&self, closing: Closing) -> Vec<Session> {
 		let tabs = &self.tabs.list;
 		match closing {
-			Closing::Pane(id) => tabs
-				.iter()
-				.find_map(|pm| pm.panes.get(&id))
-				.and_then(|pane| pane.tmux.clone())
-				.into_iter()
-				.collect(),
-			Closing::Tab(anchor) => tabs
-				.iter()
-				.find(|pm| pm.panes.contains_key(&anchor))
-				.map(crate::pane::PaneManager::tmux_sessions)
-				.unwrap_or_default(),
-			Closing::Window => tabs
-				.iter()
-				.flat_map(crate::pane::PaneManager::tmux_sessions)
-				.collect(),
+			Closing::Pane(id) => tabs.iter().find_map(|pm| pm.panes.get(&id)).and_then(|pane| pane.tmux.clone()).into_iter().collect(),
+			Closing::Tab(anchor) => tabs.iter().find(|pm| pm.panes.contains_key(&anchor)).map(crate::pane::PaneManager::tmux_sessions).unwrap_or_default(),
+			Closing::Window => tabs.iter().flat_map(crate::pane::PaneManager::tmux_sessions).collect(),
 		}
 	}
 
@@ -120,9 +93,7 @@ impl State {
 	/// again, since a pane may have gone while it was up.
 	pub(super) fn answer_close(&mut self, closing: Closing, end: bool, remember: bool) {
 		if end {
-			self.sessions_closing(closing)
-				.iter()
-				.for_each(crate::tmux::end);
+			self.sessions_closing(closing).iter().for_each(crate::tmux::end);
 		}
 		if remember {
 			let word = knobs::Value::Text(config::Choice::key(remembered(end)).to_string());
@@ -134,12 +105,7 @@ impl State {
 		match closing {
 			Closing::Pane(id) => self.close_pane_now(id),
 			Closing::Tab(anchor) => {
-				if let Some(i) = self
-					.tabs
-					.list
-					.iter()
-					.position(|pm| pm.panes.contains_key(&anchor))
-				{
+				if let Some(i) = self.tabs.list.iter().position(|pm| pm.panes.contains_key(&anchor)) {
 					self.close_tab_at(i);
 				}
 			}
@@ -152,12 +118,7 @@ impl State {
 	/// Panes menu's Close pane does.
 	pub(super) fn close_pane_now(&mut self, target: PaneId) {
 		let area = self.area();
-		let Some(tab) = self
-			.tabs
-			.list
-			.iter()
-			.position(|pm| pm.panes.contains_key(&target))
-		else {
+		let Some(tab) = self.tabs.list.iter().position(|pm| pm.panes.contains_key(&target)) else {
 			return;
 		};
 		let scope = close_scope(true, self.tabs.list[tab].panes.len(), self.tabs.len());
@@ -204,11 +165,7 @@ impl App {
 			return;
 		};
 		// with a name template that starts with the time, this lists them oldest first
-		let mut names: Vec<String> = state
-			.sessions_closing(closing)
-			.into_iter()
-			.map(|s| s.name)
-			.collect();
+		let mut names: Vec<String> = state.sessions_closing(closing).into_iter().map(|s| s.name).collect();
 		names.sort();
 		// the panes closed while the question waited
 		if names.is_empty() {
@@ -225,13 +182,7 @@ impl App {
 			let (title, paras) = ask_text(closing, &names);
 			let parent = crate::dialog::Parent::of(&state.window);
 			let warm = self.gpu_warm.get();
-			match crate::dialog::DialogWin::new_ask(
-				event_loop,
-				title,
-				&paras,
-				parent,
-				warm.as_ref(),
-			) {
+			match crate::dialog::DialogWin::new_ask(event_loop, title, &paras, parent, warm.as_ref()) {
 				Ok(n) => {
 					self.notice = Some(n);
 					self.notice_dirty = true;
@@ -281,18 +232,12 @@ mod tests {
 		let one = ["20261017-17332704".to_string()];
 		let (title, paras) = ask_text(Closing::Tab(7), &one);
 		assert_eq!(title, "Close tab");
-		assert_eq!(
-			paras[0],
-			"SilkTerm started the tmux session \"20261017-17332704\" in this tab."
-		);
+		assert_eq!(paras[0], "SilkTerm started the tmux session \"20261017-17332704\" in this tab.");
 		assert!(paras[1].starts_with("Detach leaves it running"));
 		let three = ["a".to_string(), "b".to_string(), "c".to_string()];
 		let (title, paras) = ask_text(Closing::Window, &three);
 		assert_eq!(title, "Close window");
-		assert_eq!(
-			paras[0],
-			"SilkTerm started 3 tmux sessions in this window: \"a\", \"b\", and \"c\"."
-		);
+		assert_eq!(paras[0], "SilkTerm started 3 tmux sessions in this window: \"a\", \"b\", and \"c\".");
 		assert!(paras[1].contains("leaves them running"));
 		assert_eq!(ask_text(Closing::Pane(1), &one).0, "Close pane");
 	}

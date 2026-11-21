@@ -77,20 +77,9 @@ impl Key {
 	/// on Unix, which file it is, so a picture swapped in under the same name
 	/// is told apart. None when it can't be read.
 	pub fn push_file(&mut self, path: &Path) -> Option<()> {
-		let meta = std::fs::metadata(path)
-			.ok()
-			.filter(std::fs::Metadata::is_file)?;
-		let changed = meta
-			.modified()
-			.ok()?
-			.duration_since(SystemTime::UNIX_EPOCH)
-			.ok()?;
-		self.push_bytes(
-			std::path::absolute(path)
-				.ok()?
-				.as_os_str()
-				.as_encoded_bytes(),
-		);
+		let meta = std::fs::metadata(path).ok().filter(std::fs::Metadata::is_file)?;
+		let changed = meta.modified().ok()?.duration_since(SystemTime::UNIX_EPOCH).ok()?;
+		self.push_bytes(std::path::absolute(path).ok()?.as_os_str().as_encoded_bytes());
 		self.push_number(meta.len());
 		self.push_number(changed.as_secs());
 		self.push_number(u64::from(changed.subsec_nanos()));
@@ -115,9 +104,7 @@ impl Key {
 /// FNV-1a. Stable across builds, which std's hasher doesn't promise; the whole
 /// key is checked on read, so a collision costs a miss and nothing more.
 pub(crate) fn fnv(bytes: &[u8]) -> u64 {
-	bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &byte| {
-		(hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
-	})
+	bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3))
 }
 
 #[derive(Debug)]
@@ -170,19 +157,12 @@ pub fn find(dir: &Path, key: &Key, want: (u32, u32)) -> Option<Kept> {
 		})
 		.collect();
 	// nearest first, and the larger of 2 as near, since shrinking looks better
-	near.sort_by(|(a, a_off), (b, b_off)| {
-		a_off
-			.total_cmp(b_off)
-			.then_with(|| pixels(*b).total_cmp(&pixels(*a)))
-	});
+	near.sort_by(|(a, a_off), (b, b_off)| a_off.total_cmp(b_off).then_with(|| pixels(*b).total_cmp(&pixels(*a))));
 	for (size, _) in near {
 		let path = dir.join(key.name(size));
 		if let Some(kept) = read(&path, key, size) {
 			// last used, for the prune
-			let _ = std::fs::File::options()
-				.append(true)
-				.open(&path)
-				.and_then(|file| file.set_modified(SystemTime::now()));
+			let _ = std::fs::File::options().append(true).open(&path).and_then(|file| file.set_modified(SystemTime::now()));
 			return Some(kept);
 		}
 		let _ = std::fs::remove_file(&path);
@@ -227,11 +207,7 @@ fn read(path: &Path, key: &Key, size: (u32, u32)) -> Option<Kept> {
 	}
 	let (rgba, blocks) = match kind {
 		AS_BC1 | AS_BC7 => {
-			let packing = if kind == AS_BC1 {
-				Packing::Bc1
-			} else {
-				Packing::Bc7
-			};
+			let packing = if kind == AS_BC1 { Packing::Bc1 } else { Packing::Bc7 };
 			let rgba = packing.decode(picture, size)?;
 			// the blocks are the file's tail: kept in place, not copied out
 			let mut tail = bytes;
@@ -239,19 +215,10 @@ fn read(path: &Path, key: &Key, size: (u32, u32)) -> Option<Kept> {
 			let bytes = Arc::new(tail);
 			(rgba, Some(Blocks { packing, bytes }))
 		}
-		AS_JPEG => (
-			image::load_from_memory_with_format(picture, image::ImageFormat::Jpeg)
-				.ok()?
-				.into_rgba8(),
-			None,
-		),
+		AS_JPEG => (image::load_from_memory_with_format(picture, image::ImageFormat::Jpeg).ok()?.into_rgba8(), None),
 		_ => return None,
 	};
-	(rgba.dimensions() == size).then_some(Kept {
-		rgba,
-		blocks,
-		summary,
-	})
+	(rgba.dimensions() == size).then_some(Kept { rgba, blocks, summary })
 }
 
 struct Reader<'a>(&'a [u8]);
@@ -288,27 +255,12 @@ fn read_summary(at: &mut Reader) -> Option<Summary> {
 	for value in spread.iter_mut().flatten() {
 		*value = at.float()?;
 	}
-	Some(Summary {
-		luma_hi,
-		luma_lo,
-		luma_mean,
-		spread,
-		alpha: at.float()?,
-		hue: at.float()?,
-		chroma: at.float()?,
-		opacity: at.float()?,
-	})
+	Some(Summary { luma_hi, luma_lo, luma_mean, spread, alpha: at.float()?, hue: at.float()?, chroma: at.float()?, opacity: at.float()? })
 }
 
 /// Keep `stored` for `key`, then prune the folder back under `limit`. A plain
 /// picture with any transparency isn't kept, since a JPEG has no alpha.
-pub fn store(
-	dir: &Path,
-	key: &Key,
-	stored: &Stored,
-	summary: &Summary,
-	limit: u64,
-) -> std::io::Result<bool> {
+pub fn store(dir: &Path, key: &Key, stored: &Stored, summary: &Summary, limit: u64) -> std::io::Result<bool> {
 	if !crate::config::may_write(dir) {
 		return Ok(false);
 	}
@@ -328,9 +280,7 @@ pub fn store(
 			if rgba.pixels().any(|px| px[3] != u8::MAX) {
 				return Ok(false);
 			}
-			image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, QUALITY)
-				.encode_image(rgba)
-				.map_err(std::io::Error::other)?;
+			image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, QUALITY).encode_image(rgba).map_err(std::io::Error::other)?;
 			(rgba.dimensions(), AS_JPEG, jpeg.as_slice())
 		}
 	};
@@ -351,14 +301,9 @@ pub fn store(
 
 	std::fs::create_dir_all(dir)?;
 	let name = key.name(size);
-	let nanos = SystemTime::now()
-		.duration_since(SystemTime::UNIX_EPOCH)
-		.unwrap_or_default()
-		.as_nanos();
+	let nanos = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_nanos();
 	let temp = dir.join(format!(".{name}.{}-{nanos}.tmp", std::process::id()));
-	let written = std::fs::File::create_new(&temp)
-		.and_then(|mut file| file.write_all(&bytes))
-		.and_then(|()| std::fs::rename(&temp, dir.join(&name)));
+	let written = std::fs::File::create_new(&temp).and_then(|mut file| file.write_all(&bytes)).and_then(|()| std::fs::rename(&temp, dir.join(&name)));
 	if let Err(e) = written {
 		let _ = std::fs::remove_file(&temp);
 		return Err(e);
@@ -448,9 +393,7 @@ mod tests {
 
 	// A smooth picture, the kind a blurred wallpaper is.
 	fn picture((w, h): (u32, u32)) -> image::RgbaImage {
-		image::RgbaImage::from_fn(w, h, |x, y| {
-			image::Rgba([(x * 255 / w) as u8, (y * 255 / h) as u8, 90, 255])
-		})
+		image::RgbaImage::from_fn(w, h, |x, y| image::Rgba([(x * 255 / w) as u8, (y * 255 / h) as u8, 90, 255]))
 	}
 
 	fn key(name: &str) -> Key {
@@ -462,10 +405,7 @@ mod tests {
 	fn keep(dir: &std::path::Path, key: &Key, size: (u32, u32)) {
 		let rgba = picture(size);
 		let summary = crate::autotheme::summarize(&rgba, 0.1);
-		assert!(
-			store(dir, key, &Stored::Jpeg(rgba), &summary, LIMIT).unwrap(),
-			"{size:?}"
-		);
+		assert!(store(dir, key, &Stored::Jpeg(rgba), &summary, LIMIT).unwrap(), "{size:?}");
 	}
 
 	fn kept_size(dir: &std::path::Path, key: &Key, want: (u32, u32)) -> Option<(u32, u32)> {
@@ -483,17 +423,9 @@ mod tests {
 		assert!(store(&dir, &key, &Stored::Jpeg(rgba.clone()), &summary, LIMIT).unwrap());
 		let kept = find(&dir, &key, (300, 200)).expect("kept");
 		assert!(kept.blocks.is_none());
-		assert_eq!(
-			kept.summary, summary,
-			"the summary is the original's, exactly"
-		);
+		assert_eq!(kept.summary, summary, "the summary is the original's, exactly");
 		assert_eq!(kept.rgba.dimensions(), (300, 200));
-		let worst = rgba
-			.pixels()
-			.zip(kept.rgba.pixels())
-			.flat_map(|(a, b)| (0..4).map(move |c| a[c].abs_diff(b[c])))
-			.max()
-			.unwrap();
+		let worst = rgba.pixels().zip(kept.rgba.pixels()).flat_map(|(a, b)| (0..4).map(move |c| a[c].abs_diff(b[c]))).max().unwrap();
 		assert!(worst <= 4, "off by {worst} levels");
 		// another key never reads it, even one that names the same file
 		assert!(find(&dir, &self::key("b"), (300, 200)).is_none());
@@ -529,10 +461,7 @@ mod tests {
 		let key = key(name);
 		let size = (301, 203);
 		let rgba = picture(size);
-		let blocks = Blocks {
-			packing,
-			bytes: std::sync::Arc::new(packing.encode(&rgba)),
-		};
+		let blocks = Blocks { packing, bytes: std::sync::Arc::new(packing.encode(&rgba)) };
 		let summary = crate::autotheme::summarize(&rgba, 0.25);
 		let stored = Stored::Blocks(size, blocks.clone());
 		assert!(store(&dir, &key, &stored, &summary, LIMIT).unwrap());
@@ -621,12 +550,7 @@ mod tests {
 			let mut body = MAGIC.to_vec();
 			body.resize(bytes, 0);
 			std::fs::write(&path, body).unwrap();
-			std::fs::File::options()
-				.append(true)
-				.open(&path)
-				.unwrap()
-				.set_modified(at)
-				.unwrap();
+			std::fs::File::options().append(true).open(&path).unwrap().set_modified(at).unwrap();
 		};
 		plant(&format!("old-1x1.{EXT}"), 400, ago(50));
 		plant(&format!("used-1x1.{EXT}"), 400, ago(5));
@@ -634,39 +558,18 @@ mod tests {
 		plant(&format!("new-1x1.{EXT}"), 400, ago(1));
 		// a write that died long ago, one that may still be going, and a file
 		// that is none of ours
-		plant(
-			".dead.tmp",
-			10_000,
-			now - ABANDONED - Duration::from_mins(1),
-		);
+		plant(".dead.tmp", 10_000, now - ABANDONED - Duration::from_mins(1));
 		plant(".busy.tmp", 10_000, ago(1));
 		plant("notes.txt", 10_000, ago(500));
 		prune(&dir, 1000, now);
-		let mut left: Vec<String> = std::fs::read_dir(&dir)
-			.unwrap()
-			.flatten()
-			.map(|entry| entry.file_name().to_string_lossy().into_owned())
-			.collect();
+		let mut left: Vec<String> = std::fs::read_dir(&dir).unwrap().flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
 		left.sort();
-		assert_eq!(
-			left,
-			[
-				".busy.tmp".to_string(),
-				format!("new-1x1.{EXT}"),
-				"notes.txt".into(),
-				format!("used-1x1.{EXT}"),
-			]
-		);
+		assert_eq!(left, [".busy.tmp".to_string(), format!("new-1x1.{EXT}"), "notes.txt".into(), format!("used-1x1.{EXT}"),]);
 		// a copy that is read counts as used
 		let key = key("lru");
 		keep(&dir, &key, (64, 64));
 		let name = dir.join(format!("{}64x64.{EXT}", key.prefix()));
-		std::fs::File::options()
-			.append(true)
-			.open(&name)
-			.unwrap()
-			.set_modified(ago(90))
-			.unwrap();
+		std::fs::File::options().append(true).open(&name).unwrap().set_modified(ago(90)).unwrap();
 		assert!(find(&dir, &key, (64, 64)).is_some());
 		let used = std::fs::metadata(&name).unwrap().modified().unwrap();
 		assert!(used > ago(1), "{used:?}");
@@ -683,12 +586,7 @@ mod tests {
 		keep(&dir, &key, size);
 		let path = dir.join(key.name(size));
 		let whole = std::fs::read(&path).unwrap();
-		let mut damaged: Vec<(&str, Vec<u8>)> = vec![
-			("cut short", whole[..whole.len() / 2].to_vec()),
-			("empty", Vec::new()),
-			("one byte more", [whole.as_slice(), &[0]].concat()),
-			("garbage", vec![0x5a; whole.len()]),
-		];
+		let mut damaged: Vec<(&str, Vec<u8>)> = vec![("cut short", whole[..whole.len() / 2].to_vec()), ("empty", Vec::new()), ("one byte more", [whole.as_slice(), &[0]].concat()), ("garbage", vec![0x5a; whole.len()])];
 		// the JPEG itself spoiled, with the lengths still right
 		let mut spoiled = whole.clone();
 		let at = spoiled.len() - 40;
@@ -699,10 +597,7 @@ mod tests {
 		// another key's copy under this one's name, as a hash clash would leave
 		let other = self::key("other");
 		keep(&dir, &other, size);
-		damaged.push((
-			"another key",
-			std::fs::read(dir.join(other.name(size))).unwrap(),
-		));
+		damaged.push(("another key", std::fs::read(dir.join(other.name(size))).unwrap()));
 		for (what, bytes) in damaged {
 			std::fs::write(&path, &bytes).unwrap();
 			assert!(read(&path, &key, size).is_none(), "{what}");

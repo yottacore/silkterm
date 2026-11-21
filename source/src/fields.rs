@@ -73,9 +73,7 @@ macro_rules! count {
 			get: |s| Value::Int(s.$field as i64),
 			put: |s, v| {
 				let (lo, hi) = $range;
-				number(v)
-					.map(|x| s.$field = (x.round().max(0.0) as usize).clamp(lo, hi))
-					.is_some()
+				number(v).map(|x| s.$field = (x.round().max(0.0) as usize).clamp(lo, hi)).is_some()
 			},
 		}
 	};
@@ -83,25 +81,13 @@ macro_rules! count {
 
 macro_rules! word {
 	($key:ident, $field:ident) => {
-		Field {
-			key: Key::$key,
-			get: |s| Value::Text(s.$field.key().to_string()),
-			put: |s, v| Choice::parse(v.as_text()).map(|c| s.$field = c).is_some(),
-		}
+		Field { key: Key::$key, get: |s| Value::Text(s.$field.key().to_string()), put: |s, v| Choice::parse(v.as_text()).map(|c| s.$field = c).is_some() }
 	};
 }
 
 macro_rules! color {
 	($key:ident, $field:ident) => {
-		Field {
-			key: Key::$key,
-			get: |s| hex(s.$field),
-			put: |s, v| {
-				config::parse_hex(v.as_text())
-					.map(|c| s.$field = c)
-					.is_some()
-			},
-		}
+		Field { key: Key::$key, get: |s| hex(s.$field), put: |s, v| config::parse_hex(v.as_text()).map(|c| s.$field = c).is_some() }
 	};
 }
 
@@ -262,18 +248,7 @@ pub fn by_hand(settings: &Settings, key: Key) -> bool {
 }
 
 /// The theme colors, in the order `theme::PALETTE_KEYS` lists them.
-pub const THEME_KEYS: [Key; 10] = [
-	Key::ColBg,
-	Key::ColFg,
-	Key::ColCursor,
-	Key::ColHighlight,
-	Key::ColFocus,
-	Key::ColMenuBg,
-	Key::ColMenuFg,
-	Key::ColDialogBg,
-	Key::ColDialogFg,
-	Key::ColGutter,
-];
+pub const THEME_KEYS: [Key; 10] = [Key::ColBg, Key::ColFg, Key::ColCursor, Key::ColHighlight, Key::ColFocus, Key::ColMenuBg, Key::ColMenuFg, Key::ColDialogBg, Key::ColDialogFg, Key::ColGutter];
 
 /// The font rows a saved theme has, in the order `theme::ThemeFont` has them.
 pub const THEME_FONT_KEYS: [Key; 3] = [Key::FontFamily, Key::FontSize, Key::LineHeight];
@@ -311,10 +286,7 @@ fn label_of(key: Key) -> &'static str {
 			_ => {}
 		}
 	}
-	ui.hidden
-		.iter()
-		.find(|(k, _)| *k == key)
-		.map_or("", |(_, label)| label)
+	ui.hidden.iter().find(|(k, _)| *k == key).map_or("", |(_, label)| label)
 }
 
 fn build() -> Result<knobs::Spec, Vec<String>> {
@@ -371,11 +343,7 @@ fn build() -> Result<knobs::Spec, Vec<String>> {
 	let mut scratch = Settings::bare();
 	let mut groups = Vec::new();
 	for g in &ui.groups {
-		let members: Vec<Key> = FIELDS
-			.iter()
-			.filter(|f| ui.rel(f.key).group == Some(g.id))
-			.map(|f| f.key)
-			.collect();
+		let members: Vec<Key> = FIELDS.iter().filter(|f| ui.rel(f.key).group == Some(g.id)).map(|f| f.key).collect();
 		let mut presets = Vec::new();
 		for p in &g.presets {
 			let mut values = std::collections::BTreeMap::new();
@@ -395,36 +363,14 @@ fn build() -> Result<knobs::Spec, Vec<String>> {
 					problems.push(format!("{}: no value for {}", p.key, key.name()));
 				}
 			}
-			presets.push(knobs::Preset {
-				key: p.key.to_string(),
-				label: p.label.to_string(),
-				temporary: p.temporary,
-				values,
-			});
+			presets.push(knobs::Preset { key: p.key.to_string(), label: p.label.to_string(), temporary: p.temporary, values });
 		}
-		groups.push(knobs::Group {
-			id: g.id.to_string(),
-			chooser: g.chooser.name().to_string(),
-			noun: g.noun.to_string(),
-			custom: Some(g.custom.to_string()),
-			presets,
-			from_program: g.from_program,
-			members: Vec::new(),
-		});
+		groups.push(knobs::Group { id: g.id.to_string(), chooser: g.chooser.name().to_string(), noun: g.noun.to_string(), custom: Some(g.custom.to_string()), presets, from_program: g.from_program, members: Vec::new() });
 	}
 	if !problems.is_empty() {
 		return Err(problems);
 	}
-	knobs::Spec {
-		tabs: vec![knobs::Tab {
-			path: "Settings".into(),
-			label: "Settings".into(),
-			parent: None,
-		}],
-		settings,
-		groups,
-	}
-	.finish()
+	knobs::Spec { tabs: vec![knobs::Tab { path: "Settings".into(), label: "Settings".into(), parent: None }], settings, groups }.finish()
 }
 
 // A value as the field would write it back: clamped, its case fixed, a float
@@ -441,17 +387,10 @@ pub fn load(config: &shcl::Document) -> knobs::Model {
 	let mut m = knobs::Model::load_docs(Arc::clone(spec()), config, &shcl::Document::new());
 	// "none" was how a file said no blink before `cursor.blink`. It's no
 	// animation, so the model never takes it in.
-	let animation = spec()
-		.get(Key::CursorAnimation.name())
-		.map_or("cursor.animation", |s| s.path.as_str());
-	if config
-		.get_string(animation)
-		.is_ok_and(|v| v.trim().eq_ignore_ascii_case("none"))
-	{
+	let animation = spec().get(Key::CursorAnimation.name()).map_or("cursor.animation", |s| s.path.as_str());
+	if config.get_string(animation).is_ok_and(|v| v.trim().eq_ignore_ascii_case("none")) {
 		m.values.own.remove(Key::CursorAnimation.name());
-		m.values
-			.own
-			.insert(Key::CursorBlinking.name().into(), Value::Bool(false));
+		m.values.own.insert(Key::CursorBlinking.name().into(), Value::Bool(false));
 	}
 	let mut scratch = Settings::bare();
 	let tidy = |values: &mut std::collections::BTreeMap<String, Value>, scratch: &mut Settings| {
@@ -460,10 +399,7 @@ pub fn load(config: &shcl::Document) -> knobs::Model {
 				return false;
 			};
 			let rel = ui().rel(key);
-			if (rel.rule.is_some() || rel.auto.is_some())
-				&& matches!(v, Value::Text(_))
-				&& v.as_text().trim().is_empty()
-			{
+			if (rel.rule.is_some() || rel.auto.is_some()) && matches!(v, Value::Text(_)) && v.as_text().trim().is_empty() {
 				return false;
 			}
 			// the usual folder written out is what an older build wrote for none
@@ -491,14 +427,10 @@ pub fn load(config: &shcl::Document) -> knobs::Model {
 		None => !line("font.family"),
 	};
 	if !switch("font.use_system_family") && !face_on {
-		m.values
-			.own
-			.insert(Key::SystemFont.name().into(), Value::Bool(false));
+		m.values.own.insert(Key::SystemFont.name().into(), Value::Bool(false));
 	}
 	if !switch("font.use_system_size") && (!face_on || line("font.size")) {
-		m.values
-			.own
-			.insert(Key::SystemFontSize.name().into(), Value::Bool(false));
+		m.values.own.insert(Key::SystemFontSize.name().into(), Value::Bool(false));
 	}
 	m
 }
@@ -529,15 +461,7 @@ struct Facts<'a> {
 // include `model` beside them.
 macro_rules! facts {
 	($s:expr) => {
-		Facts {
-			wallpaper: $s.wallpaper_derived,
-			last: config::last_window($s),
-			monitor_sizes: &$s.monitor_sizes,
-			stepped_profile: $s.stepped_profile,
-			tested_profile: $s.tested_profile,
-			found_picture: &$s.found_picture,
-			user_themes: &$s.user_themes,
-		}
+		Facts { wallpaper: $s.wallpaper_derived, last: config::last_window($s), monitor_sizes: &$s.monitor_sizes, stepped_profile: $s.stepped_profile, tested_profile: $s.tested_profile, found_picture: &$s.found_picture, user_themes: &$s.user_themes }
 	};
 }
 
@@ -550,22 +474,13 @@ impl<'a> Env<'a> {
 	/// fields may not be filled from it yet.
 	fn over(model: &knobs::Model, monitor: Option<&'a str>, facts: Facts<'a>) -> Env<'a> {
 		let plain = |key: Key| model.value(key.name(), &knobs::NoEnv);
-		Env {
-			monitor,
-			mode: Choice::parse(plain(Key::ThemeMode).as_text())
-				.unwrap_or(crate::theme::Mode::Dark),
-			per_monitor: plain(Key::RememberPerMonitor).as_bool(),
-			facts,
-		}
+		Env { monitor, mode: Choice::parse(plain(Key::ThemeMode).as_text()).unwrap_or(crate::theme::Mode::Dark), per_monitor: plain(Key::RememberPerMonitor).as_bool(), facts }
 	}
 }
 
 // The model to change, and an Env over the rest of the settings, so a change
 // doesn't have to copy the model first.
-fn split<'a>(
-	settings: &'a mut Settings,
-	monitor: Option<&'a str>,
-) -> (&'a mut knobs::Model, Env<'a>) {
+fn split<'a>(settings: &'a mut Settings, monitor: Option<&'a str>) -> (&'a mut knobs::Model, Env<'a>) {
 	let env = Env::over(&settings.model, monitor, facts!(settings));
 	(&mut settings.model, env)
 }
@@ -574,23 +489,11 @@ impl knobs::Env for Env<'_> {
 	fn rule(&self, name: &str) -> Option<Value> {
 		let s = &self.facts;
 		match name {
-			"system_font_family" => crate::sysfont::monospace()
-				.family
-				.as_deref()
-				.map(|desktop| Value::Text(config::desktop_font_stack(desktop))),
-			"system_font_size" => crate::sysfont::monospace()
-				.size_pt
-				.map(crate::sysfont::px_from_pt)
-				.filter(|px| *px >= 4.0)
-				.map(float),
+			"system_font_family" => crate::sysfont::monospace().family.as_deref().map(|desktop| Value::Text(config::desktop_font_stack(desktop))),
+			"system_font_size" => crate::sysfont::monospace().size_pt.map(crate::sysfont::px_from_pt).filter(|px| *px >= 4.0).map(float),
 			"remembered_columns" | "remembered_rows" => {
-				let kept =
-					config::remembered_in(s.last, s.monitor_sizes, self.monitor, self.per_monitor);
-				let n = if name == "remembered_columns" {
-					kept.columns
-				} else {
-					kept.rows
-				};
+				let kept = config::remembered_in(s.last, s.monitor_sizes, self.monitor, self.per_monitor);
+				let n = if name == "remembered_columns" { kept.columns } else { kept.rows };
 				Some(Value::Int(n as i64))
 			}
 			"wallpaper_fg" => s.wallpaper.map(|d| hex(d.fg)),
@@ -616,38 +519,21 @@ impl knobs::Env for Env<'_> {
 			return None;
 		}
 		let user = self.facts.user_themes;
-		let name = crate::theme::all_names(user)
-			.into_iter()
-			.find(|n| n.eq_ignore_ascii_case(key.trim()))?;
+		let name = crate::theme::all_names(user).into_iter().find(|n| n.eq_ignore_ascii_case(key.trim()))?;
 		let pal = crate::theme::resolve_in(user, &name, self.mode, config::os_dark());
-		Some(knobs::Preset {
-			key: key.to_string(),
-			label: name,
-			temporary: false,
-			values: THEME_KEYS
-				.iter()
-				.enumerate()
-				.map(|(i, k)| (k.name().to_string(), hex(pal.get(i))))
-				.collect(),
-		})
+		Some(knobs::Preset { key: key.to_string(), label: name, temporary: false, values: THEME_KEYS.iter().enumerate().map(|(i, k)| (k.name().to_string(), hex(pal.get(i)))).collect() })
 	}
 }
 
 /// Fill every setting field from the stored values, then what follows from
 /// them. `monitor` is the one Columns and Rows are shown for.
 pub fn fill(settings: &mut Settings, monitor: Option<&str>) {
-	let was = (
-		settings.wallpaper_raw.clone(),
-		settings.wallpaper_folder_raw.clone(),
-	);
+	let was = (settings.wallpaper_raw.clone(), settings.wallpaper_folder_raw.clone());
 	// worked out from the theme's colors, never from the last answer
 	settings.wallpaper_derived = None;
 	let values: Vec<Value> = {
 		let env = Env::new(settings, monitor);
-		FIELDS
-			.iter()
-			.map(|f| settings.model.value(f.key.name(), &env))
-			.collect()
+		FIELDS.iter().map(|f| settings.model.value(f.key.name(), &env)).collect()
 	};
 	for (f, v) in FIELDS.iter().zip(&values) {
 		let _ = (f.put)(settings, v);
@@ -731,16 +617,8 @@ fn theme_font(settings: &Settings, name: &str) -> Vec<(Key, Value)> {
 		return Vec::new();
 	};
 	let font = &theme.font;
-	let values = [
-		font.family.clone().map(Value::Text),
-		font.size.map(float),
-		font.line_height_scale.map(float),
-	];
-	THEME_FONT_KEYS
-		.into_iter()
-		.zip(values)
-		.filter_map(|(key, v)| v.map(|v| (key, v)))
-		.collect()
+	let values = [font.family.clone().map(Value::Text), font.size.map(float), font.line_height_scale.map(float)];
+	THEME_FONT_KEYS.into_iter().zip(values).filter_map(|(key, v)| v.map(|v| (key, v))).collect()
 }
 
 // A theme pick sets the saved theme's font as if it were typed in, so it
@@ -766,11 +644,7 @@ pub fn font_changed(settings: &Settings) -> Vec<Key> {
 	if settings.font_ignores_themes {
 		return Vec::new();
 	}
-	theme_font(settings, &chosen(settings, Key::Theme))
-		.into_iter()
-		.filter(|(key, v)| get(settings, *key).as_ref() != Some(v))
-		.map(|(key, _)| key)
-		.collect()
+	theme_font(settings, &chosen(settings, Key::Theme)).into_iter().filter(|(key, v)| get(settings, *key).as_ref() != Some(v)).map(|(key, _)| key).collect()
 }
 
 /// What a setting under a switch would show with the switch off: a preset's
@@ -780,45 +654,28 @@ pub fn without_switch(settings: &Settings, key: Key) -> Option<Value> {
 	let switch = ui().rel(key).auto?;
 	// a what-if, so the stored values stay as they are
 	let mut model = settings.model.clone();
-	model
-		.values
-		.own
-		.insert(switch.name().to_string(), Value::Bool(false));
+	model.values.own.insert(switch.name().to_string(), Value::Bool(false));
 	Some(model.value(key.name(), &Env::new(settings, None)))
 }
 
 pub fn can_reset(settings: &Settings, key: Key, monitor: Option<&str>) -> bool {
-	field(key).is_some()
-		&& settings
-			.model
-			.can_reset(key.name(), &Env::new(settings, monitor))
+	field(key).is_some() && settings.model.can_reset(key.name(), &Env::new(settings, monitor))
 }
 
 /// What a setting has with nothing of its own, for a tip.
 pub fn default_of(settings: &Settings, key: Key, monitor: Option<&str>) -> Option<Value> {
 	field(key)?;
-	Some(
-		settings
-			.model
-			.default_of(key.name(), &Env::new(settings, monitor)),
-	)
+	Some(settings.model.default_of(key.name(), &Env::new(settings, monitor)))
 }
 
 /// Where a setting's value comes from.
 pub fn source(settings: &Settings, key: Key, monitor: Option<&str>) -> Option<knobs::Source> {
 	field(key)?;
-	Some(
-		settings
-			.model
-			.source(key.name(), &Env::new(settings, monitor)),
-	)
+	Some(settings.model.source(key.name(), &Env::new(settings, monitor)))
 }
 
 fn group_of(chooser: Key) -> Option<&'static str> {
-	ui().groups
-		.iter()
-		.find(|g| g.chooser == chooser)
-		.map(|g| g.id)
+	ui().groups.iter().find(|g| g.chooser == chooser).map(|g| g.id)
 }
 
 /// The preset a chooser row is on, or Custom, with a temporary one in force.
@@ -832,9 +689,7 @@ pub fn chosen(settings: &Settings, chooser: Key) -> String {
 /// What a chooser's box says: the preset, with " *" after a change under it.
 /// A font that differs from the saved theme's counts as one.
 pub fn shown_choice(settings: &Settings, chooser: Key) -> String {
-	let label = settings
-		.model
-		.shown_choice(chooser.name(), &Env::new(settings, None));
+	let label = settings.model.shown_choice(chooser.name(), &Env::new(settings, None));
 	if chooser == Key::Theme && !label.ends_with(" *") && !font_changed(settings).is_empty() {
 		return format!("{label} *");
 	}
@@ -847,12 +702,7 @@ pub fn changed(settings: &Settings, chooser: Key) -> Vec<Key> {
 	let Some(group) = group_of(chooser) else {
 		return Vec::new();
 	};
-	let mut out: Vec<Key> = settings
-		.model
-		.changed(group, &Env::new(settings, None))
-		.into_iter()
-		.filter_map(Key::parse)
-		.collect();
+	let mut out: Vec<Key> = settings.model.changed(group, &Env::new(settings, None)).into_iter().filter_map(Key::parse).collect();
 	if chooser == Key::Theme {
 		out.extend(font_changed(settings));
 	}
@@ -861,44 +711,23 @@ pub fn changed(settings: &Settings, chooser: Key) -> Vec<Key> {
 
 /// What a chooser calls the person's own values.
 pub fn custom_label(chooser: Key) -> &'static str {
-	ui().groups
-		.iter()
-		.find(|g| g.chooser == chooser)
-		.map_or("Custom", |g| g.custom)
+	ui().groups.iter().find(|g| g.chooser == chooser).map_or("Custom", |g| g.custom)
 }
 
 /// The tip's line on where a value comes from, with each value written by
 /// `show` in the row's own units. Empty for a value at its default.
-pub fn state_line(
-	settings: &Settings,
-	key: Key,
-	monitor: Option<&str>,
-	show: &dyn Fn(Key, &Value) -> String,
-) -> String {
+pub fn state_line(settings: &Settings, key: Key, monitor: Option<&str>, show: &dyn Fn(Key, &Value) -> String) -> String {
 	if field(key).is_none() {
 		return String::new();
 	}
-	let line =
-		settings
-			.model
-			.state_line_shown(key.name(), &Env::new(settings, monitor), &|s, v| {
-				Key::parse(&s.id).map_or_else(|| v.show(), |k| show(k, v))
-			});
-	let font = if key == Key::Theme {
-		font_changed(settings)
-	} else {
-		Vec::new()
-	};
+	let line = settings.model.state_line_shown(key.name(), &Env::new(settings, monitor), &|s, v| Key::parse(&s.id).map_or_else(|| v.show(), |k| show(k, v)));
+	let font = if key == Key::Theme { font_changed(settings) } else { Vec::new() };
 	if font.is_empty() {
 		return line;
 	}
 	let labels: Vec<&str> = font.into_iter().map(label_of).collect();
 	let font = format!("Font changed here: {}.", labels.join(", "));
-	if line.is_empty() {
-		font
-	} else {
-		format!("{line} {font}")
-	}
+	if line.is_empty() { font } else { format!("{line} {font}") }
 }
 
 /// A preset that changed its name, such as a saved theme renamed. The chooser
@@ -908,20 +737,10 @@ pub fn rename_preset(settings: &mut Settings, chooser: Key, old: &str, new: &str
 		return;
 	};
 	let values = &mut settings.model.values;
-	if values
-		.own
-		.get(chooser.name())
-		.is_some_and(|v| v.as_text().eq_ignore_ascii_case(old))
-	{
-		values
-			.own
-			.insert(chooser.name().to_string(), Value::Text(new.to_string()));
+	if values.own.get(chooser.name()).is_some_and(|v| v.as_text().eq_ignore_ascii_case(old)) {
+		values.own.insert(chooser.name().to_string(), Value::Text(new.to_string()));
 	}
-	if values
-		.changed_on
-		.get(group)
-		.is_some_and(|on| on.eq_ignore_ascii_case(old))
-	{
+	if values.changed_on.get(group).is_some_and(|on| on.eq_ignore_ascii_case(old)) {
 		values.changed_on.insert(group.to_string(), new.to_string());
 	}
 	fill(settings, None);
@@ -947,11 +766,7 @@ pub fn adopt(mut settings: Settings) -> Settings {
 #[cfg(test)]
 pub fn owning(mut settings: Settings, values: &[(Key, Value)]) -> Settings {
 	for (key, v) in values {
-		settings
-			.model
-			.values
-			.own
-			.insert(key.name().to_string(), v.clone());
+		settings.model.values.own.insert(key.name().to_string(), v.clone());
 	}
 	fill(&mut settings, None);
 	settings
@@ -989,18 +804,12 @@ mod tests {
 		let filled = allocs(&mut s, &|s| fill(s, None));
 		let margin = number(&get(&s, Key::Margin).expect("a margin")).expect("a number");
 		let set_cost = allocs(&mut s, &|s| set(s, Key::Margin, &float(margin + 1.0), None));
-		assert_eq!(
-			number(&get(&s, Key::Margin).expect("a margin")),
-			Some(margin + 1.0)
-		);
+		assert_eq!(number(&get(&s, Key::Margin).expect("a margin")), Some(margin + 1.0));
 		let reset_cost = allocs(&mut s, &|s| reset(s, Key::Margin, None));
 		assert!(!s.model.values.own.contains_key(Key::Margin.name()));
 		// a copy costs at least one per stored value, the change itself a few
 		for (what, n) in [("set", set_cost), ("reset", reset_cost)] {
-			assert!(
-				n.saturating_sub(filled) < stored as u64 / 4,
-				"{what} made {n} allocations, a fill alone {filled}"
-			);
+			assert!(n.saturating_sub(filled) < stored as u64 / 4, "{what} made {n} allocations, a fill alone {filled}");
 		}
 	}
 }

@@ -1,6 +1,8 @@
 ##	Ruff settings for the repo's own Python scripts. The forks keep their own.
 ##	cicd/utility/py-lint.py runs the check, its indentation test and mypy, in
 ##	the lint stage.
+line-length = 320
+
 extend-exclude = [
 	"forks",
 	##	A helper shared with other repos, kept as it is there.

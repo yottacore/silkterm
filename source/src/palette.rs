@@ -103,11 +103,7 @@ pub fn readable(fg: [u8; 3], bg: [u8; 3], min_gap: f32) -> [u8; 3] {
 }
 
 pub(crate) fn to_oklab(c: [u8; 3]) -> (f32, f32, f32) {
-	to_oklab_linear([
-		crate::config::to_linear(c[0]),
-		crate::config::to_linear(c[1]),
-		crate::config::to_linear(c[2]),
-	])
+	to_oklab_linear([crate::config::to_linear(c[0]), crate::config::to_linear(c[1]), crate::config::to_linear(c[2])])
 }
 
 /// Oklab straight from linear RGB, for a buffer that is already linear.
@@ -116,11 +112,7 @@ pub(crate) fn to_oklab_linear(rgb: [f32; 3]) -> (f32, f32, f32) {
 	let l = (0.412_221_5 * r + 0.536_332_54 * g + 0.051_445_995 * b).cbrt();
 	let m = (0.211_903_5 * r + 0.680_699_5 * g + 0.107_396_96 * b).cbrt();
 	let s = (0.088_302_46 * r + 0.281_718_85 * g + 0.629_978_7 * b).cbrt();
-	(
-		0.210_454_26 * l + 0.793_617_8 * m - 0.004_072_047 * s,
-		1.977_998_5 * l - 2.428_592_2 * m + 0.450_593_7 * s,
-		0.025_904_037 * l + 0.782_771_77 * m - 0.808_675_77 * s,
-	)
+	(0.210_454_26 * l + 0.793_617_8 * m - 0.004_072_047 * s, 1.977_998_5 * l - 2.428_592_2 * m + 0.450_593_7 * s, 0.025_904_037 * l + 0.782_771_77 * m - 0.808_675_77 * s)
 }
 
 pub(crate) fn from_oklab(lightness: f32, a: f32, b: f32) -> [u8; 3] {
@@ -129,11 +121,7 @@ pub(crate) fn from_oklab(lightness: f32, a: f32, b: f32) -> [u8; 3] {
 	let s = (lightness - 0.089_484_18 * a - 1.291_485_5 * b).powi(3);
 	// A saturated color pushed toward an end can go out of gamut. from_linear_u8
 	// clamps it, which costs a little saturation and no hue.
-	[
-		crate::config::from_linear_u8(4.076_741_7 * l - 3.307_711_6 * m + 0.230_969_94 * s),
-		crate::config::from_linear_u8(-1.268_438 * l + 2.609_757_4 * m - 0.341_319_38 * s),
-		crate::config::from_linear_u8(-0.004_196_086 * l - 0.703_418_6 * m + 1.707_614_7 * s),
-	]
+	[crate::config::from_linear_u8(4.076_741_7 * l - 3.307_711_6 * m + 0.230_969_94 * s), crate::config::from_linear_u8(-1.268_438 * l + 2.609_757_4 * m - 0.341_319_38 * s), crate::config::from_linear_u8(-0.004_196_086 * l - 0.703_418_6 * m + 1.707_614_7 * s)]
 }
 
 /// A screen has only a few distinct (fg, bg) pairs, and `readable` takes 6 cube
@@ -193,11 +181,7 @@ mod tests {
 		let bg = [0, 0, 0];
 		for fg in [[0, 0, 0x80], [8, 8, 8], [0x1d, 0x1b, 0x18]] {
 			let out = readable(fg, bg, 0.30);
-			assert!(
-				gap(out, bg) >= 0.29,
-				"{fg:?} -> {out:?}, gap {}",
-				gap(out, bg)
-			);
+			assert!(gap(out, bg) >= 0.29, "{fg:?} -> {out:?}, gap {}", gap(out, bg));
 			assert!(out != fg);
 		}
 	}
@@ -226,10 +210,7 @@ mod tests {
 	// Test ID: dbzcm
 	#[test]
 	fn text_hidden_in_the_background_color_stays_hidden() {
-		assert_eq!(
-			readable([0x20, 0x20, 0x20], [0x20, 0x20, 0x20], 0.5),
-			[0x20, 0x20, 0x20]
-		);
+		assert_eq!(readable([0x20, 0x20, 0x20], [0x20, 0x20, 0x20], 0.5), [0x20, 0x20, 0x20]);
 	}
 
 	// Test ID: dbzcn
@@ -267,10 +248,7 @@ mod tests {
 	fn a_direction_with_no_room_flips_to_the_other_one() {
 		let bg = [0xb7, 0xb1, 0xa5];
 		let fg = [0xf0, 0xf0, 0xc8];
-		assert!(
-			to_oklab(fg).0 > to_oklab(bg).0,
-			"fg starts on the light side"
-		);
+		assert!(to_oklab(fg).0 > to_oklab(bg).0, "fg starts on the light side");
 		let out = readable(fg, bg, 0.45);
 		assert!(to_oklab(out).0 < to_oklab(bg).0, "{out:?} should be darker");
 		assert!(gap(out, bg) >= 0.44);
@@ -280,11 +258,7 @@ mod tests {
 	#[test]
 	fn memo_matches_plain_call() {
 		let mut memo = Readable::default();
-		let pairs = [
-			([0, 0, 0x80], [0, 0, 0]),
-			([0x88, 0xee, 0xcc], [0, 0, 0]),
-			([0xe5, 0xd6, 0x97], [0xf6, 0xf5, 0xf0]),
-		];
+		let pairs = [([0, 0, 0x80], [0, 0, 0]), ([0x88, 0xee, 0xcc], [0, 0, 0]), ([0xe5, 0xd6, 0x97], [0xf6, 0xf5, 0xf0])];
 		for (fg, bg) in pairs {
 			assert_eq!(memo.get(fg, bg, 0.30), readable(fg, bg, 0.30));
 			assert_eq!(memo.get(fg, bg, 0.30), readable(fg, bg, 0.30)); // now cached

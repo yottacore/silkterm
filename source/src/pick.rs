@@ -23,11 +23,7 @@ pub struct Hsv {
 /// shader computes the same thing, so the 2 agree on what a hue looks like.
 pub fn hue_rgb(h: f32) -> [f32; 3] {
 	let k = h.rem_euclid(1.0) * 6.0;
-	[
-		((k - 3.0).abs() - 1.0).clamp(0.0, 1.0),
-		(2.0 - (k - 2.0).abs()).clamp(0.0, 1.0),
-		(2.0 - (k - 4.0).abs()).clamp(0.0, 1.0),
-	]
+	[((k - 3.0).abs() - 1.0).clamp(0.0, 1.0), (2.0 - (k - 2.0).abs()).clamp(0.0, 1.0), (2.0 - (k - 4.0).abs()).clamp(0.0, 1.0)]
 }
 
 pub fn to_rgb(color: Hsv) -> [u8; 3] {
@@ -53,11 +49,7 @@ pub fn from_rgb(c: [u8; 3], keep: Hsv) -> Hsv {
 	} else {
 		((r - g) / span + 4.0) / 6.0
 	};
-	Hsv {
-		h,
-		s: if max <= 0.0 { keep.s } else { span / max },
-		v: max,
-	}
+	Hsv { h, s: if max <= 0.0 { keep.s } else { span / max }, v: max }
 }
 
 /// The 6 value boxes down the right side, top to bottom.
@@ -72,14 +64,7 @@ pub enum Field {
 }
 
 impl Field {
-	pub const ALL: [Field; 6] = [
-		Field::Red,
-		Field::Green,
-		Field::Blue,
-		Field::Brightness,
-		Field::Saturation,
-		Field::Hex,
-	];
+	pub const ALL: [Field; 6] = [Field::Red, Field::Green, Field::Blue, Field::Brightness, Field::Saturation, Field::Hex];
 	pub fn label(self) -> &'static str {
 		match self {
 			Field::Red => "Red %",
@@ -105,9 +90,7 @@ impl Field {
 			Field::Hex => crate::config::format_hex(rgb),
 			Field::Brightness => whole(color.v * 100.0),
 			Field::Saturation => whole(color.s * 100.0),
-			Field::Red | Field::Green | Field::Blue => {
-				whole(f32::from(rgb[self.channel().unwrap_or(0)]) / 255.0 * 100.0)
-			}
+			Field::Red | Field::Green | Field::Blue => whole(f32::from(rgb[self.channel().unwrap_or(0)]) / 255.0 * 100.0),
 		}
 	}
 	/// A typed buffer read back into the model. None for a half-typed hex or an empty
@@ -130,14 +113,8 @@ impl Field {
 	pub fn step(self, color: Hsv, dir: i32, shift: bool) -> Hsv {
 		let by = if shift { 0.1 } else { 0.01 } * dir as f32;
 		match self {
-			Field::Brightness => Hsv {
-				v: (color.v + by).clamp(0.0, 1.0),
-				..color
-			},
-			Field::Saturation => Hsv {
-				s: (color.s + by).clamp(0.0, 1.0),
-				..color
-			},
+			Field::Brightness => Hsv { v: (color.v + by).clamp(0.0, 1.0), ..color },
+			Field::Saturation => Hsv { s: (color.s + by).clamp(0.0, 1.0), ..color },
 			Field::Hex => color,
 			Field::Red | Field::Green | Field::Blue => {
 				let Some(ch) = self.channel() else {
@@ -154,12 +131,8 @@ impl Field {
 	/// whole percents.
 	pub fn accepts(self, ch: char, len: usize, at_start: bool) -> bool {
 		match self {
-			Field::Hex => {
-				(ch == '#' || ch.is_ascii_hexdigit()) && len < 7 && (ch != '#' || at_start)
-			}
-			Field::Red | Field::Green | Field::Blue | Field::Brightness | Field::Saturation => {
-				ch.is_ascii_digit() && len < 3
-			}
+			Field::Hex => (ch == '#' || ch.is_ascii_hexdigit()) && len < 7 && (ch != '#' || at_start),
+			Field::Red | Field::Green | Field::Blue | Field::Brightness | Field::Saturation => ch.is_ascii_digit() && len < 3,
 		}
 	}
 }
@@ -204,18 +177,7 @@ pub struct Picker {
 impl Picker {
 	pub fn stops() -> [Focus; 10] {
 		let [red, green, blue, brightness, saturation, hex] = Field::ALL.map(Focus::Field);
-		[
-			Focus::Square,
-			Focus::Hue,
-			red,
-			green,
-			blue,
-			brightness,
-			saturation,
-			hex,
-			Focus::Cancel,
-			Focus::Ok,
-		]
+		[Focus::Square, Focus::Hue, red, green, blue, brightness, saturation, hex, Focus::Cancel, Focus::Ok]
 	}
 	pub fn rgb(&self) -> [u8; 3] {
 		to_rgb(self.hsv)
@@ -258,59 +220,20 @@ pub fn geom(panel: Rect, m: &Metrics) -> Geom {
 	let column = m.label_w + m.field_w;
 	let fields_h = 6.0 * m.field_h + 5.0 * m.gap;
 	let fixed = m.pad * 2.0 + m.gap * 2.0 + m.strip_w + column;
-	let side = (panel.w - m.pad * 2.0 - fixed)
-		.min(fields_h)
-		.max(m.min_side);
+	let side = (panel.w - m.pad * 2.0 - fixed).min(fields_h).max(m.min_side);
 	let w = fixed + side;
 	let body_h = fields_h.max(side);
 	let h = m.pad * 3.0 + m.line_h + m.gap + body_h + m.btn_h;
 	let x = (panel.x + (panel.w - w) / 2.0).max(panel.x);
 	let y = (panel.y + (panel.h - h) / 2.0).max(panel.y);
 	let body_y = y + m.pad + m.line_h + m.gap;
-	let square = Rect {
-		x: x + m.pad,
-		y: body_y,
-		w: side,
-		h: side,
-	};
-	let strip = Rect {
-		x: square.x + side + m.gap,
-		y: body_y,
-		w: m.strip_w,
-		h: side,
-	};
+	let square = Rect { x: x + m.pad, y: body_y, w: side, h: side };
+	let strip = Rect { x: square.x + side + m.gap, y: body_y, w: m.strip_w, h: side };
 	let labels_x = strip.x + m.strip_w + m.gap;
-	let fields = std::array::from_fn(|k| Rect {
-		x: labels_x + m.label_w,
-		y: body_y + k as f32 * (m.field_h + m.gap),
-		w: m.field_w,
-		h: m.field_h,
-	});
+	let fields = std::array::from_fn(|k| Rect { x: labels_x + m.label_w, y: body_y + k as f32 * (m.field_h + m.gap), w: m.field_w, h: m.field_h });
 	let btn_y = y + h - m.pad - m.btn_h;
-	let ok = Rect {
-		x: x + w - m.pad - m.btn_w,
-		y: btn_y,
-		w: m.btn_w,
-		h: m.btn_h,
-	};
-	Geom {
-		outer: Rect { x, y, w, h },
-		title: Rect {
-			x: x + m.pad,
-			y: y + m.pad,
-			w: w - m.pad * 2.0,
-			h: m.line_h,
-		},
-		square,
-		strip,
-		labels_x,
-		fields,
-		cancel: Rect {
-			x: ok.x - m.btn_gap - m.btn_w,
-			..ok
-		},
-		ok,
-	}
+	let ok = Rect { x: x + w - m.pad - m.btn_w, y: btn_y, w: m.btn_w, h: m.btn_h };
+	Geom { outer: Rect { x, y, w, h }, title: Rect { x: x + m.pad, y: y + m.pad, w: w - m.pad * 2.0, h: m.line_h }, square, strip, labels_x, fields, cancel: Rect { x: ok.x - m.btn_gap - m.btn_w, ..ok }, ok }
 }
 
 impl Geom {
@@ -319,37 +242,23 @@ impl Geom {
 	}
 	/// Where the marker sits in the square, and where a press in it falls.
 	pub fn marker(&self, color: Hsv) -> (f32, f32) {
-		(
-			self.square.x + color.s.clamp(0.0, 1.0) * self.square.w,
-			self.square.y + (1.0 - color.v.clamp(0.0, 1.0)) * self.square.h,
-		)
+		(self.square.x + color.s.clamp(0.0, 1.0) * self.square.w, self.square.y + (1.0 - color.v.clamp(0.0, 1.0)) * self.square.h)
 	}
 	pub fn pick_square(&self, x: f32, y: f32, color: Hsv) -> Hsv {
-		Hsv {
-			s: ((x - self.square.x) / self.square.w.max(1.0)).clamp(0.0, 1.0),
-			v: (1.0 - (y - self.square.y) / self.square.h.max(1.0)).clamp(0.0, 1.0),
-			..color
-		}
+		Hsv { s: ((x - self.square.x) / self.square.w.max(1.0)).clamp(0.0, 1.0), v: (1.0 - (y - self.square.y) / self.square.h.max(1.0)).clamp(0.0, 1.0), ..color }
 	}
 	pub fn hue_y(&self, color: Hsv) -> f32 {
 		self.strip.y + color.h.rem_euclid(1.0) * self.strip.h
 	}
 	pub fn pick_hue(&self, y: f32, color: Hsv) -> Hsv {
-		Hsv {
-			h: ((y - self.strip.y) / self.strip.h.max(1.0)).clamp(0.0, 1.0),
-			..color
-		}
+		Hsv { h: ((y - self.strip.y) / self.strip.h.max(1.0)).clamp(0.0, 1.0), ..color }
 	}
 }
 
 /// Black or white, whichever can be seen on `c`. The marker sits on a field that
 /// runs from white to black to full color, so it can't be one fixed ink.
 pub fn ink_on(c: [u8; 3]) -> [u8; 3] {
-	if crate::palette::to_oklab(c).0 > 0.6 {
-		[0, 0, 0]
-	} else {
-		[255, 255, 255]
-	}
+	if crate::palette::to_oklab(c).0 > 0.6 { [0, 0, 0] } else { [255, 255, 255] }
 }
 
 #[cfg(test)]
@@ -360,27 +269,10 @@ mod tests {
 		Hsv { h, s, v }
 	}
 	fn metrics() -> Metrics {
-		Metrics {
-			pad: 18.0,
-			gap: 12.0,
-			line_h: 19.0,
-			field_h: 27.0,
-			btn_w: 76.0,
-			btn_h: 31.0,
-			btn_gap: 10.0,
-			strip_w: 22.0,
-			label_w: 96.0,
-			field_w: 58.0,
-			min_side: 80.0,
-		}
+		Metrics { pad: 18.0, gap: 12.0, line_h: 19.0, field_h: 27.0, btn_w: 76.0, btn_h: 31.0, btn_gap: 10.0, strip_w: 22.0, label_w: 96.0, field_w: 58.0, min_side: 80.0 }
 	}
 	fn panel() -> Rect {
-		Rect {
-			x: 40.0,
-			y: 30.0,
-			w: 560.0,
-			h: 520.0,
-		}
+		Rect { x: 40.0, y: 30.0, w: 560.0, h: 520.0 }
 	}
 
 	// The box stores HSV and the row stores bytes, so every drag and every
@@ -422,14 +314,7 @@ mod tests {
 	// Test ID: dcx0c
 	#[test]
 	fn the_hue_ramp_hits_the_six_primaries() {
-		let want = [
-			(0.0, [255, 0, 0]),
-			(1.0 / 6.0, [255, 255, 0]),
-			(2.0 / 6.0, [0, 255, 0]),
-			(3.0 / 6.0, [0, 255, 255]),
-			(4.0 / 6.0, [0, 0, 255]),
-			(5.0 / 6.0, [255, 0, 255]),
-		];
+		let want = [(0.0, [255, 0, 0]), (1.0 / 6.0, [255, 255, 0]), (2.0 / 6.0, [0, 255, 0]), (3.0 / 6.0, [0, 255, 255]), (4.0 / 6.0, [0, 0, 255]), (5.0 / 6.0, [255, 0, 255])];
 		for (h, rgb) in want {
 			assert_eq!(to_rgb(hsv(h, 1.0, 1.0)), rgb, "hue {h}");
 		}
@@ -462,10 +347,7 @@ mod tests {
 		}
 		// and it encodes the result, or the whole box comes out washed out
 		for part in ["c / 12.92", "1.055", "2.4", "0.04045"] {
-			assert!(
-				wgsl.contains(part),
-				"the shader lost sRGB encoding `{part}`"
-			);
+			assert!(wgsl.contains(part), "the shader lost sRGB encoding `{part}`");
 		}
 	}
 
@@ -479,16 +361,8 @@ mod tests {
 			let c = hsv(0.3, sat, val);
 			let (mx, my) = g.marker(c);
 			let back = g.pick_square(mx, my, c);
-			assert!(
-				(back.s - sat).abs() < 0.01,
-				"saturation {sat} -> {}",
-				back.s
-			);
-			assert!(
-				(back.v - val).abs() < 0.01,
-				"brightness {val} -> {}",
-				back.v
-			);
+			assert!((back.s - sat).abs() < 0.01, "saturation {sat} -> {}", back.s);
+			assert!((back.v - val).abs() < 0.01, "brightness {val} -> {}", back.v);
 		}
 		for hue in [0.0, 0.25, 0.5, 0.999] {
 			let c = hsv(hue, 1.0, 1.0);
@@ -505,20 +379,11 @@ mod tests {
 	#[test]
 	fn every_piece_of_the_box_sits_inside_it() {
 		for panel_w in [280.0, 400.0, 560.0, 1400.0] {
-			let p = Rect {
-				w: panel_w,
-				..panel()
-			};
+			let p = Rect { w: panel_w, ..panel() };
 			let m = metrics();
 			let g = geom(p, &m);
 			let inside = |r: Rect, what: &str| {
-				assert!(
-					r.x >= g.outer.x
-						&& r.y >= g.outer.y
-						&& r.x + r.w <= g.outer.x + g.outer.w + 0.01
-						&& r.y + r.h <= g.outer.y + g.outer.h + 0.01,
-					"{what} escapes the box at panel width {panel_w}"
-				);
+				assert!(r.x >= g.outer.x && r.y >= g.outer.y && r.x + r.w <= g.outer.x + g.outer.w + 0.01 && r.y + r.h <= g.outer.y + g.outer.h + 0.01, "{what} escapes the box at panel width {panel_w}");
 			};
 			inside(g.title, "the title");
 			inside(g.square, "the square");
@@ -529,20 +394,11 @@ mod tests {
 				inside(*r, &format!("value box {k}"));
 			}
 			assert!(g.square.w >= m.min_side, "the square shrank past its floor");
-			assert!(
-				g.strip.x >= g.square.x + g.square.w,
-				"strip over the square"
-			);
+			assert!(g.strip.x >= g.square.x + g.square.w, "strip over the square");
 			assert!(g.labels_x >= g.strip.x + g.strip.w, "labels over the strip");
-			assert!(
-				g.fields[0].x >= g.labels_x + m.label_w,
-				"box over its label"
-			);
+			assert!(g.fields[0].x >= g.labels_x + m.label_w, "box over its label");
 			assert!(g.cancel.x + g.cancel.w < g.ok.x, "the buttons overlap");
-			assert!(
-				g.fields[5].y + g.fields[5].h <= g.ok.y,
-				"the last box runs into the buttons"
-			);
+			assert!(g.fields[5].y + g.fields[5].h <= g.ok.y, "the last box runs into the buttons");
 		}
 	}
 
@@ -554,10 +410,7 @@ mod tests {
 		assert_eq!(to_rgb(red), [255, 20, 30]);
 		let green = Field::Green.apply(start, "0").expect("0 is a percent");
 		assert_eq!(to_rgb(green), [10, 0, 30]);
-		assert_eq!(
-			to_rgb(Field::Hex.apply(start, "#a0b1c2").expect("a hex value")),
-			[0xa0, 0xb1, 0xc2]
-		);
+		assert_eq!(to_rgb(Field::Hex.apply(start, "#a0b1c2").expect("a hex value")), [0xa0, 0xb1, 0xc2]);
 		// half-typed says nothing yet, rather than jumping the color to black
 		assert!(Field::Hex.apply(start, "#a0b").is_none());
 		assert!(Field::Red.apply(start, "").is_none());

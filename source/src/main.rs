@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
-#![cfg_attr(
-	all(target_os = "windows", not(debug_assertions)),
-	windows_subsystem = "windows"
-)]
+#![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 // Proving a wgpu::Queue is Send walks wgpu_core's Global down past the default
 // 128, which newer rustc warns on and will refuse (rust-lang/rust#159228). A
 // binary has no downstream to pass the higher limit on to.
@@ -91,9 +88,7 @@ fn open_console() {
 	// SAFETY: a plain Win32 call taking a constant; failure is reported by the
 	// return value, which we have nothing useful to do about.
 	unsafe {
-		windows_sys::Win32::System::Console::AttachConsole(
-			windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS,
-		);
+		windows_sys::Win32::System::Console::AttachConsole(windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS);
 	}
 }
 fn cli_only(cli: &cli::Cli) -> bool {
@@ -119,11 +114,7 @@ fn main() -> anyhow::Result<()> {
 	config::take_handed_down_dir();
 	app::tune_heap();
 	let args = cli::utf8_args(std::env::args_os().skip(1)).map_err(|e| e.to_string());
-	let mut cli = match args
-		.clone()
-		.map_err(anyhow::Error::msg)
-		.and_then(cli::parse)
-	{
+	let mut cli = match args.clone().map_err(anyhow::Error::msg).and_then(cli::parse) {
 		Ok(parsed) => parsed,
 		Err(e) => {
 			open_console();
@@ -139,10 +130,7 @@ fn main() -> anyhow::Result<()> {
 	// set them apart from the prompts around them.
 	if let Some(info) = cli.info {
 		match info {
-			cli::Info::Help => print!(
-				"{}",
-				cli::padded(&format!("{}\n\n{}", cli::version_line(), cli::usage()))
-			),
+			cli::Info::Help => print!("{}", cli::padded(&format!("{}\n\n{}", cli::version_line(), cli::usage()))),
 			cli::Info::Syntax => print!("{}", cli::padded(cli::usage())),
 			cli::Info::About => println!("{}", cli::about(gfx::probe_adapter_info().as_ref())),
 			cli::Info::Donate => print!("{}", cli::padded(&cli::donate())),
@@ -187,11 +175,7 @@ fn main() -> anyhow::Result<()> {
 	// gets reset.
 	if cli.reset_config {
 		match config::reset_config() {
-			Some(backup) => println!(
-				"{}: previous config saved as {}",
-				config::APP_NAME,
-				backup.display()
-			),
+			Some(backup) => println!("{}: previous config saved as {}", config::APP_NAME, backup.display()),
 			None => println!("{}: no config to reset", config::APP_NAME),
 		}
 	}
@@ -211,9 +195,7 @@ fn main() -> anyhow::Result<()> {
 	event_loop.set_control_flow(ControlFlow::Wait);
 	// An environment write, so before the first thread (see gfx.rs).
 	#[cfg(target_os = "linux")]
-	gfx::keep_software_off_shared_pixmaps(winit::platform::x11::EventLoopExtX11::is_x11(
-		&event_loop,
-	));
+	gfx::keep_software_off_shared_pixmaps(winit::platform::x11::EventLoopExtX11::is_x11(&event_loop));
 	let proxy = event_loop.create_proxy();
 	// control socket up before any PTY spawns, so shells inherit SILKTERM_SOCKET
 	let _ctl = ctl::serve(proxy.clone());
@@ -225,28 +207,13 @@ fn main() -> anyhow::Result<()> {
 	// cicd profiler stage: SILK_PROFILE_OUT set -> sample this run and write a
 	// flamegraph SVG when the app exits (App exits itself after SILK_PROFILE_SECS).
 	#[cfg(feature = "profiling")]
-	let profile_guard = std::env::var("SILK_PROFILE_OUT")
-		.ok()
-		.map(|out| {
-			pprof::ProfilerGuardBuilder::default()
-				.frequency(199)
-				.blocklist(&["libc", "libpthread", "vdso", "libgcc"])
-				.build()
-				.map(|guard| (guard, out))
-		})
-		.transpose()
-		.context("pprof: failed to start profiler")?;
+	let profile_guard = std::env::var("SILK_PROFILE_OUT").ok().map(|out| pprof::ProfilerGuardBuilder::default().frequency(199).blocklist(&["libc", "libpthread", "vdso", "libgcc"]).build().map(|guard| (guard, out))).transpose().context("pprof: failed to start profiler")?;
 	event_loop.run_app(&mut gfx::HoldsLoader(&mut app))?;
 	#[cfg(feature = "profiling")]
 	if let Some((guard, out)) = profile_guard {
-		let report = guard
-			.report()
-			.build()
-			.context("pprof: failed to build report")?;
+		let report = guard.report().build().context("pprof: failed to build report")?;
 		let file = std::fs::File::create(&out).context("pprof: failed to create SVG")?;
-		report
-			.flamegraph(file)
-			.context("pprof: failed to write flamegraph")?;
+		report.flamegraph(file).context("pprof: failed to write flamegraph")?;
 		eprintln!("{}: wrote flamegraph -> {out}", config::APP_NAME);
 	}
 	Ok(())
@@ -262,13 +229,7 @@ mod tests {
 	// Test ID: dct7t
 	#[test]
 	fn a_control_command_joins_the_console_it_was_typed_at() {
-		for args in [
-			&["--reload-settings"][..],
-			&["--wallpaper", "x.png"],
-			&["--wallpaper"],
-			&["--version"],
-			&["--help"],
-		] {
+		for args in [&["--reload-settings"][..], &["--wallpaper", "x.png"], &["--wallpaper"], &["--version"], &["--help"]] {
 			assert!(prints_and_exits(&parsed(args)), "{args:?}");
 		}
 		// a window launch must not own a console, or it dies with that shell

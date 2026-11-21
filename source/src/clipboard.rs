@@ -22,10 +22,7 @@ use raw_window_handle::RawDisplayHandle;
 use copypasta::x11_clipboard::{Primary, X11ClipboardContext};
 
 /// The desktop's selections. `clipboard` is CLIPBOARD, beside PRIMARY.
-#[allow(
-	clippy::struct_field_names,
-	reason = "`clipboard` names the CLIPBOARD selection"
-)]
+#[allow(clippy::struct_field_names, reason = "`clipboard` names the CLIPBOARD selection")]
 pub struct Clipboard {
 	clipboard: Option<Box<dyn ClipboardProvider>>,
 	#[cfg(target_os = "linux")]
@@ -49,9 +46,7 @@ enum Backend {
 
 impl std::fmt::Debug for Clipboard {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("Clipboard")
-			.field("backend", &self.backend)
-			.finish_non_exhaustive()
+		f.debug_struct("Clipboard").field("backend", &self.backend).finish_non_exhaustive()
 	}
 }
 
@@ -63,29 +58,14 @@ impl Clipboard {
 		if let Some(RawDisplayHandle::Wayland(handle)) = display {
 			// SAFETY: a live wl_display from winit, which outlives this until
 			// `release` from the app's `exiting`.
-			let (primary, clipboard) = unsafe {
-				copypasta::wayland_clipboard::create_clipboards_from_external(
-					handle.display.as_ptr(),
-				)
-			};
-			return Self {
-				clipboard: Some(Box::new(clipboard)),
-				primary: Some(Box::new(primary)),
-				backend: Backend::Wayland,
-				has_keyboard: false,
-				held_clipboard: None,
-				held_primary: None,
-			};
+			let (primary, clipboard) = unsafe { copypasta::wayland_clipboard::create_clipboards_from_external(handle.display.as_ptr()) };
+			return Self { clipboard: Some(Box::new(clipboard)), primary: Some(Box::new(primary)), backend: Backend::Wayland, has_keyboard: false, held_clipboard: None, held_primary: None };
 		}
 		let _ = display;
 		Self {
-			clipboard: copypasta::ClipboardContext::new()
-				.ok()
-				.map(|ctx| Box::new(ctx) as Box<dyn ClipboardProvider>),
+			clipboard: copypasta::ClipboardContext::new().ok().map(|ctx| Box::new(ctx) as Box<dyn ClipboardProvider>),
 			#[cfg(target_os = "linux")]
-			primary: X11ClipboardContext::<Primary>::new()
-				.ok()
-				.map(|ctx| Box::new(ctx) as Box<dyn ClipboardProvider>),
+			primary: X11ClipboardContext::<Primary>::new().ok().map(|ctx| Box::new(ctx) as Box<dyn ClipboardProvider>),
 			backend: Backend::Native,
 			has_keyboard: true,
 			held_clipboard: None,
@@ -185,11 +165,7 @@ impl Clipboard {
 	}
 
 	pub fn get_clipboard(&mut self) -> Option<String> {
-		self.clipboard
-			.as_mut()?
-			.get_contents()
-			.ok()
-			.filter(|s| !s.is_empty())
+		self.clipboard.as_mut()?.get_contents().ok().filter(|s| !s.is_empty())
 	}
 }
 
@@ -231,10 +207,7 @@ mod tests {
 		fn get_contents(&mut self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
 			Ok(String::new())
 		}
-		fn set_contents(
-			&mut self,
-			text: String,
-		) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+		fn set_contents(&mut self, text: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 			self.0.lock().unwrap().push(text);
 			Ok(())
 		}

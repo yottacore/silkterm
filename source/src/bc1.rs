@@ -42,11 +42,7 @@ pub fn encode(rgba: &image::RgbaImage) -> Vec<u8> {
 
 /// Walk `rgba` a 4x4 block at a time, `block_bytes` out for each, in rows
 /// left to right, shared over a few threads. Also what bc7.rs runs on.
-pub fn encode_blocks(
-	rgba: &image::RgbaImage,
-	block_bytes: usize,
-	encode_block: &(dyn Fn(&[Texel; 16], &mut [u8]) + Sync),
-) -> Vec<u8> {
+pub fn encode_blocks(rgba: &image::RgbaImage, block_bytes: usize, encode_block: &(dyn Fn(&[Texel; 16], &mut [u8]) + Sync)) -> Vec<u8> {
 	let (w, h) = rgba.dimensions();
 	let mut out = vec![0; blocks_in((w, h)) * block_bytes];
 	if out.is_empty() {
@@ -54,9 +50,7 @@ pub fn encode_blocks(
 	}
 	let row_bytes = w.div_ceil(4) as usize * block_bytes;
 	let rows = h.div_ceil(4) as usize;
-	let threads = std::thread::available_parallelism()
-		.map_or(1, std::num::NonZero::get)
-		.min(4);
+	let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get).min(4);
 	let band = rows.div_ceil(threads) * row_bytes;
 	// a band whose thread wouldn't start is done here after the rest
 	let mut missed = Vec::new();
@@ -64,24 +58,14 @@ pub fn encode_blocks(
 		for (n, blocks) in out.chunks_mut(band).enumerate() {
 			let first = n * band / row_bytes;
 			let job = move || encode_rows(rgba, first, blocks, block_bytes, encode_block);
-			if std::thread::Builder::new()
-				.name("bcn".into())
-				.spawn_scoped(scope, job)
-				.is_err()
-			{
+			if std::thread::Builder::new().name("bcn".into()).spawn_scoped(scope, job).is_err() {
 				missed.push(n);
 			}
 		}
 	});
 	for n in missed {
 		if let Some(blocks) = out.chunks_mut(band).nth(n) {
-			encode_rows(
-				rgba,
-				n * band / row_bytes,
-				blocks,
-				block_bytes,
-				encode_block,
-			);
+			encode_rows(rgba, n * band / row_bytes, blocks, block_bytes, encode_block);
 		}
 	}
 	out
@@ -89,13 +73,7 @@ pub fn encode_blocks(
 
 // Block rows from `first` on, as many as fit in `out`. Texels past the
 // picture repeat its edge, the way the sampler's clamp reads it.
-fn encode_rows(
-	rgba: &image::RgbaImage,
-	first: usize,
-	out: &mut [u8],
-	block_bytes: usize,
-	encode_block: &(dyn Fn(&[Texel; 16], &mut [u8]) + Sync),
-) {
+fn encode_rows(rgba: &image::RgbaImage, first: usize, out: &mut [u8], block_bytes: usize, encode_block: &(dyn Fn(&[Texel; 16], &mut [u8]) + Sync)) {
 	let (w, h) = rgba.dimensions();
 	let across = w.div_ceil(4) as usize;
 	let mut block = [[0; 3]; 16];
@@ -158,11 +136,7 @@ fn pack([r, g, b]: [i32; 3]) -> u16 {
 fn palette(c0: u16, c1: u16) -> [Texel; 4] {
 	let (p0, p1) = (unpack(c0), unpack(c1));
 	let mix = |a: i32, b: i32, n: i32| {
-		if c0 > c1 {
-			((3 - n) * a + n * b + 1) / 3
-		} else {
-			i32::midpoint(a, b)
-		}
+		if c0 > c1 { ((3 - n) * a + n * b + 1) / 3 } else { i32::midpoint(a, b) }
 	};
 	let mut colors = [p0, p1, [0; 3], [0; 3]];
 	for c in 0..3 {
@@ -178,11 +152,7 @@ fn palette(c0: u16, c1: u16) -> [Texel; 4] {
 fn fit(block: &[Texel; 16], c0: u16, c1: u16) -> (u32, u32) {
 	let colors = palette(c0, c1);
 	let dist = |t: &Texel, k: usize| {
-		let (r, g, b) = (
-			t[0] - colors[k][0],
-			t[1] - colors[k][1],
-			t[2] - colors[k][2],
-		);
+		let (r, g, b) = (t[0] - colors[k][0], t[1] - colors[k][1], t[2] - colors[k][2]);
 		(r * r + g * g + b * b) as u32
 	};
 	if c0 <= c1 {
@@ -265,28 +235,14 @@ fn tables() -> &'static Tables {
 			}
 			table
 		};
-		Tables {
-			five: build(5, expand5),
-			six: build(6, expand6),
-		}
+		Tables { five: build(5, expand5), six: build(6, expand6) }
 	})
 }
 
 // One color, nearly exact, through the tables.
 fn solid(block: &[Texel; 16], color: Texel, tables: &Tables) -> Encoded {
 	let [r, g, b] = color.map(|v| v.clamp(0, 255) as usize);
-	let ends = [
-		[
-			i32::from(tables.five[r][0]),
-			i32::from(tables.six[g][0]),
-			i32::from(tables.five[b][0]),
-		],
-		[
-			i32::from(tables.five[r][1]),
-			i32::from(tables.six[g][1]),
-			i32::from(tables.five[b][1]),
-		],
-	];
+	let ends = [[i32::from(tables.five[r][0]), i32::from(tables.six[g][0]), i32::from(tables.five[b][0])], [i32::from(tables.five[r][1]), i32::from(tables.six[g][1]), i32::from(tables.five[b][1])]];
 	Encoded::of(block, ends)
 }
 
@@ -338,20 +294,11 @@ pub fn axis_ends(block: &[Texel; 16], mean: [f32; 3]) -> [[f32; 3]; 2] {
 		cov[4] += d[1] * d[2];
 		cov[5] += d[2] * d[2];
 	}
-	let rows = [
-		[cov[0], cov[1], cov[2]],
-		[cov[1], cov[3], cov[4]],
-		[cov[2], cov[4], cov[5]],
-	];
+	let rows = [[cov[0], cov[1], cov[2]], [cov[1], cov[3], cov[4]], [cov[2], cov[4], cov[5]]];
 	// power iteration from the row with the most spread
-	let mut axis = rows[[cov[0], cov[3], cov[5]]
-		.iter()
-		.enumerate()
-		.max_by(|a, b| a.1.total_cmp(b.1))
-		.map_or(0, |(i, _)| i)];
+	let mut axis = rows[[cov[0], cov[3], cov[5]].iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).map_or(0, |(i, _)| i)];
 	for _ in 0..6 {
-		let next =
-			[0, 1, 2].map(|r| rows[r][0] * axis[0] + rows[r][1] * axis[1] + rows[r][2] * axis[2]);
+		let next = [0, 1, 2].map(|r| rows[r][0] * axis[0] + rows[r][1] * axis[1] + rows[r][2] * axis[2]);
 		let norm = next.iter().map(|v| v * v).sum::<f32>().sqrt();
 		if norm < 1e-6 {
 			break;
@@ -359,11 +306,7 @@ pub fn axis_ends(block: &[Texel; 16], mean: [f32; 3]) -> [[f32; 3]; 2] {
 		axis = next.map(|v| v / norm);
 	}
 	let norm = axis.iter().map(|v| v * v).sum::<f32>().sqrt();
-	axis = if norm < 1e-6 {
-		[0.577; 3]
-	} else {
-		axis.map(|v| v / norm)
-	};
+	axis = if norm < 1e-6 { [0.577; 3] } else { axis.map(|v| v / norm) };
 	let (mut lo, mut hi) = (f32::MAX, f32::MIN);
 	for texel in block {
 		let t: f32 = (0..3).map(|c| (texel[c] as f32 - mean[c]) * axis[c]).sum();
@@ -410,11 +353,7 @@ mod tests {
 	use super::{decode, encode, len_for, padded};
 
 	fn worst(a: &image::RgbaImage, b: &image::RgbaImage) -> u8 {
-		a.pixels()
-			.zip(b.pixels())
-			.flat_map(|(p, q)| (0..3).map(move |c| p[c].abs_diff(q[c])))
-			.max()
-			.unwrap_or(0)
+		a.pixels().zip(b.pixels()).flat_map(|(p, q)| (0..3).map(move |c| p[c].abs_diff(q[c]))).max().unwrap_or(0)
 	}
 
 	// Rounding a flat color to 5:6:5 was up to 4 levels off. Through the
@@ -425,17 +364,9 @@ mod tests {
 	fn a_flat_color_comes_back_within_a_level() {
 		for value in 0..=255u8 {
 			let shade = [value, 255 - value, value / 3 + 40];
-			let rgba = image::RgbaImage::from_pixel(
-				8,
-				8,
-				image::Rgba([shade[0], shade[1], shade[2], 255]),
-			);
+			let rgba = image::RgbaImage::from_pixel(8, 8, image::Rgba([shade[0], shade[1], shade[2], 255]));
 			let back = decode(&encode(&rgba), (8, 8)).unwrap();
-			assert!(
-				worst(&rgba, &back) <= 1,
-				"{shade:?}: {}",
-				worst(&rgba, &back)
-			);
+			assert!(worst(&rgba, &back) <= 1, "{shade:?}: {}", worst(&rgba, &back));
 		}
 	}
 
@@ -445,14 +376,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_slow_gradient_comes_back_within_two_levels() {
-		let rgba = image::RgbaImage::from_fn(256, 96, |x, y| {
-			image::Rgba([
-				(90 + x / 6) as u8,
-				(140 + x / 8 + y / 12) as u8,
-				(200 + y / 4) as u8,
-				255,
-			])
-		});
+		let rgba = image::RgbaImage::from_fn(256, 96, |x, y| image::Rgba([(90 + x / 6) as u8, (140 + x / 8 + y / 12) as u8, (200 + y / 4) as u8, 255]));
 		let back = decode(&encode(&rgba), (256, 96)).unwrap();
 		assert!(worst(&rgba, &back) <= 2, "{}", worst(&rgba, &back));
 	}
@@ -466,9 +390,7 @@ mod tests {
 		assert_eq!(padded((1917, 993)), (1920, 996));
 		assert_eq!(len_for((1917, 993)), 480 * 249 * 8);
 		// the texels past the picture repeat its last row and column
-		let rgba = image::RgbaImage::from_fn(7, 5, |x, y| {
-			image::Rgba([(x * 30) as u8, (y * 40) as u8, 9, 255])
-		});
+		let rgba = image::RgbaImage::from_fn(7, 5, |x, y| image::Rgba([(x * 30) as u8, (y * 40) as u8, 9, 255]));
 		let blocks = encode(&rgba);
 		assert_eq!(blocks.len(), len_for((7, 5)));
 		let wide = image::RgbaImage::from_fn(8, 8, |x, y| *rgba.get_pixel(x.min(6), y.min(4)));

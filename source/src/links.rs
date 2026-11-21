@@ -15,27 +15,14 @@ use std::process::{Command, Stdio};
 // (scheme, needs "//"). Ordered longest-first within a family so "https" is
 // tested before "http". Every candidate is tried anyway, but this way the
 // common case takes one comparison.
-const SCHEMES: [(&str, bool); 8] = [
-	("https", true),
-	("http", true),
-	("ftps", true),
-	("ftp", true),
-	("file", true),
-	("sftp", true),
-	("ssh", true),
-	("mailto", false),
-];
+const SCHEMES: [(&str, bool); 8] = [("https", true), ("http", true), ("ftps", true), ("ftp", true), ("file", true), ("sftp", true), ("ssh", true), ("mailto", false)];
 
 // Characters allowed in a URL. ASCII only, since percent-encoding handles the
 // rest, and admitting non-ASCII would swallow the CJK sentence that follows a
 // link. The exclusions are the delimiters RFC 3986 leaves out plus the quotes a
 // shell wraps a URL in.
 fn is_url_char(c: char) -> bool {
-	c.is_ascii_graphic()
-		&& !matches!(
-			c,
-			'"' | '\'' | '<' | '>' | '`' | '{' | '}' | '|' | '\\' | '^'
-		)
+	c.is_ascii_graphic() && !matches!(c, '"' | '\'' | '<' | '>' | '`' | '{' | '}' | '|' | '\\' | '^')
 }
 
 // A link can't start mid-word, or "xhttp://x" reads as a link one char in.
@@ -47,10 +34,7 @@ fn boundary_before(text: &[char], start: usize) -> bool {
 }
 
 fn matches_scheme(text: &[char], start: usize, scheme: &str) -> bool {
-	scheme.chars().enumerate().all(|(i, want)| {
-		text.get(start + i)
-			.is_some_and(|&c| c.eq_ignore_ascii_case(&want))
-	})
+	scheme.chars().enumerate().all(|(i, want)| text.get(start + i).is_some_and(|&c| c.eq_ignore_ascii_case(&want)))
 }
 
 // Sentence punctuation clings to the end of a URL far more often than it belongs
@@ -137,20 +121,13 @@ pub fn open(url: &str, open_command: &str) -> io::Result<()> {
 	let mut cmd = if open_command.trim().is_empty() {
 		default_command(url)
 	} else {
-		let argv = crate::config::command_argv(open_command)
-			.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "bad open command"))?;
-		let (program, args) = argv
-			.split_first()
-			.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "empty open command"))?;
+		let argv = crate::config::command_argv(open_command).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "bad open command"))?;
+		let (program, args) = argv.split_first().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "empty open command"))?;
 		let mut cmd = Command::new(program);
 		cmd.args(args).arg(url);
 		cmd
 	};
-	let mut child = cmd
-		.stdin(Stdio::null())
-		.stdout(Stdio::null())
-		.stderr(Stdio::null())
-		.spawn()?;
+	let mut child = cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
 	std::thread::spawn(move || {
 		let _ = child.wait();
 	});
@@ -219,10 +196,7 @@ mod tests {
 		for host in [Host::Windows, Host::MacOs, Host::Other] {
 			let (program, arg) = opener_argv(host, nasty);
 			assert_eq!(arg, nasty, "{host:?} altered the url");
-			assert!(
-				!program.contains("cmd") && !program.contains("sh"),
-				"{host:?} opens through a shell ({program})"
-			);
+			assert!(!program.contains("cmd") && !program.contains("sh"), "{host:?} opens through a shell ({program})");
 		}
 		assert_eq!(opener_argv(Host::Windows, nasty).0, "explorer.exe");
 	}
@@ -246,34 +220,18 @@ mod tests {
 		for hit in start..end {
 			assert_eq!(find_at(&text, hit).map(|l| l.2), Some(url.clone()));
 		}
-		assert_eq!(
-			find_at(&text, start - 1),
-			None,
-			"the space before is not one"
-		);
+		assert_eq!(find_at(&text, start - 1), None, "the space before is not one");
 		assert_eq!(find_at(&text, end), None, "the space after is not one");
 	}
 
 	// Test ID: datty
 	#[test]
 	fn sentence_punctuation_and_brackets_come_off_the_end() {
-		assert_eq!(
-			at("visit http://example.com/x.", "http"),
-			Some("http://example.com/x".into())
-		);
-		assert_eq!(
-			at("(see http://example.com/x)", "http"),
-			Some("http://example.com/x".into())
-		);
+		assert_eq!(at("visit http://example.com/x.", "http"), Some("http://example.com/x".into()));
+		assert_eq!(at("(see http://example.com/x)", "http"), Some("http://example.com/x".into()));
 		// a closer the URL itself opened is part of it
-		assert_eq!(
-			at("http://en.wikipedia.org/wiki/Ruby_(gem)", "http"),
-			Some("http://en.wikipedia.org/wiki/Ruby_(gem)".into())
-		);
-		assert_eq!(
-			at("quoted 'https://example.com/q' here", "https"),
-			Some("https://example.com/q".into())
-		);
+		assert_eq!(at("http://en.wikipedia.org/wiki/Ruby_(gem)", "http"), Some("http://en.wikipedia.org/wiki/Ruby_(gem)".into()));
+		assert_eq!(at("quoted 'https://example.com/q' here", "https"), Some("https://example.com/q".into()));
 	}
 
 	// The allowlist is the security boundary. A scheme that isn't listed must
@@ -284,10 +242,7 @@ mod tests {
 		assert_eq!(at("javascript:alert(1)", "javascript"), None);
 		assert_eq!(at("data:text/html;base64,AAAA", "data"), None);
 		assert_eq!(at("vbscript:msgbox", "vbscript"), None);
-		assert_eq!(
-			at("mail me at mailto:a@b.com now", "mailto"),
-			Some("mailto:a@b.com".into())
-		);
+		assert_eq!(at("mail me at mailto:a@b.com now", "mailto"), Some("mailto:a@b.com".into()));
 	}
 
 	// Test ID: datv0
@@ -304,10 +259,7 @@ mod tests {
 	// Test ID: datv1
 	#[test]
 	fn the_scheme_is_case_insensitive_and_several_links_coexist() {
-		assert_eq!(
-			at("HTTPS://Example.COM/A", "HTTPS"),
-			Some("HTTPS://Example.COM/A".into())
-		);
+		assert_eq!(at("HTTPS://Example.COM/A", "HTTPS"), Some("HTTPS://Example.COM/A".into()));
 		let line = "a http://one.example b ftp://two.example c";
 		assert_eq!(at(line, "http"), Some("http://one.example".into()));
 		assert_eq!(at(line, "ftp"), Some("ftp://two.example".into()));
@@ -335,10 +287,7 @@ mod tests {
 				let line = format!("{scheme}:{body}");
 				let text: Vec<char> = line.chars().collect();
 				for hit in 0..text.len() {
-					assert!(
-						find_at(&text, hit).is_none(),
-						"{line:?} was offered as a link at char {hit}"
-					);
+					assert!(find_at(&text, hit).is_none(), "{line:?} was offered as a link at char {hit}");
 				}
 			}
 		}
@@ -381,31 +330,17 @@ mod tests {
 					continue;
 				};
 				assert!(start < end && end <= text.len(), "range {start}..{end}");
-				assert!(
-					(start..end).contains(&hit),
-					"{hit} is outside {start}..{end}"
-				);
-				assert_eq!(
-					url,
-					text[start..end].iter().collect::<String>(),
-					"the url is not what was on the row"
-				);
+				assert!((start..end).contains(&hit), "{hit} is outside {start}..{end}");
+				assert_eq!(url, text[start..end].iter().collect::<String>(), "the url is not what was on the row");
 				let lower = url.to_ascii_lowercase();
 				assert!(
 					SCHEMES.iter().any(|&(scheme, slashes)| {
-						let want = if slashes {
-							format!("{scheme}://")
-						} else {
-							format!("{scheme}:")
-						};
+						let want = if slashes { format!("{scheme}://") } else { format!("{scheme}:") };
 						lower.starts_with(&want) && lower.len() > want.len()
 					}),
 					"{url:?} is not an allowlisted scheme"
 				);
-				assert!(
-					url.chars().skip_while(|&c| c != ':').all(is_url_char),
-					"{url:?} has a character a url may not"
-				);
+				assert!(url.chars().skip_while(|&c| c != ':').all(is_url_char), "{url:?} has a character a url may not");
 			}
 		}
 

@@ -100,7 +100,7 @@ pub enum Kind {
 		keys: [Key; 2],
 		labels: [&'static str; 2],
 	},
-	Radio(&'static [&'static str]), // pick one of N mutually-exclusive options
+	Radio(&'static [&'static str]),    // pick one of N mutually-exclusive options
 	Dropdown(&'static [&'static str]), // one-of-N via a collapsed box + popup list
 	/// a row of push-buttons that act on the row above rather than holding a value
 	/// (Save / Save as / Rename / Delete); each is its own focus stop
@@ -248,13 +248,7 @@ pub fn tab_tree(paths: &[&str]) -> Result<(Vec<TabNode>, Vec<&'static str>), Vec
 			problems.push(format!("tabs: {path} has no title"));
 			continue;
 		}
-		nodes.push(TabNode {
-			title: keep(title.to_string()),
-			path: keep((*path).to_string()),
-			depth: parent.map_or(0, |p| nodes[p].depth + 1),
-			parent,
-			leaf: None,
-		});
+		nodes.push(TabNode { title: keep(title.to_string()), path: keep((*path).to_string()), depth: parent.map_or(0, |p| nodes[p].depth + 1), parent, leaf: None });
 	}
 	// a tab nothing sits under has the rows
 	let mut leaves = Vec::new();
@@ -264,11 +258,7 @@ pub fn tab_tree(paths: &[&str]) -> Result<(Vec<TabNode>, Vec<&'static str>), Vec
 			leaves.push(nodes[i].title);
 		}
 	}
-	if problems.is_empty() {
-		Ok((nodes, leaves))
-	} else {
-		Err(problems)
-	}
+	if problems.is_empty() { Ok((nodes, leaves)) } else { Err(problems) }
 }
 
 #[derive(Debug)]
@@ -377,16 +367,10 @@ impl Ui {
 	/// Config path(s) behind a setting, for revert's comment-out. Empty for a
 	/// heading, or for a row that has no setting of its own.
 	pub fn settings_of(&self, key: Key) -> &'static [&'static str] {
-		self.settings
-			.iter()
-			.find(|(k, _)| *k == key)
-			.map_or(&[][..], |(_, paths)| *paths)
+		self.settings.iter().find(|(k, _)| *k == key).map_or(&[][..], |(_, paths)| *paths)
 	}
 	pub fn rel(&self, key: Key) -> Rel {
-		self.relations
-			.iter()
-			.find(|(k, _)| *k == key)
-			.map_or_else(Rel::default, |(_, rel)| *rel)
+		self.relations.iter().find(|(k, _)| *k == key).map_or_else(Rel::default, |(_, rel)| *rel)
 	}
 }
 
@@ -396,12 +380,7 @@ pub fn ui() -> &'static Ui {
 	static CELL: OnceLock<Ui> = OnceLock::new();
 	CELL.get_or_init(|| match parse(SOURCE) {
 		Ok(mut ui) => {
-			keep_platform(
-				&mut ui.specs,
-				cfg!(any(windows, test)),
-				cfg!(any(target_os = "macos", test)),
-				cfg!(all(target_os = "macos", not(test))),
-			);
+			keep_platform(&mut ui.specs, cfg!(any(windows, test)), cfg!(any(target_os = "macos", test)), cfg!(all(target_os = "macos", not(test))));
 			// by the real platform, test or not: a mark that is wrong for the
 			// box it shows on is worse than none
 			pick_warnings(&mut ui.specs, cfg!(windows));
@@ -427,9 +406,7 @@ pub(crate) fn heap_round() -> usize {
 
 // `macos` keeps the Mac's own rows, and `mac_build` drops the ones it can't use
 fn keep_platform(specs: &mut Vec<Spec>, windows: bool, macos: bool, mac_build: bool) {
-	specs.retain(|spec| {
-		(windows || !spec.windows) && (macos || !spec.macos) && !(mac_build && spec.not_macos)
-	});
+	specs.retain(|spec| (windows || !spec.windows) && (macos || !spec.macos) && !(mac_build && spec.not_macos));
 }
 
 // A row has one tip, shown over its label, its mark, and its controls alike, so
@@ -470,18 +447,10 @@ fn keep_all(items: Vec<String>) -> &'static [&'static str] {
 	have
 }
 
-#[allow(
-	clippy::too_many_lines,
-	reason = "one straight-line read of one document"
-)]
+#[allow(clippy::too_many_lines, reason = "one straight-line read of one document")]
 fn parse(text: &str) -> Result<Ui, Vec<String>> {
 	let doc = shcl::Document::parse(text);
-	let mut problems: Vec<String> = doc
-		.diagnostics()
-		.iter()
-		.filter(|d| d.severity == shcl::Severity::Error)
-		.map(|d| format!("line {}: {}", d.line, d.message))
-		.collect();
+	let mut problems: Vec<String> = doc.diagnostics().iter().filter(|d| d.severity == shcl::Severity::Error).map(|d| format!("line {}: {}", d.line, d.message)).collect();
 
 	let float = |path: &str, problems: &mut Vec<String>| -> f32 {
 		match doc.get_float(path) {
@@ -492,70 +461,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			}
 		}
 	};
-	let layout = Layout {
-		width: float("layout.width", &mut problems),
-		pad: float("layout.pad", &mut problems),
-		tabs_gap: float("layout.tabs_gap", &mut problems),
-		buttons_gap: float("layout.buttons_gap", &mut problems),
-		row_height: float("layout.row_height", &mut problems),
-		row_pad: float("layout.row_pad", &mut problems),
-		header_height: float("layout.header_height", &mut problems),
-		header_pad: float("layout.header_pad", &mut problems),
-		header_gap: float("layout.header_gap", &mut problems),
-		subgroup_gap: float("layout.subgroup_gap", &mut problems),
-		indent: float("layout.indent", &mut problems),
-		label_width: float("layout.label_width", &mut problems),
-		label_gap: float("layout.label_gap", &mut problems),
-		revert_width: float("layout.revert_width", &mut problems),
-		slider_width: float("layout.slider_width", &mut problems),
-		swatch: float("layout.swatch", &mut problems),
-		hex_width: float("layout.hex_width", &mut problems),
-		value_width: float("layout.value_width", &mut problems),
-		radio_box: float("layout.radio_box", &mut problems),
-		radio_pitch: float("layout.radio_pitch", &mut problems),
-		dual_pitch: float("layout.dual_pitch", &mut problems),
-		dropdown_width: float("layout.dropdown_width", &mut problems),
-		dropdown_pair_width: float("layout.dropdown_pair_width", &mut problems),
-		dropdown_item_pad: float("layout.dropdown_item_pad", &mut problems),
-		dropdown_item_min: float("layout.dropdown_item_min", &mut problems),
-		base_line_height: float("layout.base_line_height", &mut problems),
-		field_height: float("layout.field_height", &mut problems),
-		field_pad: float("layout.field_pad", &mut problems),
-		field_pad_v: float("layout.field_pad_v", &mut problems),
-		caret_pad: float("layout.caret_pad", &mut problems),
-		view_ahead: float("layout.view_ahead", &mut problems),
-		edit_menu_width: float("layout.edit_menu_width", &mut problems),
-		button_height: float("layout.button_height", &mut problems),
-		button_pad: float("layout.button_pad", &mut problems),
-		button_width: float("layout.button_width", &mut problems),
-		button_gap: float("layout.button_gap", &mut problems),
-		shell_name_width: float("layout.shell_name_width", &mut problems),
-		shell_command_width: float("layout.shell_command_width", &mut problems),
-		shell_seen_width: float("layout.shell_seen_width", &mut problems),
-		shell_active_width: float("layout.shell_active_width", &mut problems),
-		shell_col_gap: float("layout.shell_col_gap", &mut problems),
-		shell_grip: float("layout.shell_grip", &mut problems),
-		shell_button: float("layout.shell_button", &mut problems),
-		shell_head_gap: float("layout.shell_head_gap", &mut problems),
-		shell_add_gap: float("layout.shell_add_gap", &mut problems),
-		tab_pad: float("layout.tab_pad", &mut problems),
-		tab_height: float("layout.tab_height", &mut problems),
-		tab_pad_v: float("layout.tab_pad_v", &mut problems),
-		tab_top: float("layout.tab_top", &mut problems),
-		tab_gap: float("layout.tab_gap", &mut problems),
-		tab_indent: float("layout.tab_indent", &mut problems),
-		scrollbar_width: float("layout.scrollbar_width", &mut problems),
-		scrollbar_inset: float("layout.scrollbar_inset", &mut problems),
-		scrollbar_thumb_min: float("layout.scrollbar_thumb_min", &mut problems),
-		pick_gap: float("layout.pick_gap", &mut problems),
-		pick_strip: float("layout.pick_strip", &mut problems),
-		pick_label_width: float("layout.pick_label_width", &mut problems),
-		pick_field_width: float("layout.pick_field_width", &mut problems),
-		pick_min_square: float("layout.pick_min_square", &mut problems),
-		pick_marker: float("layout.pick_marker", &mut problems),
-		search_gap: float("layout.search_gap", &mut problems),
-		rows_pad: float("layout.rows_pad", &mut problems),
-	};
+	let layout = Layout { width: float("layout.width", &mut problems), pad: float("layout.pad", &mut problems), tabs_gap: float("layout.tabs_gap", &mut problems), buttons_gap: float("layout.buttons_gap", &mut problems), row_height: float("layout.row_height", &mut problems), row_pad: float("layout.row_pad", &mut problems), header_height: float("layout.header_height", &mut problems), header_pad: float("layout.header_pad", &mut problems), header_gap: float("layout.header_gap", &mut problems), subgroup_gap: float("layout.subgroup_gap", &mut problems), indent: float("layout.indent", &mut problems), label_width: float("layout.label_width", &mut problems), label_gap: float("layout.label_gap", &mut problems), revert_width: float("layout.revert_width", &mut problems), slider_width: float("layout.slider_width", &mut problems), swatch: float("layout.swatch", &mut problems), hex_width: float("layout.hex_width", &mut problems), value_width: float("layout.value_width", &mut problems), radio_box: float("layout.radio_box", &mut problems), radio_pitch: float("layout.radio_pitch", &mut problems), dual_pitch: float("layout.dual_pitch", &mut problems), dropdown_width: float("layout.dropdown_width", &mut problems), dropdown_pair_width: float("layout.dropdown_pair_width", &mut problems), dropdown_item_pad: float("layout.dropdown_item_pad", &mut problems), dropdown_item_min: float("layout.dropdown_item_min", &mut problems), base_line_height: float("layout.base_line_height", &mut problems), field_height: float("layout.field_height", &mut problems), field_pad: float("layout.field_pad", &mut problems), field_pad_v: float("layout.field_pad_v", &mut problems), caret_pad: float("layout.caret_pad", &mut problems), view_ahead: float("layout.view_ahead", &mut problems), edit_menu_width: float("layout.edit_menu_width", &mut problems), button_height: float("layout.button_height", &mut problems), button_pad: float("layout.button_pad", &mut problems), button_width: float("layout.button_width", &mut problems), button_gap: float("layout.button_gap", &mut problems), shell_name_width: float("layout.shell_name_width", &mut problems), shell_command_width: float("layout.shell_command_width", &mut problems), shell_seen_width: float("layout.shell_seen_width", &mut problems), shell_active_width: float("layout.shell_active_width", &mut problems), shell_col_gap: float("layout.shell_col_gap", &mut problems), shell_grip: float("layout.shell_grip", &mut problems), shell_button: float("layout.shell_button", &mut problems), shell_head_gap: float("layout.shell_head_gap", &mut problems), shell_add_gap: float("layout.shell_add_gap", &mut problems), tab_pad: float("layout.tab_pad", &mut problems), tab_height: float("layout.tab_height", &mut problems), tab_pad_v: float("layout.tab_pad_v", &mut problems), tab_top: float("layout.tab_top", &mut problems), tab_gap: float("layout.tab_gap", &mut problems), tab_indent: float("layout.tab_indent", &mut problems), scrollbar_width: float("layout.scrollbar_width", &mut problems), scrollbar_inset: float("layout.scrollbar_inset", &mut problems), scrollbar_thumb_min: float("layout.scrollbar_thumb_min", &mut problems), pick_gap: float("layout.pick_gap", &mut problems), pick_strip: float("layout.pick_strip", &mut problems), pick_label_width: float("layout.pick_label_width", &mut problems), pick_field_width: float("layout.pick_field_width", &mut problems), pick_min_square: float("layout.pick_min_square", &mut problems), pick_marker: float("layout.pick_marker", &mut problems), search_gap: float("layout.search_gap", &mut problems), rows_pad: float("layout.rows_pad", &mut problems) };
 	let glyph = |path: &str, problems: &mut Vec<String>| -> &'static str {
 		match doc.get_string(path) {
 			Ok(v) => keep(v),
@@ -565,17 +471,8 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			}
 		}
 	};
-	let help = Help {
-		cancel: glyph("help.cancel", &mut problems),
-		apply: glyph("help.apply", &mut problems),
-		ok: glyph("help.ok", &mut problems),
-	};
-	let icons = Icons {
-		dropdown_arrow: glyph("icons.dropdown_arrow", &mut problems),
-		dropdown_check: glyph("icons.dropdown_check", &mut problems),
-		revert: glyph("icons.revert", &mut problems),
-		search_sep: glyph("icons.search_sep", &mut problems),
-	};
+	let help = Help { cancel: glyph("help.cancel", &mut problems), apply: glyph("help.apply", &mut problems), ok: glyph("help.ok", &mut problems) };
+	let icons = Icons { dropdown_arrow: glyph("icons.dropdown_arrow", &mut problems), dropdown_check: glyph("icons.dropdown_check", &mut problems), revert: glyph("icons.revert", &mut problems), search_sep: glyph("icons.search_sep", &mut problems) };
 
 	let paths = doc.get_string_array("tabs").unwrap_or_default();
 	let (tab_tree, tabs) = match tab_tree(&paths.iter().map(String::as_str).collect::<Vec<_>>()) {
@@ -589,11 +486,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		problems.push("tabs: no tab titles".into());
 	}
 	// the leaves' full paths, which is what a heading names its tab by
-	let leaf_paths: Vec<&str> = tab_tree
-		.iter()
-		.filter(|n| n.is_leaf())
-		.map(|n| n.path)
-		.collect();
+	let leaf_paths: Vec<&str> = tab_tree.iter().filter(|n| n.is_leaf()).map(|n| n.path).collect();
 	let tabs_side = match doc.get_string("tabs_side").as_deref() {
 		Ok("left") => TabsSide::Left,
 		Ok("top") | Err(_) => TabsSide::Top,
@@ -631,17 +524,13 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		if key != Key::None {
 			relations.push((key, read_rel(&doc, &format!("rows.{name}"), &mut problems)));
 		}
-		let options = doc
-			.get_string_array(&at("options"))
-			.map_or(&[][..], keep_all);
+		let options = doc.get_string_array(&at("options")).map_or(&[][..], keep_all);
 		let kind = match kind_text.as_str() {
 			"heading" => {
 				let named = doc.get_string(&at("tab")).unwrap_or_default();
 				match leaf_paths.iter().position(|path| *path == named) {
 					Some(index) => tab = index,
-					None if tab_tree.iter().any(|n| n.path == named) => problems.push(format!(
-						"rows.{name}: {named} has tabs under it; name one of them"
-					)),
+					None if tab_tree.iter().any(|n| n.path == named) => problems.push(format!("rows.{name}: {named} has tabs under it; name one of them")),
 					None => problems.push(format!("rows.{name}: not one of the tabs")),
 				}
 				Kind::Header(label)
@@ -651,8 +540,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			"color" => Kind::Color,
 			"text" => Kind::Text,
 			"hotkey" => {
-				let Some(hotkey) = paths.first().and_then(|path| crate::keys::hotkey_at(path))
-				else {
+				let Some(hotkey) = paths.first().and_then(|path| crate::keys::hotkey_at(path)) else {
 					problems.push(format!("rows.{name}: a hotkey row needs a keys. setting"));
 					continue;
 				};
@@ -664,11 +552,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 				if options.len() < 2 && !(kind_text == "dropdown" && options.is_empty()) {
 					problems.push(format!("rows.{name}: {kind_text} needs options"));
 				}
-				if kind_text == "radio" {
-					Kind::Radio(options)
-				} else {
-					Kind::Dropdown(options)
-				}
+				if kind_text == "radio" { Kind::Radio(options) } else { Kind::Dropdown(options) }
 			}
 			"buttons" => {
 				if options.is_empty() {
@@ -698,34 +582,18 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 				if typed_max < max {
 					problems.push(format!("rows.{name}: typed_max is below the range"));
 				}
-				Kind::Slider {
-					min,
-					max,
-					int: doc.get_bool(&at("whole")).unwrap_or(false),
-					log,
-					typed_max: typed_max.max(max),
-				}
+				Kind::Slider { min, max, int: doc.get_bool(&at("whole")).unwrap_or(false), log, typed_max: typed_max.max(max) }
 			}
 			"pair" => {
-				let parts: Vec<Key> = doc
-					.get_string_array(&at("parts"))
-					.unwrap_or_default()
-					.iter()
-					.filter_map(|p| Key::parse(p))
-					.collect();
+				let parts: Vec<Key> = doc.get_string_array(&at("parts")).unwrap_or_default().iter().filter_map(|p| Key::parse(p)).collect();
 				if parts.len() != 2 || options.len() != 2 || paths.len() != 2 {
-					problems.push(format!(
-						"rows.{name}: pair needs 2 parts, options, settings"
-					));
+					problems.push(format!("rows.{name}: pair needs 2 parts, options, settings"));
 					continue;
 				}
 				for (part, path) in parts.iter().zip(paths.iter()) {
 					settings.push((*part, keep_all(vec![path.clone()])));
 				}
-				Kind::Dual {
-					keys: [parts[0], parts[1]],
-					labels: [options[0], options[1]],
-				}
+				Kind::Dual { keys: [parts[0], parts[1]], labels: [options[0], options[1]] }
 			}
 			other => {
 				problems.push(format!("rows.{name}: unknown kind {other}"));
@@ -734,9 +602,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		};
 		// a pair row already filed its 2 parts above, and neither a buttons row
 		// nor the shells grid has a value of its own
-		if key != Key::None
-			&& !matches!(kind, Kind::Dual { .. } | Kind::Buttons(_) | Kind::ShellList)
-		{
+		if key != Key::None && !matches!(kind, Kind::Dual { .. } | Kind::Buttons(_) | Kind::ShellList) {
 			// A text box may stand for more than one setting, as "File or folder"
 			// does, so a revert comments out each. Anything else has one value.
 			match (paths.len(), &kind) {
@@ -749,17 +615,9 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		// already beside one, and every part has to be something that fits on one
 		// line. A row whose height isn't a constant (the grid) or that has no
 		// value (a heading) isn't.
-		let one_line = |kind: &Kind| {
-			!matches!(
-				kind,
-				Kind::Header(_) | Kind::ShellList | Kind::Buttons(_) | Kind::Radio(_)
-			)
-		};
+		let one_line = |kind: &Kind| !matches!(kind, Kind::Header(_) | Kind::ShellList | Kind::Buttons(_) | Kind::Radio(_));
 		if beside {
-			if !specs
-				.last()
-				.is_some_and(|prev| prev.tab == tab && one_line(&prev.kind))
-			{
+			if !specs.last().is_some_and(|prev| prev.tab == tab && one_line(&prev.kind)) {
 				problems.push(format!("rows.{name}: beside needs a plain row above it"));
 			}
 			if !one_line(&kind) {
@@ -768,26 +626,20 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			// its label, if any, takes room in front of a checkbox; any other
 			// control fills its part and would be drawn over by it
 			if !label.is_empty() && !matches!(kind, Kind::Toggle) {
-				problems.push(format!(
-					"rows.{name}: only a toggle beside another may carry a label"
-				));
+				problems.push(format!("rows.{name}: only a toggle beside another may carry a label"));
 			}
 		}
 		let warning = doc.get_string(&at("warning")).unwrap_or_default();
 		let windows_warning = doc.get_string(&at("windows_warning")).unwrap_or_default();
 		// the mark sits after the label in the label column, which a heading and
 		// half a line don't have
-		if !(warning.is_empty() && windows_warning.is_empty())
-			&& (label.is_empty() || beside || matches!(kind, Kind::Header(_)))
-		{
+		if !(warning.is_empty() && windows_warning.is_empty()) && (label.is_empty() || beside || matches!(kind, Kind::Header(_))) {
 			problems.push(format!("rows.{name}: a warning needs a label of its own"));
 		}
 		let aliases = doc.get_string_array(&at("aliases")).unwrap_or_default();
 		// a search lists a row by its label, so one with none can't be listed
 		if !aliases.is_empty() && label.is_empty() {
-			problems.push(format!(
-				"rows.{name}: aliases need a label to list the row by"
-			));
+			problems.push(format!("rows.{name}: aliases need a label to list the row by"));
 		}
 		if aliases.iter().any(|a| a.trim().is_empty()) {
 			problems.push(format!("rows.{name}: an alias is blank"));
@@ -796,36 +648,15 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		if matches!(kind, Kind::Header(_)) {
 			group_windows = windows;
 		} else if group_windows && !windows {
-			problems.push(format!(
-				"rows.{name}: a Windows-only group's rows are Windows-only"
-			));
+			problems.push(format!("rows.{name}: a Windows-only group's rows are Windows-only"));
 		}
 		let macos = doc.get_bool(&at("macos")).unwrap_or(false);
 		if matches!(kind, Kind::Header(_)) {
 			group_macos = macos;
 		} else if group_macos && !macos {
-			problems.push(format!(
-				"rows.{name}: a macOS-only group's rows are macOS-only"
-			));
+			problems.push(format!("rows.{name}: a macOS-only group's rows are macOS-only"));
 		}
-		specs.push(Spec {
-			label,
-			key,
-			kind,
-			tab,
-			help: doc.get_string(&at("help")).map_or("", keep),
-			indent: doc
-				.get_int(&at("indent"))
-				.map_or(u8::MAX, |n| n.clamp(0, 4) as u8),
-			beside,
-			revert_help: doc.get_string(&at("revert_help")).map_or("", keep),
-			windows,
-			macos,
-			not_macos: doc.get_bool(&at("not_macos")).unwrap_or(false),
-			warning: keep(warning),
-			windows_warning: keep(windows_warning),
-			aliases: keep_all(aliases),
-		});
+		specs.push(Spec { label, key, kind, tab, help: doc.get_string(&at("help")).map_or("", keep), indent: doc.get_int(&at("indent")).map_or(u8::MAX, |n| n.clamp(0, 4) as u8), beside, revert_help: doc.get_string(&at("revert_help")).map_or("", keep), windows, macos, not_macos: doc.get_bool(&at("not_macos")).unwrap_or(false), warning: keep(warning), windows_warning: keep(windows_warning), aliases: keep_all(aliases) });
 	}
 
 	let mut hidden: Vec<(Key, &'static str)> = Vec::new();
@@ -842,30 +673,18 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			Ok(path) => settings.push((key, keep_all(vec![path]))),
 			Err(_) => problems.push(format!("values.{name}: needs a setting path")),
 		}
-		relations.push((
-			key,
-			read_rel(&doc, &format!("values.{name}"), &mut problems),
-		));
+		relations.push((key, read_rel(&doc, &format!("values.{name}"), &mut problems)));
 		hidden.push((key, doc.get_string(&at("label")).map_or("", keep)));
 	}
 	let groups = read_groups(&doc, &mut problems);
 
 	// one step in from the checkbox above a row, unless it says otherwise
 	let up_of = |key: Key| {
-		let rel = relations
-			.iter()
-			.find(|(k, _)| *k == key)
-			.map(|(_, rel)| *rel)
-			.unwrap_or_default();
+		let rel = relations.iter().find(|(k, _)| *k == key).map(|(_, rel)| *rel).unwrap_or_default();
 		rel.gate.or(rel.auto)
 	};
 	let declared: Vec<(Key, u8)> = specs.iter().map(|s| (s.key, s.indent)).collect();
-	let declared_of = |key: Key| {
-		declared
-			.iter()
-			.find(|(k, _)| *k == key)
-			.map_or(u8::MAX, |(_, indent)| *indent)
-	};
+	let declared_of = |key: Key| declared.iter().find(|(k, _)| *k == key).map_or(u8::MAX, |(_, indent)| *indent);
 	for spec in &mut specs {
 		if spec.indent != u8::MAX {
 			continue;
@@ -889,23 +708,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		spec.indent = (base + steps).min(4);
 	}
 
-	if problems.is_empty() {
-		Ok(Ui {
-			tabs,
-			tab_tree,
-			tabs_side,
-			layout,
-			icons,
-			help,
-			specs,
-			hidden,
-			groups,
-			settings,
-			relations,
-		})
-	} else {
-		Err(problems)
-	}
+	if problems.is_empty() { Ok(Ui { tabs, tab_tree, tabs_side, layout, icons, help, specs, hidden, groups, settings, relations }) } else { Err(problems) }
 }
 
 fn read_rel(doc: &shcl::Document, at: &str, problems: &mut Vec<String>) -> Rel {
@@ -919,24 +722,14 @@ fn read_rel(doc: &shcl::Document, at: &str, problems: &mut Vec<String>) -> Rel {
 	};
 	let gate = key_of("gate");
 	let auto = key_of("auto");
-	Rel {
-		gate,
-		auto,
-		rule: doc.get_string(&format!("{at}.rule")).ok().map(keep),
-		group: doc.get_string(&format!("{at}.group")).ok().map(keep),
-	}
+	Rel { gate, auto, rule: doc.get_string(&format!("{at}.rule")).ok().map(keep), group: doc.get_string(&format!("{at}.group")).ok().map(keep) }
 }
 
 // A preset's value as the file has it. The setting it is for decides the type,
 // and knobs turns an int into a float where one is wanted.
 fn read_value(doc: &shcl::Document, path: &str) -> Option<knobs::Value> {
 	use knobs::Value;
-	doc.get_bool(path)
-		.map(Value::Bool)
-		.or_else(|_| doc.get_int(path).map(Value::Int))
-		.or_else(|_| doc.get_float(path).map(Value::Float))
-		.or_else(|_| doc.get_string(path).map(Value::Text))
-		.ok()
+	doc.get_bool(path).map(Value::Bool).or_else(|_| doc.get_int(path).map(Value::Int)).or_else(|_| doc.get_float(path).map(Value::Float)).or_else(|_| doc.get_string(path).map(Value::Text)).ok()
 }
 
 fn read_groups(doc: &shcl::Document, problems: &mut Vec<String>) -> Vec<GroupSpec> {
@@ -957,9 +750,7 @@ fn read_groups(doc: &shcl::Document, problems: &mut Vec<String>) -> Vec<GroupSpe
 					continue;
 				}
 				let Some(setting) = Key::parse(&name) else {
-					problems.push(format!(
-						"groups.{id}.presets.{key}: no setting named {name}"
-					));
+					problems.push(format!("groups.{id}.presets.{key}: no setting named {name}"));
 					continue;
 				};
 				match read_value(doc, &p(&name)) {
@@ -968,21 +759,9 @@ fn read_groups(doc: &shcl::Document, problems: &mut Vec<String>) -> Vec<GroupSpe
 				}
 			}
 			let kept = keep(key.clone());
-			presets.push(PresetSpec {
-				key: kept,
-				label: doc.get_string(&p("label")).map_or(kept, keep),
-				temporary: doc.get_bool(&p("temporary")).unwrap_or(false),
-				values,
-			});
+			presets.push(PresetSpec { key: kept, label: doc.get_string(&p("label")).map_or(kept, keep), temporary: doc.get_bool(&p("temporary")).unwrap_or(false), values });
 		}
-		groups.push(GroupSpec {
-			id: keep(id.clone()),
-			chooser,
-			noun: keep(text("noun")),
-			custom: keep(text("custom")),
-			from_program: doc.get_bool(&at("from_program")).unwrap_or(false),
-			presets,
-		});
+		groups.push(GroupSpec { id: keep(id.clone()), chooser, noun: keep(text("noun")), custom: keep(text("custom")), from_program: doc.get_bool(&at("from_program")).unwrap_or(false), presets });
 	}
 	groups
 }
@@ -1016,28 +795,15 @@ mod tests {
 				_ => declared.push(spec.key),
 			}
 		}
-		let missing: Vec<&str> = Key::ALL
-			.iter()
-			.filter(|k| !declared.contains(k))
-			.map(|k| k.name())
-			.collect();
+		let missing: Vec<&str> = Key::ALL.iter().filter(|k| !declared.contains(k)).map(|k| k.name()).collect();
 		assert!(missing.is_empty(), "no dialog row for: {missing:?}");
 		for key in declared.iter().filter(|k| !valueless.contains(k)) {
-			assert!(
-				!ui.settings_of(*key).is_empty(),
-				"{} has no config path",
-				key.name()
-			);
+			assert!(!ui.settings_of(*key).is_empty(), "{} has no config path", key.name());
 		}
 		// every relation names a setting that is declared
 		for (key, rel) in &ui.relations {
 			for other in [rel.gate, rel.auto].into_iter().flatten() {
-				assert!(
-					declared.contains(&other),
-					"{} names {}",
-					key.name(),
-					other.name()
-				);
+				assert!(declared.contains(&other), "{} names {}", key.name(), other.name());
 			}
 		}
 	}
@@ -1048,10 +814,7 @@ mod tests {
 	fn every_tab_has_rows_and_every_row_a_tab() {
 		let ui = ui();
 		for (index, title) in ui.tabs.iter().enumerate() {
-			assert!(
-				ui.specs.iter().any(|s| s.tab == index),
-				"tab {title} has no rows"
-			);
+			assert!(ui.specs.iter().any(|s| s.tab == index), "tab {title} has no rows");
 		}
 		assert!(ui.specs.iter().all(|s| s.tab < ui.tabs.len()));
 		// the first row must be a heading, or the rows before it have no section
@@ -1065,22 +828,8 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_layout_numbers_are_sane() {
 		let lay = &ui().layout;
-		for (name, value) in [
-			("width", lay.width),
-			("pad", lay.pad),
-			("row_height", lay.row_height),
-			("label_width", lay.label_width),
-			("slider_width", lay.slider_width),
-			("dropdown_pair_width", lay.dropdown_pair_width),
-			("swatch", lay.swatch),
-			("button_height", lay.button_height),
-			("base_line_height", lay.base_line_height),
-			("scrollbar_width", lay.scrollbar_width),
-		] {
-			assert!(
-				value > 0.0 && value < 4000.0,
-				"layout.{name} is {value} DIP"
-			);
+		for (name, value) in [("width", lay.width), ("pad", lay.pad), ("row_height", lay.row_height), ("label_width", lay.label_width), ("slider_width", lay.slider_width), ("dropdown_pair_width", lay.dropdown_pair_width), ("swatch", lay.swatch), ("button_height", lay.button_height), ("base_line_height", lay.base_line_height), ("scrollbar_width", lay.scrollbar_width)] {
+			assert!(value > 0.0 && value < 4000.0, "layout.{name} is {value} DIP");
 		}
 	}
 
@@ -1088,13 +837,8 @@ mod tests {
 	#[test]
 	fn a_bad_document_is_reported_rather_than_half_read() {
 		let bad = "tabs: \"Only\"\nrows:\n\tNotASetting:\n\t\tlabel: x\n\t\tkind: toggle\n";
-		let Err(problems) = parse(bad) else {
-			panic!("a row naming no setting must be reported")
-		};
-		assert!(
-			problems.iter().any(|p| p.contains("notasetting")),
-			"{problems:?}"
-		);
+		let Err(problems) = parse(bad) else { panic!("a row naming no setting must be reported") };
+		assert!(problems.iter().any(|p| p.contains("notasetting")), "{problems:?}");
 	}
 
 	// The macOS build leaves out software rendering and nothing else.
@@ -1102,9 +846,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_software_rendering_leaves_the_macos_build() {
-		let Ok(mut ui) = parse(SOURCE) else {
-			panic!("settings_ui.shcl does not parse")
-		};
+		let Ok(mut ui) = parse(SOURCE) else { panic!("settings_ui.shcl does not parse") };
 		let all = ui.specs.len();
 		keep_platform(&mut ui.specs, false, true, false);
 		let not_windows = ui.specs.len();
@@ -1112,9 +854,7 @@ mod tests {
 		keep_platform(&mut ui.specs, false, true, true);
 		assert_eq!(ui.specs.len(), not_windows - 1);
 		assert!(!ui.specs.iter().any(|s| s.key == Key::SoftwareRendering));
-		let Ok(mut ui) = parse(SOURCE) else {
-			unreachable!()
-		};
+		let Ok(mut ui) = parse(SOURCE) else { unreachable!() };
 		keep_platform(&mut ui.specs, true, true, false);
 		assert_eq!(ui.specs.len(), all, "a test build keeps every row");
 	}
@@ -1125,25 +865,14 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_windows_rows_leave_every_other_build() {
-		let Ok(mut ui) = parse(SOURCE) else {
-			panic!("settings_ui.shcl does not parse")
-		};
+		let Ok(mut ui) = parse(SOURCE) else { panic!("settings_ui.shcl does not parse") };
 		let all = ui.specs.len();
 		let windows = ui.specs.iter().filter(|s| s.windows).count();
 		assert!(windows >= 5, "the heading and four rows");
-		assert!(
-			ui.specs
-				.iter()
-				.any(|s| s.windows && matches!(s.kind, Kind::Header(_)))
-		);
+		assert!(ui.specs.iter().any(|s| s.windows && matches!(s.kind, Kind::Header(_))));
 		keep_platform(&mut ui.specs, false, true, false);
 		assert_eq!(ui.specs.len(), all - windows);
-		for key in [
-			Key::OpenBatch,
-			Key::OpenPowerShell,
-			Key::OpenVbScript,
-			Key::OpenFolder,
-		] {
+		for key in [Key::OpenBatch, Key::OpenPowerShell, Key::OpenVbScript, Key::OpenFolder] {
 			assert!(ui.specs.iter().all(|s| s.key != key), "{}", key.name());
 		}
 	}
@@ -1153,30 +882,14 @@ mod tests {
 	// Test ID: ddeqk
 	#[test]
 	fn a_warning_needs_a_label_of_its_own() {
-		let head =
-			"tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n";
+		let head = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n";
 		let margin = "\tMargin:\n\t\tlabel: x\n\t\tkind: toggle\n\t\tsetting: margin\n";
 		let fine = format!("{head}{margin}\t\twarning: \"Careful.\"\n");
-		let Err(problems) = parse(&fine) else {
-			panic!("a fragment with no layout block parses clean")
-		};
-		assert!(
-			!problems.iter().any(|p| p.contains("warning")),
-			"a labeled row may warn: {problems:?}"
-		);
-		for bad in [
-			format!("{head}\t\twarning: \"Careful.\"\n{margin}"),
-			format!(
-				"{head}{margin}\tRows:\n\t\tkind: toggle\n\t\tbeside: true\n\t\tsetting: rows\n\t\twarning: \"Careful.\"\n"
-			),
-		] {
-			let Err(problems) = parse(&bad) else {
-				panic!("a warning with no label column must be reported: {bad}")
-			};
-			assert!(
-				problems.iter().any(|p| p.contains("warning")),
-				"{problems:?}"
-			);
+		let Err(problems) = parse(&fine) else { panic!("a fragment with no layout block parses clean") };
+		assert!(!problems.iter().any(|p| p.contains("warning")), "a labeled row may warn: {problems:?}");
+		for bad in [format!("{head}\t\twarning: \"Careful.\"\n{margin}"), format!("{head}{margin}\tRows:\n\t\tkind: toggle\n\t\tbeside: true\n\t\tsetting: rows\n\t\twarning: \"Careful.\"\n")] {
+			let Err(problems) = parse(&bad) else { panic!("a warning with no label column must be reported: {bad}") };
+			assert!(problems.iter().any(|p| p.contains("warning")), "{problems:?}");
 		}
 	}
 
@@ -1188,9 +901,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_the_windows_build_warns_that_transparency_keeps_memory() {
 		let read = |windows: bool| {
-			let Ok(mut ui) = parse(SOURCE) else {
-				panic!("settings_ui.shcl does not parse")
-			};
+			let Ok(mut ui) = parse(SOURCE) else { panic!("settings_ui.shcl does not parse") };
 			pick_warnings(&mut ui.specs, windows);
 			ui.specs
 		};
@@ -1207,16 +918,10 @@ mod tests {
 		}
 		// a mark for Windows alone has no label column to sit in either, on a
 		// heading or half a line
-		let head =
-			"tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n";
+		let head = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n";
 		let bad = format!("{head}\t\twindows_warning: \"Careful.\"\n");
-		let Err(problems) = parse(&bad) else {
-			panic!("a fragment with no layout block never parses clean")
-		};
-		assert!(
-			problems.iter().any(|p| p.contains("warning")),
-			"{problems:?}"
-		);
+		let Err(problems) = parse(&bad) else { panic!("a fragment with no layout block never parses clean") };
+		assert!(problems.iter().any(|p| p.contains("warning")), "{problems:?}");
 	}
 
 	// "Carry" read as "has" or "keeps" is a word to avoid in what people read,
@@ -1226,19 +931,11 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_dialog_text_says_carry() {
-		let Ok(ui) = parse(SOURCE) else {
-			panic!("settings_ui.shcl does not parse")
-		};
+		let Ok(ui) = parse(SOURCE) else { panic!("settings_ui.shcl does not parse") };
 		let mut texts: Vec<&str> = vec![ui.help.cancel, ui.help.apply, ui.help.ok];
 		texts.extend(&ui.tabs);
 		for spec in &ui.specs {
-			texts.extend([
-				spec.label,
-				spec.help,
-				spec.revert_help,
-				spec.warning,
-				spec.windows_warning,
-			]);
+			texts.extend([spec.label, spec.help, spec.revert_help, spec.warning, spec.windows_warning]);
 			match spec.kind {
 				Kind::Radio(options) | Kind::Dropdown(options) | Kind::Buttons(options) => {
 					texts.extend(options);
@@ -1250,12 +947,7 @@ mod tests {
 		}
 		for text in texts {
 			let words = text.split(|c: char| !c.is_ascii_alphabetic());
-			assert!(
-				!words
-					.map(str::to_ascii_lowercase)
-					.any(|w| ["carry", "carries", "carried", "carrying"].contains(&w.as_str())),
-				"{text}"
-			);
+			assert!(!words.map(str::to_ascii_lowercase).any(|w| ["carry", "carries", "carried", "carrying"].contains(&w.as_str())), "{text}");
 		}
 	}
 
@@ -1265,9 +957,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_option_key_group_leaves_every_build_but_the_mac() {
-		let Ok(mut ui) = parse(SOURCE) else {
-			panic!("settings_ui.shcl doesn't parse")
-		};
+		let Ok(mut ui) = parse(SOURCE) else { panic!("settings_ui.shcl doesn't parse") };
 		let all = ui.specs.len();
 		let mac: Vec<Key> = ui.specs.iter().filter(|s| s.macos).map(|s| s.key).collect();
 		assert_eq!(mac.len(), 2, "the heading and its row");
@@ -1277,30 +967,16 @@ mod tests {
 		assert!(ui.specs.iter().all(|s| !s.macos));
 
 		let bad = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\t\tmacos: true\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: [0, 1]\n\t\tsetting: margin\n";
-		let Err(problems) = parse(bad) else {
-			panic!("a shared row under a macOS-only heading must be reported")
-		};
-		assert!(
-			problems
-				.iter()
-				.any(|p| p.contains("margin") && p.contains("macOS")),
-			"{problems:?}"
-		);
+		let Err(problems) = parse(bad) else { panic!("a shared row under a macOS-only heading must be reported") };
+		assert!(problems.iter().any(|p| p.contains("margin") && p.contains("macOS")), "{problems:?}");
 	}
 
 	// Test ID: ddamr
 	#[test]
 	fn a_windows_group_cannot_contain_a_row_for_everyone() {
 		let bad = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\t\twindows: true\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: [0, 1]\n\t\tsetting: margin\n";
-		let Err(problems) = parse(bad) else {
-			panic!("a shared row under a Windows-only heading must be reported")
-		};
-		assert!(
-			problems
-				.iter()
-				.any(|p| p.contains("margin") && p.contains("Windows")),
-			"{problems:?}"
-		);
+		let Err(problems) = parse(bad) else { panic!("a shared row under a Windows-only heading must be reported") };
+		assert!(problems.iter().any(|p| p.contains("margin") && p.contains("Windows")), "{problems:?}");
 	}
 
 	// A slider's scale and typed cap are refused when they can't mean anything,
@@ -1308,21 +984,10 @@ mod tests {
 	// Test ID: ddp93
 	#[test]
 	fn a_slider_scale_or_cap_that_means_nothing_is_refused() {
-		for (extra, want) in [
-			("scale: loggy", "linear or log"),
-			("scale: log", "above 0"),
-			("typed_max: 0.5", "below the range"),
-		] {
-			let text = format!(
-				"tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: [0, 1]\n\t\t{extra}\n\t\tsetting: margin\n"
-			);
-			let Err(problems) = parse(&text) else {
-				panic!("{extra} was taken")
-			};
-			assert!(
-				problems.iter().any(|p| p.contains(want)),
-				"{extra}: {problems:?}"
-			);
+		for (extra, want) in [("scale: loggy", "linear or log"), ("scale: log", "above 0"), ("typed_max: 0.5", "below the range")] {
+			let text = format!("tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: [0, 1]\n\t\t{extra}\n\t\tsetting: margin\n");
+			let Err(problems) = parse(&text) else { panic!("{extra} was taken") };
+			assert!(problems.iter().any(|p| p.contains(want)), "{extra}: {problems:?}");
 		}
 	}
 
@@ -1334,37 +999,18 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_hotkey_has_one_row_on_the_keys_tab() {
 		let ui = ui();
-		let keys_tab = ui
-			.tabs
-			.iter()
-			.position(|t| *t == "Keys")
-			.expect("a Keys tab");
+		let keys_tab = ui.tabs.iter().position(|t| *t == "Keys").expect("a Keys tab");
 		for (hotkey, path) in crate::keys::config_paths() {
-			let rows: Vec<&super::Spec> = ui
-				.specs
-				.iter()
-				.filter(|s| matches!(s.kind, Kind::Hotkey(h) if h == hotkey))
-				.collect();
+			let rows: Vec<&super::Spec> = ui.specs.iter().filter(|s| matches!(s.kind, Kind::Hotkey(h) if h == hotkey)).collect();
 			assert_eq!(rows.len(), 1, "{path}");
 			assert_eq!(rows[0].tab, keys_tab, "{path}");
 			assert_eq!(ui.settings_of(rows[0].key), [path.as_str()]);
 		}
-		let rows = ui
-			.specs
-			.iter()
-			.filter(|s| matches!(s.kind, Kind::Hotkey(_)))
-			.count();
+		let rows = ui.specs.iter().filter(|s| matches!(s.kind, Kind::Hotkey(_))).count();
 		assert_eq!(rows, crate::keys::config_paths().count());
 		let bad = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\tHotkeyCopy:\n\t\tlabel: Copy\n\t\tkind: hotkey\n\t\tsetting: keys.bogus\n";
-		let Err(problems) = parse(bad) else {
-			panic!("a hotkey row binding nothing must be reported")
-		};
-		assert!(
-			problems
-				.iter()
-				.any(|p| p.contains("hotkeycopy") && p.contains("keys.")),
-			"{problems:?}"
-		);
+		let Err(problems) = parse(bad) else { panic!("a hotkey row binding nothing must be reported") };
+		assert!(problems.iter().any(|p| p.contains("hotkeycopy") && p.contains("keys.")), "{problems:?}");
 	}
 
 	// "A/B" is B under A. Rows go on the leaves, which a heading names by path.
@@ -1374,41 +1020,16 @@ mod tests {
 		let (nodes, leaves) = tab_tree(&["A", "B", "B/C", "B/D", "E"]).unwrap();
 		assert_eq!(leaves, ["A", "C", "D", "E"]);
 		assert_eq!(nodes[1].leaf, None, "B only holds tabs");
-		assert_eq!(
-			(nodes[2].parent, nodes[2].depth, nodes[2].title),
-			(Some(1), 1, "C")
-		);
+		assert_eq!((nodes[2].parent, nodes[2].depth, nodes[2].title), (Some(1), 1, "C"));
 		assert_eq!(nodes[3].leaf, Some(2));
-		assert!(
-			tab_tree(&["B/C", "B"]).is_err(),
-			"a child before its parent"
-		);
+		assert!(tab_tree(&["B/C", "B"]).is_err(), "a child before its parent");
 		assert!(tab_tree(&["A", "A"]).is_err(), "a tab twice");
 		let head = "rows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: ";
-		let Err(problems) = parse(&format!("tabs: [\"B\", \"B/C\"]\n{head}B\n")) else {
-			panic!("a heading on a tab that holds tabs must be reported")
-		};
-		assert!(
-			problems.iter().any(|p| p.contains("has tabs under it")),
-			"{problems:?}"
-		);
-		let Err(problems) = parse(&format!(
-			"tabs: [\"B\", \"B/C\"]\ntabs_side: left\n{head}B/C\n"
-		)) else {
-			panic!("the layout is missing")
-		};
-		assert!(
-			!problems
-				.iter()
-				.any(|p| p.contains("of the tabs") || p.contains("under it")),
-			"{problems:?}"
-		);
-		let Err(problems) = parse(&format!("tabs: \"B\"\ntabs_side: sideways\n{head}B\n")) else {
-			panic!("the layout is missing")
-		};
-		assert!(
-			problems.iter().any(|p| p.contains("tabs_side")),
-			"{problems:?}"
-		);
+		let Err(problems) = parse(&format!("tabs: [\"B\", \"B/C\"]\n{head}B\n")) else { panic!("a heading on a tab that holds tabs must be reported") };
+		assert!(problems.iter().any(|p| p.contains("has tabs under it")), "{problems:?}");
+		let Err(problems) = parse(&format!("tabs: [\"B\", \"B/C\"]\ntabs_side: left\n{head}B/C\n")) else { panic!("the layout is missing") };
+		assert!(!problems.iter().any(|p| p.contains("of the tabs") || p.contains("under it")), "{problems:?}");
+		let Err(problems) = parse(&format!("tabs: \"B\"\ntabs_side: sideways\n{head}B\n")) else { panic!("the layout is missing") };
+		assert!(problems.iter().any(|p| p.contains("tabs_side")), "{problems:?}");
 	}
 }

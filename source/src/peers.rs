@@ -24,9 +24,7 @@ pub fn runtime_dir() -> PathBuf {
 	#[cfg(test)]
 	return crate::testdir::run_dir().to_path_buf();
 	#[cfg(not(test))]
-	std::env::var_os("XDG_RUNTIME_DIR")
-		.filter(|dir| !dir.is_empty())
-		.map_or_else(std::env::temp_dir, PathBuf::from)
+	std::env::var_os("XDG_RUNTIME_DIR").filter(|dir| !dir.is_empty()).map_or_else(std::env::temp_dir, PathBuf::from)
 }
 
 /// The settings file as a short name. Different spellings of one file get one
@@ -45,9 +43,7 @@ fn real_path(path: &Path) -> PathBuf {
 	if let Ok(real) = std::fs::canonicalize(path) {
 		return real;
 	}
-	let dir = path
-		.parent()
-		.and_then(|dir| std::fs::canonicalize(dir).ok());
+	let dir = path.parent().and_then(|dir| std::fs::canonicalize(dir).ok());
 	match (dir, path.file_name()) {
 		(Some(dir), Some(name)) => dir.join(name),
 		_ => std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf()),
@@ -58,8 +54,7 @@ fn real_path(path: &Path) -> PathBuf {
 /// so it never changes after.
 pub fn own_key() -> Option<&'static str> {
 	static KEY: OnceLock<Option<String>> = OnceLock::new();
-	KEY.get_or_init(|| crate::config::settings_file().map(|path| key_for(&path)))
-		.as_deref()
+	KEY.get_or_init(|| crate::config::settings_file().map(|path| key_for(&path))).as_deref()
 }
 
 /// The meeting folder for `key`, made if need be. None when it can't be made
@@ -87,10 +82,7 @@ fn make_private_dir(dir: &Path) -> std::io::Result<()> {
 	// SAFETY: no arguments, can't fail.
 	let uid = unsafe { libc::geteuid() };
 	if !meta.is_dir() || meta.uid() != uid || meta.mode() & 0o077 != 0 {
-		return Err(std::io::Error::new(
-			std::io::ErrorKind::PermissionDenied,
-			"not a private folder of this user",
-		));
+		return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "not a private folder of this user"));
 	}
 	Ok(())
 }
@@ -104,10 +96,7 @@ fn make_private_dir(dir: &Path) -> std::io::Result<()> {
 fn warn_once(what: &str) {
 	static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 	if !SAID.swap(true, std::sync::atomic::Ordering::Relaxed) {
-		eprintln!(
-			"{}: other windows using this settings file won't be told about saves: {what}",
-			crate::config::APP_NAME
-		);
+		eprintln!("{}: other windows using this settings file won't be told about saves: {what}", crate::config::APP_NAME);
 	}
 }
 
@@ -134,11 +123,7 @@ pub fn others(dir: &Path, own: u32) -> Vec<u32> {
 	let Ok(entries) = std::fs::read_dir(dir) else {
 		return Vec::new();
 	};
-	entries
-		.flatten()
-		.filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok())
-		.filter(|pid| *pid != own)
-		.collect()
+	entries.flatten().filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok()).filter(|pid| *pid != own).collect()
 }
 
 /// What came of telling one process.
@@ -167,12 +152,7 @@ pub fn tell_others() {
 }
 
 /// The same for a given folder and sender, so a test can stand in for both.
-pub fn tell_in(
-	dir: &Path,
-	own: u32,
-	key: &str,
-	poke: impl Fn(u32, &str) -> Told,
-) -> Vec<(u32, Told)> {
+pub fn tell_in(dir: &Path, own: u32, key: &str, poke: impl Fn(u32, &str) -> Told) -> Vec<(u32, Told)> {
 	let line = format!("saved\t{key}");
 	others(dir, own)
 		.into_iter()
@@ -212,23 +192,14 @@ pub fn save_lock() -> SaveLock {
 		held.set(held.get() + 1);
 		held.get() == 1
 	});
-	let file = outer
-		.then(crate::config::settings_file)
-		.flatten()
-		.and_then(|path| meeting_dir(&key_for(&path)))
-		.and_then(|dir| take(&dir.join("lock"), LOCK_WAIT));
+	let file = outer.then(crate::config::settings_file).flatten().and_then(|path| meeting_dir(&key_for(&path))).and_then(|dir| take(&dir.join("lock"), LOCK_WAIT));
 	SaveLock { file }
 }
 
 // Each take opens the file afresh, so 2 threads of one process shut each
 // other out the same way 2 processes do.
 fn take(path: &Path, wait: Duration) -> Option<File> {
-	let file = OpenOptions::new()
-		.create(true)
-		.truncate(false)
-		.write(true)
-		.open(path)
-		.ok()?;
+	let file = OpenOptions::new().create(true).truncate(false).write(true).open(path).ok()?;
 	let until = Instant::now() + wait;
 	loop {
 		match file.try_lock() {
@@ -237,11 +208,7 @@ fn take(path: &Path, wait: Duration) -> Option<File> {
 				std::thread::sleep(Duration::from_millis(5));
 			}
 			Err(e) => {
-				eprintln!(
-					"{}: saving without the settings lock ({}: {e})",
-					crate::config::APP_NAME,
-					path.display()
-				);
+				eprintln!("{}: saving without the settings lock ({}: {e})", crate::config::APP_NAME, path.display());
 				return None;
 			}
 		}
@@ -296,13 +263,7 @@ mod tests {
 		});
 		told.sort_unstable_by_key(|(pid, _)| *pid);
 		assert_eq!(told, vec![(11, Told::Sent), (12, Told::Gone)]);
-		assert!(
-			heard
-				.lock()
-				.unwrap()
-				.iter()
-				.all(|(_, line)| line == "saved\tabc")
-		);
+		assert!(heard.lock().unwrap().iter().all(|(_, line)| line == "saved\tabc"));
 		assert!(dir.join("11").exists());
 		assert!(!dir.join("12").exists(), "the dead one's marker stays");
 		assert!(dir.join("10").exists() && dir.join("lock").exists());

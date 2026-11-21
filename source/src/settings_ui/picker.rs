@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-use super::{
-	Dlg, EditState, SettingsDialog, TextItem, border, lay, pick_field_of, pick_field_row, quad,
-};
+use super::{Dlg, EditState, SettingsDialog, TextItem, border, lay, pick_field_of, pick_field_row, quad};
 use crate::config;
 use crate::gfx::{QuadMode, RectInstance};
 use crate::pane::Rect;
@@ -18,19 +16,7 @@ impl SettingsDialog {
 	// width cut "#rrggbb" short at every size.
 	fn pick_metrics(&self) -> pick::Metrics {
 		let l = lay();
-		pick::Metrics {
-			pad: l.pad,
-			gap: l.pick_gap,
-			line_h: self.line_h,
-			field_h: self.field_h(),
-			btn_w: self.btn_w,
-			btn_h: self.btn_h(),
-			btn_gap: l.button_gap,
-			strip_w: l.pick_strip,
-			label_w: self.pick_label_w.max(self.line_h * 5.0),
-			field_w: self.pick_field_w.max(self.line_h * 3.0),
-			min_side: l.pick_min_square,
-		}
+		pick::Metrics { pad: l.pad, gap: l.pick_gap, line_h: self.line_h, field_h: self.field_h(), btn_w: self.btn_w, btn_h: self.btn_h(), btn_gap: l.button_gap, strip_w: l.pick_strip, label_w: self.pick_label_w.max(self.line_h * 5.0), field_w: self.pick_field_w.max(self.line_h * 3.0), min_side: l.pick_min_square }
 	}
 
 	pub(super) fn pick_geom(&self) -> pick::Geom {
@@ -45,20 +31,7 @@ impl SettingsDialog {
 		self.open = None;
 		let key = self.specs[i].key;
 		let start = self.get_col(key);
-		self.pick = Some(Picker {
-			row: i,
-			start_values: self.edited.model.values.clone(),
-			hsv: pick::from_rgb(
-				start,
-				pick::Hsv {
-					h: 0.0,
-					s: 0.0,
-					v: 0.0,
-				},
-			),
-			focus: pick::Focus::Square,
-			drag: None,
-		});
+		self.pick = Some(Picker { row: i, start_values: self.edited.model.values.clone(), hsv: pick::from_rgb(start, pick::Hsv { h: 0.0, s: 0.0, v: 0.0 }), focus: pick::Focus::Square, drag: None });
 	}
 
 	/// Cancel puts back what was stored when the box opened, which also puts
@@ -78,11 +51,7 @@ impl SettingsDialog {
 
 	fn pick_drop_edit(&mut self) {
 		self.emenu = None;
-		if self
-			.edit
-			.as_ref()
-			.is_some_and(|e| pick_field_of(e.row).is_some())
-		{
+		if self.edit.as_ref().is_some_and(|e| pick_field_of(e.row).is_some()) {
 			self.edit = None;
 		}
 	}
@@ -152,18 +121,9 @@ impl SettingsDialog {
 		let (focus, hsv) = (picker.focus, picker.hsv);
 		let by = if self.shift { 0.1 } else { 0.01 } * dir as f32;
 		match focus {
-			pick::Focus::Square if vertical => self.pick_set(pick::Hsv {
-				v: (hsv.v - by).clamp(0.0, 1.0),
-				..hsv
-			}),
-			pick::Focus::Square => self.pick_set(pick::Hsv {
-				s: (hsv.s + by).clamp(0.0, 1.0),
-				..hsv
-			}),
-			pick::Focus::Hue if vertical => self.pick_set(pick::Hsv {
-				h: (hsv.h + by).rem_euclid(1.0),
-				..hsv
-			}),
+			pick::Focus::Square if vertical => self.pick_set(pick::Hsv { v: (hsv.v - by).clamp(0.0, 1.0), ..hsv }),
+			pick::Focus::Square => self.pick_set(pick::Hsv { s: (hsv.s + by).clamp(0.0, 1.0), ..hsv }),
+			pick::Focus::Hue if vertical => self.pick_set(pick::Hsv { h: (hsv.h + by).rem_euclid(1.0), ..hsv }),
 			pick::Focus::Field(f) if vertical => {
 				let stepped = f.step(hsv, -dir, self.shift);
 				self.pick_set(stepped);
@@ -189,12 +149,7 @@ impl SettingsDialog {
 
 	/// Every click while the box is up belongs to it: its own controls act, and
 	/// anything outside is swallowed rather than reaching the panel behind.
-	pub(super) fn pick_mouse_down(
-		&mut self,
-		x: f32,
-		y: f32,
-		measure: &mut impl FnMut(&str) -> f32,
-	) {
+	pub(super) fn pick_mouse_down(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) {
 		if self.emenu.is_some() {
 			return;
 		}
@@ -250,11 +205,7 @@ impl SettingsDialog {
 
 	/// The picker box. Drawn in the overlay pass, over a dimmed panel, the same
 	/// way the name box is.
-	pub(super) fn pick_overlay(
-		&self,
-		colors: &Dlg,
-		measure: &mut impl FnMut(&str) -> f32,
-	) -> (Vec<RectInstance>, Vec<TextItem>) {
+	pub(super) fn pick_overlay(&self, colors: &Dlg, measure: &mut impl FnMut(&str) -> f32) -> (Vec<RectInstance>, Vec<TextItem>) {
 		let mut rects = Vec::new();
 		let mut texts = Vec::new();
 		let Some(picker) = &self.pick else {
@@ -263,51 +214,19 @@ impl SettingsDialog {
 		let mk = |text: Cow<'static, str>, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - self.line_h) / 2.0;
 		// a disc: a rounded quad whose radius is its own half-width
-		let disc = |x: f32, y: f32, d: f32, color: [u8; 3]| RectInstance {
-			pos: [x - d / 2.0, y - d / 2.0],
-			size: [d, d],
-			color: config::srgb_f32(color),
-			params: [QuadMode::Rounded.code(), d / 2.0],
-		};
-		rects.push(RectInstance {
-			pos: [self.rect.x, self.rect.y],
-			size: [self.rect.w, self.rect.h],
-			color: [0.0, 0.0, 0.0, 0.45],
-			..Default::default()
-		});
+		let disc = |x: f32, y: f32, d: f32, color: [u8; 3]| RectInstance { pos: [x - d / 2.0, y - d / 2.0], size: [d, d], color: config::srgb_f32(color), params: [QuadMode::Rounded.code(), d / 2.0] };
+		rects.push(RectInstance { pos: [self.rect.x, self.rect.y], size: [self.rect.w, self.rect.h], color: [0.0, 0.0, 0.0, 0.45], ..Default::default() });
 		let g = self.pick_geom();
-		rects.push(quad(
-			g.outer.x,
-			g.outer.y,
-			g.outer.w,
-			g.outer.h,
-			colors.panel_bg,
-		));
+		rects.push(quad(g.outer.x, g.outer.y, g.outer.w, g.outer.h, colors.panel_bg));
 		border(&mut rects, g.outer, 1.0, colors.panel_border);
-		texts.push(TextItem {
-			clip: Some(g.title),
-			..mk(self.specs[picker.row].label.into(), g.title.x, g.title.y)
-		});
+		texts.push(TextItem { clip: Some(g.title), ..mk(self.specs[picker.row].label.into(), g.title.x, g.title.y) });
 
 		// The square mixes toward the hue in sRGB, so its `color` is the hue in
 		// sRGB rather than the linear every other quad uses (see RectInstance).
 		let hue = pick::hue_rgb(picker.hsv.h);
-		rects.push(RectInstance {
-			pos: [g.square.x, g.square.y],
-			size: [g.square.w, g.square.h],
-			color: [hue[0], hue[1], hue[2], 1.0],
-			params: [QuadMode::PickSquare.code(), 0.0],
-		});
-		rects.push(RectInstance {
-			pos: [g.strip.x, g.strip.y],
-			size: [g.strip.w, g.strip.h],
-			color: [0.0, 0.0, 0.0, 1.0],
-			params: [QuadMode::HueStrip.code(), 0.0],
-		});
-		for (r, on) in [
-			(g.square, picker.focus == pick::Focus::Square),
-			(g.strip, picker.focus == pick::Focus::Hue),
-		] {
+		rects.push(RectInstance { pos: [g.square.x, g.square.y], size: [g.square.w, g.square.h], color: [hue[0], hue[1], hue[2], 1.0], params: [QuadMode::PickSquare.code(), 0.0] });
+		rects.push(RectInstance { pos: [g.strip.x, g.strip.y], size: [g.strip.w, g.strip.h], color: [0.0, 0.0, 0.0, 1.0], params: [QuadMode::HueStrip.code(), 0.0] });
+		for (r, on) in [(g.square, picker.focus == pick::Focus::Square), (g.strip, picker.focus == pick::Focus::Hue)] {
 			if on {
 				border(&mut rects, r, 2.0, colors.focus_out);
 			} else {
@@ -323,43 +242,15 @@ impl SettingsDialog {
 		// The strip is full-chroma at every point, so its marker is plain black
 		// and white rather than a theme color that could match its own hue.
 		let hy = g.hue_y(picker.hsv);
-		rects.push(quad(
-			g.strip.x - 2.0,
-			hy - 2.5,
-			g.strip.w + 4.0,
-			5.0,
-			[0, 0, 0],
-		));
-		rects.push(quad(
-			g.strip.x - 1.0,
-			hy - 1.5,
-			g.strip.w + 2.0,
-			3.0,
-			[255, 255, 255],
-		));
+		rects.push(quad(g.strip.x - 2.0, hy - 2.5, g.strip.w + 4.0, 5.0, [0, 0, 0]));
+		rects.push(quad(g.strip.x - 1.0, hy - 1.5, g.strip.w + 2.0, 3.0, [255, 255, 255]));
 
 		for f in pick::Field::ALL {
 			let box_r = g.field(f);
-			texts.push(TextItem {
-				clip: Some(Rect {
-					x: g.labels_x,
-					w: box_r.x - g.labels_x - 6.0,
-					..box_r
-				}),
-				..mk(f.label().into(), g.labels_x, row_text_y(box_r.y, box_r.h))
-			});
+			texts.push(TextItem { clip: Some(Rect { x: g.labels_x, w: box_r.x - g.labels_x - 6.0, ..box_r }), ..mk(f.label().into(), g.labels_x, row_text_y(box_r.y, box_r.h)) });
 			rects.push(quad(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
 			let open = picker.focus == pick::Focus::Field(f);
-			border(
-				&mut rects,
-				box_r,
-				1.0,
-				if open {
-					colors.focus_out
-				} else {
-					colors.panel_border
-				},
-			);
+			border(&mut rects, box_r, 1.0, if open { colors.focus_out } else { colors.panel_border });
 			let (txt, view) = match &self.edit {
 				Some(edit) if pick_field_of(edit.row) == Some(f) => (edit.buf.clone(), edit.view),
 				_ => (f.text(picker.hsv), 0.0),
@@ -367,20 +258,10 @@ impl SettingsDialog {
 			if open {
 				self.caret_quad(colors, &mut rects, box_r, measure);
 			}
-			texts.push(TextItem {
-				clip: Some(box_r),
-				..mk(
-					txt.into(),
-					box_r.x + lay().field_pad - view,
-					row_text_y(box_r.y, box_r.h),
-				)
-			});
+			texts.push(TextItem { clip: Some(box_r), ..mk(txt.into(), box_r.x + lay().field_pad - view, row_text_y(box_r.y, box_r.h)) });
 		}
 
-		for (part, r, caption) in [
-			(pick::Focus::Cancel, g.cancel, "Cancel"),
-			(pick::Focus::Ok, g.ok, "OK"),
-		] {
+		for (part, r, caption) in [(pick::Focus::Cancel, g.cancel, "Cancel"), (pick::Focus::Ok, g.ok, "OK")] {
 			rects.push(quad(r.x, r.y, r.w, r.h, colors.btn_bg));
 			let ring = picker.focus == part;
 			let outline = if ring {
@@ -407,10 +288,7 @@ mod tests {
 	use crate::ui_spec::{Key, Kind};
 
 	fn color_row(d: &SettingsDialog) -> usize {
-		d.specs
-			.iter()
-			.position(|s| s.key == Key::ColBg)
-			.expect("a color row")
+		d.specs.iter().position(|s| s.key == Key::ColBg).expect("a color row")
 	}
 
 	// Open the picker the way a click does, on a dialog showing that tab.
@@ -446,11 +324,7 @@ mod tests {
 		let g = d.pick_geom();
 		d.mouse_down_dip(g.square.x, g.square.y, &mut m);
 		d.mouse_up_dip(g.square.x, g.square.y);
-		assert_eq!(
-			d.key_enter(),
-			super::super::Action::None,
-			"Enter is the box's OK"
-		);
+		assert_eq!(d.key_enter(), super::super::Action::None, "Enter is the box's OK");
 		assert!(d.pick.is_none());
 		assert_eq!(d.get_col(Key::ColBg), [255, 255, 255]);
 	}
@@ -467,17 +341,9 @@ mod tests {
 		d.mouse_down_dip(g.square.x + 2.0, g.square.y + 2.0, &mut m);
 		let started = d.get_col(Key::ColBg);
 		// off the bottom right corner: full saturation, no brightness
-		d.mouse_move_dip(
-			g.square.x + g.square.w + 90.0,
-			g.square.y + g.square.h + 90.0,
-			&mut m,
-		);
+		d.mouse_move_dip(g.square.x + g.square.w + 90.0, g.square.y + g.square.h + 90.0, &mut m);
 		assert_ne!(d.get_col(Key::ColBg), started, "the drag went nowhere");
-		assert_eq!(
-			d.get_col(Key::ColBg),
-			[0, 0, 0],
-			"clamped to the far corner"
-		);
+		assert_eq!(d.get_col(Key::ColBg), [0, 0, 0], "clamped to the far corner");
 		d.mouse_up_dip(0.0, 0.0);
 		// the pointer moving on after the release no longer moves the color
 		let settled = d.get_col(Key::ColBg);
@@ -493,10 +359,7 @@ mod tests {
 		d.mouse_down_dip(g.strip.x + 2.0, g.strip.y + g.strip.h * 0.75, &mut m);
 		let after = d.pick.as_ref().map(|p| (p.hsv.s, p.hsv.v)).unwrap();
 		assert_eq!(before, after, "the strip disturbed the square's choice");
-		assert!(
-			(d.pick.as_ref().unwrap().hsv.h - 0.75).abs() < 0.02,
-			"three quarters down the strip"
-		);
+		assert!((d.pick.as_ref().unwrap().hsv.h - 0.75).abs() < 0.02, "three quarters down the strip");
 	}
 
 	// Every way in must reach the box rather than the panel under it. The panel
@@ -508,19 +371,11 @@ mod tests {
 		let (mut d, i) = mk_picker();
 		let mut m = |s: &str| s.chars().count() as f32;
 		let before = d.get_col(Key::ColBg);
-		let other = d
-			.specs
-			.iter()
-			.position(|s| matches!(s.kind, Kind::Text))
-			.expect("a text row");
+		let other = d.specs.iter().position(|s| matches!(s.kind, Kind::Text)).expect("a text row");
 		d.focus = Some(super::super::Focus::Row(other, 0));
 
 		for c in ['o', 'a', 'c'] {
-			assert_eq!(
-				d.alt_key(c),
-				super::super::Action::None,
-				"Alt+{c} must not reach OK"
-			);
+			assert_eq!(d.alt_key(c), super::super::Action::None, "Alt+{c} must not reach OK");
 		}
 		d.char_input('f'); // the square has focus, so this types nowhere
 		d.wheel(0.0, -400.0);
@@ -546,21 +401,13 @@ mod tests {
 		for f in super::super::pick::Field::ALL {
 			let row = super::super::pick_field_row(f);
 			assert_eq!(super::super::pick_field_of(row), Some(f));
-			assert_eq!(
-				super::super::shell_field_of(row),
-				None,
-				"{f:?} read as a shell"
-			);
+			assert_eq!(super::super::shell_field_of(row), None, "{f:?} read as a shell");
 		}
 		// and the grid's own rows aren't value boxes
 		for entry in 0..4 {
 			for command in [false, true] {
 				let row = super::super::shell_field_row(entry, command);
-				assert_eq!(
-					super::super::pick_field_of(row),
-					None,
-					"shell {entry} read as a value box"
-				);
+				assert_eq!(super::super::pick_field_of(row), None, "shell {entry} read as a value box");
 			}
 		}
 		assert_eq!(super::super::pick_field_of(super::super::PROMPT_ROW), None);
@@ -581,17 +428,9 @@ mod tests {
 		assert!(d.edit.is_none(), "neither is the strip");
 		for f in pick::Field::ALL {
 			d.key_tab();
-			assert_eq!(
-				d.pick.as_ref().map(|p| p.focus),
-				Some(pick::Focus::Field(f)),
-				"Tab stopped somewhere else"
-			);
+			assert_eq!(d.pick.as_ref().map(|p| p.focus), Some(pick::Focus::Field(f)), "Tab stopped somewhere else");
 			let want = f.text(d.pick.as_ref().unwrap().hsv);
-			assert_eq!(
-				d.selected_text().as_deref(),
-				Some(want.as_str()),
-				"{f:?} did not open with its value selected"
-			);
+			assert_eq!(d.selected_text().as_deref(), Some(want.as_str()), "{f:?} did not open with its value selected");
 		}
 		d.key_tab();
 		assert_eq!(d.pick.as_ref().map(|p| p.focus), Some(pick::Focus::Cancel));
@@ -599,11 +438,7 @@ mod tests {
 		d.key_tab();
 		assert_eq!(d.pick.as_ref().map(|p| p.focus), Some(pick::Focus::Ok));
 		d.key_tab();
-		assert_eq!(
-			d.pick.as_ref().map(|p| p.focus),
-			Some(pick::Focus::Square),
-			"the walk wraps"
-		);
+		assert_eq!(d.pick.as_ref().map(|p| p.focus), Some(pick::Focus::Square), "the walk wraps");
 	}
 
 	// Test ID: dcx0r
@@ -625,10 +460,7 @@ mod tests {
 		d.select_all();
 		d.insert_str("100");
 		assert_eq!(d.get_col(Key::ColBg), [0xff, 0x66, 0xcc]);
-		assert_eq!(
-			pick::Field::Hex.text(d.pick.as_ref().unwrap().hsv),
-			"#ff66cc"
-		);
+		assert_eq!(pick::Field::Hex.text(d.pick.as_ref().unwrap().hsv), "#ff66cc");
 		// junk never gets into the box, let alone the row: only the digit goes in,
 		// and it replaces the selection the way the first keystroke should
 		d.select_all();
@@ -644,11 +476,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_arrows_work_the_square_the_strip_and_the_boxes() {
 		let (mut d, _) = mk_picker();
-		d.pick_set(pick::Hsv {
-			h: 0.5,
-			s: 0.5,
-			v: 0.5,
-		});
+		d.pick_set(pick::Hsv { h: 0.5, s: 0.5, v: 0.5 });
 		d.key_horizontal(1); // the square has focus: Right raises saturation
 		assert!((d.pick.as_ref().unwrap().hsv.s - 0.51).abs() < 1e-4);
 		d.key_vertical(false); // Up raises brightness
@@ -660,10 +488,7 @@ mod tests {
 		assert!((d.pick.as_ref().unwrap().hsv.h - (before + 0.01)).abs() < 1e-4);
 		let sv = d.pick.as_ref().map(|p| (p.hsv.s, p.hsv.v));
 		d.key_horizontal(1); // Left/Right on the strip is a focus move
-		assert_eq!(
-			d.pick.as_ref().map(|p| p.focus),
-			Some(pick::Focus::Field(pick::Field::Red))
-		);
+		assert_eq!(d.pick.as_ref().map(|p| p.focus), Some(pick::Focus::Field(pick::Field::Red)));
 		assert_eq!(d.pick.as_ref().map(|p| (p.hsv.s, p.hsv.v)), sv);
 
 		// a value box steps, and its own text is rewritten and reselected
@@ -671,11 +496,7 @@ mod tests {
 		let shown = d.selected_text().expect("open and selected");
 		d.key_vertical(false);
 		assert!((d.pick.as_ref().unwrap().hsv.v - 0.52).abs() < 1e-4);
-		assert_ne!(
-			d.selected_text().as_deref(),
-			Some(shown.as_str()),
-			"the box still shows the old number"
-		);
+		assert_ne!(d.selected_text().as_deref(), Some(shown.as_str()), "the box still shows the old number");
 		// and Left/Right in an open box moves the caret rather than the value
 		let held = d.pick.as_ref().unwrap().hsv.v;
 		d.key_horizontal(-1);
@@ -702,11 +523,7 @@ mod tests {
 		assert!(d.pick.is_some(), "Space on the chip opens the picker");
 		d.pick_cancel();
 		d.focus = Some(super::super::Focus::Row(i, 0));
-		assert_eq!(
-			d.key_enter(),
-			super::super::Action::None,
-			"Enter is not the OK here"
-		);
+		assert_eq!(d.key_enter(), super::super::Action::None, "Enter is not the OK here");
 		assert!(d.pick.is_some(), "Enter on the chip opens the picker");
 	}
 
@@ -726,27 +543,10 @@ mod tests {
 		let (quads, texts) = d.overlay_dip(&mut m);
 		assert!(d.overlay_open(), "the box needs the second pass");
 		// the square and the strip are the 2 quads only this box draws
-		assert_eq!(
-			quads
-				.iter()
-				.filter(|q| q.mode() == QuadMode::PickSquare)
-				.count(),
-			1,
-			"one saturation/brightness square"
-		);
-		assert_eq!(
-			quads
-				.iter()
-				.filter(|q| q.mode() == QuadMode::HueStrip)
-				.count(),
-			1,
-			"one hue strip"
-		);
+		assert_eq!(quads.iter().filter(|q| q.mode() == QuadMode::PickSquare).count(), 1, "one saturation/brightness square");
+		assert_eq!(quads.iter().filter(|q| q.mode() == QuadMode::HueStrip).count(), 1, "one hue strip");
 		for f in pick::Field::ALL {
-			assert!(
-				texts.iter().any(|t| t.text == f.label()),
-				"{f:?} has no label"
-			);
+			assert!(texts.iter().any(|t| t.text == f.label()), "{f:?} has no label");
 		}
 		assert!(texts.iter().any(|t| t.text == "Cancel"));
 		assert!(texts.iter().any(|t| t.text == "OK"));

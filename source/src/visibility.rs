@@ -58,13 +58,7 @@ fn paired_dark_luma(settings: &Settings) -> f32 {
 }
 
 fn paired_dark_bg(settings: &Settings) -> [u8; 3] {
-	crate::theme::resolve_in(
-		&settings.user_themes,
-		&settings.theme,
-		crate::theme::Mode::Dark,
-		true,
-	)
-	.bg
+	crate::theme::resolve_in(&settings.user_themes, &settings.theme, crate::theme::Mode::Dark, true).bg
 }
 
 // How far a linear-light mix of `from` toward `to` travels in sRGB-encoded luma.
@@ -76,11 +70,7 @@ fn shift(from: f32, to: f32, alpha: f32) -> f32 {
 // The sRGB transfer curve's slope at a linear value. How much of a change in the
 // picture the eye gets back, where the composite happens to sit.
 fn slope(at: f32) -> f32 {
-	if at <= 0.003_130_8 {
-		12.92
-	} else {
-		(1.055 / 2.4) * at.powf(1.0 / 2.4 - 1.0)
-	}
+	if at <= 0.003_130_8 { 12.92 } else { (1.055 / 2.4) * at.powf(1.0 / 2.4 - 1.0) }
 }
 
 // How much of the picture's own contrast a linear-light blend at `alpha` puts on
@@ -166,15 +156,9 @@ pub fn wallpaper_mix(settings: &Settings, slider: f32, picture: Option<(f32, f32
 		None => amount,
 	};
 	if dark(settings) {
-		return Mix {
-			amount: even(slider),
-			perceptual: false,
-		};
+		return Mix { amount: even(slider), perceptual: false };
 	}
-	Mix {
-		amount: even(encoded_scale(slider, paired_dark_luma(settings)).clamp(0.0, 1.0)),
-		perceptual: true,
-	}
+	Mix { amount: even(encoded_scale(slider, paired_dark_luma(settings)).clamp(0.0, 1.0)), perceptual: true }
 }
 
 /// How many points the light-mode halo curve is solved at. They are spaced
@@ -220,11 +204,7 @@ impl HaloMatch {
 // toward `bg`. A channel at a time, weighted as luma, since that is how both
 // renderers blend and how far a colored pixel visibly moves.
 fn moved(fields: &[[f32; 3]], bg: [f32; 3], alpha: f32) -> f32 {
-	let one = |f: &[f32; 3]| {
-		(0..3)
-			.map(|c| LUMA[c] * shift(f[c], bg[c], alpha).abs())
-			.sum::<f32>()
-	};
+	let one = |f: &[f32; 3]| (0..3).map(|c| LUMA[c] * shift(f[c], bg[c], alpha).abs()).sum::<f32>();
 	fields.iter().map(one).sum::<f32>() / fields.len().max(1) as f32
 }
 
@@ -233,12 +213,7 @@ fn moved(fields: &[[f32; 3]], bg: [f32; 3], alpha: f32) -> f32 {
 /// quantiles). None leaves the halo as asked: dark mode is the reference, and
 /// with no picture up the halo sits on the background color it is made of. A
 /// picture not summarized yet stands in as a gray at the bundled pack's median.
-pub fn halo_match(
-	settings: &Settings,
-	slider: f32,
-	picture: Option<(f32, f32)>,
-	spread: &[[f32; 3]],
-) -> Option<HaloMatch> {
+pub fn halo_match(settings: &Settings, slider: f32, picture: Option<(f32, f32)>, spread: &[[f32; 3]]) -> Option<HaloMatch> {
 	if dark(settings) || slider <= 0.0 {
 		return None;
 	}
@@ -248,23 +223,9 @@ pub fn halo_match(
 	let linear = |c: [u8; 3]| c.map(config::to_linear);
 	let (dark_bg, light_bg) = (linear(paired_dark_bg(settings)), linear(settings.bg));
 	// each mode's own blend, the visibility ramp included
-	let dark_mix = Mix {
-		amount: evened(
-			slider,
-			slider,
-			picture,
-			paired_dark_luma(settings),
-			settings.wallpaper_even,
-		),
-		perceptual: false,
-	};
+	let dark_mix = Mix { amount: evened(slider, slider, picture, paired_dark_luma(settings), settings.wallpaper_even), perceptual: false };
 	let light_mix = wallpaper_mix(settings, slider, Some(picture));
-	let fields = |mix: Mix, bg: [f32; 3]| -> Vec<[f32; 3]> {
-		spread
-			.iter()
-			.map(|p| std::array::from_fn(|c| mix.field(p[c], bg[c])))
-			.collect()
-	};
+	let fields = |mix: Mix, bg: [f32; 3]| -> Vec<[f32; 3]> { spread.iter().map(|p| std::array::from_fn(|c| mix.field(p[c], bg[c]))).collect() };
 	let (dark, light) = (fields(dark_mix, dark_bg), fields(light_mix, light_bg));
 	let reach = moved(&light, light_bg, 1.0);
 	let mut curve = [0.0f32; HALO_NODES];
@@ -299,24 +260,12 @@ pub struct HaloMemo {
 }
 
 impl HaloMemo {
-	pub fn get(
-		&mut self,
-		settings: &Settings,
-		slider: f32,
-		picture: Option<(f32, f32)>,
-		spread: &[[f32; 3]],
-	) -> Option<HaloMatch> {
+	pub fn get(&mut self, settings: &Settings, slider: f32, picture: Option<(f32, f32)>, spread: &[[f32; 3]]) -> Option<HaloMatch> {
 		let key = &mut self.next;
 		key.clear();
 		let bg = settings.bg;
 		let dark_bg = paired_dark_bg(settings);
-		key.extend([
-			u32::from(dark(settings)),
-			slider.to_bits(),
-			u32::from_le_bytes([bg[0], bg[1], bg[2], 0]),
-			u32::from_le_bytes([dark_bg[0], dark_bg[1], dark_bg[2], 0]),
-			settings.wallpaper_even.to_bits(),
-		]);
+		key.extend([u32::from(dark(settings)), slider.to_bits(), u32::from_le_bytes([bg[0], bg[1], bg[2], 0]), u32::from_le_bytes([dark_bg[0], dark_bg[1], dark_bg[2], 0]), settings.wallpaper_even.to_bits()]);
 		if let Some((mean, hi)) = picture {
 			key.extend([1, mean.to_bits(), hi.to_bits()]);
 		}
@@ -331,10 +280,7 @@ impl HaloMemo {
 
 #[cfg(test)]
 mod tests {
-	use super::{
-		HALO_NODES, HaloMemo, MIX_GAMMA, Mix, REF_HI, REF_MEAN, encoded_scale, halo_match, moved,
-		standout, wallpaper_mix,
-	};
+	use super::{HALO_NODES, HaloMemo, MIX_GAMMA, Mix, REF_HI, REF_MEAN, encoded_scale, halo_match, moved, standout, wallpaper_mix};
 	use crate::config::{self, Settings};
 
 	// the tests name a mode by its config word
@@ -374,17 +320,10 @@ mod tests {
 				let mut s = themed(name, mode);
 				for v in SLIDERS {
 					for picture in [None, Some(DIM), Some(ORDINARY), Some(BRIGHT)] {
-						assert!(
-							!wallpaper_mix(&s, v, picture).perceptual,
-							"{name} {mode} {v}"
-						);
+						assert!(!wallpaper_mix(&s, v, picture).perceptual, "{name} {mode} {v}");
 					}
 					for picture in [None, Some(DIM), Some(BRIGHT)] {
-						assert_eq!(
-							halo_match(&s, v, picture, &SPREAD),
-							None,
-							"{name} {mode} {v}"
-						);
+						assert_eq!(halo_match(&s, v, picture, &SPREAD), None, "{name} {mode} {v}");
 					}
 				}
 				s.wallpaper_even = 0.0;
@@ -405,14 +344,8 @@ mod tests {
 	#[test]
 	fn over_black_the_mix_is_the_blend_it_replaces() {
 		for v in SLIDERS {
-			let blend = Mix {
-				amount: v,
-				perceptual: false,
-			};
-			let curve = Mix {
-				amount: v.powf(1.0 / MIX_GAMMA),
-				perceptual: true,
-			};
+			let blend = Mix { amount: v, perceptual: false };
+			let curve = Mix { amount: v.powf(1.0 / MIX_GAMMA), perceptual: true };
 			for p in [0.0f32, 0.01, 0.13, 0.5, 1.0] {
 				let (a, b) = (blend.field(p, 0.0), curve.field(p, 0.0));
 				assert!((a - b).abs() < 1e-5, "v {v}, picture {p}: {a} against {b}");
@@ -433,21 +366,11 @@ mod tests {
 		for name in crate::theme::names() {
 			let (dark, light) = (bg_luma(name, "dark"), bg_luma(name, "light"));
 			for v in SLIDERS {
-				let in_dark = contrast_on_screen(
-					Mix {
-						amount: v,
-						perceptual: false,
-					},
-					dark,
-				);
-				let in_light =
-					contrast_on_screen(wallpaper_mix(&themed(name, "light"), v, None), light);
+				let in_dark = contrast_on_screen(Mix { amount: v, perceptual: false }, dark);
+				let in_light = contrast_on_screen(wallpaper_mix(&themed(name, "light"), v, None), light);
 				// the stand-in picture is one luma and a real one is a spread, so
 				// this is close rather than exact
-				assert!(
-					(in_dark - in_light).abs() < 0.02,
-					"{name} {v}: dark {in_dark}, light {in_light}"
-				);
+				assert!((in_dark - in_light).abs() < 0.02, "{name} {v}: dark {in_dark}, light {in_light}");
 			}
 		}
 	}
@@ -460,10 +383,7 @@ mod tests {
 		let mix = wallpaper_mix(&s, 0.10, None);
 		assert!(mix.perceptual);
 		// SilkTerm's dark background is black, so the closed form is exact
-		assert!(
-			(mix.amount - 0.10f32.powf(1.0 / MIX_GAMMA)).abs() < 1e-4,
-			"{mix:?}"
-		);
+		assert!((mix.amount - 0.10f32.powf(1.0 / MIX_GAMMA)).abs() < 1e-4, "{mix:?}");
 	}
 
 	// A dark theme whose background isn't black already shows less picture, so
@@ -495,51 +415,25 @@ mod tests {
 	}
 
 	// A picture's quantiles, darkest first, standing in for a summary's
-	const SPREAD: [[f32; 3]; 6] = [
-		[0.004; 3], [0.02; 3], [0.06; 3], [0.13; 3], [0.25; 3], [0.5; 3],
-	];
+	const SPREAD: [[f32; 3]; 6] = [[0.004; 3], [0.02; 3], [0.06; 3], [0.13; 3], [0.25; 3], [0.5; 3]];
 
 	// Quantiles that go with each stand-in picture: grays, and a strongly colored
 	// version of the same, which is where a luma-only model went wrong.
 	fn spreads_of(picture: (f32, f32)) -> [Vec<[f32; 3]>; 2] {
 		let (mean, hi) = picture;
-		let steps = [
-			mean * 0.05,
-			mean * 0.3,
-			mean * 0.7,
-			mean,
-			(mean + hi) * 0.5,
-			hi,
-		];
-		[
-			steps.iter().map(|&l| [l; 3]).collect(),
-			steps
-				.iter()
-				.map(|&l| [(l * 2.5).min(1.0), l * 0.4, (l * 1.5).min(1.0)])
-				.collect(),
-		]
+		let steps = [mean * 0.05, mean * 0.3, mean * 0.7, mean, (mean + hi) * 0.5, hi];
+		[steps.iter().map(|&l| [l; 3]).collect(), steps.iter().map(|&l| [(l * 2.5).min(1.0), l * 0.4, (l * 1.5).min(1.0)]).collect()]
 	}
 
 	fn bg_linear(name: &str, mode: &str) -> [f32; 3] {
-		crate::theme::resolve(name, mode_of(mode), true)
-			.bg
-			.map(config::to_linear)
+		crate::theme::resolve(name, mode_of(mode), true).bg.map(config::to_linear)
 	}
 
 	// Each mode's fields for these channels, as the renderers draw them.
-	fn fields(
-		name: &str,
-		mode: &str,
-		v: f32,
-		picture: (f32, f32),
-		spread: &[[f32; 3]],
-	) -> Vec<[f32; 3]> {
+	fn fields(name: &str, mode: &str, v: f32, picture: (f32, f32), spread: &[[f32; 3]]) -> Vec<[f32; 3]> {
 		let mix = wallpaper_mix(&themed(name, mode), v, Some(picture));
 		let bg = bg_linear(name, mode);
-		spread
-			.iter()
-			.map(|p| std::array::from_fn(|c| mix.field(p[c], bg[c])))
-			.collect()
+		spread.iter().map(|p| std::array::from_fn(|c| mix.field(p[c], bg[c]))).collect()
 	}
 
 	// Test ID: dcx41
@@ -566,10 +460,7 @@ mod tests {
 		for name in crate::theme::names() {
 			let s = themed(name, "light");
 			for picture in [DIM, ORDINARY, BRIGHT] {
-				for (v, spread) in [0.05f32, 0.1, 0.25, 0.5]
-					.into_iter()
-					.flat_map(|v| spreads_of(picture).map(|sp| (v, sp)))
-				{
+				for (v, spread) in [0.05f32, 0.1, 0.25, 0.5].into_iter().flat_map(|v| spreads_of(picture).map(|sp| (v, sp))) {
 					let m = halo_match(&s, v, Some(picture), &spread).expect("a picture is up");
 					let dark = fields(name, "dark", v, picture, &spread);
 					let light = fields(name, "light", v, picture, &spread);
@@ -580,12 +471,7 @@ mod tests {
 						let drawn = m.alpha(a);
 						let got = moved(&light, light_bg, drawn);
 						// within a level, or full where light mode can't reach that far
-						assert!(
-							(got - want).abs() < 1.0 / 255.0 || (drawn >= 1.0 && got < want),
-							"{name} {picture:?} {v} at {a}: wanted {}, got {}",
-							want * 255.0,
-							got * 255.0
-						);
+						assert!((got - want).abs() < 1.0 / 255.0 || (drawn >= 1.0 && got < want), "{name} {picture:?} {v} at {a}: wanted {}, got {}", want * 255.0, got * 255.0);
 					}
 				}
 			}
@@ -604,16 +490,10 @@ mod tests {
 		for v in [0.1f32, 0.35] {
 			let dim = halo_match(&s, v, Some(DIM), &[[DIM.0; 3], [DIM.1; 3]]).expect("up");
 			let ordinary = halo_match(&s, v, Some(ORDINARY), &[]).expect("up");
-			assert!(
-				dim.alpha(1.0) < ordinary.alpha(1.0) * 0.8,
-				"{v}: dim {dim:?}, ordinary {ordinary:?}"
-			);
+			assert!(dim.alpha(1.0) < ordinary.alpha(1.0) * 0.8, "{v}: dim {dim:?}, ordinary {ordinary:?}");
 		}
 		// and with no quantiles the picture's own mean stands in for them
-		assert_eq!(
-			halo_match(&s, 0.1, Some(ORDINARY), &[]),
-			halo_match(&s, 0.1, Some(ORDINARY), &[[ORDINARY.0; 3]])
-		);
+		assert_eq!(halo_match(&s, 0.1, Some(ORDINARY), &[]), halo_match(&s, 0.1, Some(ORDINARY), &[[ORDINARY.0; 3]]));
 	}
 
 	// Test ID: ddj1p
@@ -622,8 +502,7 @@ mod tests {
 	fn the_matched_halo_only_ever_grows_with_what_was_asked() {
 		for name in crate::theme::names() {
 			for picture in [DIM, ORDINARY, BRIGHT] {
-				let m =
-					halo_match(&themed(name, "light"), 0.1, Some(picture), &SPREAD).expect("up");
+				let m = halo_match(&themed(name, "light"), 0.1, Some(picture), &SPREAD).expect("up");
 				assert_eq!(m.alpha(0.0), 0.0, "{name} {picture:?}");
 				assert_eq!(m.curve.len(), HALO_NODES);
 				let mut last = 0.0;
@@ -650,25 +529,13 @@ mod tests {
 		assert_eq!(memo.get(&light, 0.1, Some(ORDINARY), &SPREAD), first);
 		let moved_slider = memo.get(&light, 0.35, Some(ORDINARY), &SPREAD);
 		assert_ne!(moved_slider, first);
-		assert_eq!(
-			moved_slider,
-			halo_match(&light, 0.35, Some(ORDINARY), &SPREAD)
-		);
+		assert_eq!(moved_slider, halo_match(&light, 0.35, Some(ORDINARY), &SPREAD));
 		let dimmer = [[0.002f32; 3], [0.01; 3], [0.03, 0.01, 0.02]];
-		assert_eq!(
-			memo.get(&light, 0.35, Some(ORDINARY), &dimmer),
-			halo_match(&light, 0.35, Some(ORDINARY), &dimmer)
-		);
-		assert_eq!(
-			memo.get(&themed("SilkTerm", "dark"), 0.35, Some(ORDINARY), &dimmer),
-			None
-		);
+		assert_eq!(memo.get(&light, 0.35, Some(ORDINARY), &dimmer), halo_match(&light, 0.35, Some(ORDINARY), &dimmer));
+		assert_eq!(memo.get(&themed("SilkTerm", "dark"), 0.35, Some(ORDINARY), &dimmer), None);
 		let mut pastel = themed("Pastel", "light");
 		pastel.wallpaper_even = 0.0;
-		assert_eq!(
-			memo.get(&pastel, 0.35, Some(ORDINARY), &dimmer),
-			halo_match(&pastel, 0.35, Some(ORDINARY), &dimmer)
-		);
+		assert_eq!(memo.get(&pastel, 0.35, Some(ORDINARY), &dimmer), halo_match(&pastel, 0.35, Some(ORDINARY), &dimmer));
 	}
 
 	// The visibility ramp. A picture further from the background than the pack's
@@ -687,10 +554,7 @@ mod tests {
 				for v in SLIDERS {
 					let plain = wallpaper_mix(&s, v, None).amount;
 					let evened = wallpaper_mix(&s, v, Some(ORDINARY)).amount;
-					assert!(
-						(plain - evened).abs() < 0.02,
-						"{name} {mode} {v}: {plain} {evened}"
-					);
+					assert!((plain - evened).abs() < 0.02, "{name} {mode} {v}: {plain} {evened}");
 				}
 			}
 		}
@@ -703,10 +567,7 @@ mod tests {
 		let s = themed("SilkTerm", "dark");
 		for v in [0.05f32, 0.1, 0.35, 0.6] {
 			let plain = wallpaper_mix(&s, v, None).amount;
-			assert!(
-				wallpaper_mix(&s, v, Some(BRIGHT)).amount < plain,
-				"bright at {v}"
-			);
+			assert!(wallpaper_mix(&s, v, Some(BRIGHT)).amount < plain, "bright at {v}");
 			assert!(wallpaper_mix(&s, v, Some(DIM)).amount > plain, "dim at {v}");
 		}
 	}
@@ -721,24 +582,11 @@ mod tests {
 		for v in [0.05f32, 0.1, 0.35, 0.6] {
 			let plain = wallpaper_mix(&s, v, None).amount;
 			assert!(wallpaper_mix(&s, v, Some(DIM)).amount < plain, "dim at {v}");
-			assert!(
-				wallpaper_mix(&s, v, Some(BRIGHT)).amount > plain,
-				"bright at {v}"
-			);
+			assert!(wallpaper_mix(&s, v, Some(BRIGHT)).amount > plain, "bright at {v}");
 		}
 		// and the 2 modes disagree about which picture that is
-		assert!(
-			standout(
-				BRIGHT,
-				config::luma(crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true).bg)
-			) > 1.0
-		);
-		assert!(
-			standout(
-				BRIGHT,
-				config::luma(crate::theme::resolve("SilkTerm", crate::theme::Mode::Light, true).bg)
-			) < 1.0
-		);
+		assert!(standout(BRIGHT, config::luma(crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true).bg)) > 1.0);
+		assert!(standout(BRIGHT, config::luma(crate::theme::resolve("SilkTerm", crate::theme::Mode::Light, true).bg)) < 1.0);
 	}
 
 	// Glare comes from a picture's bright end, not from its average. A night sky
@@ -769,10 +617,7 @@ mod tests {
 					for strength in [0.0f32, 0.5, 1.0] {
 						s.wallpaper_even = strength;
 						let mix = wallpaper_mix(&s, 1.0, Some(picture));
-						assert!(
-							(mix.amount - 1.0).abs() < 1e-5,
-							"{name} {mode} {strength}: {mix:?}"
-						);
+						assert!((mix.amount - 1.0).abs() < 1e-5, "{name} {mode} {strength}: {mix:?}");
 					}
 				}
 			}
@@ -787,11 +632,7 @@ mod tests {
 		s.wallpaper_even = 0.0;
 		for v in SLIDERS {
 			for picture in [DIM, ORDINARY, BRIGHT] {
-				assert_eq!(
-					wallpaper_mix(&s, v, Some(picture)).amount,
-					v,
-					"{v} {picture:?}"
-				);
+				assert_eq!(wallpaper_mix(&s, v, Some(picture)).amount, v, "{v} {picture:?}");
 			}
 		}
 	}
@@ -806,10 +647,7 @@ mod tests {
 				let mut last = 0.0;
 				for i in 0..=100 {
 					let a = wallpaper_mix(&s, i as f32 / 100.0, Some(picture)).amount;
-					assert!(
-						a >= last - 1e-5,
-						"{mode} {picture:?} at {i}: {a} after {last}"
-					);
+					assert!(a >= last - 1e-5, "{mode} {picture:?} at {i}: {a} after {last}");
 					last = a;
 				}
 			}
@@ -820,9 +658,6 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_picture_leaves_the_halo_alone() {
-		assert_eq!(
-			halo_match(&themed("SilkTerm", "light"), 0.0, None, &SPREAD),
-			None
-		);
+		assert_eq!(halo_match(&themed("SilkTerm", "light"), 0.0, None, &SPREAD), None);
 	}
 }
