@@ -275,7 +275,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Saving or renaming a theme drops the comments in its block and moves it to the end of the list
 	- ID: 2026112016030005
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Avg
 	- Opened: 20261120-160300
 	- Opened by: CC
@@ -286,8 +286,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Reproduced: Yes, 20261120, with the same remove and set steps through the shcl command line on a scratch file.
 	- Possible cause: The theme writer removes the whole block, then writes it again.
 	- Origin: e79a250e, 20260805. Not seen by an earlier round. Confirmed.
+	- Actual cause: `write_user_themes` removed a changed theme's whole block and wrote it again, which took its comments with it and added it after the other themes.
 	- Decisions:
 		- 20261120: G30 rewrites a theme's whole subtree on purpose, so stale colors can't survive. A fix keeps that by removing the keys the theme no longer has, rather than the block.
+		- 20261120: A value that already reads the same is left as written, quotes and case included, since a save never rewrites a value. Any other line under the block goes, a key typed in by hand included, as it did when the block was rewritten.
+		- 20261120: A block shaped so a value can't be set where it is, such as an ANSI list written as a block, is still written again whole. That's checked by reading the theme back.
+	- Actual fix: A changed theme is edited in its block. Each value that doesn't read the same is set, and every other line under the block is taken out. The block's path is quoted the way the file lists it, so a slug such as `80s` is found.
+	- Swept: The shell list edits its entries in place, and rewrites the whole list only for a reorder, on purpose. Monitor sizes are set in place. The `kept` block is the program's own. Deleting a theme still removes its block.
+	- Verified: dfjvz and dfjw0 failed on the old writer and pass with the fix. Switching off the whole-block fallback, or the quoting, makes dfjw0 fail. The backlog quick run passes in all 5 areas, with 1534 unit tests.
+	- Branch: nov20b-2026112016030005
+	- Commit: 130ad220
+	- Test case: dfjvz `a_theme_save_changes_only_its_changed_lines`, and dfjw0 `a_theme_save_drops_what_the_theme_no_longer_has`.
+	- Acceptance signoff: Self-closed: the intent was clear, and its tests failed before the fix and pass after.
+	- Closed: 20261120-174609
+	- Closed reason: Done
 	- Notes:
 		- Code review 20261120 item 5.
 		- On rc.1 since it loses text the user wrote, by the rule used for Code review 20261117.
@@ -296,7 +308,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Saving a new theme can delete a theme block of the same name that Settings didn't list
 	- ID: 2026112016030006
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Low
 	- Opened: 20261120-160300
 	- Opened by: CC
@@ -308,6 +320,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: The free-key check looks only at the themes the dialog loaded.
 	- Origin: e79a250e, 20260805. Not seen by an earlier round. Plausible.
 	- Related IDs: The shell list got a 3-way merge against the file for the same case, in c6d68c11
+	- Actual cause: Confirmed. A new theme's key was checked only against the themes the dialog loaded, and the save removed whatever block the file had under it before writing.
+	- Decisions:
+		- 20261120: A new theme whose key the file already has takes the next free number after it, as the dialog numbers a second theme of one name. The block it would have hit is left as it is.
+		- 20261120: After an Apply that moved a key, the window and the dialog read the file again, as they do after another window's save. Without that, a later Apply in the same dialog would edit the block the new theme kept off.
+	- Actual fix: `write_user_themes` picks a new theme's key against the file at save time. The dialog's numbering and the save's are one helper, `theme::free_slug`.
+	- Verified: dfjw1 failed on the old writer, where the hand-typed block was gone, and passes with the fix. The reread after a moved key was read, not run.
+	- Swept: The dialog's `free_slug` and the save use the one helper. The shell list already merges against the file.
+	- Branch: nov20b-2026112016030005
+	- Commit: 130ad220
+	- Test case: dfjw1 `a_new_theme_keeps_off_a_block_it_never_read`.
+	- Acceptance signoff: Self-closed: the test failed before the fix and passes after.
+	- Closed: 20261120-174609
+	- Closed reason: Done
 	- Notes:
 		- Code review 20261120 item 6.
 		- On rc.1 since it can delete user text, by the rule used for Code review 20261117.

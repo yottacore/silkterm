@@ -337,6 +337,17 @@ pub fn find_user<'a>(user: &'a [UserTheme], name: &str) -> Option<&'a UserTheme>
 		.find(|t| t.name.eq_ignore_ascii_case(name.trim()))
 }
 
+/// `base`, or the first of `base2`, `base3` and on that isn't `taken`.
+pub fn free_slug(base: &str, taken: impl Fn(&str) -> bool) -> String {
+	if !taken(base) {
+		return base.to_string();
+	}
+	(2..=u32::from(u16::MAX))
+		.map(|n| format!("{base}{n}"))
+		.find(|s| !taken(s))
+		.unwrap_or_else(|| base.to_string())
+}
+
 /// Which variant of the theme to use, `theme_mode`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {

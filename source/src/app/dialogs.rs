@@ -481,7 +481,9 @@ impl App {
 			// When another window saved while these changes were open, the file has
 			// both, and the window and the dialog both take it from there.
 			if let Some(d) = self.dialog.as_mut() {
-				let behind = wrote && d.take_behind();
+				// a new theme the file already had a key for went under another one
+				let moved = config::take_theme_key_moved();
+				let behind = wrote && (d.take_behind() || moved);
 				d.commit_baseline(unsaved);
 				if let Some(state) = self.state.as_mut().filter(|_| behind) {
 					state.follow_peer();

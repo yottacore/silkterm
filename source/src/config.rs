@@ -2967,7 +2967,7 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	// round f32 -> a clean decimal so persisted floats aren't 0.2000000029...
 	let rounded = |v: f32| (v as f64 * 1000.0).round() / 1000.0;
 
-	write_user_themes(&mut doc, &orig.user_themes, &edited.user_themes);
+	let theme_moved = write_user_themes(&mut doc, &orig.user_themes, &edited.user_themes);
 	write_shells(&mut doc, &orig.shells, &edited.shells);
 
 	let (revert, disable) = write_model(&mut doc, orig, edited);
@@ -3052,8 +3052,21 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	if wrote {
 		revert_keys(&revert.iter().map(String::as_str).collect::<Vec<_>>());
 		disable_keys(&disable.iter().map(String::as_str).collect::<Vec<_>>());
+		if theme_moved {
+			THEME_KEY_MOVED.store(true, std::sync::atomic::Ordering::Relaxed);
+		}
 	}
 	wrote
+}
+
+// A save put a new theme under another key than the one it was given, so what
+// holds the old key has to read the file again before it saves that theme.
+static THEME_KEY_MOVED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether a save since the last call put a new theme under a key of its own,
+/// rather than the one the dialog gave it. Taking it clears it.
+pub fn take_theme_key_moved() -> bool {
+	THEME_KEY_MOVED.swap(false, std::sync::atomic::Ordering::Relaxed)
 }
 
 const KEPT_NOTE: &str = "Saved by SilkTerm, so these values can be used again later. See Settings.";
@@ -3905,53 +3918,56 @@ fn read_raw_doc(doc: &shcl::Document, path: &std::path::Path) -> (RawConfig, Vec
 // anything else missing falls back to the first built-in, so a hand-edited or
 // half-written block still yields a usable theme rather than none.
 fn read_user_themes(doc: &shcl::Document) -> Vec<crate::theme::UserTheme> {
+	doc.children("themes")
+		.into_iter()
+		.filter_map(|slug| read_user_theme(doc, slug))
+		.collect()
+}
+
+fn read_user_theme(doc: &shcl::Document, slug: String) -> Option<crate::theme::UserTheme> {
 	let base = crate::theme::THEMES[0].1;
-	let mut out = Vec::new();
-	for slug in doc.children("themes") {
-		let read = |mode: &str, fallback: crate::theme::Palette| {
-			let mut pal = fallback;
-			let mut any = false;
-			for (i, key) in crate::theme::PALETTE_KEYS.iter().enumerate() {
-				if let Some(c) = doc
-					.get_string(&format!("themes.{slug}.{mode}.{key}"))
-					.ok()
-					.as_deref()
-					.and_then(parse_hex)
-				{
-					pal.set(i, c);
+	let read = |mode: &str, fallback: crate::theme::Palette| {
+		let mut pal = fallback;
+		let mut any = false;
+		for (i, key) in crate::theme::PALETTE_KEYS.iter().enumerate() {
+			if let Some(c) = doc
+				.get_string(&format!("themes.{slug}.{mode}.{key}"))
+				.ok()
+				.as_deref()
+				.and_then(parse_hex)
+			{
+				pal.set(i, c);
+				any = true;
+			}
+		}
+		if let Ok(list) = doc.get_string_array(&format!("themes.{slug}.{mode}.ansi")) {
+			for (slot, text) in pal.ansi.iter_mut().zip(list.iter()) {
+				if let Some(c) = parse_hex(text) {
+					*slot = c;
 					any = true;
 				}
 			}
-			if let Ok(list) = doc.get_string_array(&format!("themes.{slug}.{mode}.ansi")) {
-				for (slot, text) in pal.ansi.iter_mut().zip(list.iter()) {
-					if let Some(c) = parse_hex(text) {
-						*slot = c;
-						any = true;
-					}
-				}
-			}
-			(pal, any)
-		};
-		let (dark, got_dark) = read("dark", base.dark);
-		let (light, got_light) = read("light", base.light);
-		if !got_dark && !got_light {
-			continue;
 		}
-		let name = doc
-			.get_string(&format!("themes.{slug}.name"))
-			.ok()
-			.filter(|n| !n.trim().is_empty())
-			.unwrap_or_else(|| slug.clone());
-		let font = read_theme_font(doc, &slug);
-		out.push(crate::theme::UserTheme {
-			slug,
-			name,
-			dark,
-			light,
-			font,
-		});
+		(pal, any)
+	};
+	let (dark, got_dark) = read("dark", base.dark);
+	let (light, got_light) = read("light", base.light);
+	if !got_dark && !got_light {
+		return None;
 	}
-	out
+	let name = doc
+		.get_string(&format!("themes.{slug}.name"))
+		.ok()
+		.filter(|n| !n.trim().is_empty())
+		.unwrap_or_else(|| slug.clone());
+	let font = read_theme_font(doc, &slug);
+	Some(crate::theme::UserTheme {
+		slug,
+		name,
+		dark,
+		light,
+		font,
+	})
 }
 
 // A theme's font, each value as the font rows would take it. A theme saved
@@ -3977,44 +3993,121 @@ fn read_theme_font(doc: &shcl::Document, slug: &str) -> crate::theme::ThemeFont 
 }
 
 // Bring the file's `themes.*` subtrees in line with the dialog's list. A theme
-// that changed at all is dropped and rewritten whole rather than edited field by
-// field: saving, renaming, and deleting are then one operation, and a stale color
-// can't survive under a name that no longer sets it.
+// that changed is edited where it is, so its block keeps its comments and its
+// place in the list, which is the dropdown's order. A new theme takes a key the
+// file doesn't have yet, since the dialog knows only the themes it loaded, and
+// a block it never read may be another window's save or one that didn't load.
+// Returns whether a new theme went under another key than the dialog gave it.
 fn write_user_themes(
 	doc: &mut shcl::Document,
 	orig: &[crate::theme::UserTheme],
 	now: &[crate::theme::UserTheme],
-) {
+) -> bool {
 	for old in orig {
 		if !now.iter().any(|t| t.slug == old.slug) {
 			doc.remove(&format!("themes.{}", old.slug));
 		}
 	}
-	for theme in now {
+	let mut moved = false;
+	for (k, theme) in now.iter().enumerate() {
 		if orig.iter().any(|t| t == theme) {
 			continue;
 		}
-		let at = format!("themes.{}", theme.slug);
-		doc.remove(&at);
-		doc.put_string(&format!("{at}.name"), &theme.name);
-		for (mode, pal) in [("dark", &theme.dark), ("light", &theme.light)] {
-			for (i, key) in crate::theme::PALETTE_KEYS.iter().enumerate() {
-				doc.put_string(&format!("{at}.{mode}.{key}"), &format_hex(pal.get(i)));
+		let mut theme = theme.clone();
+		if !orig.iter().any(|t| t.slug == theme.slug) {
+			let in_file = doc.children("themes");
+			let slug = crate::theme::free_slug(&theme.slug, |s| {
+				in_file.iter().any(|f| f == s)
+					|| now.iter().enumerate().any(|(j, t)| j != k && t.slug == s)
+			});
+			moved |= slug != theme.slug;
+			theme.slug = slug;
+		}
+		// quoted as `paths()` gives it, for a slug such as `80s`
+		let at = format!("themes.{}", shcl::quote_segment(&theme.slug));
+		put_theme(doc, &at, &theme);
+		// a block shaped by hand in a way an edit can't follow, such as an
+		// array written as a block, is written again whole
+		let mut whole = shcl::Document::new();
+		put_theme(&mut whole, &at, &theme);
+		if read_user_theme(doc, theme.slug.clone()) != read_user_theme(&whole, theme.slug.clone()) {
+			doc.remove(&at);
+			put_theme(doc, &at, &theme);
+		}
+	}
+	moved
+}
+
+// Sets each of a theme's values that doesn't already read the same, then takes
+// out every other line under its block, so a stale color can't survive under a
+// name that no longer sets it (G30).
+fn put_theme(doc: &mut shcl::Document, at: &str, theme: &crate::theme::UserTheme) {
+	let mut values = Vec::new();
+	let mut blocks = Vec::new();
+	let path = format!("{at}.name");
+	if doc.get_string(&path).ok().as_deref() != Some(theme.name.as_str()) {
+		doc.put_string(&path, &theme.name);
+	}
+	values.push(path);
+	for (mode, pal) in [("dark", &theme.dark), ("light", &theme.light)] {
+		blocks.push(format!("{at}.{mode}"));
+		for (i, key) in crate::theme::PALETTE_KEYS.iter().enumerate() {
+			let path = format!("{at}.{mode}.{key}");
+			if doc.get_string(&path).ok().as_deref().and_then(parse_hex) != Some(pal.get(i)) {
+				doc.put_string(&path, &format_hex(pal.get(i)));
 			}
+			values.push(path);
+		}
+		let path = format!("{at}.{mode}.ansi");
+		let reads: Option<Vec<[u8; 3]>> = doc
+			.get_string_array(&path)
+			.ok()
+			.and_then(|list| list.iter().map(|c| parse_hex(c)).collect());
+		if reads.as_deref() != Some(&pal.ansi[..]) {
 			let ansi: Vec<String> = pal.ansi.iter().map(|c| format_hex(*c)).collect();
 			let ansi: Vec<&str> = ansi.iter().map(String::as_str).collect();
-			doc.put_string_array(&format!("{at}.{mode}.ansi"), &ansi);
+			doc.put_string_array(&path, &ansi);
 		}
-		let font = &theme.font;
-		if let Some(family) = &font.family {
-			doc.put_string(&format!("{at}.font.family"), family);
+		values.push(path);
+	}
+	let font = &theme.font;
+	if let Some(family) = &font.family {
+		let path = format!("{at}.font.family");
+		if doc.get_string(&path).ok().as_ref() != Some(family) {
+			doc.put_string(&path, family);
 		}
-		let rounded = |v: f32| (f64::from(v) * 1000.0).round() / 1000.0;
-		if let Some(size) = font.size {
-			doc.put_float(&format!("{at}.font.size"), rounded(size));
+		values.push(path);
+	}
+	let rounded = |v: f32| (f64::from(v) * 1000.0).round() / 1000.0;
+	for (key, v) in [
+		("size", font.size),
+		("line_height_scale", font.line_height_scale),
+	] {
+		if let Some(v) = v {
+			let path = format!("{at}.font.{key}");
+			if doc.get_float(&path).ok() != Some(rounded(v)) {
+				doc.put_float(&path, rounded(v));
+			}
+			values.push(path);
 		}
-		if let Some(scale) = font.line_height_scale {
-			doc.put_float(&format!("{at}.font.line_height_scale"), rounded(scale));
+	}
+	if values.iter().any(|p| p.starts_with(&format!("{at}.font."))) {
+		blocks.push(format!("{at}.font"));
+	}
+	// an array's items sit under its path, so a value keeps what's under it
+	let kept = |path: &str| {
+		blocks.iter().any(|b| b == path)
+			|| values.iter().any(|v| {
+				path == v
+					|| path
+						.strip_prefix(v.as_str())
+						.is_some_and(|rest| rest.starts_with('.'))
+			})
+	};
+	let inside = format!("{at}.");
+	for path in doc.paths() {
+		if path.starts_with(&inside) && !kept(&path) {
+			doc.remove(&path);
 		}
 	}
 }
@@ -16606,6 +16699,174 @@ mod tests {
 			(font.family.as_deref(), font.line_height_scale),
 			(None, None)
 		);
+	}
+
+	fn test_theme(slug: &str, name: &str, from: &str) -> crate::theme::UserTheme {
+		crate::theme::UserTheme {
+			slug: slug.to_string(),
+			name: name.to_string(),
+			dark: crate::theme::resolve_in(&[], from, crate::theme::Mode::Dark, true),
+			light: crate::theme::resolve_in(&[], from, crate::theme::Mode::Light, true),
+			font: crate::theme::ThemeFont {
+				family: Some("Mono".into()),
+				size: Some(14.0),
+				line_height_scale: None,
+			},
+		}
+	}
+
+	// A save or a rename edits a theme's block where it is. Its comments and its
+	// place in the list stay, and only the lines that changed are new.
+	// Test ID: dfjvz
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_theme_save_changes_only_its_changed_lines() {
+		let three = [
+			test_theme("work", "Work", "SilkTerm"),
+			test_theme("home", "Home", "Matrix"),
+			test_theme("night", "Night", "SilkTerm"),
+		];
+		let mut doc = parse_kept("");
+		write_user_themes(&mut doc, &[], &three);
+		let written = saved_text(&doc);
+		let at = written.find("\twork:\n").expect("work block");
+		let mut text = written.clone();
+		text.insert_str(at + "\twork:\n".len(), "\t\t# kept for the office\n");
+		text.insert_str(at, "\t# the one I use most\n");
+
+		let mut doc = parse_kept(&text);
+		let orig = read_user_themes(&doc);
+		assert_eq!(orig, three, "the comments read as nothing");
+		let mut now = orig.clone();
+		now[0].name = "Office".into();
+		now[0].dark.bg = [1, 2, 3];
+		write_user_themes(&mut doc, &orig, &now);
+		let after = saved_text(&doc);
+
+		assert!(
+			after.contains("\t# the one I use most\n\twork:\n\t\t# kept for the office\n"),
+			"{after}"
+		);
+		let slugs: Vec<String> = read_user_themes(&parse_kept(&after))
+			.into_iter()
+			.map(|t| t.slug)
+			.collect();
+		assert_eq!(slugs, ["work", "home", "night"], "the list keeps its order");
+		assert_eq!(read_user_themes(&parse_kept(&after)), now);
+		let changed: Vec<(&str, &str)> = text
+			.lines()
+			.zip(after.lines())
+			.filter(|(a, b)| a != b)
+			.collect();
+		assert_eq!(text.lines().count(), after.lines().count(), "{after}");
+		assert_eq!(changed.len(), 2, "only name and background: {changed:?}");
+		assert!(
+			changed.iter().any(|(_, b)| b.contains("Office")),
+			"{changed:?}"
+		);
+		assert!(
+			changed.iter().any(|(_, b)| b.contains("#010203")),
+			"{changed:?}"
+		);
+	}
+
+	// What a theme no longer has goes from its block, so a stale color can't
+	// survive under it (G30). A value that reads the same is left as written.
+	// Test ID: dfjw0
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_theme_save_drops_what_the_theme_no_longer_has() {
+		// a slug that isn't a bare name is quoted in the file
+		let mut doc = parse_kept("");
+		let theme = test_theme("80s", "Work", "SilkTerm");
+		write_user_themes(&mut doc, &[], std::slice::from_ref(&theme));
+		let text = saved_text(&doc)
+			.replace("\t\tname: Work\n", "\t\tname: 'Work'\n\t\tretired: 1\n")
+			.replacen("\t\t\tansi:", "\t\t\told_key: \"#ffffff\"\n\t\t\tansi:", 1);
+		assert!(
+			text.contains("\t\"80s\":\n")
+				&& text.contains("old_key")
+				&& text.contains("name: 'Work'"),
+			"{text}"
+		);
+
+		let mut doc = parse_kept(&text);
+		let orig = read_user_themes(&doc);
+		let mut now = orig.clone();
+		now[0].font.size = None;
+		now[0].dark.fg = [9, 9, 9];
+		write_user_themes(&mut doc, &orig, &now);
+		let after = saved_text(&doc);
+		for gone in ["retired", "old_key", "size:"] {
+			assert!(!after.contains(gone), "{gone} is left: {after}");
+		}
+		assert!(
+			after.contains("name: 'Work'"),
+			"a name that reads the same is kept as written: {after}"
+		);
+		assert_eq!(read_user_themes(&parse_kept(&after)), now);
+
+		// a block written twice reads as one, and its second name goes
+		let twice = format!("{text}\t\"80s\":\n\t\tname: Other\n");
+		let mut doc = parse_kept(&twice);
+		write_user_themes(&mut doc, &orig, &now);
+		let after = saved_text(&doc);
+		assert!(!after.contains("Other"), "{after}");
+		assert_eq!(read_user_themes(&parse_kept(&after)), now);
+		write_user_themes(&mut doc, &now, &[]);
+		assert!(doc.children("themes").is_empty(), "a delete finds it too");
+
+		// one shaped so a value can't be set where it is is written again whole
+		let matrix = test_theme("work", "Work", "Matrix");
+		let mut doc = parse_kept("");
+		write_user_themes(&mut doc, &[], std::slice::from_ref(&matrix));
+		let text = saved_text(&doc);
+		let ansi = text
+			.lines()
+			.find(|l| l.trim_start().starts_with("ansi:"))
+			.unwrap();
+		let block = text.replacen(ansi, "\t\t\tansi:\n\t\t\t\tx: 1", 1);
+		let mut doc = parse_kept(&block);
+		let orig = read_user_themes(&doc);
+		assert_ne!(orig[0].dark.ansi, matrix.dark.ansi, "{block}");
+		write_user_themes(&mut doc, &orig, std::slice::from_ref(&matrix));
+		let after = saved_text(&doc);
+		assert_eq!(read_user_themes(&parse_kept(&after)), [matrix], "{after}");
+	}
+
+	// A new theme takes a key the file doesn't have, so a block this save never
+	// read, such as one another window saved or one that didn't load, stays.
+	// Test ID: dfjw1
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_new_theme_keeps_off_a_block_it_never_read() {
+		let hand = "themes:\n\tsea:\n\t\tname: Sea\n\t\tdark:\n\t\t\tbackground: #102030\n";
+		let mut doc = parse_kept(hand);
+		assert!(
+			read_user_themes(&doc).is_empty(),
+			"an unquoted color doesn't load"
+		);
+		let sea = test_theme("sea", "Sea", "SilkTerm");
+		let moved = write_user_themes(&mut doc, &[], std::slice::from_ref(&sea));
+		let after = saved_text(&doc);
+		assert!(after.starts_with(hand), "{after}");
+		assert!(moved, "the theme went under another key");
+		assert_eq!(doc.children("themes"), ["sea", "sea2"]);
+		let back = read_user_themes(&parse_kept(&after));
+		assert_eq!(back.len(), 1);
+		assert_eq!(
+			(back[0].slug.as_str(), back[0].name.as_str()),
+			("sea2", "Sea")
+		);
+
+		// a key free in the file stays the one the dialog gave
+		let mut doc = parse_kept("");
+		assert!(!write_user_themes(
+			&mut doc,
+			&[],
+			std::slice::from_ref(&sea)
+		));
+		assert_eq!(doc.children("themes"), ["sea"]);
 	}
 
 	// Test ID: dattw

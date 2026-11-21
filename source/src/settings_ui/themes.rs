@@ -140,8 +140,9 @@ impl SettingsDialog {
 	}
 
 	// A config path segment for a new theme: the name reduced to something a path
-	// can use, then made unique. The slug never changes afterwards, so a rename
-	// rewrites one line rather than moving a subtree.
+	// can use, then made unique among the themes loaded. The save makes it unique
+	// in the file too. The slug never changes afterwards, so a rename rewrites one
+	// line rather than moving a subtree.
 	fn free_slug(&self, name: &str) -> String {
 		let base: String = name
 			.chars()
@@ -154,15 +155,10 @@ impl SettingsDialog {
 			})
 			.collect();
 		let trimmed = base.trim_matches('_');
-		let base = if trimmed.is_empty() { "theme" } else { trimmed }.to_string();
-		let taken = |s: &str| self.edited.user_themes.iter().any(|t| t.slug == s);
-		if !taken(&base) {
-			return base;
-		}
-		(2..=u32::from(u16::MAX))
-			.map(|n| format!("{base}{n}"))
-			.find(|s| !taken(s))
-			.unwrap_or(base)
+		let base = if trimmed.is_empty() { "theme" } else { trimmed };
+		crate::theme::free_slug(base, |s| {
+			self.edited.user_themes.iter().any(|t| t.slug == s)
+		})
 	}
 
 	/// Why OK can't accept the typed name, if it can't.
