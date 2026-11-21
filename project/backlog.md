@@ -358,7 +358,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Both installers still rewrite a hand-edited launcher that wraps the program in `sh -c` or names it bare
 	- ID: 2026112016030007
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Low
 	- Opened: 20261120-160300
 	- Opened by: CC
@@ -374,6 +374,18 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Code review 20261120 item 7.
 		- On rc.1 as a gap in an rc.1 fix that loses user edits.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Decisions:
+		- 20261120: The bare name counts only as a whole word, after a space, a quote or `=`, and before a space or a quote. So `silkterm-old` and `/opt/elsewhere/silkterm` are still rewritten. A bare name that PATH resolves to some other copy is kept too, since the launcher can't tell which one it gets.
+	- Actual cause: `fLauncherNames` matched the plain path only between spaces, and never matched the bare name.
+	- Actual fix: Both installers also take the path or the bare name after a quote or `=`, and before a quote. Installer version 1.3.3.
+		- Swept: `fLauncherNames` in install.bash and install.ps1 are the only launcher matchers. The Windows shortcut check compares the target path and isn't touched, so Target OS Windows has nothing to change.
+	- Verified: dcbdz passes for bash, bash 3.2 and pwsh on Linux. Its 2 new keep checks failed on the old installers, for each of the 3. The quick gate passed.
+	- Branch: nov20b-2026112016030007
+	- Commit: 73434409
+	- Test case: dcbdz `cicd/tests/install/run.bash` ("an upgrade keeps a launcher that wraps it in sh -c", "an upgrade keeps a launcher that names it bare", "a launcher naming silkterm-old is rewritten").
+	- Acceptance signoff: Self-closed: dcbdz failed before the fix and passes after.
+	- Closed: 20261120-181000
+	- Closed reason: Done
 
 - Remove the line length limit from the rustfmt and ruff settings
 	- ID: 2026112016030047

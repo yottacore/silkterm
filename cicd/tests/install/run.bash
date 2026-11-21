@@ -309,6 +309,29 @@ fCases() {
 	fCheck "${kind}: a launcher naming some other program is rewritten" fPresent "^Exec=\"${h}/.local/bin/silkterm\"\$" "${entry}"
 	fCheck "${kind}: and the plan says so" fSaid "${h}" "Launcher:"
 
+	## A launcher that wraps the program in sh -c, or names it bare, is kept on
+	## upgrade. One naming another program whose name only starts the same is
+	## still rewritten.
+	caseDir="${work}/${kind}-rel-wrapped"
+	fRelease "${caseDir}" 9.9.7 9.9.8 9.9.9
+	printf '[{"tag_name":"v9.9.7","draft":false,"prerelease":false}]\n' > "${caseDir}/releases.json"
+	h="${work}/${kind}-wrapped"
+	entry="${h}/.local/share/applications/silkterm.desktop"
+	STUB_DIR="${caseDir}" fInstall "${h}" || true
+	sed -i "s|^Exec=.*|Exec=sh -c \"${h}/.local/bin/silkterm --x\"|" "${entry}" 2>/dev/null || true
+	printf '[{"tag_name":"v9.9.8","draft":false,"prerelease":false}]\n' > "${caseDir}/releases.json"
+	STUB_DIR="${caseDir}" fInstall "${h}" || true
+	fCheck "${kind}: an upgrade keeps a launcher that wraps it in sh -c" fPresent '^Exec=sh -c ".*/silkterm --x"$' "${entry}"
+	fCheck "${kind}: and installs the new program" fInstalled "${h}" 9.9.8
+	sed -i 's|^Exec=.*|Exec=silkterm --x|' "${entry}" 2>/dev/null || true
+	printf '[{"tag_name":"v9.9.9","draft":false,"prerelease":false}]\n' > "${caseDir}/releases.json"
+	STUB_DIR="${caseDir}" fInstall "${h}" || true
+	fCheck "${kind}: an upgrade keeps a launcher that names it bare" fPresent '^Exec=silkterm --x$' "${entry}"
+	fCheck "${kind}: and installs the new program" fInstalled "${h}" 9.9.9
+	sed -i 's|^Exec=.*|Exec=silkterm-old --x|' "${entry}" 2>/dev/null || true
+	STUB_DIR="${caseDir}" fInstall "${h}" || true
+	fCheck "${kind}: a launcher naming silkterm-old is rewritten" fPresent "^Exec=\"${h}/.local/bin/silkterm\"\$" "${entry}"
+
 	## An upgrade over a running copy. A copy over it fails on Linux.
 	caseDir="${work}/${kind}-rel-busy"
 	fReleaseElf "${caseDir}" 9.9.8 9.9.9
@@ -483,3 +506,4 @@ echo "all passed"
 ##		- 20261111 JC: install.bash cases under bash 3.2; blank-line layout and a
 ##		               bad target value.
 ##		- 20261118 JC: An upgrade keeps a launcher edited by hand.
+##		- 20261120 JC: And one that wraps the program in sh -c or names it bare.

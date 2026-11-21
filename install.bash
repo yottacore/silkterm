@@ -23,7 +23,7 @@
 
 ##	•••••••••••••••••••  Per-project settings - edit only these  ••••••••••••••••••
 
-installerVersion="1.3.2"
+installerVersion="1.3.3"
 ownerRepo="yottacore/silkterm"
 appName="SilkTerm"
 exeName="silkterm"
@@ -317,16 +317,20 @@ function fDesktopExec() {
 }
 
 ##	fLauncherNames <entry> <program> - true when an Exec line in the entry names
-##	the program, quoted and escaped the way fDesktopExec writes it, or plain
-##	between spaces. Arguments or a wrapper added by hand still count. An entry
-##	that can't be read counts too, so it's left alone.
+##	the program, quoted and escaped the way fDesktopExec writes it, or plain, by
+##	its path or its bare name. Plain means after a space, a quote or '=', and
+##	before a space or a quote, so `sh -c "<path> --x"` counts. Arguments or a
+##	wrapper added by hand still count. An entry that can't be read counts too,
+##	so it's left alone.
 function fLauncherNames() {
-	local quoted line
+	local quoted line name="${2##*/}"
 	[[ -r "${1}" ]] || return 0
 	quoted="\"$(fDesktopExec "${2}")\""
 	while IFS= read -r line || [[ -n "${line}" ]]; do
 		case "${line}" in Exec=*) ;; *) continue ;; esac
-		case " ${line#Exec=} " in *"${quoted}"* | *" ${2} "*) return 0 ;; esac
+		case " ${line#Exec=} " in
+			*"${quoted}"* | *[\ \"\'=]"${2}"[\ \"\']* | *[\ \"\'=]"${name}"[\ \"\']*) return 0 ;;
+		esac
 	done < "${1}"
 	return 1
 }
@@ -661,3 +665,5 @@ fi
 ##		  names some other program.
 ##		- 20261119 JC: Version kept in step with install.ps1.
 ##		- 20261119: Versions compare without a subshell per field.
+##		- 20261120 JC: A launcher that wraps the program in sh -c, or names it bare,
+##		  is kept on upgrade.
