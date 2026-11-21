@@ -130,6 +130,9 @@ pub struct Scroll {
 	// output raises it and the view gives it back as it gets to them, so it is
 	// a history rather than a state. See `unshown_lines`.
 	unshown: f32,
+	// Lines `keep_place` has moved the view, all told. A handle drag measures
+	// from where it started, and this tells it how far the text has gone since.
+	kept: f64,
 }
 
 impl Scroll {
@@ -146,6 +149,7 @@ impl Scroll {
 			sweep: false,
 			wheel_dir: 0.0,
 			unshown: 0.0,
+			kept: 0.0,
 		}
 	}
 
@@ -302,9 +306,19 @@ impl Scroll {
 		if went_up <= 0.0 || self.following() {
 			return;
 		}
+		let before = self.target;
 		self.target = (self.target + went_up).min(self.max);
 		self.visual = (self.visual + went_up).min(self.max);
 		self.mid = (self.mid + went_up).min(self.max);
+		// what the view moved rather than `went_up`: a view held at the top
+		// doesn't move, and a drag counting it anyway would go dead for that far
+		self.kept += f64::from(self.target - before);
+	}
+
+	/// The running total of what `keep_place` has moved the view, in lines. Only
+	/// a difference between two readings means anything.
+	pub fn kept(&self) -> f64 {
+		self.kept
 	}
 
 	/// A nudge that goes back no further than the new lines, floor or not:

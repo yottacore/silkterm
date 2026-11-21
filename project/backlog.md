@@ -37,14 +37,31 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Dragging the scrollbar thumb while output arrives can make the text jump
 	- ID: 2026112017124593
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Low
 	- Opened: 20261120-171245
 	- Opened by:
-	- Related IDs: 2026112016030002
+	- Related IDs: 2026112016030002, 2026112016030026
+	- Target OS: All
+	- Target version: rc.1
 	- Incorrect behavior: While output arrives, a drag of the scrollbar thumb sets the view's place directly, so the next pointer move can jump the text.
 	- Expected behavior: The text under the view stays put during a drag, as it does since 2026112016030002 when the view is parked.
 	- Reproduced: No. Found while fixing 2026112016030002.
+	- Note: not a duplicate of 2026112016030026. That one is the grab during an ease, measured against the drawn thumb. This one is output arriving during a drag.
+	- Actual cause: each drag move set the place from the pointer alone. Output moves a parked view up with its text, and the next move put it back. The minimap marker went back by every line that went up. The thumb went back by most of them, since a deeper scrollback also rescales the track.
+	- Decisions:
+		- 20261120: the minimap marker drag had the same fault and is fixed with it.
+		- 20261120: while output arrives during a drag with the pointer still, the text stays put and the thumb moves a little, since the same text sits higher in a deeper scrollback. The handle tracks the pointer's moves rather than its exact spot then.
+		- 20261120: a view held at the top of a full scrollback doesn't move with the output, and the drag doesn't count those lines either, so dragging down moves it at once.
+	- Actual fix [Bug]: a handle drag goes on from where it started, moved by the lines output has carried the view up since. The thumb drag maps the pointer's move from the grab at the current scrollback's scale.
+	- Swept: the thumb drag and the marker drag are the only drags that set the place from the pointer. A track click, a marker jump and a selection's edge scroll are one-shot or relative.
+	- Test case: dfjwf `a_handle_drag_keeps_the_text_still_while_output_arrives`.
+	- Verified: 20261120. dfjwf passes, with the scrollback growing and full. With the shift taken out of the drag it fails, the view going back to where it was grabbed. Counting the lines that went up rather than what the view moved fails its top-of-scrollback case. daqnd, dfjtz, dfjv0 and dc0b5 pass. The quick gate's format, lint, test, script and docs areas pass.
+	- Acceptance signoff: Self-closed: the behavior the item asked for, red before and green after.
+	- Closed: 20261120-175800
+	- Closed reason: Done
+	- Branch: nov20b-2026112017124593
+	- Commit: bb874dd1
 
 - Does not release resources in tmux and/or muffer
 	- ID: 2026112006320249

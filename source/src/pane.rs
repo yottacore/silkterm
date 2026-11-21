@@ -1500,6 +1500,46 @@ fn bar_pos_to_lines(track_h: f32, thumb_h: f32, max: f32, thumb_y: f32) -> f32 {
 	(1.0 - (thumb_y / span).clamp(0.0, 1.0)) * max
 }
 
+// A thumb drag `moved` px down the track from where the thumb showed
+// `from_lines`, back to a scroll position. Measured from the grab rather than
+// from the track, since a scrollback that grows mid-drag rescales the track:
+// the same pointer y over a deeper scrollback is a different line, and the
+// text jumped by the difference at the next move.
+fn bar_drag_lines(track_h: f32, thumb_h: f32, max: f32, from_lines: f32, moved: f32) -> f32 {
+	if max <= 0.0 {
+		return 0.0;
+	}
+	let from_y = (track_h - thumb_h) * (1.0 - from_lines / max);
+	bar_pos_to_lines(track_h, thumb_h, max, from_y + moved)
+}
+
+/// Where a handle drag started: the pointer y, the place in lines the handle
+/// showed then, and `Scroll::kept` then. Output that arrives while the view is
+/// parked carries the view up with the text, and a drag that went on from the
+/// old place undid that at the next pointer move, so the text jumped back.
+#[derive(Debug, Clone, Copy)]
+pub struct HandleGrab {
+	y: f32,
+	lines: f32,
+	kept: f64,
+}
+
+impl HandleGrab {
+	fn new(y: f32, lines: f32, scroll: &Scroll) -> Self {
+		Self {
+			y,
+			lines,
+			kept: scroll.kept(),
+		}
+	}
+
+	// The pointer y and the place at the grab, the place moved with the text
+	// since. The difference of two running totals is small, so f32 holds it.
+	fn from(&self, scroll: &Scroll) -> (f32, f32) {
+		(self.y, self.lines + (scroll.kept() - self.kept) as f32)
+	}
+}
+
 enum Node {
 	Leaf(PaneId),
 	Split {
@@ -1714,18 +1754,17 @@ pub struct Pane {
 	/// no timed resume.
 	pub cursor_wake: Option<std::time::Instant>,
 	// Scrollbar fade: `bar_alpha` eases toward 0 or 1, `bar_hold` keeps it up for
-	// a moment after the last user scroll. `bar_drag` is the grab offset from the
-	// thumb's top edge while the handle is being dragged (Some = dragging).
+	// a moment after the last user scroll. `bar_drag` is where a thumb drag
+	// started (Some = dragging).
 	bar_alpha: f32,
 	bar_hold: f32,
 	pub bar_hover: bool,
-	pub bar_drag: Option<f32>,
+	pub bar_drag: Option<HandleGrab>,
 	pub bar_animating: bool,
 	// Minimap column: the rasterized buffer and the image composed from it, plus
-	// where a drag of the viewport marker started, as the pointer y and the
-	// scroll position then.
+	// where a drag of the viewport marker started.
 	map: Minimap,
-	pub map_drag: Option<(f32, f32)>,
+	pub map_drag: Option<HandleGrab>,
 	// Where the target sat when a handle drag ended, while the text is still
 	// easing up to it. None once both agree. See `handle_lines`.
 	handle_drop_at: Option<f32>,
@@ -3188,27 +3227,29 @@ impl Pane {
 		strip.contains(x, y)
 	}
 
-	/// Start a thumb drag, remembering where inside the handle it was grabbed so
-	/// the thumb doesn't jump under the pointer.
+	/// Start a thumb drag, remembering the pointer and the place the thumb
+	/// showed, so the thumb doesn't jump under the pointer.
 	pub fn bar_grab(&mut self, y: f32, ctx: &TextCtx, cfg: &config::Settings) {
-		if let Some(bar) = self.scrollbar(ctx, cfg) {
-			self.bar_drag = Some(y - bar.thumb.y);
+		if self.scrollbar(ctx, cfg).is_some() {
+			self.bar_drag = Some(HandleGrab::new(y, self.handle_lines(), &self.scroll));
 			self.poke_scrollbar();
 		}
 	}
 
-	/// Continue a thumb drag: put the thumb's top where the pointer says, and map
-	/// that back to a scroll position.
+	/// Continue a thumb drag: move the thumb as far as the pointer has moved, and
+	/// map that back to a scroll position.
 	pub fn bar_drag_to(&mut self, y: f32, ctx: &TextCtx, cfg: &config::Settings) {
 		let Some(grab) = self.bar_drag else { return };
 		let Some(bar) = self.scrollbar(ctx, cfg) else {
 			return;
 		};
-		let lines = bar_pos_to_lines(
+		let (from_y, from_lines) = grab.from(&self.scroll);
+		let lines = bar_drag_lines(
 			bar.track.h,
 			bar.thumb.h,
 			self.scroll.max_lines(),
-			y - grab - bar.track.y,
+			from_lines,
+			y - from_y,
 		);
 		self.scroll.scroll_to(lines);
 		self.poke_scrollbar();
@@ -3292,7 +3333,7 @@ impl Pane {
 	/// a press with no movement from scrolling anything.
 	pub fn map_grab(&mut self, y: f32, ctx: &TextCtx, cfg: &config::Settings) {
 		if self.minimap(ctx, cfg).and_then(|g| g.handle).is_some() {
-			self.map_drag = Some((y, self.scroll.visual_lines()));
+			self.map_drag = Some(HandleGrab::new(y, self.scroll.visual_lines(), &self.scroll));
 			self.poke_scrollbar();
 		}
 	}
@@ -3304,8 +3345,9 @@ impl Pane {
 		};
 		let rows = self.term.lines;
 		let (total, shown) = self.map_span();
+		let from = grab.from(&self.scroll);
 		self.scroll
-			.scroll_to(minimap::drag_to(&g, total, shown, rows, grab, y, ctx.scale));
+			.scroll_to(minimap::drag_to(&g, total, shown, rows, from, y, ctx.scale));
 		self.poke_scrollbar();
 	}
 
@@ -5769,18 +5811,18 @@ mod tests {
 	use super::{
 		APP_SCROLL_MAX, AttrsList, BAR_MIN_THUMB, BRACKET_REACH_ROWS, CURSOR_ALPHA,
 		CURSOR_ALPHA_LIGHT, CURSOR_MAX_LAG, CellRules, CursorAnimation, DepthSampler, Dir, GColor,
-		LinkHit, Node, OffStrip, Output, PROMPT_SKEL_MIN, PauseState, Rect, Rule, RuleSpan,
-		SLIDE_TOP_BAND_APPS, StripCell, Style, Weight, adopt_band, alloc_pane_id, band_row_line,
-		bar_applies_to, bar_pos_to_lines, bar_thumb_span, bar_track, bell_brighten, blank_went_up,
-		bracket_reach, capture_grid_text, capture_start, cell_rules, child_areas, cursor_alpha,
-		cursor_cycle, cursor_envelope, cursor_geometry, cursor_plate, cursor_slide_step,
-		cursor_wake_after, debold_attrs, distinct_pair, divider_at, drop_hold_over, ease_output,
-		edge_scroll_rate, equalize_dir_run, fingerprint_frame, fnv_row, fnv_row_skel,
-		glide_to_full, grid_point, handle_is_dragged, handle_pos, has_ink, layout,
-		ledger_makes_room, ledger_step, link_at, lock_for_frame, logical_line_bounds, minimap,
-		mono_attrs, move_is_input, next_capture_poll, output_advance, output_band, pair_inside,
-		paste_payload, place_split, prompt_strip, pulse_env, push_cell_rules, pushed_since,
-		render_char, repaint_shift, repainted_edge, resume_delay, same_char_pair,
+		HandleGrab, LinkHit, Node, OffStrip, Output, PROMPT_SKEL_MIN, PauseState, Rect, Rule,
+		RuleSpan, SLIDE_TOP_BAND_APPS, StripCell, Style, Weight, adopt_band, alloc_pane_id,
+		band_row_line, bar_applies_to, bar_drag_lines, bar_pos_to_lines, bar_thumb_span, bar_track,
+		bell_brighten, blank_went_up, bracket_reach, capture_grid_text, capture_start, cell_rules,
+		child_areas, cursor_alpha, cursor_cycle, cursor_envelope, cursor_geometry, cursor_plate,
+		cursor_slide_step, cursor_wake_after, debold_attrs, distinct_pair, divider_at,
+		drop_hold_over, ease_output, edge_scroll_rate, equalize_dir_run, fingerprint_frame,
+		fnv_row, fnv_row_skel, glide_to_full, grid_point, handle_is_dragged, handle_pos, has_ink,
+		layout, ledger_makes_room, ledger_step, link_at, lock_for_frame, logical_line_bounds,
+		minimap, mono_attrs, move_is_input, next_capture_poll, output_advance, output_band,
+		pair_inside, paste_payload, place_split, prompt_strip, pulse_env, push_cell_rules,
+		pushed_since, render_char, repaint_shift, repainted_edge, resume_delay, same_char_pair,
 		scroll_shift_signed, set_buffer_rows, set_ratio, shape_reach, shift_makes_room,
 		shown_cursor_shape, skel_rows, slide_bands, slide_is_visible, snapshot_rows, span_quads,
 		static_bands, strip_cell, strip_rows, swap_leaves, text_buffer_h, translate_span,
@@ -5876,6 +5918,90 @@ mod tests {
 		let (top, _) = bar_thumb_span(track_h, thickness, rows, max, max);
 		assert!(top < bottom, "the oldest line sits at the top of the track");
 		assert_eq!(top, 0.0);
+	}
+
+	// A thumb or marker drag while output arrives keeps the text under the view.
+	// A parked view moves up with the lines that go up, and the drag goes on
+	// from there. Before the fix the next pointer move set the place from the
+	// pointer alone, which put the marker back by every line that went up, and
+	// the thumb, over a deeper scrollback, by most of them (2026112017124593).
+	// Test ID: dfjwf
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_handle_drag_keeps_the_text_still_while_output_arrives() {
+		let _g = config::test_store_lock();
+		let cfg = config::Settings {
+			minimap: true,
+			..config::Settings::default()
+		};
+		config::update(cfg.clone());
+		let (track_h, thickness, rows) = (400.0, 16.0, 40.0);
+		let map_geom = |max: f32| {
+			let total = max as usize + rows as usize;
+			let full = Rect {
+				x: 0.0,
+				y: 0.0,
+				w: 400.0,
+				h: track_h,
+			};
+			let g = minimap::geom(
+				full,
+				0.0,
+				1.0,
+				&cfg,
+				total,
+				total,
+				rows as usize,
+				0.0,
+				false,
+				true,
+			);
+			(g.expect("a minimap"), total)
+		};
+		for full in [false, true] {
+			let at = if full { "full" } else { "growing" };
+			let mut s = crate::scroll::Scroll::new();
+			s.set_max(1000.0);
+			s.scroll_to(300.0);
+			s.snap();
+			let (thumb_y, _) = bar_thumb_span(track_h, thickness, rows, 1000.0, 300.0);
+			let y = thumb_y + 5.0;
+			let bar = HandleGrab::new(y, s.target_lines(), &s);
+			let map = HandleGrab::new(y, s.visual_lines(), &s);
+			// 5 lines go up: the scrollback grows by them, or stays full and drops 5
+			let max = if full { 1000.0 } else { 1005.0 };
+			s.set_max(max);
+			s.keep_place(5.0);
+			assert_eq!(s.target_lines(), 305.0, "{at}");
+			let (_, thumb_h) = bar_thumb_span(track_h, thickness, rows, max, 305.0);
+			let (from_y, from) = bar.from(&s);
+			let still = bar_drag_lines(track_h, thumb_h, max, from, y - from_y);
+			assert!(
+				(still - 305.0).abs() < 1e-3,
+				"{at}: the thumb put the view at {still}"
+			);
+			// 10 px up the track is 10 px' worth of the deeper scrollback back
+			let up = bar_drag_lines(track_h, thumb_h, max, from, y - 10.0 - from_y);
+			let want = 305.0 + 10.0 * max / (track_h - thumb_h);
+			assert!((up - want).abs() < 1e-2, "{at}: {up}, wanted {want}");
+			let (g, total) = map_geom(max);
+			let still = minimap::drag_to(&g, total, total, rows as usize, map.from(&s), y, 1.0);
+			assert!(
+				(still - 305.0).abs() < 1e-3,
+				"{at}: the marker put the view at {still}"
+			);
+		}
+		// a view held at the top of a full scrollback doesn't move, so a drag
+		// down from there moves it at once rather than after a dead stretch
+		let mut s = crate::scroll::Scroll::new();
+		s.set_max(1000.0);
+		s.scroll_to(1000.0);
+		s.snap();
+		let bar = HandleGrab::new(0.0, 1000.0, &s);
+		s.keep_place(5.0);
+		assert_eq!(bar.from(&s), (0.0, 1000.0));
+		let (_, thumb_h) = bar_thumb_span(track_h, thickness, rows, 1000.0, 1000.0);
+		assert!(bar_drag_lines(track_h, thumb_h, 1000.0, 1000.0, 1.0) < 1000.0);
 	}
 
 	// Dragging either handle has to pin the other to it. The thumb and the marker
