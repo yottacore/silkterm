@@ -165,7 +165,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - While scrolled back, new output moves the view, so the text being read slides away
 	- ID: 2026112016030002
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: High
 	- Opened: 20261120-160300
 	- Opened by: CC
@@ -178,10 +178,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Confirmed by trace.
 	- Decisions:
 		- 20261120: JC: a view that isn't following the bottom stays on its text while output arrives, as filed. It stays a High defect.
+		- 20261120: the minimap's count of lines the view hasn't shown stays as it was. Moving it with the view would hide from the map all output that arrives while scrolled back. Item 8 owns the map's catch-up.
 	- Notes:
 		- Code review 20261120 item 2.
 		- Item 8 has the same root. Nothing counts the lines pushed while scrolled back with a full scrollback.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: confirmed. The engine raises its display offset by the lines that go up, and each frame set it back to the view's place, counted from the bottom, which output didn't move while scrolled back.
+	- Actual fix [Bug]: while the view isn't following the bottom, each frame moves it up by the lines that went into the scrollback, until it reaches the top. With the scrollback full, the engine's own count of those lines is used, since the depth stays flat there. An ease in flight keeps its course.
+	- Swept: the frame build's grid snap is the only place the grid offset is set from the view. The alt screen has no scrollback, so it can't be scrolled back.
+	- Test case: dfjtz `a_parked_view_stays_on_its_text_while_output_arrives`, dfjv0 `keep_place_shifts_a_parked_view_with_the_text`.
+	- Verified: 20261120. dfjtz passes, with the scrollback full and not. It fails with the fix taken out, and fails at a full scrollback with only the depth's growth counted. dfjv0 passes. The quick gate's format, lint and test areas pass.
+	- Acceptance signoff: Self-closed: the behavior JC decided, red before and green after.
+	- Closed: 20261120-171200
+	- Closed reason: Done
+	- Branch: nov20b-2026112016030002
+	- Commit: 0a5f5823
 
 - An environment variable that isn't valid UTF-8 crashes SilkTerm at launch
 	- ID: 2026112016030003

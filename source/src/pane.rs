@@ -5343,6 +5343,15 @@ fn ease_output(
 	blank_up: impl Fn(usize) -> bool,
 ) -> (bool, usize, bool) {
 	let follow = scroll.following();
+	// Lines that went up while the view is parked in the scrollback carry the
+	// text being read with them. The engine raises its display offset to match,
+	// and the build snaps the grid back to `desired_offset`, so without this the
+	// text slid away a line per line printed (2026112016030002). With the
+	// scrollback full the depth stays flat, so the engine's count is the one
+	// that sees them.
+	if !follow && !alt {
+		scroll.keep_place(output.grew.max(output.pushed) as f32);
+	}
 	let advanced = output_advance(alt, follow, output.grew, output.pushed);
 	// read before the nudge: a band is measured fresh when the ease was at rest
 	let was_chasing = scroll.chasing_output();
@@ -8297,6 +8306,74 @@ mod tests {
 			assert!(!s.animating(), "scrollback {scrollback}: the clear eased");
 			// what it eased before
 			//   assert!(s.chasing_output());
+		}
+	}
+
+	// A view parked 100 lines back stays on its text while output arrives, with
+	// the scrollback full and not. Each build snaps the grid to the view, as
+	// `Pane::build` does, and the engine has already raised its offset by the
+	// lines that went up, so the view has to land where the engine did. Before
+	// the fix the snap pulled the text down a line per line printed
+	// (2026112016030002).
+	// Test ID: dfjtz
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_parked_view_stays_on_its_text_while_output_arrives() {
+		let _g = config::test_store_lock();
+		config::update(config::Settings::default());
+		let (cols, lines) = (20usize, 8usize);
+		for scrollback in [1000usize, 120] {
+			let fill = (0..300)
+				.map(|i| format!("line {i:03}\r\n"))
+				.collect::<Vec<_>>()
+				.concat();
+			let mut term = term_fed(cols, lines, scrollback, &fill);
+			term.scroll_ledger_mut().clear();
+			let full = term.grid().history_size() == scrollback;
+			assert_eq!(full, scrollback == 120);
+			let mut depth = DepthSampler::default();
+			depth.rebaseline(term.grid().history_size());
+			let mut s = crate::scroll::Scroll::new();
+			s.set_max(term.grid().history_size() as f32);
+			s.scroll_to(100.0);
+			s.snap();
+			let snap_grid = |term: &mut Term<VoidListener>, s: &crate::scroll::Scroll| {
+				let desired = s.desired_offset().min(term.grid().history_size());
+				let delta = desired as i32 - term.grid().display_offset() as i32;
+				term.scroll_display(alacritty_terminal::grid::Scroll::Delta(delta));
+				delta
+			};
+			snap_grid(&mut term, &s);
+			assert_eq!(term.grid().display_offset(), 100);
+			let top = row_hash(&term, -100);
+			for write in 0..4 {
+				feed(
+					&mut term,
+					&(0..5)
+						.map(|i| format!("new {write}{i}\r\n"))
+						.collect::<Vec<_>>()
+						.concat(),
+				);
+				let history = term.grid().history_size();
+				let output = Output {
+					grew: depth.take(history),
+					pushed: term.scroll_ledger().pushed(),
+					since_clear: None,
+					was_blank: false,
+				};
+				term.scroll_ledger_mut().clear();
+				s.set_max(history as f32);
+				let (follow, advanced, _) =
+					ease_output(&mut s, false, false, output, lines, |_| None, |_| false);
+				assert!(!follow && advanced == if full { 0 } else { 5 });
+				let delta = snap_grid(&mut term, &s);
+				let at = format!("scrollback {scrollback}, write {write}");
+				assert_eq!(delta, 0, "{at}: the view and the engine disagree");
+				let offset = term.grid().display_offset() as i32;
+				assert_eq!(offset, 100 + 5 * (write + 1), "{at}");
+				assert_eq!(row_hash(&term, -offset), top, "{at}: the text slid");
+				assert!(!s.animating(), "{at}: a parked view started to move");
+			}
 		}
 	}
 

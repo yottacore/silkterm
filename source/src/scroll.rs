@@ -292,6 +292,21 @@ impl Scroll {
 		}
 	}
 
+	/// `went_up` lines went into the scrollback while the view is parked in it.
+	/// The view counts from the bottom, so it moves up with them to stay on the
+	/// text being read, until that text drops off the top. A coordinate shift,
+	/// as in `nudge_output`: an ease in flight keeps its course over the text.
+	/// `unshown` is left alone, since moving it would hide from the minimap all
+	/// output that arrives while the view is parked.
+	pub fn keep_place(&mut self, went_up: f32) {
+		if went_up <= 0.0 || self.following() {
+			return;
+		}
+		self.target = (self.target + went_up).min(self.max);
+		self.visual = (self.visual + went_up).min(self.max);
+		self.mid = (self.mid + went_up).min(self.max);
+	}
+
 	/// A nudge that goes back no further than the new lines, floor or not:
 	/// output after a clear, which must not ease through the screen it cleared.
 	pub fn nudge_output_within(&mut self, grown: f32, view_rows: f32) {
@@ -1609,5 +1624,47 @@ mod tests {
 			s.advance(0.016);
 		}
 		assert!(s.following());
+	}
+
+	// A view parked in the scrollback moves up with the lines that went up, an
+	// ease in flight keeps its course, the top of the scrollback is as far as it
+	// goes, and a view following the bottom is left to the output ease
+	// (2026112016030002).
+	// Test ID: dfjv0
+	#[test]
+	fn keep_place_shifts_a_parked_view_with_the_text() {
+		let _g = pin();
+		let mut s = Scroll::new();
+		s.set_max(200.0);
+		s.scroll_to(50.0);
+		for _ in 0..5 {
+			s.advance(0.016);
+		}
+		let (target, visual) = (s.target_lines(), s.visual_lines());
+		assert!(visual < target, "still easing up");
+		s.set_max(205.0);
+		s.keep_place(5.0);
+		assert_eq!(
+			(s.target_lines(), s.visual_lines()),
+			(target + 5.0, visual + 5.0)
+		);
+		s.keep_place(0.0);
+		assert_eq!(s.target_lines(), target + 5.0);
+		s.scroll_to(205.0);
+		s.snap();
+		s.keep_place(5.0);
+		assert_eq!(
+			(s.target_lines(), s.visual_lines()),
+			(205.0, 205.0),
+			"the text dropped off"
+		);
+		s.jump_bottom();
+		s.snap();
+		s.keep_place(5.0);
+		assert_eq!(
+			(s.target_lines(), s.visual_lines()),
+			(0.0, 0.0),
+			"following"
+		);
 	}
 }
