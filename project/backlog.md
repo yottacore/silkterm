@@ -68,6 +68,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Type: Bug
 	- Status: Waiting on UAT
 		- 20261120: It needs a look on b23 with muffer idle in tmux, per the hand testing row. The rigs used a quiet shell in tmux, not muffer.
+	- Stand-in: none (20261120). What's left is what muffer itself writes while idle, and test windows never run muffer. A silent alt-screen app in tmux writes no more than the quiet shell idletmux already covers.
 	- Needs hand testing: On b23, leave a window with muffer idle in tmux in the front tab, unfocused and on screen. It should let go after "Minutes otherwise". Started from a terminal with `SILK_IDLEDBG=1`, "wait restarted: output" names anything else that still holds it.
 	- Severity: High
 	- Opened: 20261120-063202
