@@ -163,6 +163,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Reproduced: No. Traced through the engine's grid scroll and the frame build.
 	- Possible cause: The engine raises its display offset to keep the text still. Each frame then sets it back to the smooth scroll position, which counts from the bottom and isn't moved for output while scrolled back.
 	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Confirmed by trace.
+	- Decisions:
+		- 20261120: JC: a view that isn't following the bottom stays on its text while output arrives, as filed. It stays a High defect.
 	- Notes:
 		- Code review 20261120 item 2.
 		- Item 8 has the same root. Nothing counts the lines pushed while scrolled back with a full scrollback.
