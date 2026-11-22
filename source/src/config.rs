@@ -2161,7 +2161,7 @@ pub(crate) fn local_stamp() -> (String, u32) {
 		GetLocalTime(&raw mut now);
 		now
 	};
-	(format!("{:04}{:02}{:02}-{:02}{:02}{:02}", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond,), u32::from(now.wMilliseconds / 10))
+	(format!("{:04}{:02}{:02}-{:02}{:02}{:02}", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond), u32::from(now.wMilliseconds / 10))
 }
 
 /// `YYYY-mm-DD` of a unix time, in the local zone of whoever is running this.
