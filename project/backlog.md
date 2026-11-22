@@ -17989,6 +17989,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 			- Fixed: still try first, but after 2 frames in a row of getting nowhere, wait properly. Waiting takes a numbered ticket, which puts us at the end of the current read cycle and makes the reader queue behind us, so the wait is bounded under 5ms where the polite try wasn't.
 			- The worst stale run went from 2083ms to 52ms, at an unchanged frame rate. Idle and ordinary output cost are unchanged, since this only engages when something is contending.
 			- Pinned by: dd5qc `a_frame_waits_its_turn_once_trying_keeps_losing`.
+			- dd5qc is skipped under Miri. Miri reports parking_lot_core's futex call as undefined behavior, and this is the only test that makes the term lock wait.
 	- Tier 5 - cursor animation: pause is the only mode, and it stops now.
 		- ✅ 5.1 Removed the 'cursor_animation_input' option. Behavior is always "pause".
 			- A source const (CURSOR_ANIM_CONTINUOUS, pane.rs) brings the old always-on mode back if ever wanted.

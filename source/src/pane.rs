@@ -7874,6 +7874,9 @@ mod tests {
 	// gets in at the end of the cycle.
 	// Test ID: dd5qc
 	#[test]
+	// parking_lot_core passes &AtomicI32 to the variadic futex syscall, and Miri
+	// wants *mut u32 there. Only a lock that has to park reaches it.
+	#[cfg_attr(miri, ignore = "Miri rejects parking_lot's futex call")]
 	fn a_frame_waits_its_turn_once_trying_keeps_losing() {
 		use alacritty_terminal::sync::FairMutex;
 		use std::sync::atomic::{AtomicBool, Ordering};
