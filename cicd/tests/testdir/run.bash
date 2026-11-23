@@ -222,7 +222,7 @@ unshortened="$(fLacking 'sway -c|"sway", "-c"|SILKTERM_SOCKET=|--reload-settings
 fCheck "and every one that binds sockets there keeps them short${unshortened:+ (not:${unshortened})}" test -z "${unshortened}"
 stray="$(git -C "${root}" grep -n 'temp_dir' -- 'source/src/*.rs' \
 	| grep -v '^source/src/testdir\.rs:' \
-	| grep -v -E '^source/src/peers\.rs:[0-9]+:[[:space:]]*\.map_or_else\(std::env::temp_dir, PathBuf::from\)$' || true)"
+	| grep -v -E '^source/src/peers\.rs:[0-9]+:.*\.map_or_else\(std::env::temp_dir, PathBuf::from\)$' || true)"
 fCheck "no Rust code but the run folder and the control socket asks for the temp dir" test -z "${stray}"
 [[ -z "${stray}" ]] || sed 's/^/      /' <<<"${stray}"
 boxSpecific="$(git -C "${root}" grep -n '/m''nt/' -- cicd source utility || true)"
