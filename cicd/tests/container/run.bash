@@ -131,6 +131,25 @@ fCheck "with docker here it is the default" test "$(USE_CONTAINER=1 fParse -y)" 
 fCheck "--no-container turns it off" test "$(USE_CONTAINER=1 fParse --no-container -y)" = "container=0 inner="
 fCheck "and wins over --container, wherever it sits" test "$(USE_CONTAINER=1 fParse --no-container --container)" = "container=0 inner="
 
+## --long takes the private repo when its runner is there, and hands the run
+## inside --with-private for its tests.
+longPriv="$(fLift '^## --long runs everything' '^fi$')"
+lp="${work}/lp"; mkdir -p "${lp}/a/b" "${lp}/x/repo/cicd"
+printf '#!/bin/sh\n' > "${lp}/run.bash"; chmod +x "${lp}/run.bash"; cp "${lp}/run.bash" "${lp}/x/repo/cicd/run.bash"
+fLongPriv(){  ## fLongPriv <long> <withPrivate> <runner> [in container]: prints withPrivate and the inner args after the check
+	local long="${1}" withPrivate="${2}" PRIVATE_RUNNER="${3}" SILK_CICD_IN_CONTAINER="${4:-}" root="${lp}/a/b" PRIVATE_DIR=x
+	local -a innerArgs=()
+	eval "${longPriv}"
+	echo "${withPrivate} ${innerArgs[*]:-}"
+}
+fCheck "the --long check was found" test -n "${longPriv}"
+fCheck "--long takes the private runner when it's there" test "$(fLongPriv 1 0 "${lp}/run.bash")" = "1 --with-private"
+fCheck "and finds it beside the repo when none is named" test "$(fLongPriv 1 0 "")" = "1 --with-private"
+fCheck "but not when it's missing" test "$(fLongPriv 1 0 "${lp}/none.bash")" = "0 "
+fCheck "a run without --long leaves it out" test "$(fLongPriv 0 0 "${lp}/run.bash")" = "0 "
+fCheck "--with-private given too goes in once" test "$(fLongPriv 1 1 "${lp}/run.bash")" = "1 "
+fCheck "the run inside takes only what it was handed" test "$(fLongPriv 1 0 "${lp}/run.bash" 1)" = "0 "
+
 ## What the run inside made: stage 5's list, from the target dir the two share.
 eval "$(fLift '^fContainerArtifacts(){' '^}')"
 tdir="${work}/target"; mkdir -p "${tdir}/release" "${tdir}/x86_64-pc-windows-gnu/release" "${tdir}/aarch64-unknown-linux-gnu/release"
@@ -642,6 +661,7 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261124: --long takes the private repo when it is here.
 ##		- 20261119: The private repo goes in only with --with-private, which
 ##		  replaced --no-private.
 ##		- 20261103: The options that turn off one part of stage 3 or 5 go in.

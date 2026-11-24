@@ -71,8 +71,9 @@
 ##	                       --backlog-run-quick
 ##	   --codeql            add CodeQL to the leak checks (off by default; slow)
 ##	   --long              everything, the steps that take hours too: the test
-##	                       suite under TSan and under Miri, and CodeQL. Not with
-##	                       --quick or --backlog-run-quick
+##	                       suite under TSan and under Miri, and CodeQL. Also
+##	                       --with-private, when the private repo is here. Not
+##	                       with --quick or --backlog-run-quick
 ##	   --slow              another name for --long
 ##	   --no-profile        skip the profiler stage
 ##	   --no-dogfood        skip the dogfood install
@@ -252,9 +253,16 @@ while (($#)); do case "${1}" in
 	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
 if ((noContainer)); then container=0; fi
-## The private repo is opt-in, so a plain clone never looks for it.
+## --long runs everything, so it takes the private repo too when it's beside
+## this one. The run inside the container is handed --with-private instead.
+privDefault="$(cd "${root}/../.." && pwd)/${PRIVATE_DIR}/repo/cicd/run.bash"
+if ((long && ! withPrivate)) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" && -x "${PRIVATE_RUNNER:-${privDefault}}" ]]; then
+	withPrivate=1; innerArgs+=(--with-private)
+fi
+## The private repo is opt-in, by --with-private or --long, so a plain clone
+## never looks for it.
 if ((withPrivate)); then
-	PRIVATE_RUNNER="${PRIVATE_RUNNER:-$(cd "${root}/../.." && pwd)/${PRIVATE_DIR}/repo/cicd/run.bash}"
+	PRIVATE_RUNNER="${PRIVATE_RUNNER:-${privDefault}}"
 	export SILK_PRIVATE_RUNNER="${PRIVATE_RUNNER}"   ## the test ID check reads it
 else
 	PRIVATE_RUNNER=""; unset SILK_PRIVATE_RUNNER
@@ -1429,7 +1437,7 @@ fPlanSteps(){
 	fi
 	if ((quick)); then why="--quick"; elif ((noRemote)); then why="--no-remote"
 	elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then why=""
-	elif ((! withPrivate)); then why="needs --with-private"
+	elif ((! withPrivate)); then why="needs --with-private or --long"
 	else why="not checked out"; fi
 	fStepIf "Private runner" "${why}"
 	why="${rel}"; ((${#DOGFOOD_DESTS[@]})) || why="$(fStepOff_Why --no-dogfood)"; fStepIf "Dogfood" "${why}"
@@ -1700,7 +1708,7 @@ elif ((noRemote)); then
 elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then
 	fEcho_Clean "Private runner ......: ${PRIVATE_RUNNER} (macOS, Microsoft Store)"
 elif ((! withPrivate)); then
-	fEcho_Clean "Private runner ......: (off; --with-private turns it on)"
+	fEcho_Clean "Private runner ......: (off; --with-private or --long turns it on)"
 else
 	fEcho_Clean "Private runner ......: (not checked out)"
 fi
@@ -2597,6 +2605,7 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-24: --long takes --with-private too, when the private repo is here.
 ##		- 2026-11-19: The private repo is opt-in, by --with-private, and --no-private
 ##		              is gone. A plain run never looks for it.
 ##		- 2026-11-17: Stage 0 puts the stash back when the pull fails, names it when
