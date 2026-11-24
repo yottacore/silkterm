@@ -97,6 +97,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- Settings, Keyboard tab: when a key mapping already exists, clear the other one that the new one conflicts with
+	- ID: 2026112316112356
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261123-161123
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Requirements:
+		- Settings/Keyboard tab: When a key mapping already exists, clear the other one that the new one conflicts with.
+	- Notes:
+		- Pre-next-cut.
+
 - Does not release resources in tmux and/or muffer
 	- ID: 2026112006320249
 	- Type: Bug
