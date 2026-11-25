@@ -50,6 +50,10 @@ pub enum UserEvent {
 	// nothing (see ChildWatch). Never constructed elsewhere.
 	#[cfg_attr(not(windows), allow(dead_code))]
 	ChildGone(PaneId),
+	// windows: another window moved, showed, hid, or changed desktops, so what
+	// covers this one may have changed (app/covered.rs). Never constructed elsewhere.
+	#[cfg_attr(not(windows), allow(dead_code))]
+	Restacked,
 	// a pick from the macOS menu bar (macmenu.rs); never constructed elsewhere
 	#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 	Menu(crate::app::MenuAction),

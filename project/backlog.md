@@ -101,7 +101,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ID: 2026112509070667
 	- Type: Bug
 	- Status: Started
-		- The rest is in its 2 children: 2026112512414281 (Transparency on, partly covered) waits for an answer, and 2026112512414302 (fully covered) is queued.
+		- The rest is in its 2 children: 2026112512414281 (Transparency on, partly covered) waits for an answer, and 2026112512414302 (fully covered) is Done.
 	- Severity: High
 	- Opened: 20261125-090706
 	- Opened by: JC
@@ -140,7 +140,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Windows: a window fully covered by other windows isn't treated as hidden
 	- ID: 2026112512414302
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Avg
 	- Opened: 20261125-124143
 	- Opened by: CC
@@ -154,6 +154,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- No polling while the window is focused, and no steady wakeups while it's idle.
 	- Reproduced: No. Read from the code and winit's Windows backend, which sends no `Occluded` event.
 	- Note: SetWinEventHook on z-order, location, show, hide, cloak and minimize events, as Chromium's occlusion tracker does, is the likely route. Only a window known to be opaque may count as covering: a layered, no-redirection, cloaked or minimized one doesn't. A fully covered arm in `cicd/tests/wingui/idlebehind.ps1` (dfskh) would test it.
+	- Actual cause: Windows doesn't tell a window it's covered, and nothing worked it out, so only a minimized window counted as hidden.
+	- Actual fix: While the window is unfocused, it works out whether other windows cover all of it, the way Chromium does. Hooks on the desktop's window events (the window in front, moves and resizes by hand, minimize and restore, show, hide and close, z-order, maximize and restore, and virtual desktop moves) say when to look again. The look walks down the windows above this one and takes away each one sure to hide what's under it. Moves are followed only from the programs whose windows cover it. A window on another virtual desktop counts as hidden. A covered window freezes and takes the hidden wait, the same as a minimized one, and comes back through the same catch-up.
+	- Decisions:
+		- 20261125: A window never counts as covering when it's layered, click-through, drawn without a redirection bitmap, a tool window, a popup, shaped by a window region, cloaked, minimized, or another of SilkTerm's own. Some popups and borderless windows that do hide it won't count, which only leaves things as they were.
+		- 20261125: A focused window always counts as shown, and nothing is hooked while it has focus, which is the "no polling while focused" requirement.
+		- 20261125: Moves of other windows are hooked only for the programs that cover it, since hooked for every program they come with every pointer move. Each hooked event wakes the loop once, as read from winit's wait, which wakes for accessibility messages. That wasn't measured.
+		- 20261125: The covered area is the client area. A part off screen still counts as showing, so a window half off screen with the rest covered stays shown.
+	- Verified: 20261125 on vm925w, with Transparency off and on. All covered by another program's window, it logged "covered by other windows", took the hidden wait, and let its device go at 61 s. Moved off by that program without the focus changing, it was taken as shown within a second, and with Transparency on it took its device back without a click. Moved to another virtual desktop and back, it was taken as hidden and then as shown. With a strip in view, neither setting was ever taken as covered, and both behaved as before. The unit suite, clippy on the Linux and Windows targets, and the quick run's 5 areas pass.
+	- Swept: the one hidden check, `State::window_hidden`, which both render entry points and the idle release read. The idle release, the freeze and the reveal read only that.
+	- Test case: dfsm7 `a_window_counts_as_covered_only_with_none_of_it_left` and dfsm8 `a_window_cut_into_too_many_pieces_counts_as_shown`. `cicd/tests/wingui/idlecover.ps1` (dfsmp), new, and `idlebehind.ps1` (dfskh), now also checking a window partly in view is never taken as covered, both by hand on vm925w: `cicd/tests/wingui/run.bash --host vm925w idlecover idlebehind`. About 3 and a half minutes each, so not in the pipeline.
+	- Branch: nov25-2026112512414302
+	- Commit: 18a59ece
+	- Acceptance signoff: Self-closed: covering, coming back, and virtual desktops each passed a check on vm925w with both Transparency settings. Nothing is hooked while focused, by construction. The wakeups while covered weren't counted.
+	- Closed: 20261125-132455
+	- Closed reason: Done
 
 - Settings, Keyboard tab: when a key mapping already exists, clear the other one that the new one conflicts with
 	- ID: 2026112316112356
