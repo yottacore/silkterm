@@ -428,6 +428,15 @@ impl Bindings {
 		self.own.iter().find(|(each, _)| *each == hotkey).map(|(_, chords)| chords.as_slice())
 	}
 
+	/// What a hotkey is set to: the file's own value, or its default where the
+	/// file sets none. A chord it lost to another hotkey is still in it.
+	pub fn value(&self, hotkey: Hotkey) -> Vec<Chord> {
+		if let Some(own) = self.own(hotkey) {
+			return own.to_vec();
+		}
+		TABLE.iter().find(|row| row.0 == hotkey).and_then(|row| parse_value(default_text(row, self.mac)).ok()).unwrap_or_default()
+	}
+
 	/// These bindings with one hotkey's own value changed, or put back to its
 	/// default with None.
 	#[must_use]

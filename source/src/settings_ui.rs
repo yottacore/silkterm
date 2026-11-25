@@ -1024,8 +1024,8 @@ pub struct SettingsDialog {
 	// press, if anything was.
 	capture: Option<usize>,
 	capture_refused: Option<String>,
-	// Chords a press here took off another hotkey the file had set them for:
-	// (that hotkey, the chord, the one that has it now). Kept to say so on the
+	// Chords a press here took off another hotkey, set or by default: (that
+	// hotkey, the chord, the one that has it now). Kept to say so on the
 	// row that lost it, since the bindings no longer see a clash.
 	moved: Vec<(Hotkey, Chord, Hotkey)>,
 	// Chords are spoken the Mac's way. Stored so a test can ask for either.
@@ -2672,21 +2672,22 @@ impl SettingsDialog {
 		}
 		true
 	}
-	// Give a hotkey new chords of its own. A chord another hotkey's own value
-	// has is taken off that one, so the latest press wins; one another has only
-	// by default leaves it the way the file would make it.
+	// Give a hotkey new chords of its own. A chord another hotkey has, set or
+	// by default, is taken off that one's own value, so the latest press wins
+	// and the file is left without a clash for every launch to report.
 	fn set_hotkey(&mut self, hotkey: Hotkey, chords: Vec<Chord>) {
 		self.moved.retain(|(from, ..)| *from != hotkey);
 		let mut keys = self.edited.keys.clone();
 		for &chord in &chords {
 			for (other, _) in crate::keys::config_paths() {
-				let Some(own) = keys.own(other).filter(|_| other != hotkey) else {
-					continue;
-				};
-				if !own.contains(&chord) {
+				if other == hotkey {
 					continue;
 				}
-				let rest = own.iter().copied().filter(|each| *each != chord).collect();
+				let value = keys.value(other);
+				if !value.contains(&chord) {
+					continue;
+				}
+				let rest = value.into_iter().filter(|each| *each != chord).collect();
 				keys = keys.with_own(other, Some(rest));
 				self.moved.push((other, chord, hotkey));
 			}
@@ -10739,9 +10740,9 @@ mod tests {
 		assert_eq!(shown_on(&d, i), "Alt+Shift+Plus | ");
 	}
 
-	// A chord pressed for one hotkey that another has is said on both rows, the
-	// way the launch says it about the file. One the other hotkey had only by
-	// default stays the file's business; one it had been set to moves.
+	// A chord pressed for one hotkey that another has moves to the latest
+	// press, and the row it left says where it went. Until 20261125 one the
+	// other hotkey had only by default stayed the file's business.
 	// Test ID: ddev1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -10755,8 +10756,11 @@ mod tests {
 		d.capture_start(close_pane);
 		assert!(d.capture_key(&Pressed::Character("W".into()), ctrl_shift));
 		assert_eq!(shown_on(&d, close_tab), "Ctrl+F4 | Ctrl+Shift+W is set for Close pane");
-		assert_eq!(shown_on(&d, close_pane), "Ctrl+Shift+W | took Ctrl+Shift+W from Close tab");
-		assert!(d.is_default(Key::HotkeyCloseTab), "close_tab itself was not set");
+		// 20261125: the press takes it off close_tab's own value too
+		// assert_eq!(shown_on(&d, close_pane), "Ctrl+Shift+W | took Ctrl+Shift+W from Close tab");
+		// assert!(d.is_default(Key::HotkeyCloseTab), "close_tab itself was not set");
+		assert_eq!(shown_on(&d, close_pane), "Ctrl+Shift+W | ");
+		assert!(!d.is_default(Key::HotkeyCloseTab), "close_tab is set to what it has left");
 
 		// set for one, then pressed for another: the latest press has it
 		let right = row_of(&d, Key::HotkeySplitRight);
@@ -10780,6 +10784,50 @@ mod tests {
 		d.moved.clear();
 		assert_eq!(shown_on(&d, right), "Alt+D | Alt+D is also set for Split horizontal");
 		assert_eq!(shown_on(&d, down), "Off | Alt+D is set for Split vertical");
+	}
+
+	// A chord pressed for one hotkey comes off any other that has it, by
+	// default as well as set, so what is saved has no clash for the launch to
+	// report. A clash the file already had is said on both rows until a press
+	// settles it.
+	// Test ID: dfsn8
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_pressed_chord_comes_off_a_hotkey_that_had_it_by_default() {
+		use crate::input::Hotkey;
+		use crate::keys::{Bindings, Chord};
+		use winit::keyboard::{Key as Pressed, ModifiersState};
+		let saved = |keys: &Bindings| -> Vec<(Hotkey, Vec<Chord>)> { crate::keys::config_paths().filter_map(|(hotkey, _)| keys.own(hotkey).map(|chords| (hotkey, chords.to_vec()))).collect() };
+		let ctrl_shift = ModifiersState::CONTROL.union(ModifiersState::SHIFT);
+		for (mac, mods, spoken) in [(false, ctrl_shift, "Ctrl+Shift+T"), (true, ModifiersState::SUPER, "Command+T")] {
+			let (mut d, _) = keys_dialog(mac);
+			let new_tab = row_of(&d, Key::HotkeyNewTab);
+			let new_window = row_of(&d, Key::HotkeyNewWindow);
+			d.capture_start(new_window);
+			assert!(d.capture_key(&Pressed::Character("t".into()), mods));
+			assert_eq!(d.edited.keys.own(Hotkey::NewTab), Some(&[][..]), "mac {mac}: new_tab is set off");
+			assert_eq!(shown_on(&d, new_tab), format!("Off | {spoken} is set for New window"));
+			assert_eq!(shown_on(&d, new_window), format!("{spoken} | "));
+			assert!(!d.is_default(Key::HotkeyNewTab));
+			assert!(d.edited.keys.taken().is_empty(), "mac {mac}");
+			let (loaded, notes) = Bindings::with(mac, &saved(&d.edited.keys));
+			assert!(notes.is_empty(), "mac {mac}: {notes:?}");
+			assert_eq!(loaded, d.edited.keys);
+		}
+
+		// one of 2 default chords comes off, and the other stays
+		let (mut d, _) = keys_dialog(false);
+		let close_tab = row_of(&d, Key::HotkeyCloseTab);
+		let close_pane = row_of(&d, Key::HotkeyClosePane);
+		d.edited.keys = Bindings::with(false, &[(Hotkey::ClosePane, vec![Chord::parse("Ctrl+Shift+W").unwrap()])]).0;
+		assert_eq!(shown_on(&d, close_tab), "Ctrl+F4 | Ctrl+Shift+W is set for Close pane", "a clash from the file");
+		assert_eq!(shown_on(&d, close_pane), "Ctrl+Shift+W | took Ctrl+Shift+W from Close tab");
+		d.capture_start(close_pane);
+		assert!(d.capture_key(&Pressed::Character("W".into()), ctrl_shift));
+		assert_eq!(d.edited.keys.own(Hotkey::CloseTab), Some(&[Chord::parse("Ctrl+F4").unwrap()][..]));
+		assert_eq!(shown_on(&d, close_tab), "Ctrl+F4 | Ctrl+Shift+W is set for Close pane");
+		assert_eq!(shown_on(&d, close_pane), "Ctrl+Shift+W | ");
+		assert!(Bindings::with(false, &saved(&d.edited.keys)).1.is_empty());
 	}
 
 	// On a Mac the rows show Command chords in Apple's order, and Command held
@@ -10863,16 +10911,34 @@ mod tests {
 		assert!(config::persist(&d.orig, &d.edited));
 		config::revert_keys(&d.take_reverted());
 		let saved = std::fs::read_to_string(&path).unwrap();
-		// only the hotkey that was set is in the file; the one that lost a
-		// chord to it isn't
+		// only the hotkeys the press set are in the file. 20261125: on Linux
+		// that is close_tab too, with the chord it has left; it was close_pane
+		// alone, with close_tab left to lose the chord at every launch.
+		// assert_eq!(lines.len(), 1, "{saved}");
 		let active = |text: &str| -> Vec<String> { text.lines().map(str::trim).filter(|line| crate::keys::config_paths().any(|(_, p)| line.starts_with(&format!("{}:", &p["keys.".len()..])))).map(String::from).collect() };
-		let lines = active(&saved);
-		assert_eq!(lines.len(), 1, "{saved}");
-		let written = lines[0].trim_start_matches("close_pane:").trim().trim_matches('"');
-		assert_eq!(written, value);
+		let read = |line: &str| line.split_once(':').map(|(name, value)| format!("{name}: {}", value.trim().trim_matches('"'))).unwrap_or_default();
+		let mut lines: Vec<String> = active(&saved).iter().map(|line| read(line)).collect();
+		let shipped_keys = crate::keys::Bindings::defaults(mac);
+		let mut by_hand = pristine.clone();
+		let mut set = Vec::new();
+		let mut set_rows = Vec::new();
+		for (hotkey, p) in crate::keys::config_paths() {
+			let Some(own) = d.edited.keys.own(hotkey) else {
+				continue;
+			};
+			let name = &p["keys.".len()..];
+			let own = crate::keys::value_text(own, mac);
+			by_hand = by_hand.replace(&format!("# {name}: \"{}\"  ## Default", crate::keys::value_text(shipped_keys.chords(hotkey), mac)), &format!("{name}: \"{own}\""));
+			set.push(format!("{name}: {own}"));
+			set_rows.push(d.specs.iter().position(|spec| matches!(spec.kind, Kind::Hotkey(each) if each == hotkey)).expect("a row"));
+		}
+		lines.sort();
+		set.sort();
+		assert_eq!(lines, set, "{saved}");
+		assert!(set.contains(&format!("close_pane: {value}")), "{set:?}");
+		assert_eq!(set.len(), if mac { 1 } else { 2 }, "{set:?}");
 
-		// the same as uncommenting the line and typing the chord in
-		let by_hand = pristine.replace(&shipped, &format!("close_pane: \"{value}\""));
+		// the same as uncommenting the lines and typing the chords in
 		let _ = std::fs::write(&path, &by_hand);
 		let hand = config::reload_from_disk();
 		let _ = std::fs::write(&path, &saved);
@@ -10880,10 +10946,12 @@ mod tests {
 		assert!(after.keys == hand.keys, "loads as the hand edit does");
 		assert!(after.keys == d.edited.keys, "loads as it was set");
 
-		// the revert arrow takes it out of the file again
+		// the revert arrows take them out of the file again
 		d.orig = after.clone();
 		d.edited = after;
-		d.row_revert(i);
+		for row in set_rows {
+			d.row_revert(row);
+		}
 		assert!(config::persist(&d.orig, &d.edited));
 		config::revert_keys(&d.take_reverted());
 		let reverted = std::fs::read_to_string(&path).unwrap();

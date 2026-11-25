@@ -173,7 +173,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Settings, Keyboard tab: when a key mapping already exists, clear the other one that the new one conflicts with
 	- ID: 2026112316112356
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Closed
 	- Priority: Avg
 	- Opened: 20261123-161123
 	- Opened by: JC
@@ -184,6 +184,23 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Settings/Keyboard tab: When a key mapping already exists, clear the other one that the new one conflicts with.
 	- Notes:
 		- Pre-next-cut.
+	- Progress log:
+		- 20261125: A chord pressed on the Keys tab now comes off any other hotkey that has it, by default as well as set. That hotkey is saved with what it has left, or "none" when nothing is left, and its row says where the chord went. Before this, a chord another hotkey had only by default was left for the launch to take, so the file kept the clash and every launch reported it.
+	- Decisions:
+		- 20261125: This replaces the 20261003 decision on 2026100307252506 that a chord another hotkey has by default is taken from it the way the file takes it.
+		- 20261125: Only the chord comes off. A hotkey with 2 chords by default, such as Close tab with Ctrl+Shift+W and Ctrl+F4, keeps the other one.
+		- 20261125: Reverting the row that took a chord doesn't give the chord back. The row that lost it keeps its new value until its own revert arrow is used. This was already so for a chord taken from a set value.
+		- 20261125: A clash already in the file is still shown on both rows when Settings opens, and the next press of that chord settles it.
+	- Swept: `set_hotkey` is the only place the dialog changes a hotkey. Its other callers in tests set chords nothing else has. The uiux style guide's Keys tab line was updated. design.md and the split panes design don't describe a clash.
+	- Verified: The quick gate passed in all 5 areas. dfsn8 failed with the old lookup put back, and passes with the fix.
+	- Branch: nov25-2026112316112356
+	- Commit: 359bc391
+	- Test case: `a_pressed_chord_comes_off_a_hotkey_that_had_it_by_default` (dfsn8).
+		- 20261125: `a_chord_another_hotkey_had_is_said_on_both_rows` (ddev1): the Close pane note goes from "took Ctrl+Shift+W from Close tab" to none, and Close tab is no longer at its default. The old asserts are commented out beside the new ones.
+		- 20261125: `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` (ddev4): the saved file has 2 hotkey lines on Linux, not 1, since close_tab is saved with Ctrl+F4. The hand edit and the revert cover both lines.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its test failed before and passes after.
+	- Closed: 20261125-133534
+	- Closed reason: Done
 
 - Does not release resources in tmux and/or muffer
 	- ID: 2026112006320249
