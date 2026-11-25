@@ -97,6 +97,16 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- Windows: "Minutes otherwise" doesn't sleep resources when SilkTerm is behind other windows
+	- ID: 2026112509070667
+	- Type: Bug
+	- Status: Queued
+	- Opened: 20261125-090706
+	- Opened by: JC
+	- Related IDs: 2026111009560100, 2026110609500001, 2026103010083401
+	- Target OS: Windows
+	- Incorrect behavior: "Minutes otherwise" doesn't sleep resources when silkterm is behind other windows.
+
 - Settings, Keyboard tab: when a key mapping already exists, clear the other one that the new one conflicts with
 	- ID: 2026112316112356
 	- Type: Enhancement
