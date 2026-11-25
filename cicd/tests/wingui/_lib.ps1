@@ -338,6 +338,7 @@ $script:vks = @{
 	ctrl = 0x11; shift = 0x10; alt = 0x12
 	tab = 0x09; escape = 0x1B; enter = 0x0D; space = 0x20
 	f4 = 0x73; f11 = 0x7A; win = 0x5B
+	left = 0x25; right = 0x27
 }
 
 ##	Literal text, typed through the keyboard layout the way a keyboard does.

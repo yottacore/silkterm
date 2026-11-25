@@ -46,6 +46,7 @@ use window_size::{MonitorWatch, fit_px, launch_maximized, window_px};
 
 mod closing;
 mod cmdline;
+mod covered;
 mod dialogs;
 mod idle;
 mod menubar;
@@ -810,6 +811,8 @@ struct State {
 	// render entry points go through.
 	was_hidden: bool,
 	minimized: MinimizedProbe,
+	// all covered by other windows, where the desktop doesn't say (Windows)
+	cover: covered::Cover,
 	// Deadline of the next animation frame while SILK_MAX_FPS pins the rate; None
 	// otherwise, which is every ordinary run. See `max_fps`.
 	next_frame: Option<Instant>,
@@ -3308,6 +3311,7 @@ impl ApplicationHandler<UserEvent> for App {
 			keeps_picture: !(cfg!(windows) && want_transparent),
 			was_hidden: false,
 			minimized: MinimizedProbe::default(),
+			cover: covered::Cover::new(&self.proxy),
 			next_frame: None,
 			wp_count: 0,
 			wp_current: None,
@@ -3487,6 +3491,8 @@ impl ApplicationHandler<UserEvent> for App {
 				state.apply_menu(action, target, &self.proxy);
 				state.dirty = true;
 			}
+			// the pass after this looks at what covers the window again
+			UserEvent::Restacked => {}
 			UserEvent::VtSwitched => {
 				// Back on this display's console, since the watcher only sends
 				// returns. Rebuild either way, since focus may go to another window
@@ -3528,6 +3534,12 @@ impl ApplicationHandler<UserEvent> for App {
 		};
 		if restore_sign(&event) {
 			state.minimized.forget();
+		}
+		// The window itself moved, so look again at what covers it. The pointer
+		// reaching it means some of it shows, which a hidden window checks.
+		let pointer = matches!(event, WindowEvent::CursorEntered { .. } | WindowEvent::CursorMoved { .. } | WindowEvent::MouseInput { .. } | WindowEvent::MouseWheel { .. });
+		if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } | WindowEvent::Occluded(_)) || (pointer && state.was_hidden) {
+			state.cover.touch();
 		}
 		// The startup benchmark owns the window while its banner is up: anything
 		// typed or clicked would change what is being timed. Closing still works.

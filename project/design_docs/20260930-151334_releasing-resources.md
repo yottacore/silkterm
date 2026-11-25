@@ -122,7 +122,9 @@ What a window costs while it's in use is described in the [Reducing resources](2
 
 - On X11 there isn't any visible side effect, by design. The window keeps showing its last frame, and taking the device back takes about 25 ms.
 
-- On Windows with Transparency off the window keeps its last frame too. With Transparency on it draws through a composition visual and doesn't have a surface of its own, so letting the device go leaves it black. That window is let go only while minimized.
+- On Windows with Transparency off the window keeps its last frame too. With Transparency on it draws through a composition visual and doesn't have a surface of its own, so letting the device go leaves it black. That window is let go only while minimized or all covered.
+
+- Windows doesn't report a covered window, so SilkTerm works it out while the window is unfocused, the way Chromium does. Hooks on other windows' events, such as a move, a show or hide, a change of the window in front, or a switch of virtual desktop, say when to look again. The look walks down the windows above this one and takes away each one that is sure to hide what's under it. A layered or click-through window, one without a redirection bitmap, a tool window, a popup, a shaped window, and another of SilkTerm's own never count, because a window wrongly taken as covered would stop drawing while someone reads it. A window on another virtual desktop counts as hidden. A focused window counts as shown, and nothing is hooked while it has focus. Moves are followed only from the programs whose windows cover it, because hooked for every program they come with every pointer move.
 
 - A minimized window on Windows reports a size of zero, and during a restore it stops reporting minimized a moment before the real size comes back. A window without any size counts as hidden, so nothing is drawn or rebuilt in that gap. A rebuild there took 1x1 as the window's size, and the console host's reflow at 2 columns lost the screen. Coming back into view is a sign of life by itself, because Windows doesn't send occlusion events and its repaint can come inside the gap.
 

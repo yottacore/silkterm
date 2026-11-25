@@ -434,7 +434,8 @@ impl State {
 	fn window_hidden(&mut self) -> bool {
 		let window = &self.window;
 		let minimized = &mut self.minimized;
-		window_hidden(self.revealed, self.occluded, self.no_area, || FREEZE_MINIMIZED && minimized.get(Instant::now(), || window.is_minimized().unwrap_or(false)))
+		let covered = self.revealed && self.cover.check(window, self.focused);
+		window_hidden(self.revealed, self.occluded || covered, self.no_area, || FREEZE_MINIMIZED && minimized.get(Instant::now(), || window.is_minimized().unwrap_or(false)))
 	}
 
 	/// The freeze edge, kept in one place because both render entry points call

@@ -34,6 +34,23 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- Windows: a window with Transparency on that is partly behind other windows never frees resources
+	- ID: 2026112512414281
+	- Type: Bug
+	- Status: Waiting for answers
+		- Waits on the 2026112512414281 question in questions.md: keep the device, free all but the device and its swapchain, or let it go black.
+	- Severity: High
+	- Opened: 20261125-124142
+	- Opened by: CC
+	- Parent ID: 2026112509070667
+	- Target OS: Windows
+	- Target version: rc.1
+	- Incorrect behavior: With Transparency on, a window still partly in view is never let go, however long it sits unfocused and quiet. It waits until it's minimized.
+	- Reproduced: 20261125, on vm925w. A window covered but for a strip on its left, unfocused, with the pointer over the other window, logged "kept: on screen, and would go blank" and held its device for 81 s with "Minutes otherwise" at 1.
+	- Possible cause: Built that way since 2026100319134501. With Transparency on the window draws through a composition visual and has no surface of its own, so letting the device go leaves it black. The help for "Minutes otherwise" says so.
+	- Against: the releasing resources design doc, "On Windows with Transparency on, a window in view never lets go".
+	- Test case: `cicd/tests/wingui/idlebehind.ps1` (dfskh), seethru arm, which checks today's hold. The answer decides what it checks next.
+
 - Demo: the cursor should go to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -100,28 +117,25 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Windows: "Minutes otherwise" doesn't sleep resources when SilkTerm is behind other windows
 	- ID: 2026112509070667
 	- Type: Bug
-	- Status: Queued
+	- Status: Started
+		- The rest is in its 2 children: 2026112512414281 (Transparency on, partly covered) waits for an answer, and 2026112512414302 (fully covered) is Done.
 	- Severity: High
 	- Opened: 20261125-090706
 	- Opened by: JC
 	- Related IDs: 2026111009560100, 2026110609500001, 2026103010083401
 	- Target OS: Windows
-	- Incorrect behavior: "Minutes otherwise" doesn't sleep resources when silkterm is behind other windows.
-
-- Settings, Keyboard tab: when a key mapping already exists, clear the other one that the new one conflicts with
-	- ID: 2026112316112356
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261123-161123
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
 	- Target version: rc.1
-	- Requirements:
-		- Settings/Keyboard tab: When a key mapping already exists, clear the other one that the new one conflicts with.
-	- Notes:
-		- Pre-next-cut.
+	- Incorrect behavior: "Minutes otherwise" doesn't sleep resources when silkterm is behind other windows.
+	- Reproduced: 20261125, on vm925w, with "Minutes otherwise" at 1 and "Minutes when hidden" at 30, read from the file. The window was covered but for a strip on its left by another program's window, which had the focus and the pointer.
+		- Transparency off: it let go 60 s after it was covered, and a click brought it back.
+		- Transparency on: it never let go. The log said "kept: on screen, and would go blank" for the whole 81 s.
+		- winit's Windows backend drops a pointer move to the same place, so a resting pointer doesn't restart the wait there.
+	- Actual cause: With Transparency on, a Windows window that is on screen, even mostly covered, keeps its device by design, since it would go black without it. Windows sends no occlusion events, so a fully covered window counts as on screen too.
+	- Decisions:
+		- 20261125: The design doc's hold for a window in view with Transparency on is a recorded decision, so it isn't changed without an answer. The question is on child 2026112512414281.
+		- 20261125: Treating a fully covered window as hidden is what the "Minutes when hidden" help already says, so it's a bug of its own, child 2026112512414302. It wasn't built in this pass. A window wrongly taken as covered would stop drawing while someone reads it, so it needs a careful build and a run on a real desktop.
+	- Test case: `cicd/tests/wingui/idlebehind.ps1` (dfskh), new, by hand on vm925w: `cicd/tests/wingui/run.bash --host vm925w idlebehind`. About 3 and a half minutes, so not in the pipeline.
+	- Branch: nov25-2026112509070667
 
 - Does not release resources in tmux and/or muffer
 	- ID: 2026112006320249
@@ -378,6 +392,39 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `a_lost_device_is_seen` (dfefp), `a_lost_warm_device_is_let_go` (dfefq), and `cicd/tests/devlost/run.bash` (dfeg0), in the pipeline after dlgwl.
 	- Acceptance signoff: Self-closed: passed on vm925w (DX12 and Vulkan) and in the hosted Mac tests on Metal.
 	- Closed: 20261117-173102
+	- Closed reason: Done
+
+- Windows: a window fully covered by other windows isn't treated as hidden
+	- ID: 2026112512414302
+	- Type: Bug
+	- Status: Closed
+	- Severity: Avg
+	- Opened: 20261125-124143
+	- Opened by: CC
+	- Parent ID: 2026112509070667
+	- Target OS: Windows
+	- Target version: rc.1
+	- Incorrect behavior: The help for "Minutes when hidden" says it covers a minimized or covered window. On Windows only a minimized one counts. winit sends no occlusion events there, so a window fully covered by other windows waits "Minutes otherwise", and with Transparency on it never lets go.
+	- Requirements:
+		- A window fully covered by other visible windows, or cloaked on another virtual desktop, counts as hidden. It builds no frames and waits "Minutes when hidden".
+		- A window that comes back into view draws again at once, and takes its device back if it would be black without it.
+		- No polling while the window is focused, and no steady wakeups while it's idle.
+	- Reproduced: No. Read from the code and winit's Windows backend, which sends no `Occluded` event.
+	- Note: SetWinEventHook on z-order, location, show, hide, cloak and minimize events, as Chromium's occlusion tracker does, is the likely route. Only a window known to be opaque may count as covering: a layered, no-redirection, cloaked or minimized one doesn't. A fully covered arm in `cicd/tests/wingui/idlebehind.ps1` (dfskh) would test it.
+	- Actual cause: Windows doesn't tell a window it's covered, and nothing worked it out, so only a minimized window counted as hidden.
+	- Actual fix: While the window is unfocused, it works out whether other windows cover all of it, the way Chromium does. Hooks on the desktop's window events (the window in front, moves and resizes by hand, minimize and restore, show, hide and close, z-order, maximize and restore, and virtual desktop moves) say when to look again. The look walks down the windows above this one and takes away each one sure to hide what's under it. Moves are followed only from the programs whose windows cover it. A window on another virtual desktop counts as hidden. A covered window freezes and takes the hidden wait, the same as a minimized one, and comes back through the same catch-up.
+	- Decisions:
+		- 20261125: A window never counts as covering when it's layered, click-through, drawn without a redirection bitmap, a tool window, a popup, shaped by a window region, cloaked, minimized, or another of SilkTerm's own. Some popups and borderless windows that do hide it won't count, which only leaves things as they were.
+		- 20261125: A focused window always counts as shown, and nothing is hooked while it has focus, which is the "no polling while focused" requirement.
+		- 20261125: Moves of other windows are hooked only for the programs that cover it, since hooked for every program they come with every pointer move. Each hooked event wakes the loop once, as read from winit's wait, which wakes for accessibility messages. That wasn't measured.
+		- 20261125: The covered area is the client area. A part off screen still counts as showing, so a window half off screen with the rest covered stays shown.
+	- Verified: 20261125 on vm925w, with Transparency off and on. All covered by another program's window, it logged "covered by other windows", took the hidden wait, and let its device go at 61 s. Moved off by that program without the focus changing, it was taken as shown within a second, and with Transparency on it took its device back without a click. Moved to another virtual desktop and back, it was taken as hidden and then as shown. With a strip in view, neither setting was ever taken as covered, and both behaved as before. The unit suite, clippy on the Linux and Windows targets, and the quick run's 5 areas pass.
+	- Swept: the one hidden check, `State::window_hidden`, which both render entry points and the idle release read. The idle release, the freeze and the reveal read only that.
+	- Test case: dfsm7 `a_window_counts_as_covered_only_with_none_of_it_left` and dfsm8 `a_window_cut_into_too_many_pieces_counts_as_shown`. `cicd/tests/wingui/idlecover.ps1` (dfsmp), new, and `idlebehind.ps1` (dfskh), now also checking a window partly in view is never taken as covered, both by hand on vm925w: `cicd/tests/wingui/run.bash --host vm925w idlecover idlebehind`. About 3 and a half minutes each, so not in the pipeline.
+	- Branch: nov25-2026112512414302
+	- Commit: 18a59ece
+	- Acceptance signoff: Self-closed: covering, coming back, and virtual desktops each passed a check on vm925w with both Transparency settings. Nothing is hooked while focused, by construction. The wakeups while covered weren't counted.
+	- Closed: 20261125-132455
 	- Closed reason: Done
 
 - An environment variable that isn't valid UTF-8 crashes SilkTerm at launch
@@ -714,6 +761,38 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Commit: b1e1924c
 	- Acceptance signoff: Self-closed: reproduced, and the test fails without the fix and passes with it.
 	- Closed: 20261117-164510
+	- Closed reason: Done
+
+- Settings, Keyboard tab: when a key mapping already exists, clear the other one that the new one conflicts with
+	- ID: 2026112316112356
+	- Type: Enhancement
+	- Status: Closed
+	- Priority: Avg
+	- Opened: 20261123-161123
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Requirements:
+		- Settings/Keyboard tab: When a key mapping already exists, clear the other one that the new one conflicts with.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261125: A chord pressed on the Keys tab now comes off any other hotkey that has it, by default as well as set. That hotkey is saved with what it has left, or "none" when nothing is left, and its row says where the chord went. Before this, a chord another hotkey had only by default was left for the launch to take, so the file kept the clash and every launch reported it.
+	- Decisions:
+		- 20261125: This replaces the 20261003 decision on 2026100307252506 that a chord another hotkey has by default is taken from it the way the file takes it.
+		- 20261125: Only the chord comes off. A hotkey with 2 chords by default, such as Close tab with Ctrl+Shift+W and Ctrl+F4, keeps the other one.
+		- 20261125: Reverting the row that took a chord doesn't give the chord back. The row that lost it keeps its new value until its own revert arrow is used. This was already so for a chord taken from a set value.
+		- 20261125: A clash already in the file is still shown on both rows when Settings opens, and the next press of that chord settles it.
+	- Swept: `set_hotkey` is the only place the dialog changes a hotkey. Its other callers in tests set chords nothing else has. The uiux style guide's Keys tab line was updated. design.md and the split panes design don't describe a clash.
+	- Verified: The quick gate passed in all 5 areas. dfsn8 failed with the old lookup put back, and passes with the fix.
+	- Branch: nov25-2026112316112356
+	- Commit: 359bc391
+	- Test case: `a_pressed_chord_comes_off_a_hotkey_that_had_it_by_default` (dfsn8).
+		- 20261125: `a_chord_another_hotkey_had_is_said_on_both_rows` (ddev1): the Close pane note goes from "took Ctrl+Shift+W from Close tab" to none, and Close tab is no longer at its default. The old asserts are commented out beside the new ones.
+		- 20261125: `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` (ddev4): the saved file has 2 hotkey lines on Linux, not 1, since close_tab is saved with Ctrl+F4. The hand edit and the revert cover both lines.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its test failed before and passes after.
+	- Closed: 20261125-133534
 	- Closed reason: Done
 
 - macOS: Create a setting to use Option as Meta in the terminal
