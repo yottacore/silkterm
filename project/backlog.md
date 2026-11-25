@@ -100,13 +100,60 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Windows: "Minutes otherwise" doesn't sleep resources when SilkTerm is behind other windows
 	- ID: 2026112509070667
 	- Type: Bug
-	- Status: Queued
+	- Status: Started
+		- The rest is in its 2 children: 2026112512414281 (Transparency on, partly covered) waits for an answer, and 2026112512414302 (fully covered) is queued.
 	- Severity: High
 	- Opened: 20261125-090706
 	- Opened by: JC
 	- Related IDs: 2026111009560100, 2026110609500001, 2026103010083401
 	- Target OS: Windows
+	- Target version: rc.1
 	- Incorrect behavior: "Minutes otherwise" doesn't sleep resources when silkterm is behind other windows.
+	- Reproduced: 20261125, on vm925w, with "Minutes otherwise" at 1 and "Minutes when hidden" at 30, read from the file. The window was covered but for a strip on its left by another program's window, which had the focus and the pointer.
+		- Transparency off: it let go 60 s after it was covered, and a click brought it back.
+		- Transparency on: it never let go. The log said "kept: on screen, and would go blank" for the whole 81 s.
+		- winit's Windows backend drops a pointer move to the same place, so a resting pointer doesn't restart the wait there.
+	- Actual cause: With Transparency on, a Windows window that is on screen, even mostly covered, keeps its device by design, since it would go black without it. Windows sends no occlusion events, so a fully covered window counts as on screen too.
+	- Decisions:
+		- 20261125: The design doc's hold for a window in view with Transparency on is a recorded decision, so it isn't changed without an answer. The question is on child 2026112512414281.
+		- 20261125: Treating a fully covered window as hidden is what the "Minutes when hidden" help already says, so it's a bug of its own, child 2026112512414302. It wasn't built in this pass. A window wrongly taken as covered would stop drawing while someone reads it, so it needs a careful build and a run on a real desktop.
+	- Test case: `cicd/tests/wingui/idlebehind.ps1` (dfskh), new, by hand on vm925w: `cicd/tests/wingui/run.bash --host vm925w idlebehind`. About 3 and a half minutes, so not in the pipeline.
+	- Branch: nov25-2026112509070667
+
+- Windows: a window with Transparency on that is partly behind other windows never frees resources
+	- ID: 2026112512414281
+	- Type: Bug
+	- Status: Waiting for answers
+		- Waits on the 2026112512414281 question in questions.md: keep the device, free all but the device and its swapchain, or let it go black.
+	- Severity: High
+	- Opened: 20261125-124142
+	- Opened by: CC
+	- Parent ID: 2026112509070667
+	- Target OS: Windows
+	- Target version: rc.1
+	- Incorrect behavior: With Transparency on, a window still partly in view is never let go, however long it sits unfocused and quiet. It waits until it's minimized.
+	- Reproduced: 20261125, on vm925w. A window covered but for a strip on its left, unfocused, with the pointer over the other window, logged "kept: on screen, and would go blank" and held its device for 81 s with "Minutes otherwise" at 1.
+	- Possible cause: Built that way since 2026100319134501. With Transparency on the window draws through a composition visual and has no surface of its own, so letting the device go leaves it black. The help for "Minutes otherwise" says so.
+	- Against: the releasing resources design doc, "On Windows with Transparency on, a window in view never lets go".
+	- Test case: `cicd/tests/wingui/idlebehind.ps1` (dfskh), seethru arm, which checks today's hold. The answer decides what it checks next.
+
+- Windows: a window fully covered by other windows isn't treated as hidden
+	- ID: 2026112512414302
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261125-124143
+	- Opened by: CC
+	- Parent ID: 2026112509070667
+	- Target OS: Windows
+	- Target version: rc.1
+	- Incorrect behavior: The help for "Minutes when hidden" says it covers a minimized or covered window. On Windows only a minimized one counts. winit sends no occlusion events there, so a window fully covered by other windows waits "Minutes otherwise", and with Transparency on it never lets go.
+	- Requirements:
+		- A window fully covered by other visible windows, or cloaked on another virtual desktop, counts as hidden. It builds no frames and waits "Minutes when hidden".
+		- A window that comes back into view draws again at once, and takes its device back if it would be black without it.
+		- No polling while the window is focused, and no steady wakeups while it's idle.
+	- Reproduced: No. Read from the code and winit's Windows backend, which sends no `Occluded` event.
+	- Note: SetWinEventHook on z-order, location, show, hide, cloak and minimize events, as Chromium's occlusion tracker does, is the likely route. Only a window known to be opaque may count as covering: a layered, no-redirection, cloaked or minimized one doesn't. A fully covered arm in `cicd/tests/wingui/idlebehind.ps1` (dfskh) would test it.
 
 - Settings, Keyboard tab: when a key mapping already exists, clear the other one that the new one conflicts with
 	- ID: 2026112316112356
