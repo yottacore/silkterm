@@ -2175,6 +2175,23 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It covers the left half only now. alacritty, kitty and wezterm draw it 2 cells wide.
 		- Detail: `detail_backlog.md`, under this ID.
 
+- Windows: the `savenotice` scenario no longer gets a refused save, so its notice never comes up
+	- ID: 2026112612100000
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261126-121000
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.2
+	- Incorrect behavior: `savenotice` (dct88) fails "a message box came up for the refused save" on vm925w, twice in a row, on the beta4 build.
+	- Reproduced: 20261126, on vm925w. On Linux the same file, with or without a Format line, is filled from the template at launch. The unreadable line and both `shells:` blocks are kept, and the save goes through.
+	- Possible cause: Since the 11-19 template work, a save beside an unreadable line keeps it rather than refusing. The scenario's file no longer leads to a refused save. The notice may still work for a save that is refused some other way.
+	- Expected behavior: The scenario sets up a save that is still refused, and sees the notice. If no save can be refused any more, the notice and its scenario go.
+	- Notes:
+		- b29w's console has been locked in recent full runs, so the scenario skipped there and this went unseen.
+		- Nothing is lost: the line stays in the file.
+
 - A pre-nesting file's look settings stop applying after it converts
 	- ID: 2026111917532694
 	- Type: Bug
