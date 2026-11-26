@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Windows: a window with Transparency on that is partly behind other windows never frees resources
 	- ID: 2026112512414281
 	- Type: Bug
-	- Status: Waiting for answers
+	- Status: Queued
 		- Waits on the 2026112512414281 question in questions.md: keep the device, free all but the device and its swapchain, or let it go black.
 	- Severity: High
 	- Opened: 20261125-124142
@@ -50,6 +50,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: Built that way since 2026100319134501. With Transparency on the window draws through a composition visual and has no surface of its own, so letting the device go leaves it black. The help for "Minutes otherwise" says so.
 	- Against: the releasing resources design doc, "On Windows with Transparency on, a window in view never lets go".
 	- Test case: `cicd/tests/wingui/idlebehind.ps1` (dfskh), seethru arm, which checks today's hold. The answer decides what it checks next.
+	- 20261125: answered, Transparency was on. Go with B: free everything but the device and its swapchain, so the last frame stays up.
 
 - Demo: the cursor should go to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
