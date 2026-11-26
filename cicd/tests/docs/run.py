@@ -54,11 +54,13 @@ NO_INNER_DOC = {"buildnum.rs"}
 
 
 def problems(lines: list[str]) -> list[tuple[int, str]]:
-	##	(line, problem) pairs, 1-based. Fenced code and TOC blocks are passed over
-	##	whole, and a fence counts as text for the lines around it.
+	##	(line, problem) pairs, 1-based. Fenced code, TOC blocks and multi-line HTML
+	##	comments are passed over whole, and a fence counts as text for the lines
+	##	around it. A changelog's template is a comment, and its headings aren't real.
 	out = []
 	fence: str | None = None
 	toc = False
+	comment = False
 	in_item = False
 	for i, line in enumerate(lines):
 		stripped = line.strip()
@@ -69,6 +71,12 @@ def problems(lines: list[str]) -> list[tuple[int, str]]:
 		if fence is not None:
 			if stripped.startswith(fence):
 				fence = None
+			continue
+		if comment:
+			comment = "-->" not in stripped
+			continue
+		if stripped.startswith("<!--") and "-->" not in stripped:
+			comment = True
 			continue
 		if stripped == TOC_BEGIN:
 			toc = True
@@ -228,3 +236,4 @@ if __name__ == "__main__":
 ##		- 20261004: Banner rules in .rs files.
 ##		- 20261005: Doc comments on pub items and file openings.
 ##		- 20261006: A plain `//` may label a group of pub items.
+##		- 20261126: Multi-line HTML comments are passed over.
