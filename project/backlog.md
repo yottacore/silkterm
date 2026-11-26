@@ -34,40 +34,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
-- Windows: a window with Transparency on that is partly behind other windows never frees resources
-	- ID: 2026112512414281
-	- Type: Bug
-	- Status: Closed
-		- The behavior passed its check on vm925w. Only the new wording is left to judge: the "Minutes otherwise" help, and the Windows warning on Transparency.
-	- Severity: High
-	- Opened: 20261125-124142
-	- Opened by: CC
-	- Parent ID: 2026112509070667
-	- Target OS: Windows
-	- Target version: rc.1
-	- Incorrect behavior: With Transparency on, a window still partly in view is never let go, however long it sits unfocused and quiet. It waits until it's minimized.
-	- Reproduced: 20261125, on vm925w. A window covered but for a strip on its left, unfocused, with the pointer over the other window, logged "kept: on screen, and would go blank" and held its device for 81 s with "Minutes otherwise" at 1.
-	- Possible cause: Built that way since 2026100319134501. With Transparency on the window draws through a composition visual and has no surface of its own, so letting the device go leaves it black. The help for "Minutes otherwise" says so.
-	- Against: the releasing resources design doc, "On Windows with Transparency on, a window in view never lets go".
-	- 20261125: answered, Transparency was on. Go with B: free everything but the device and its swapchain, so the last frame stays up.
-	- Actual cause: A window that would go black without its device kept all of it while in view. Nothing let go of the rest.
-	- Actual fix: In view, such a window lets go of everything but the device and its swapchain after "Minutes otherwise": the glyph atlases, the wallpaper, the scrim, the other renderers, and the CPU caches kept for them. The last frame stays up. A sign of life or a resize brings the rest back on the kept device. Once the window is out of sight, the device and swapchain go too, after "Minutes when hidden". The "Minutes otherwise" help, the Windows warning on Transparency, and the releasing resources design doc say so.
-	- Decisions:
-		- 20261125: A window that kept its swapchain ignores the desktop's repaint requests, since its last frame is still up. Otherwise each move of a window over it would bring everything back.
-		- 20261125: Any resize to a real size brings the rest back, a restore included, since the kept swapchain still has the old size.
-		- 20261125: The hidden wait for what was kept counts from the last sign of life, as for any hidden window. A window idle for long and then covered lets the device go at once, and takes it back when shown, as a minimized one already did.
-		- 20261125: Being shown again is a sign of life only for a window with nothing left on screen. A window that still holds its device or swapchain no longer restarts its wait when shown.
-	- Verified: 20261125 on vm925w, idlebehind with Transparency off and on. With it on, partly in view, the window let go of all but its device and swapchain 60 s after it was covered, in about 2 ms. The strip in view was the same picture 6 s later. A click brought the rest back on the kept device in about 42 ms. Transparency off was as before. With the whole device let go in view instead, the same check failed: the strip went black. The idle unit tests, clippy on the Linux and Windows targets, and the quick run's 5 areas pass.
-	- Swept: every release and rebuild goes through `State::idle_release` and `State::rebuild_gpu`. The release in about_to_wait and its wake both read `State::next_release`. A lost device, the software rendering switch, and a repaint's release all let go of everything, a kept swapchain included. The 2 places that took the device back for a window that would go blank, a repaint and being shown, read `goes_blank`. The heal after a console return only runs while the device is held.
-	- Test case: dfsvf `a_window_that_would_go_blank_keeps_its_swapchain_in_view`, which fails with the old hold put back. `cicd/tests/wingui/idlebehind.ps1` (dfskh), seethru arm, now checks the partial release, the picture in the strip, and the rebuild on the kept device, by hand on vm925w: `cicd/tests/wingui/run.bash --host vm925w idlebehind`.
-		- 20261125: ddga8 `a_window_that_would_go_blank_is_never_let_go_in_view` is commented out, since the answer reverses what it checked. dfsvf replaces it.
-		- 20261125: df4cn `each_hold_on_the_device_names_itself`: a window that would go blank, unfocused in view, was held as "on screen, and would go blank" and now isn't held.
-	- Branch: nov25b-2026112512414281
-	- Commit: 56d07667
-	- Acceptance signoff: Self-closed: the behavior passed dfskh on vm925w, and the 2 help strings read plainly and match it
-	- Closed: 20261125-170447
-	- Closed reason: Done
-
 - Demo: the cursor should go to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -130,6 +96,40 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261019: It's still stuck upstream. `cargo update --dry-run` doesn't move any of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon, or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
+
+- Windows: a window with Transparency on that is partly behind other windows never frees resources
+	- ID: 2026112512414281
+	- Type: Bug
+	- Status: Closed
+		- The behavior passed its check on vm925w. Only the new wording is left to judge: the "Minutes otherwise" help, and the Windows warning on Transparency.
+	- Severity: High
+	- Opened: 20261125-124142
+	- Opened by: CC
+	- Parent ID: 2026112509070667
+	- Target OS: Windows
+	- Target version: rc.1
+	- Incorrect behavior: With Transparency on, a window still partly in view is never let go, however long it sits unfocused and quiet. It waits until it's minimized.
+	- Reproduced: 20261125, on vm925w. A window covered but for a strip on its left, unfocused, with the pointer over the other window, logged "kept: on screen, and would go blank" and held its device for 81 s with "Minutes otherwise" at 1.
+	- Possible cause: Built that way since 2026100319134501. With Transparency on the window draws through a composition visual and has no surface of its own, so letting the device go leaves it black. The help for "Minutes otherwise" says so.
+	- Against: the releasing resources design doc, "On Windows with Transparency on, a window in view never lets go".
+	- 20261125: answered, Transparency was on. Go with B: free everything but the device and its swapchain, so the last frame stays up.
+	- Actual cause: A window that would go black without its device kept all of it while in view. Nothing let go of the rest.
+	- Actual fix: In view, such a window lets go of everything but the device and its swapchain after "Minutes otherwise": the glyph atlases, the wallpaper, the scrim, the other renderers, and the CPU caches kept for them. The last frame stays up. A sign of life or a resize brings the rest back on the kept device. Once the window is out of sight, the device and swapchain go too, after "Minutes when hidden". The "Minutes otherwise" help, the Windows warning on Transparency, and the releasing resources design doc say so.
+	- Decisions:
+		- 20261125: A window that kept its swapchain ignores the desktop's repaint requests, since its last frame is still up. Otherwise each move of a window over it would bring everything back.
+		- 20261125: Any resize to a real size brings the rest back, a restore included, since the kept swapchain still has the old size.
+		- 20261125: The hidden wait for what was kept counts from the last sign of life, as for any hidden window. A window idle for long and then covered lets the device go at once, and takes it back when shown, as a minimized one already did.
+		- 20261125: Being shown again is a sign of life only for a window with nothing left on screen. A window that still holds its device or swapchain no longer restarts its wait when shown.
+	- Verified: 20261125 on vm925w, idlebehind with Transparency off and on. With it on, partly in view, the window let go of all but its device and swapchain 60 s after it was covered, in about 2 ms. The strip in view was the same picture 6 s later. A click brought the rest back on the kept device in about 42 ms. Transparency off was as before. With the whole device let go in view instead, the same check failed: the strip went black. The idle unit tests, clippy on the Linux and Windows targets, and the quick run's 5 areas pass.
+	- Swept: every release and rebuild goes through `State::idle_release` and `State::rebuild_gpu`. The release in about_to_wait and its wake both read `State::next_release`. A lost device, the software rendering switch, and a repaint's release all let go of everything, a kept swapchain included. The 2 places that took the device back for a window that would go blank, a repaint and being shown, read `goes_blank`. The heal after a console return only runs while the device is held.
+	- Test case: dfsvf `a_window_that_would_go_blank_keeps_its_swapchain_in_view`, which fails with the old hold put back. `cicd/tests/wingui/idlebehind.ps1` (dfskh), seethru arm, now checks the partial release, the picture in the strip, and the rebuild on the kept device, by hand on vm925w: `cicd/tests/wingui/run.bash --host vm925w idlebehind`.
+		- 20261125: ddga8 `a_window_that_would_go_blank_is_never_let_go_in_view` is commented out, since the answer reverses what it checked. dfsvf replaces it.
+		- 20261125: df4cn `each_hold_on_the_device_names_itself`: a window that would go blank, unfocused in view, was held as "on screen, and would go blank" and now isn't held.
+	- Branch: nov25b-2026112512414281
+	- Commit: 56d07667
+	- Acceptance signoff: Self-closed: the behavior passed dfskh on vm925w, and the 2 help strings read plainly and match it
+	- Closed: 20261125-170447
+	- Closed reason: Done
 
 - Windows: "Minutes otherwise" doesn't sleep resources when SilkTerm is behind other windows
 	- ID: 2026112509070667
