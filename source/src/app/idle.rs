@@ -170,9 +170,9 @@ struct Idle {
 
 // When an idle window may let its device go, or None while something keeps
 // it: the switch off, the window not yet shown, a rating due or running, or a
-// window on screen that has focus or would go blank without its device. There
-// are 2 waits, because a hidden window is known to be out of sight while a
-// merely unfocused one may be on a second monitor being read.
+// window on screen that has focus. There are 2 waits, because a hidden window
+// is known to be out of sight while a merely unfocused one may be on a second
+// monitor being read.
 fn release_deadline(cfg: &config::Settings, idle: &Idle) -> Option<Instant> {
 	let rule = idle_rule(cfg);
 	if kept_by(&rule, idle).is_some() {
@@ -192,10 +192,38 @@ fn kept_by(rule: &IdleRule, idle: &Idle) -> Option<&'static str> {
 		Some("a rating is due or running")
 	} else if !idle.hidden && idle.focused {
 		Some("focused on screen")
-	} else if !idle.hidden && !idle.keeps_picture {
-		Some("on screen, and would go blank")
 	} else {
 		None
+	}
+}
+
+/// How much an idle release lets go of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Letting {
+	Everything,
+	// The device and its swapchain stay, so the last frame does.
+	AllButSwapchain,
+}
+
+// How much of the device the window still holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Held {
+	All,
+	Swapchain,
+	Nothing,
+}
+
+// When the next idle release is due, and how much it lets go. A window with
+// nothing on screen but what its device draws, as on Windows with
+// Transparency on, went black when let go in view. It keeps the device and its
+// swapchain there, and lets the rest go. What it kept goes once it is out of
+// sight, after the hidden wait.
+fn next_release(cfg: &config::Settings, idle: &Idle, held: Held) -> Option<(Instant, Letting)> {
+	let letting = if idle.hidden || idle.keeps_picture { Letting::Everything } else { Letting::AllButSwapchain };
+	match held {
+		Held::Nothing => None,
+		Held::Swapchain if !idle.hidden => None,
+		Held::All | Held::Swapchain => release_deadline(cfg, idle).map(|due| (due, letting)),
 	}
 }
 
@@ -491,8 +519,11 @@ impl State {
 	/// keeps its picture takes the device back only for that frame
 	/// (`repaint_done`). One that goes blank without it wakes for good.
 	pub(super) fn note_repaint(&mut self) {
-		if !self.keeps_picture {
+		if self.goes_blank() {
 			self.note_active("redraw request");
+		} else if self.kept_gfx.is_some() {
+			// the kept swapchain still holds the last frame
+			self.idle_trace.not_a_wake("redraw request");
 		} else if self.idle.repaint(self.gpu.is_none()) {
 			idledbg("wake: redraw request, for one frame");
 		}
@@ -513,9 +544,15 @@ impl State {
 	/// restore can come before the size does, so this is called from the
 	/// catch-up edge as well as on an occlusion event.
 	pub(super) fn note_shown(&mut self) {
-		if !self.keeps_picture {
+		if self.goes_blank() {
 			self.note_active("shown");
 		}
+	}
+
+	// Nothing of the window is left on screen: its device and swapchain are
+	// gone, and it has no redirection bitmap to keep the last frame.
+	fn goes_blank(&self) -> bool {
+		!self.keeps_picture && self.gpu.is_none() && self.kept_gfx.is_none()
 	}
 
 	/// Output from `pane`, which counts only while it can be seen: the window
@@ -555,9 +592,18 @@ impl State {
 		Idle { focused: self.focused, hidden: self.was_hidden, revealed: self.revealed, bench_busy: self.bench.is_some() || self.bench_at.is_some(), since: self.idle.since, keeps_picture: self.keeps_picture }
 	}
 
-	/// Reads the hidden answer the pass's `freeze_sync` settled on.
-	pub(super) fn release_deadline(&self, cfg: &config::Settings) -> Option<Instant> {
-		release_deadline(cfg, &self.idle_view())
+	/// When the next idle release is due, and how much it lets go
+	/// (`next_release`). Reads the hidden answer the pass's `freeze_sync`
+	/// settled on.
+	pub(super) fn next_release(&self, cfg: &config::Settings) -> Option<(Instant, Letting)> {
+		let held = if self.gpu.is_some() {
+			Held::All
+		} else if self.kept_gfx.is_some() {
+			Held::Swapchain
+		} else {
+			Held::Nothing
+		};
+		next_release(cfg, &self.idle_view(), held)
 	}
 
 	/// Let the device and everything on it go. The window stays, the shells run
@@ -565,14 +611,39 @@ impl State {
 	/// way back. What the CPU held only for the device's sake goes too: the
 	/// rasterized glyphs, the shaped chrome.
 	pub(super) fn release_gpu(&mut self) {
+		self.idle_release(Letting::Everything);
+	}
+
+	/// The idle release, of as much as `letting` says.
+	pub(super) fn idle_release(&mut self, letting: Letting) {
 		let Some(gpu) = self.gpu.take() else {
+			// the rest of what a window that would go blank kept in view
+			if letting == Letting::Everything
+				&& let Some(gfx) = self.kept_gfx.take()
+			{
+				let start = Instant::now();
+				self.rebirth = Some(gfx.release());
+				trim_heap();
+				idledbg(&format!("device released, with the swapchain it kept in view, in {:?}", start.elapsed()));
+			}
 			return;
 		};
 		let start = Instant::now();
 		self.text.detach_gpu();
 		self.chrome = None;
 		self.invalidate_prepared();
-		self.rebirth = Some(gpu.release());
+		let kept = letting == Letting::AllButSwapchain;
+		if kept {
+			let gfx = gpu.into_gfx();
+			// wgpu frees what was dropped only when the device is next polled,
+			// and nothing is drawn or polled until the rebuild
+			if !gfx.lost() {
+				let _ = gfx.device.poll(wgpu::PollType::wait_indefinitely());
+			}
+			self.kept_gfx = Some(gfx);
+		} else {
+			self.rebirth = Some(gpu.release());
+		}
 		self.idle.rebuilt();
 		self.idle.repaint = false;
 		self.frame_retry = Retry::default();
@@ -580,7 +651,11 @@ impl State {
 		self.conserve = Conserve::Saving;
 		self.update_title();
 		trim_heap();
-		idledbg(&format!("device released in {:?}", start.elapsed()));
+		if kept {
+			idledbg(&format!("device released but for itself and its swapchain, in {:?}", start.elapsed()));
+		} else {
+			idledbg(&format!("device released in {:?}", start.elapsed()));
+		}
 	}
 
 	/// The device again, on the same window, and everything that was on it
@@ -590,18 +665,32 @@ impl State {
 	/// released and due, and it is tried again on a backoff while the window
 	/// shows.
 	pub(super) fn rebuild_gpu(&mut self) {
-		let Some(rebirth) = self.rebirth.as_ref() else {
-			return;
-		};
 		let start = Instant::now();
-		let gfx = match Gfx::rebuild(rebirth, &self.window, crate::gfx::wanted()) {
-			Ok(gfx) => gfx,
-			Err(e) => {
-				if self.idle.rebuild_failed(Instant::now()) {
-					eprintln!("{}: couldn't bring the GPU device back ({e}); trying again", config::APP_NAME);
-				}
-				idledbg(&format!("rebuild refused: {e}"));
+		let want = crate::gfx::wanted();
+		// A kept device that was lost, or that software rendering turned on or
+		// off since, goes the way of any other.
+		if self.kept_gfx.as_ref().is_some_and(|gfx| gfx.lost() || gfx.want != want) {
+			self.release_gpu();
+		}
+		let kept = self.kept_gfx.is_some();
+		let gfx = if let Some(mut gfx) = self.kept_gfx.take() {
+			// the window may have been resized while nothing followed it
+			let size = self.window.inner_size();
+			gfx.resize(size.width, size.height);
+			gfx
+		} else {
+			let Some(rebirth) = self.rebirth.as_ref() else {
 				return;
+			};
+			match Gfx::rebuild(rebirth, &self.window, want) {
+				Ok(gfx) => gfx,
+				Err(e) => {
+					if self.idle.rebuild_failed(Instant::now()) {
+						eprintln!("{}: couldn't bring the GPU device back ({e}); trying again", config::APP_NAME);
+					}
+					idledbg(&format!("rebuild refused: {e}"));
+					return;
+				}
 			}
 		};
 		self.rebirth = None;
@@ -630,7 +719,8 @@ impl State {
 		self.update_title();
 		// the grid moved while nothing drew: one hard-cut catch-up frame
 		self.freeze_catchup();
-		idledbg(&format!("device rebuilt in {:?} at {w}x{h}, {drawn:?}", start.elapsed()));
+		let on = if kept { ", on the kept device" } else { "" };
+		idledbg(&format!("device rebuilt in {:?} at {w}x{h}, {drawn:?}{on}", start.elapsed()));
 		self.follow_renderer(drawn);
 	}
 
@@ -914,27 +1004,62 @@ mod tests {
 		assert_eq!(kept_by(&rule, &rating), Some("a rating is due or running"));
 		let focused = Idle { focused: true, ..free };
 		assert_eq!(kept_by(&rule, &focused), Some("focused on screen"));
+		// a window that would go blank keeps only its swapchain now (`next_release`)
 		let blanks = Idle { keeps_picture: false, ..free };
-		assert_eq!(kept_by(&rule, &blanks), Some("on screen, and would go blank"));
+		assert_eq!(kept_by(&rule, &blanks), None);
 		// out of sight, neither focus nor the picture keeps it
 		let hidden = Idle { hidden: true, focused: true, keeps_picture: false, ..free };
 		assert_eq!(kept_by(&rule, &hidden), None);
 	}
 
-	// A Windows window drawn through a composition visual has no redirection
-	// bitmap, so nothing is left on screen once its device goes: one let go in
-	// view went black and stayed black until typed into. It waits until it is
-	// out of sight, and only then for the hidden wait.
-	// Test ID: ddga8
+	// Off since a window that would go blank lets go of all but its device and
+	// swapchain in view (2026112512414281). `a_window_that_would_go_blank_keeps_its_swapchain_in_view`
+	// covers it.
+	// // A Windows window drawn through a composition visual has no redirection
+	// // bitmap, so nothing is left on screen once its device goes: one let go in
+	// // view went black and stayed black until typed into. It waits until it is
+	// // out of sight, and only then for the hidden wait.
+	// // Test ID: ddga8
+	// #[test]
+	// #[cfg_attr(miri, ignore = "too slow under Miri")]
+	// fn a_window_that_would_go_blank_is_never_let_go_in_view() {
+	// 	let since = Instant::now();
+	// 	let cfg = config::Settings { idle_release: true, idle_release_hidden_min: 30, idle_release_min: 240, ..config::Settings::default() };
+	// 	let blanks = |focused, hidden| Idle { focused, hidden, revealed: true, bench_busy: false, since, keeps_picture: false };
+	// 	assert!(release_deadline(&cfg, &blanks(false, false)).is_none(), "unfocused in view");
+	// 	assert!(release_deadline(&cfg, &blanks(true, false)).is_none());
+	// 	assert_eq!(release_deadline(&cfg, &blanks(false, true)), Some(since + Duration::from_mins(30)));
+	// }
+
+	// A Windows window with Transparency on has no redirection bitmap, so
+	// nothing is left on screen once its device goes. Partly covered and
+	// unfocused, it never let anything go (2026112512414281). In view it lets
+	// go of everything but the device and its swapchain after "Minutes
+	// otherwise", so the last frame stays up, and what it kept goes after the
+	// hidden wait once it is out of sight. Any other window lets go of all of
+	// it.
+	// Test ID: dfsvf
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
-	fn a_window_that_would_go_blank_is_never_let_go_in_view() {
+	fn a_window_that_would_go_blank_keeps_its_swapchain_in_view() {
+		use super::{Held, Letting, next_release};
 		let since = Instant::now();
 		let cfg = config::Settings { idle_release: true, idle_release_hidden_min: 30, idle_release_min: 240, ..config::Settings::default() };
-		let blanks = |focused, hidden| Idle { focused, hidden, revealed: true, bench_busy: false, since, keeps_picture: false };
-		assert!(release_deadline(&cfg, &blanks(false, false)).is_none(), "unfocused in view");
-		assert!(release_deadline(&cfg, &blanks(true, false)).is_none());
-		assert_eq!(release_deadline(&cfg, &blanks(false, true)), Some(since + Duration::from_mins(30)));
+		let idle = |focused, hidden, keeps_picture| Idle { focused, hidden, revealed: true, bench_busy: false, since, keeps_picture };
+		let otherwise = since + Duration::from_hours(4);
+		let hidden = since + Duration::from_mins(30);
+		assert_eq!(next_release(&cfg, &idle(false, false, false), Held::All), Some((otherwise, Letting::AllButSwapchain)), "unfocused in view");
+		assert_eq!(next_release(&cfg, &idle(true, false, false), Held::All), None, "focused in view");
+		assert_eq!(next_release(&cfg, &idle(false, true, false), Held::All), Some((hidden, Letting::Everything)), "hidden");
+		assert_eq!(next_release(&cfg, &idle(false, false, false), Held::Swapchain), None, "the swapchain stays in view");
+		assert_eq!(next_release(&cfg, &idle(true, true, false), Held::Swapchain), Some((hidden, Letting::Everything)), "and goes once hidden");
+		assert_eq!(next_release(&cfg, &idle(false, false, true), Held::All), Some((otherwise, Letting::Everything)), "a window that keeps its picture");
+		assert_eq!(next_release(&cfg, &idle(false, true, true), Held::All), Some((hidden, Letting::Everything)));
+		for keeps_picture in [false, true] {
+			assert_eq!(next_release(&cfg, &idle(false, true, keeps_picture), Held::Nothing), None, "nothing left");
+		}
+		let off = config::Settings { idle_release: false, ..cfg.clone() };
+		assert_eq!(next_release(&off, &idle(false, true, false), Held::Swapchain), None, "switched off");
 	}
 
 	// Off since the minimized wait was taken out again (2026100513581813): a

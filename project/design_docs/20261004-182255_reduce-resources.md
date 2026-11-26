@@ -454,7 +454,7 @@ What a window already gives back while unused is described in the [Releasing res
 
 - "Free resources when idle" gets a warning mark. Its tip says it matters most on a card with little memory, or next to GPU-heavy programs, with many windows open that aren't all in view. Turn it off only if the graphics driver has trouble with it.
 
-- A setting that stops a window from giving memory back gets a warning mark where it does so. Today that's Transparency on Windows, because a window in view with Transparency on is never let go. The mark shows only in the Windows build.
+- A setting that stops a window from giving memory back gets a warning mark where it does so. Today that's Transparency on Windows, because a window in view with Transparency on keeps its device and swapchain. The mark shows only in the Windows build.
 
 - A row that can't work on the running platform is grayed with a tip saying why, using the existing grayed-row tips. A row is hidden only in a build that can never use it, as with the Windows-only file association rows.
 

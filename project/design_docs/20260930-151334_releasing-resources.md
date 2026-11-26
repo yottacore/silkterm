@@ -45,10 +45,10 @@ What a window costs while it's in use is described in the [Reducing resources](2
 - "Free resources when idle" on the Window tab, on by default, lets an unused window give its GPU device back.
 	- A window counts as unused when there isn't any input, focus change, or output from any pane while it can be seen. A pane in a tab in the back can't be seen.
 	- It lets go after "Minutes when hidden", 1 by default, if minimized or covered, and after "Minutes otherwise", 240 by default, if only unfocused.
-	- On Windows with Transparency on, a window in view never lets go, because nothing would be left on screen without its device. It waits until it's minimized.
+	- On Windows with Transparency on, a window in view keeps its device and swapchain when it lets go, because nothing would be left on screen without them. Everything else goes, such as the glyph atlases, the wallpaper, the scrim, and what the CPU held for them, so the last frame stays up. A resize or a sign of life brings the rest back. Once it's out of sight, it lets the device and swapchain go too, after "Minutes when hidden" (2026112512414281).
 	- Any sign of life takes the device back. That means a key, a click, a change of focus, or a shell printing in the tab in front while it can be seen. Being shown again counts only for a window that would be blank without its device.
 	- The pointer moving over a window starts the wait over while it has its device, but doesn't take a released device back.
-	- When the desktop asks a released window for a repaint, it takes the device back only to draw that frame, and lets it go again once the frame with the wallpaper is up. The wait isn't started over.
+	- When the desktop asks a released window for a repaint, it takes the device back only to draw that frame, and lets it go again once the frame with the wallpaper is up. The wait isn't started over. A window that kept its swapchain ignores the repaint, since its last frame is still up.
 	- It never lets go while a dialog is open or a hardware rating is due or running.
 
 - The window title says "(resource conservation mode)" while released, "(restoring resources ...)" until the wallpaper is back, then "(resources restored)" for 5 seconds.
@@ -122,7 +122,7 @@ What a window costs while it's in use is described in the [Reducing resources](2
 
 - On X11 there isn't any visible side effect, by design. The window keeps showing its last frame, and taking the device back takes about 25 ms.
 
-- On Windows with Transparency off the window keeps its last frame too. With Transparency on it draws through a composition visual and doesn't have a surface of its own, so letting the device go leaves it black. That window is let go only while minimized or all covered.
+- On Windows with Transparency off the window keeps its last frame too. With Transparency on it draws through a composition visual and doesn't have a surface of its own, so letting the device go leaves it black. In view, that window lets go of everything but the device and its swapchain, so the last frame stays up. A resize, which the kept swapchain can't follow, or a sign of life brings the rest back. The device and swapchain go only while it's minimized or all covered.
 
 - Windows doesn't report a covered window, so SilkTerm works it out while the window is unfocused, the way Chromium does. Hooks on other windows' events, such as a move, a show or hide, a change of the window in front, or a switch of virtual desktop, say when to look again. The look walks down the windows above this one and takes away each one that is sure to hide what's under it. A layered or click-through window, one without a redirection bitmap, a tool window, a popup, a shaped window, and another of SilkTerm's own never count, because a window wrongly taken as covered would stop drawing while someone reads it. A window on another virtual desktop counts as hidden. A focused window counts as shown, and nothing is hooked while it has focus. Moves are followed only from the programs whose windows cover it, because hooked for every program they come with every pointer move.
 
