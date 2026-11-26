@@ -1,6 +1,6 @@
 [package]
 name = "silkterm"
-version = "1.0.0-beta3"
+version = "1.0.0-beta4"
 edition = "2024"
 rust-version = "1.96"
 description = "Smooth-scrolling GUI terminal emulator with split panes"

@@ -34,31 +34,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
-- Demo: the cursor should go to 50% width when the cursor size and animation change
-	- ID: 2026092812581720
-	- Type: Enhancement
-	- Status: Stalled
-		- Held for the next release's demo re-record.
-	- Needs external testing: the next demo re-record at release shows the cursor at 50% width in the cursor segment
-	- Priority: Avg
-	- Opened: 20260928-125817
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements:
-		- When changing the cursor size and animation, change to 50% width.
-	- Progress log:
-		- 20261022: The cursor scene now goes from the full block to a 50% wide one, with the phase animation, in place of the 25% bar. `cursor.size.width` is a percent of the cell. `script.txt` says the same. The gif isn't re-recorded, per the decision below.
-		- Verified: the demo test drives the cursor scene and finds width 50 and the phase animation. It failed with the old 25, and passes now. The Python lint is clean on both files.
-		- Swept: `script.txt`, the recorder's config comment, scene comment and history, and the docs. Only the cursor scene sets the width on camera. The starting config still has the 100 block.
-		- 20261023: The demo recorder test (dcrxy) passed in the full run at 2da75a7.
-	- Decisions:
-		- 20260928: Held for the release, with the other demo recorder change.
-	- Branch: rnd1022
-	- Test case: `cicd/tests/demo/run.py`, "the cursor scene narrows the cursor to half width".
-	- Closed:
-
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -780,6 +755,32 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Commit: b1e1924c
 	- Acceptance signoff: Self-closed: reproduced, and the test fails without the fix and passes with it.
 	- Closed: 20261117-164510
+	- Closed reason: Done
+
+- Demo: the cursor should go to 50% width when the cursor size and animation change
+	- ID: 2026092812581720
+	- Type: Enhancement
+	- Status: Closed
+	- Priority: Avg
+	- Opened: 20260928-125817
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Requirements:
+		- When changing the cursor size and animation, change to 50% width.
+	- Progress log:
+		- 20261022: The cursor scene now goes from the full block to a 50% wide one, with the phase animation, in place of the 25% bar. `cursor.size.width` is a percent of the cell. `script.txt` says the same. The gif isn't re-recorded, per the decision below.
+		- Verified: the demo test drives the cursor scene and finds width 50 and the phase animation. It failed with the old 25, and passes now. The Python lint is clean on both files.
+		- Swept: `script.txt`, the recorder's config comment, scene comment and history, and the docs. Only the cursor scene sets the width on camera. The starting config still has the 100 block.
+		- 20261023: The demo recorder test (dcrxy) passed in the full run at 2da75a7.
+		- 20261126: The gif was recorded again for beta4. Its cursor scene goes from the block to a half-width bar, with the phase animation.
+	- Decisions:
+		- 20260928: Held for the release, with the other demo recorder change.
+	- Branch: rnd1022
+	- Test case: `cicd/tests/demo/run.py`, "the cursor scene narrows the cursor to half width".
+	- Acceptance signoff: Self-closed: the beta4 gif shows the cursor at half width.
+	- Closed: 20261126-104500
 	- Closed reason: Done
 
 - Settings, Keyboard tab: when a key mapping already exists, clear the other one that the new one conflicts with
