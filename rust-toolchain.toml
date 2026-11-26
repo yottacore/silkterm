@@ -9,4 +9,9 @@ targets = [
 	"x86_64-pc-windows-gnu",
 	"aarch64-unknown-linux-gnu",
 	"aarch64-pc-windows-gnullvm",
+	"x86_64-apple-darwin",
 ]
+# The sanitizer runs need a nightly, so cicd pins a dated one here. rustup skips
+# the comment; cicd reads the date from it, and only the container image installs
+# that toolchain. Bump it like the channel above.
+# nightly = "nightly-2026-10-15"

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Copyright © 2026 Jim Collier
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::time::{Duration, Instant};
 
 use glutin::config::GlConfig;
 use glutin::context::{ContextApi, ContextAttributesBuilder, PossiblyCurrentContext, Version};
@@ -12,29 +13,42 @@ use glutin::prelude::*;
 use glutin::surface::{Surface as GlWindowSurface, SurfaceAttributesBuilder, WindowSurface};
 use glutin_winit::DisplayBuilder;
 use raw_window_handle::HasWindowHandle;
+#[cfg(not(target_os = "macos"))]
 use wgpu::hal::api::Gles;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowAttributes};
 
-// COLOR PIPELINE CONTRACT (breaking it reproduces the "everything too dark /
-// SELECTION_BG invisible" bug class): every fragment shader in this app writes
-// LINEAR light (rect srgb_f32, glyphon Accurate, bg-image, scrim), and exactly
-// ONE sRGB encode happens per frame, owned by this module - on the native path
-// the sRGB surface format encodes on write; on the GL path the blit's lin2srgb
-// does it into the non-sRGB fbo 0, so the offscreen MUST stay a non-sRGB,
-// high-precision format (Rgba16Float; an sRGB view would decode in the blit's
-// sample and cancel the encode, an 8-bit linear one bands dark gradients).
-// New render features must not add their own encode.
+/// Color pipeline contract: every fragment shader here writes linear light, and
+/// exactly one sRGB encode happens per frame, in this module. The native path's
+/// sRGB surface encodes on write. On the GL path the blit's lin2srgb encodes into
+/// the non-sRGB fbo 0, so the offscreen must stay a non-sRGB, high-precision format
+/// (`Rgba16Float`). Breaking this brings back the "everything too dark" bugs, so
+/// new render features mustn't add an encode of their own. The scrim's color map
+/// is stored encoded, but scrim.rs decodes it on read.
+///
+/// That one encode runs on premultiplied values, which is exact at alpha 1 and
+/// wrong anywhere else, since sRGB(a * c) is brighter than a * sRGB(c). A light
+/// background at 80% came out as 91% of itself. The pane fill is the only
+/// translucent thing drawn, so the fill is given the color whose encoded,
+/// premultiplied value is right.
+pub fn see_through(color: [f32; 4]) -> [f32; 4] {
+	let a = color[3];
+	if a >= 1.0 || a <= 0.0 {
+		return color;
+	}
+	let k = |c: f32| crate::config::to_linear_f32(a * crate::config::from_linear(c)) / a;
+	[k(color[0]), k(color[1]), k(color[2]), a]
+}
 
-// How a frame reaches the screen. `Native` is the normal wgpu surface (Vulkan/
-// Metal/DX/Wayland - supports premultiplied alpha where the platform does).
+// How a frame reaches the screen. `Native` is the normal wgpu surface
+// (Vulkan/Metal/DX/Wayland), with premultiplied alpha where the platform has it.
 // `Gl` runs wgpu on a glutin-created GL context so X11 can do per-pixel alpha:
-// the wgpu surface there can't bind the window's ARGB visual, glutin can. We
-// render to the GL default framebuffer (fbo 0) and present via swap_buffers.
+// the wgpu surface there can't bind the window's ARGB visual, but glutin can. The
+// scene renders to the GL default framebuffer (fbo 0) and presents with swap_buffers.
 enum Backend {
 	Native(wgpu::Surface<'static>),
 	// The GL default framebuffer (fbo 0) is Y-flipped vs wgpu's top-left origin,
-	// which flips our quads and clips glyphon's bounds-limited text out entirely.
+	// which flips the quads and clips glyphon's bounds-limited text out entirely.
 	// So the scene renders to `offscreen` (normal orientation, exactly like the
 	// native path), then `blit` flips it into the default framebuffer `fb`.
 	Gl {
@@ -48,6 +62,8 @@ enum Backend {
 		offscreen_view: wgpu::TextureView,
 		blit: Blit,
 	},
+	// the surface let go ahead of a new device (`regain`), which failed
+	Gone,
 }
 
 // Fullscreen flip-blit of the offscreen texture into the GL default framebuffer.
@@ -60,53 +76,21 @@ struct Blit {
 
 impl Blit {
 	fn new(device: &wgpu::Device, format: wgpu::TextureFormat, src: &wgpu::TextureView) -> Self {
-		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-			label: Some("blit shader"),
-			source: wgpu::ShaderSource::Wgsl(BLIT_WGSL.into()),
-		});
-		let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("blit bgl"),
-			entries: &[
-				wgpu::BindGroupLayoutEntry {
-					binding: 0,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Texture {
-						sample_type: wgpu::TextureSampleType::Float { filterable: true },
-						view_dimension: wgpu::TextureViewDimension::D2,
-						multisampled: false,
-					},
-					count: None,
-				},
-				wgpu::BindGroupLayoutEntry {
-					binding: 1,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-					count: None,
-				},
-			],
-		});
+		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("blit shader"), source: wgpu::ShaderSource::Wgsl(BLIT_WGSL.into()) });
+		let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("blit bgl"), entries: &[wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }, count: None }, wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None }] });
 		let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
-		let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("blit layout"),
-			bind_group_layouts: &[Some(&layout)],
-			immediate_size: 0,
-		});
+		let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("blit layout"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
 		let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 			label: Some("blit pipeline"),
 			layout: Some(&pl),
-			vertex: wgpu::VertexState {
-				module: &shader,
-				entry_point: Some("vs"),
-				compilation_options: Default::default(),
-				buffers: &[],
-			},
+			vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
 			fragment: Some(wgpu::FragmentState {
 				module: &shader,
 				entry_point: Some("fs"),
 				compilation_options: Default::default(),
 				targets: &[Some(wgpu::ColorTargetState {
 					format,
-					blend: None, // straight copy; offscreen already holds premultiplied rgba
+					blend: None, // straight copy; offscreen already has premultiplied rgba
 					write_mask: wgpu::ColorWrites::ALL,
 				})],
 			}),
@@ -117,34 +101,11 @@ impl Blit {
 			cache: None,
 		});
 		let bind = Self::bind(device, &layout, &sampler, src);
-		Self {
-			pipeline,
-			sampler,
-			layout,
-			bind,
-		}
+		Self { pipeline, sampler, layout, bind }
 	}
 
-	fn bind(
-		device: &wgpu::Device,
-		layout: &wgpu::BindGroupLayout,
-		sampler: &wgpu::Sampler,
-		src: &wgpu::TextureView,
-	) -> wgpu::BindGroup {
-		device.create_bind_group(&wgpu::BindGroupDescriptor {
-			label: Some("blit bind"),
-			layout,
-			entries: &[
-				wgpu::BindGroupEntry {
-					binding: 0,
-					resource: wgpu::BindingResource::TextureView(src),
-				},
-				wgpu::BindGroupEntry {
-					binding: 1,
-					resource: wgpu::BindingResource::Sampler(sampler),
-				},
-			],
-		})
+	fn bind(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, sampler: &wgpu::Sampler, src: &wgpu::TextureView) -> wgpu::BindGroup {
+		device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("blit bind"), layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(src) }, wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) }] })
 	}
 
 	fn rebind(&mut self, device: &wgpu::Device, src: &wgpu::TextureView) {
@@ -152,106 +113,219 @@ impl Blit {
 	}
 }
 
-// A frame in flight, returned by `begin_frame` and consumed by `end_frame`.
+/// Why `begin_frame` had nothing to draw into. Metal reports Occluded for a window
+/// that is hidden, minimized or fully covered, and draws nothing until it shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoFrame {
+	Occluded,
+	Other,
+}
+
+/// Backoff for GPU work that was refused: a frame with no surface to draw into,
+/// or a device that wouldn't come back. Nothing else asks again once the load
+/// is gone, and a GPU that stays unavailable mustn't cost a spin. The delay
+/// doubles per miss up to a cap, and a success starts it over.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Retry {
+	pub misses: u32,
+	pub at: Option<Instant>,
+}
+
+impl Retry {
+	/// Another refusal; the next try waits longer. Returns the wait.
+	pub fn missed(&mut self, now: Instant, first: Duration, cap: Duration) -> Duration {
+		let wait = first.saturating_mul(1 << self.misses.min(16)).min(cap);
+		self.misses = self.misses.saturating_add(1);
+		self.at = Some(now + wait);
+		wait
+	}
+
+	/// True once, when the wait is over. The miss count stays, so the next
+	/// refusal waits longer.
+	pub fn take_due(&mut self, now: Instant) -> bool {
+		let due = self.at.is_some_and(|at| now >= at);
+		if due {
+			self.at = None;
+		}
+		due
+	}
+}
+
+/// Set once a device is lost: a driver reset, a GPU fault, or video memory
+/// gone after a resume. wgpu reports that only through the device's lost
+/// callback, not as an error, and every frame after it is refused, so a new
+/// device is the only way back. Clones share the flag, as clones of a device
+/// share the device.
+#[derive(Debug, Default, Clone)]
+pub struct Loss(Arc<AtomicBool>);
+
+impl Loss {
+	// wgpu keeps one callback per device, so each device is watched once, as
+	// it's made (`request_device`).
+	fn watch(device: &wgpu::Device) -> Self {
+		let loss = Self::default();
+		let flag = loss.0.clone();
+		// called inside whichever wgpu call ran into the loss, so it only marks it
+		device.set_device_lost_callback(move |_, _| flag.store(true, Ordering::Release));
+		// Whatever is made on a lost device is invalid, and the rest of the
+		// frame using it is a validation error, which wgpu's own handler panics
+		// on. Those are ignored, and any other error is still fatal.
+		let flag = loss.0.clone();
+		device.on_uncaptured_error(Arc::new(move |err: wgpu::Error| {
+			assert!(flag.load(Ordering::Acquire), "wgpu error: {err}");
+		}));
+		loss
+	}
+
+	pub fn lost(&self) -> bool {
+		self.0.load(Ordering::Acquire)
+	}
+}
+
+pub const FRAME_RETRY_FIRST: Duration = Duration::from_millis(16);
+pub const FRAME_RETRY_MAX: Duration = Duration::from_secs(2);
+
+/// A frame in flight, returned by `begin_frame` and consumed by `end_frame`.
 pub enum Frame {
 	Native(wgpu::SurfaceTexture),
 	Gl,
 }
 
-// A VT switch (Ctrl+Alt+F1 and back) or suspend/resume can silently trash the
-// CONTENTS of GPU textures on the GL path: the context survives, so per-frame
-// procedural draws (rects, cursor) still work, but everything sampled from a
-// once-uploaded texture - the glyph atlases (all text) and the wallpaper -
-// reads garbage, which is the "window goes mostly black" bug. No event reports
-// this, so known-pattern sentinel textures are probed on a slow tick; a
-// mismatched readback means the uploads are gone and the app rebuilds them
-// (State::recover_gpu). Native-surface backends already get Lost/Outdated from
-// the swapchain and are not affected, so the sentinel exists only on GL.
+impl std::fmt::Debug for Frame {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str(match self {
+			Self::Native(_) => "Frame::Native",
+			Self::Gl => "Frame::Gl",
+		})
+	}
+}
+
+// A VT switch or suspend and resume can quietly wipe GPU texture contents on the
+// GL path. The context survives, so per-frame draws still work, but anything
+// sampled from an uploaded texture, such as the glyph atlases and the wallpaper,
+// reads garbage, and the window goes mostly black. No event reports this, so
+// sentinel textures with a known pattern are probed on a slow tick, and a
+// mismatch makes the app rebuild its uploads (State::recover_gpu). Native
+// backends lose the whole device instead, which `Loss` reports, or get Lost or
+// Outdated from the swapchain.
 //
-// TWO witnesses, because the NVIDIA driver restores what it holds a sysmem
-// backing for and purges the rest (NV_robustness_video_memory_purge: resources
-// exclusively in video memory "will be lost"; the driver "attempts to hide"
-// the purge for the ones it can restore). A round-1 single 64px copy-usage
-// sentinel survived a real VT switch that still wiped the atlas, so:
-// - `up_tex`: CPU-uploaded + TEXTURE_BINDING, sized like a glyph atlas -
+// There are 2 sentinels, since NVIDIA restores what it has a system-memory copy
+// of and purges the rest (NV_robustness_video_memory_purge). A single small
+// copy-usage sentinel survived a real VT switch that still wiped the atlas.
+// - `up_tex`: uploaded from the CPU and sampled, sized like a glyph atlas. It
 //   catches drivers that purge sampled uploads.
-// - `fbo_tex`: seeded only by a GPU-side copy, never from the CPU, so no
-//   driver can re-materialize its contents from a sysmem copy - catches the
-//   documented purge of vidmem-exclusive (rendered/FBO-class) resources.
-//   Seeded by copy, not a render-pass clear: a clear could be tracked as
-//   metadata and re-applied on restore, which would false-negative.
+// - `fbo_tex`: filled only by a GPU-side copy, so no driver can restore it from
+//   a system-memory copy. It catches the purge of video-memory-only resources.
+//   It's filled by a copy rather than a clear, since a driver could replay a
+//   clear on restore and hide the loss.
 const SENTINEL_PX: u32 = 256; // atlas-sized, so it shares the real textures' VRAM pool
 const SENTINEL_ROW: u32 = SENTINEL_PX * 4; // Rgba8Unorm; multiple of 256 (COPY_BYTES_PER_ROW_ALIGNMENT), so no pad rows
 const SENTINEL_BYTES: usize = (SENTINEL_ROW * SENTINEL_PX) as usize;
 
 // Odd multiplier = a byte permutation tiled over the texture; neither zeroed
-// nor noise VRAM plausibly reproduces 16KB of it.
+// nor noise VRAM plausibly reproduces 256KB of it.
 fn sentinel_pattern() -> Vec<u8> {
-	(0..SENTINEL_BYTES)
-		.map(|i| (i as u8).wrapping_mul(151).wrapping_add(43))
-		.collect()
+	(0..SENTINEL_BYTES).map(sentinel_byte).collect()
 }
 
-// One probe's verdict (see `vram_check_poll`).
+fn sentinel_byte(i: usize) -> u8 {
+	(i as u8).wrapping_mul(151).wrapping_add(43)
+}
+
+// Checked in place, since a probe runs every couple of seconds per window.
+fn holds_sentinel(block: &[u8]) -> bool {
+	block.len() == SENTINEL_BYTES && block.iter().enumerate().all(|(i, &b)| b == sentinel_byte(i))
+}
+
+/// One probe's verdict (see `vram_check_poll`).
+#[derive(Debug)]
 pub enum VramProbe {
 	Intact,
 	// which witness lost its pattern (true = gone)
 	Lost { uploaded: bool, rendered: bool },
-	// readback map failed - inconclusive, will retry
+	// readback map failed; inconclusive, will retry
 	MapFailed,
+}
+
+/// The readback map failed; inconclusive, the next probe tries again.
+#[derive(Debug)]
+pub struct MapFailed;
+
+/// An async read of square Rgba8 blocks out of textures, started on one probe
+/// tick and checked on a later one. Shared by the sentinels and the wallpaper.
+/// `side * 4` must be a multiple of 256 (`COPY_BYTES_PER_ROW_ALIGNMENT`).
+#[derive(Debug)]
+pub struct BlockReadback {
+	side: u32,
+	buf: wgpu::Buffer,
+	// probe in flight; the map_async callback stores 1 = mapped ok, 2 = failed
+	inflight: Option<Arc<AtomicU8>>,
+}
+
+impl BlockReadback {
+	/// Room for `blocks` blocks of `side` x `side`, back to back.
+	pub fn new(device: &wgpu::Device, label: &str, side: u32, blocks: u64) -> Self {
+		let buf = device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: u64::from(side * side * 4) * blocks, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+		Self { side, buf, inflight: None }
+	}
+
+	/// Copy one block per `(texture, origin)` into the buffer in order, and
+	/// map it. False when a read is already in flight.
+	pub fn start(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, from: &[(&wgpu::Texture, wgpu::Origin3d)]) -> bool {
+		if self.inflight.is_some() {
+			return false;
+		}
+		let block = u64::from(self.side * self.side * 4);
+		let mut enc = device.create_command_encoder(&Default::default());
+		for (n, (tex, origin)) in (0u64..).zip(from) {
+			enc.copy_texture_to_buffer(wgpu::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: *origin, aspect: wgpu::TextureAspect::All }, wgpu::TexelCopyBufferInfo { buffer: &self.buf, layout: wgpu::TexelCopyBufferLayout { offset: n * block, bytes_per_row: Some(self.side * 4), rows_per_image: Some(self.side) } }, wgpu::Extent3d { width: self.side, height: self.side, depth_or_array_layers: 1 });
+		}
+		queue.submit(Some(enc.finish()));
+		let flag = Arc::new(AtomicU8::new(0));
+		let done = flag.clone();
+		self.buf.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+			done.store(if r.is_ok() { 1 } else { 2 }, Ordering::Release);
+		});
+		self.inflight = Some(flag);
+		true
+	}
+
+	/// None while nothing is in flight or the map is still pending. Otherwise
+	/// `check` sees the whole buffer, and the buffer is unmapped after.
+	pub fn poll<T>(&mut self, device: &wgpu::Device, check: impl FnOnce(&[u8]) -> T) -> Option<Result<T, MapFailed>> {
+		let flag = self.inflight.as_ref()?.clone();
+		if flag.load(Ordering::Acquire) == 0 {
+			// non-blocking pump so the map callback can run
+			let _ = device.poll(wgpu::PollType::Poll);
+		}
+		match flag.load(Ordering::Acquire) {
+			0 => None,
+			2 => {
+				self.inflight = None;
+				Some(Err(MapFailed))
+			}
+			_ => {
+				self.inflight = None;
+				let seen = check(&self.buf.slice(..).get_mapped_range());
+				self.buf.unmap();
+				Some(Ok(seen))
+			}
+		}
+	}
 }
 
 struct Sentinel {
 	up_tex: wgpu::Texture,
 	fbo_tex: wgpu::Texture,
-	buf: wgpu::Buffer, // both witnesses read back into one buffer (up at 0, fbo at SENTINEL_BYTES)
-	// probe in flight; the map_async callback stores 1 = mapped ok, 2 = failed
-	inflight: Option<Arc<AtomicU8>>,
+	read: BlockReadback, // up at block 0, fbo at block 1
 }
 
 impl Sentinel {
 	fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
-		let mk_tex = |label: &str, usage: wgpu::TextureUsages| {
-			device.create_texture(&wgpu::TextureDescriptor {
-				label: Some(label),
-				size: wgpu::Extent3d {
-					width: SENTINEL_PX,
-					height: SENTINEL_PX,
-					depth_or_array_layers: 1,
-				},
-				mip_level_count: 1,
-				sample_count: 1,
-				dimension: wgpu::TextureDimension::D2,
-				format: wgpu::TextureFormat::Rgba8Unorm,
-				usage,
-				view_formats: &[],
-			})
-		};
-		let up_tex = mk_tex(
-			"vram sentinel uploaded",
-			wgpu::TextureUsages::TEXTURE_BINDING
-				| wgpu::TextureUsages::COPY_DST
-				| wgpu::TextureUsages::COPY_SRC,
-		);
-		let fbo_tex = mk_tex(
-			"vram sentinel rendered",
-			wgpu::TextureUsages::RENDER_ATTACHMENT
-				| wgpu::TextureUsages::TEXTURE_BINDING
-				| wgpu::TextureUsages::COPY_DST
-				| wgpu::TextureUsages::COPY_SRC,
-		);
-		let buf = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("vram sentinel read"),
-			size: (SENTINEL_BYTES * 2) as u64,
-			usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-			mapped_at_creation: false,
-		});
-		let sentinel = Self {
-			up_tex,
-			fbo_tex,
-			buf,
-			inflight: None,
-		};
+		let mk_tex = |label: &str, usage: wgpu::TextureUsages| device.create_texture(&wgpu::TextureDescriptor { label: Some(label), size: wgpu::Extent3d { width: SENTINEL_PX, height: SENTINEL_PX, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Rgba8Unorm, usage, view_formats: &[] });
+		let up_tex = mk_tex("vram sentinel uploaded", wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC);
+		let fbo_tex = mk_tex("vram sentinel rendered", wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC);
+		let sentinel = Self { up_tex, fbo_tex, read: BlockReadback::new(device, "vram sentinel read", SENTINEL_PX, 2) };
 		sentinel.seed(device, queue, &sentinel_pattern());
 		sentinel
 	}
@@ -259,50 +333,17 @@ impl Sentinel {
 	// Upload `data` into up_tex, then GPU-copy it into fbo_tex (write_texture is
 	// ordered before subsequently submitted command buffers, so the copy sees it).
 	fn seed(&self, device: &wgpu::Device, queue: &wgpu::Queue, data: &[u8]) {
-		queue.write_texture(
-			wgpu::TexelCopyTextureInfo {
-				texture: &self.up_tex,
-				mip_level: 0,
-				origin: wgpu::Origin3d::ZERO,
-				aspect: wgpu::TextureAspect::All,
-			},
-			data,
-			wgpu::TexelCopyBufferLayout {
-				offset: 0,
-				bytes_per_row: Some(SENTINEL_ROW),
-				rows_per_image: Some(SENTINEL_PX),
-			},
-			wgpu::Extent3d {
-				width: SENTINEL_PX,
-				height: SENTINEL_PX,
-				depth_or_array_layers: 1,
-			},
-		);
+		queue.write_texture(wgpu::TexelCopyTextureInfo { texture: &self.up_tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, data, wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(SENTINEL_ROW), rows_per_image: Some(SENTINEL_PX) }, wgpu::Extent3d { width: SENTINEL_PX, height: SENTINEL_PX, depth_or_array_layers: 1 });
 		let mut enc = device.create_command_encoder(&Default::default());
-		enc.copy_texture_to_texture(
-			wgpu::TexelCopyTextureInfo {
-				texture: &self.up_tex,
-				mip_level: 0,
-				origin: wgpu::Origin3d::ZERO,
-				aspect: wgpu::TextureAspect::All,
-			},
-			wgpu::TexelCopyTextureInfo {
-				texture: &self.fbo_tex,
-				mip_level: 0,
-				origin: wgpu::Origin3d::ZERO,
-				aspect: wgpu::TextureAspect::All,
-			},
-			wgpu::Extent3d {
-				width: SENTINEL_PX,
-				height: SENTINEL_PX,
-				depth_or_array_layers: 1,
-			},
-		);
+		enc.copy_texture_to_texture(wgpu::TexelCopyTextureInfo { texture: &self.up_tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, wgpu::TexelCopyTextureInfo { texture: &self.fbo_tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, wgpu::Extent3d { width: SENTINEL_PX, height: SENTINEL_PX, depth_or_array_layers: 1 });
 		queue.submit(Some(enc.finish()));
 	}
 }
 
 pub struct Gfx {
+	// Kept across a release (see `Rebirth`): the device and everything on it
+	// go, and the instance is what they're rebuilt from.
+	instance: wgpu::Instance,
 	pub device: wgpu::Device,
 	pub queue: wgpu::Queue,
 	pub config: wgpu::SurfaceConfiguration,
@@ -311,69 +352,261 @@ pub struct Gfx {
 	pub adapter_info: wgpu::AdapterInfo,
 	backend: Backend,
 	sentinel: Option<Sentinel>, // GL path only: VT-switch texture-content-loss probe
+	// set for a window glutin made, whichever device it has now
+	gl_route: Option<GlRoute>,
+	pub drawn: Drawn,
+	/// what the device was asked for, so a change of setting can be told
+	pub want: Want,
+	pub loss: Loss,
+	// the surface reported Lost, which a reconfigure doesn't mend
+	surface_lost: AtomicBool,
+	born: std::time::SystemTime, // read by `lose_on_purpose`
 	_window: Arc<Window>,
+	_vulkan: Option<OnVulkan>,
+}
+
+impl std::fmt::Debug for Gfx {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("Gfx").field("format", &self.format).field("transparent", &self.transparent).field("adapter", &self.adapter_info.name).finish_non_exhaustive()
+	}
+}
+
+/// What is kept of a released `Gfx`, enough to build the device again on the
+/// same window. The instance is kept rather than made afresh because on the GL
+/// path its teardown terminates an EGL display that the glutin context may
+/// share, and because the adapter enumeration it has is the slow part of a
+/// cold start on the others.
+pub enum Rebirth {
+	Native(wgpu::Instance),
+	Gl(GlRoute),
+}
+
+/// How a window glutin made gets a device: the GL instance and the framebuffer
+/// config a context on the window has to match, and the instance a software
+/// device on it comes from, once one was needed. Kept as a whole, so a window
+/// drawing in software goes back to GL at its next build.
+#[derive(Clone)]
+pub struct GlRoute {
+	instance: wgpu::Instance,
+	config: glutin::config::Config,
+	software: Option<wgpu::Instance>,
+}
+
+impl std::fmt::Debug for GlRoute {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("GlRoute").field("software", &self.software.is_some()).finish_non_exhaustive()
+	}
+}
+
+/// Which kind of adapter a device is asked of first. The other is tried once
+/// when the first can't make a device.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Want {
+	Card,
+	Software,
+}
+
+impl Want {
+	/// `force_fallback_adapter` for each try, in order. false lets wgpu pick
+	/// any adapter, a card ahead of software; true takes software only.
+	pub const fn order(self) -> [bool; 2] {
+		match self {
+			Self::Card => [false, true],
+			Self::Software => [true, false],
+		}
+	}
+}
+
+/// wgpu has a software adapter everywhere but macOS: lavapipe on Linux, WARP on
+/// Windows.
+pub const SOFTWARE_POSSIBLE: bool = !cfg!(target_os = "macos");
+
+/// What the next device is asked for.
+pub fn wanted() -> Want {
+	if SOFTWARE_POSSIBLE && crate::config::settings().software_rendering { Want::Software } else { Want::Card }
+}
+
+/// How a device came to be on its adapter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Drawn {
+	Card,
+	// software, because the setting asked for it
+	Software,
+	// software, because the card couldn't make a device
+	Fallback,
+	// software, because no card was found
+	NoCard,
+}
+
+impl Drawn {
+	pub fn of(info: &wgpu::AdapterInfo, asked_software: bool, card_refused: bool) -> Self {
+		if info.device_type != wgpu::DeviceType::Cpu {
+			Self::Card
+		} else if card_refused {
+			Self::Fallback
+		} else if asked_software {
+			Self::Software
+		} else {
+			Self::NoCard
+		}
+	}
+
+	/// Software on a machine that has a card. The card keeps its performance
+	/// rating then, since this isn't new hardware.
+	pub const fn instead_of_card(self) -> bool {
+		matches!(self, Self::Software | Self::Fallback)
+	}
+}
+
+impl std::fmt::Debug for Rebirth {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str(match self {
+			Self::Native(_) => "Rebirth::Native",
+			Self::Gl(..) => "Rebirth::Gl",
+		})
+	}
 }
 
 impl Gfx {
-	pub fn new(window: Arc<Window>) -> anyhow::Result<Self> {
-		Self::with_backends(window, wgpu::Backends::all())
+	pub fn new(window: Arc<Window>, want: Want) -> anyhow::Result<Self> {
+		Self::with_backends(window, wgpu::Backends::all(), want)
 	}
 
-	// Native wgpu path with a chosen backend set. Pop-out dialog windows pass
-	// `Backends::PRIMARY` (Vulkan/Metal/DX12, NO GL): initializing wgpu's GL
-	// backend while the main window holds a glutin GL/EGL context panics in
-	// wgpu-hal's EGL teardown (`unmake_current().unwrap()`), so dialogs must avoid
-	// touching EGL entirely.
-	pub fn with_backends(window: Arc<Window>, backends: wgpu::Backends) -> anyhow::Result<Self> {
-		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-			backends,
-			flags: wgpu::InstanceFlags::default(),
-			memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-			backend_options: wgpu::BackendOptions::default(),
-			display: None,
-		});
-		let surface = instance.create_surface(window.clone())?;
+	/// Let the device and everything on it go. Every other wgpu object made on
+	/// this device must be gone already, or the device outlives this call: the
+	/// handles are refcounted, and the last one standing is what frees it.
+	/// Ordered by hand, since the GL objects are deleted through a context that
+	/// has to be current while it happens and glutin destroys one without
+	/// unbinding it first.
+	pub fn release(self) -> Rebirth {
+		let Self { instance, device, queue, backend, sentinel, gl_route, loss, .. } = self;
+		drop(sentinel);
+		match backend {
+			Backend::Native(_) | Backend::Gone => {
+				drop(backend);
+				// a lost device has no work left to wait for
+				if !loss.lost() {
+					let _ = device.poll(wgpu::PollType::wait_indefinitely());
+				}
+				drop(queue);
+				drop(device);
+			}
+			Backend::Gl { ctx, surface, fb, fb_view, offscreen, offscreen_view, blit } => {
+				drop((blit, offscreen_view, offscreen, fb_view, fb));
+				let _ = device.poll(wgpu::PollType::wait_indefinitely());
+				drop(queue);
+				drop(device);
+				// Unbound before either is destroyed. GLX only defers destroying a
+				// current drawable, so the window kept its old GLX surface, and
+				// NVIDIA refused the rebuild a second one (BadDrawable, then
+				// GLXBadWindow when the half-made one was dropped).
+				let ctx = ctx.make_not_current();
+				drop(surface);
+				drop(ctx);
+			}
+		}
+		gl_route.map_or(Rebirth::Native(instance), Rebirth::Gl)
+	}
 
-		// Prefer a real GPU; if none can be acquired, retry forcing a software
-		// (CPU) adapter so the app still runs without hardware acceleration.
-		let pick = |fallback| {
-			pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-				power_preference: wgpu::PowerPreference::HighPerformance,
-				compatible_surface: Some(&surface),
-				force_fallback_adapter: fallback,
-			}))
-		};
-		let adapter = pick(false).or_else(|_| pick(true))?;
-		let adapter_info = adapter.get_info();
-		log_renderer(&adapter_info);
+	/// The device again, on the window it was released from. A kept instance that
+	/// can no longer be used for the window (a driver that went away in the meantime)
+	/// falls back to a cold start.
+	pub fn rebuild(rebirth: &Rebirth, window: &Arc<Window>, want: Want) -> anyhow::Result<Self> {
+		match rebirth {
+			Rebirth::Native(instance) => Self::on(instance.clone(), window.clone(), false, &want.order(), None).or_else(|_| Self::new(window.clone(), want)),
+			Rebirth::Gl(route) => Self::on_route(route.clone(), window, want, false),
+		}
+	}
 
-		let (device, queue) = pollster::block_on(request_device(&adapter))?;
-		let (config, format, transparent) = surface_config(&surface, &adapter, &window)
-			.ok_or_else(|| anyhow::anyhow!("adapter cannot present to this window"))?;
-		surface.configure(&device, &config);
-
-		Ok(Self {
-			device,
-			queue,
-			config,
-			format,
-			transparent,
-			adapter_info,
-			backend: Backend::Native(surface),
-			sentinel: None,
-			_window: window,
+	/// Windows per-pixel transparency. A swapchain made straight from the HWND
+	/// only ever composites opaque, whatever the window asked for, so the setting
+	/// used to change nothing there. DX12 can instead present through a
+	/// `DirectComposition` visual, which does support premultiplied alpha. It's
+	/// the only backend with that option, so it has to be the one picked. Falls
+	/// back to the ordinary path (opaque) when DX12 can't present to this window.
+	#[cfg(windows)]
+	pub fn new_composited(window: Arc<Window>, want: Want) -> anyhow::Result<Self> {
+		let dx12 = wgpu::Dx12BackendOptions { presentation_system: wgpu::Dx12SwapchainKind::DxgiFromVisual, ..Default::default() };
+		let options = wgpu::BackendOptions { dx12, ..Default::default() };
+		Self::build(window.clone(), wgpu::Backends::DX12, options, want).or_else(|e| {
+			eprintln!("{}: composited DX12 surface unavailable ({e}); using native surface (no transparency)", crate::config::APP_NAME);
+			Self::new(window, want)
 		})
 	}
 
-	// Same native path, but on a context that was built ahead of time (see
-	// `DialogGpu`). Only the surface is created here, which is sub-millisecond -
-	// the instance/adapter/device that dominate `with_backends` are already paid
-	// for. `None` means this warm context cannot serve this window, so the caller
-	// must fall back to a cold `with_backends`.
+	/// Native wgpu path with a chosen backend set. Pop-out dialog windows pass
+	/// `Backends::PRIMARY` (Vulkan/Metal/DX12, no GL): initializing wgpu's GL
+	/// backend while the main window holds a glutin GL/EGL context panics in
+	/// wgpu-hal's EGL teardown (`unmake_current().unwrap()`), so dialogs must avoid
+	/// touching EGL entirely.
+	pub fn with_backends(window: Arc<Window>, backends: wgpu::Backends, want: Want) -> anyhow::Result<Self> {
+		Self::build(window, backends, wgpu::BackendOptions::default(), want)
+	}
+
+	fn build(window: Arc<Window>, backends: wgpu::Backends, backend_options: wgpu::BackendOptions, want: Want) -> anyhow::Result<Self> {
+		let _loader = hold_loader();
+		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor { backends, flags: wgpu::InstanceFlags::default(), memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(), backend_options, display: None });
+		Self::on(instance, window, true, &want.order(), None)
+	}
+
+	// Surface, adapter and device on an instance that already exists: the cold
+	// start above and a rebuild after a release (`log` is the difference, since
+	// the adapter was reported the first time). `order` is as for
+	// `pick_device`, and `refused` says a card already refused a device.
+	fn on(instance: wgpu::Instance, window: Arc<Window>, log: bool, order: &[bool], refused: Option<String>) -> anyhow::Result<Self> {
+		let _loader = hold_loader();
+		let surface = instance.create_surface(window.clone())?;
+		let picked = pick_device(&instance, Some(&surface), order, refused, "silkterm device")?;
+		let (config, format, transparent) = surface_config(&surface, &picked.adapter, &window).ok_or_else(|| anyhow::anyhow!("adapter can't present to this window"))?;
+		if log || picked.drawn == Drawn::Fallback {
+			log_renderer(&picked.info, transparent);
+		}
+		surface.configure(&picked.device, &config);
+
+		Ok(Self { _vulkan: OnVulkan::count(&picked.info), instance, device: picked.device, queue: picked.queue, config, format, transparent, adapter_info: picked.info, backend: Backend::Native(surface), sentinel: None, gl_route: None, drawn: picked.drawn, want: if order.first() == Some(&true) { Want::Software } else { Want::Card }, loss: picked.loss, surface_lost: AtomicBool::new(false), born: std::time::SystemTime::now(), _window: window })
+	}
+
+	// A device on a window glutin made: GL on the card, or software when the
+	// setting asks for it or the card can't make a device. Software comes
+	// through a Vulkan instance of its own (lavapipe). libGL keeps the card's
+	// driver once loaded, and a second wgpu GL instance panics in EGL teardown
+	// (see `with_backends`).
+	fn on_route(mut route: GlRoute, window: &Arc<Window>, want: Want, log: bool) -> anyhow::Result<Self> {
+		let mut gfx = match want {
+			Want::Card => match Self::gl_on(&route, window.clone(), log) {
+				Ok(gfx) => gfx,
+				Err(e) => Self::software_on_route(&mut route, window, log, Some(e.to_string())).map_err(|_| e)?,
+			},
+			Want::Software => match Self::software_on_route(&mut route, window, log, None) {
+				Ok(gfx) => gfx,
+				Err(e) => {
+					note_no_software(&e);
+					Self::gl_on(&route, window.clone(), log)?
+				}
+			},
+		};
+		gfx.want = want;
+		Ok(gfx)
+	}
+
+	fn software_on_route(route: &mut GlRoute, window: &Arc<Window>, log: bool, refused: Option<String>) -> anyhow::Result<Self> {
+		let _loader = hold_loader();
+		let instance = route.software.get_or_insert_with(|| plain_instance(wgpu::Backends::PRIMARY)).clone();
+		let mut gfx = Self::on(instance, window.clone(), log, &[true], refused)?;
+		gfx.gl_route = Some(route.clone());
+		Ok(gfx)
+	}
+
+	/// Same native path, but on a context that was built ahead of time (see
+	/// `DialogGpu`). Only the surface is created here, which is sub-millisecond,
+	/// since the instance/adapter/device that dominate `with_backends` are already
+	/// paid for. `None` means this warm context can't draw to this window, so the
+	/// caller must fall back to a cold `with_backends`.
 	pub fn with_dialog_gpu(window: Arc<Window>, gpu: &DialogGpu) -> Option<Self> {
+		let _loader = hold_loader();
 		// The warm instance was built with no display connection, so it may not be
-		// able to make a surface for this window at all. That is the same answer as
-		// an adapter that cannot present here: fall back, rather than failing the
+		// able to make a surface for this window at all. That's handled the same as
+		// an adapter that can't present here: fall back, rather than failing the
 		// open and leaving the dialog unreachable for the life of the process.
 		let surface = gpu.instance.create_surface(window.clone()).ok()?;
 		// The warm adapter was picked with no surface to check against (no window
@@ -382,71 +615,64 @@ impl Gfx {
 		let (config, format, transparent) = surface_config(&surface, &gpu.adapter, &window)?;
 		surface.configure(&gpu.device, &config);
 
-		Some(Self {
-			device: gpu.device.clone(),
-			queue: gpu.queue.clone(),
-			config,
-			format,
-			transparent,
-			adapter_info: gpu.adapter_info.clone(),
-			backend: Backend::Native(surface),
-			sentinel: None,
-			_window: window,
-		})
+		Some(Self { instance: gpu.instance.clone(), device: gpu.device.clone(), queue: gpu.queue.clone(), config, format, transparent, adapter_info: gpu.adapter_info.clone(), backend: Backend::Native(surface), sentinel: None, gl_route: None, drawn: gpu.drawn, want: gpu.want, loss: gpu.loss.clone(), surface_lost: AtomicBool::new(false), born: std::time::SystemTime::now(), _window: window, _vulkan: OnVulkan::count(&gpu.adapter_info) })
 	}
 
-	// X11-only per-pixel transparency: glutin creates the window with a 32-bit
-	// ARGB visual + transparent GL context, and wgpu runs on it via hal external
-	// interop (PoCs on branch spike/x11-transparency). Returns the window it created.
-	pub fn new_gl_transparent(
-		el: &ActiveEventLoop,
-		attrs: WindowAttributes,
-	) -> anyhow::Result<(Self, Arc<Window>)> {
-		// No transparency requirement in the template: the picker closure must
-		// return a Config (can't say "none fit"), and a panic there would abort
-		// past resumed()'s native-backend fallback (panic=abort in release).
-		// So match broadly, prefer transparent+deepest-alpha, validate after.
+	// The GL config picker: transparent first, then the deepest alpha.
+	#[allow(clippy::expect_used, reason = "the template asks for nothing, so every config the display has is offered")]
+	fn most_transparent_config(cfgs: Box<dyn Iterator<Item = glutin::config::Config> + '_>) -> glutin::config::Config {
+		cfgs.reduce(|best, cand| {
+			let (best_transparent, cand_transparent) = (best.supports_transparency().unwrap_or(false), cand.supports_transparency().unwrap_or(false));
+			if (cand_transparent, cand.alpha_size()) > (best_transparent, best.alpha_size()) { cand } else { best }
+		})
+		.expect("GL reported no framebuffer configs")
+	}
+
+	/// X11-only per-pixel transparency: glutin creates the window with a 32-bit
+	/// ARGB visual + transparent GL context, and wgpu runs on it via hal external
+	/// interop (PoCs on branch spike/x11-transparency). Returns the window it created.
+	pub fn new_gl_transparent(el: &ActiveEventLoop, attrs: WindowAttributes, want: Want) -> anyhow::Result<(Self, Arc<Window>)> {
+		#[cfg(target_os = "linux")]
+		quiet_glx_errors();
+		// No transparency requirement in the template, since the picker closure must
+		// return a Config, and a panic there would abort past resumed()'s native-backend
+		// fallback. So match broadly, prefer transparent and deepest alpha, and check
+		// after.
 		let template = glutin::config::ConfigTemplateBuilder::new();
-		let (window, config) = DisplayBuilder::new()
-			.with_window_attributes(Some(attrs))
-			.build(el, template, |cfgs| {
-				cfgs.reduce(|best, cand| {
-					let (best_transparent, cand_transparent) = (
-						best.supports_transparency().unwrap_or(false),
-						cand.supports_transparency().unwrap_or(false),
-					);
-					if (cand_transparent, cand.alpha_size()) > (best_transparent, best.alpha_size())
-					{
-						cand
-					} else {
-						best
-					}
-				})
-				// unreachable unless GL reports zero framebuffer configs at all
-				.expect("GL reported no framebuffer configs")
-			})
-			.map_err(|e| anyhow::anyhow!("glutin display build: {e}"))?;
+		let (window, config) = DisplayBuilder::new().with_window_attributes(Some(attrs)).build(el, template, Self::most_transparent_config).map_err(|e| anyhow::anyhow!("glutin display build: {e}"))?;
 		if !config.supports_transparency().unwrap_or(false) || config.alpha_size() < 8 {
-			return Err(anyhow::anyhow!(
-				"no transparency-capable GL config (no ARGB visual?)"
-			));
+			return Err(anyhow::anyhow!("no transparency-capable GL config (no ARGB visual?)"));
 		}
 		let window = Arc::new(window.ok_or_else(|| anyhow::anyhow!("glutin made no window"))?);
+		// empty flags: no indirect validation, which needs compute the GL 3.3 context
+		// lacks, and indirect draws aren't used.
+		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor { backends: wgpu::Backends::GL, flags: wgpu::InstanceFlags::empty(), memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(), backend_options: wgpu::BackendOptions::default(), display: None });
+		let route = GlRoute { instance, config, software: None };
+		let gfx = Self::on_route(route, &window, want, true)?;
+		Ok((gfx, window))
+	}
+
+	// The GL context, its surface and the wgpu device over them, on a window
+	// glutin made. Shared by the cold start above and a rebuild after a release:
+	// the window and its ARGB visual outlive the context, so a new one is built
+	// from the same config.
+	fn gl_on(route: &GlRoute, window: Arc<Window>, log: bool) -> anyhow::Result<Self> {
+		let config = &route.config;
 		let raw = window.window_handle()?.as_raw();
 		let gl_display = config.display();
 
-		// Request a high GL version. NVIDIA/Linux honors the *exact* version asked
-		// (gfx-rs/wgpu#8676), and many wgpu GL bugs - including rendering into a 2D
-		// texture view, which is how glyphon draws its atlas - only disappear on
-		// GL >=4.2 (gfx-rs/wgpu#8675). A 3.3/4.1 context renders no glyphon text.
+		// Request a high GL version. NVIDIA/Linux honors the exact version asked
+		// (gfx-rs/wgpu#8676), and many wgpu GL bugs only go away on GL >=4.2
+		// (gfx-rs/wgpu#8675), including rendering into a 2D texture view, which is
+		// how glyphon draws its atlas. A 3.3/4.1 context renders no glyphon text.
 		// Try 4.6 down so non-NVIDIA drivers still get a context.
 		let ctx = {
 			let mut picked = None;
 			for (maj, min) in [(4u8, 6u8), (4, 3), (4, 2), (4, 1), (3, 3)] {
-				let attrs = ContextAttributesBuilder::new()
-					.with_context_api(ContextApi::OpenGl(Some(Version::new(maj, min))))
-					.build(Some(raw));
-				if let Ok(ctx) = unsafe { gl_display.create_context(&config, &attrs) } {
+				let attrs = ContextAttributesBuilder::new().with_context_api(ContextApi::OpenGl(Some(Version::new(maj, min)))).build(Some(raw));
+				// SAFETY: `raw` is `window`'s handle, and `Gfx` keeps the window
+				// (`_window`, dropped last) for as long as the context.
+				if let Ok(ctx) = unsafe { gl_display.create_context(config, &attrs) } {
 					picked = Some(ctx);
 					break;
 				}
@@ -454,211 +680,169 @@ impl Gfx {
 			picked.ok_or_else(|| anyhow::anyhow!("no GL context could be created"))?
 		};
 		let size = window.inner_size();
-		let surface = unsafe {
-			gl_display.create_window_surface(
-				&config,
-				&SurfaceAttributesBuilder::<WindowSurface>::new().build(
-					raw,
-					NonZeroU32::new(size.width.max(1)).unwrap(),
-					NonZeroU32::new(size.height.max(1)).unwrap(),
-				),
-			)?
-		};
+		// SAFETY: as for the context above, the window outlives the surface.
+		let surface = unsafe { gl_display.create_window_surface(config, &SurfaceAttributesBuilder::<WindowSurface>::new().build(raw, NonZeroU32::new(size.width).unwrap_or(NonZeroU32::MIN), NonZeroU32::new(size.height).unwrap_or(NonZeroU32::MIN)))? };
 		let ctx = ctx.make_current(&surface)?;
-		// Frame pacing on this path is swap_buffers blocking on vblank; the driver
-		// default isn't guaranteed (__GL_SYNC_TO_VBLANK=0, PRIME setups), and without
-		// it every scroll animation becomes an unthrottled busy-render loop.
-		// SILK_MAX_FPS (app.rs) paces the loop itself, and then vblank must NOT also
-		// have a say: a swap that blocks to the next refresh puts every frame back on
-		// the display's grid, which is the grid the pinned rate exists to leave.
-		let interval = if std::env::var_os("SILK_MAX_FPS").is_some() {
-			glutin::surface::SwapInterval::DontWait
-		} else {
-			glutin::surface::SwapInterval::Wait(NonZeroU32::MIN)
-		};
+		// Frame pacing on this path is swap_buffers blocking on vblank. The driver default
+		// isn't guaranteed (__GL_SYNC_TO_VBLANK=0, PRIME setups), and without it every
+		// scroll animation becomes a busy render loop. SILK_MAX_FPS (app.rs) paces the
+		// loop itself, and then vblank has to stay out of it, since a swap that blocks to
+		// the next refresh puts every frame back on the display's grid.
+		let interval = if std::env::var_os("SILK_MAX_FPS").is_some() { glutin::surface::SwapInterval::DontWait } else { glutin::surface::SwapInterval::Wait(NonZeroU32::MIN) };
 		let _ = surface.set_swap_interval(&ctx, interval);
 
-		// wrap glutin's GL context as a wgpu device (hal external interop)
-		let exposed = unsafe {
-			wgpu::hal::gles::Adapter::new_external(
-				|name| {
-					std::ffi::CString::new(name).map_or(std::ptr::null(), |cstr| {
-						gl_display.get_proc_address(&cstr).cast()
-					})
-				},
-				wgpu::GlBackendOptions::default(),
-			)
-		}
-		.ok_or_else(|| anyhow::anyhow!("wgpu GL external adapter init failed"))?;
-
-		// empty flags: no indirect-validation (needs compute the GL 3.3 context
-		// lacks; we never use indirect draws).
-		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-			backends: wgpu::Backends::GL,
-			flags: wgpu::InstanceFlags::empty(),
-			memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-			backend_options: wgpu::BackendOptions::default(),
-			display: None,
-		});
-		let adapter = unsafe { instance.create_adapter_from_hal::<Gles>(exposed) };
-		let adapter_info = adapter.get_info();
-		log_renderer(&adapter_info);
-		let (device, queue) =
-			pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-				label: Some("silkterm gl device"),
-				required_features: wgpu::Features::empty(),
-				required_limits: adapter.limits(),
-				..Default::default()
-			}))?;
-
-		// The GL offscreen is linear-light, so it must NOT be sRGB (an sRGB-declared
-		// offscreen makes the blit's textureSample DECODE, cancelling its lin2srgb).
-		// It must also be HIGH-PRECISION: an 8-bit *linear* offscreen starves dark
-		// gradients of codes -> pronounced banding (esp. a blurred background image).
-		// Rgba16Float gives a linear intermediate with no banding; the blit then
-		// does the single linear->sRGB encode (+ dither) into the 8-bit fbo 0.
-		let format = wgpu::TextureFormat::Rgba16Float;
-		let config = wgpu::SurfaceConfiguration {
-			usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-			format,
-			width: size.width.max(1),
-			height: size.height.max(1),
-			present_mode: wgpu::PresentMode::AutoVsync,
-			alpha_mode: wgpu::CompositeAlphaMode::PreMultiplied,
-			view_formats: vec![],
-			desired_maximum_frame_latency: 2,
+		// A refusal from here on leaves the context current, and glutin destroys
+		// one without unbinding it, which spoils the window for the next GLX
+		// context on NVIDIA (see `release`). The software fallback and the
+		// retry after it both come back to this window, so unbind first.
+		let made = (|| {
+			let adapter = gl_adapter(&route.instance, &gl_display)?;
+			let adapter_info = adapter.get_info();
+			if log {
+				log_renderer(&adapter_info, true);
+			}
+			let (device, queue, loss) = request_device(&adapter, "silkterm gl device")?;
+			anyhow::Ok((adapter_info, device, queue, loss))
+		})();
+		let (adapter_info, device, queue, loss) = match made {
+			Ok(made) => made,
+			Err(e) => {
+				let ctx = ctx.make_not_current();
+				drop(surface);
+				drop(ctx);
+				return Err(e);
+			}
 		};
-		let fb = default_fb(&device, FB_FORMAT, config.width, config.height);
+		let drawn = Drawn::of(&adapter_info, false, false);
+
+		// The GL offscreen is linear light, so it mustn't be sRGB, or the blit's
+		// textureSample would decode and cancel its lin2srgb. It also has to be
+		// high-precision, since an 8-bit linear offscreen bands dark gradients, most of
+		// all a blurred wallpaper. The blit then does the single linear-to-sRGB encode,
+		// with dither, into the 8-bit fbo 0.
+		let format = wgpu::TextureFormat::Rgba16Float;
+		let (width, height) = fit_px(size.width, size.height, device.limits().max_texture_dimension_2d);
+		let surface_cfg = wgpu::SurfaceConfiguration { usage: wgpu::TextureUsages::RENDER_ATTACHMENT, format, width, height, present_mode: wgpu::PresentMode::AutoVsync, alpha_mode: wgpu::CompositeAlphaMode::PreMultiplied, view_formats: vec![], desired_maximum_frame_latency: 2 };
+		let fb = default_fb(&device, FB_FORMAT, surface_cfg.width, surface_cfg.height);
 		let fb_view = fb.create_view(&Default::default());
-		let offscreen = offscreen_tex(&device, format, config.width, config.height);
+		let offscreen = offscreen_tex(&device, format, surface_cfg.width, surface_cfg.height);
 		let offscreen_view = offscreen.create_view(&Default::default());
 		let blit = Blit::new(&device, FB_FORMAT, &offscreen_view);
 
 		let sentinel = Some(Sentinel::new(&device, &queue));
-		Ok((
-			Self {
-				device,
-				queue,
-				config,
-				format,
-				transparent: true,
-				adapter_info,
-				backend: Backend::Gl {
-					ctx,
-					surface,
-					fb,
-					fb_view,
-					offscreen,
-					offscreen_view,
-					blit,
-				},
-				sentinel,
-				_window: window.clone(),
-			},
-			window,
-		))
+		Ok(Self { instance: route.instance.clone(), device, queue, config: surface_cfg, format, transparent: true, adapter_info, backend: Backend::Gl { ctx, surface, fb, fb_view, offscreen, offscreen_view, blit }, sentinel, gl_route: Some(route.clone()), drawn, want: Want::Card, loss, surface_lost: AtomicBool::new(false), born: std::time::SystemTime::now(), _window: window, _vulkan: None })
 	}
 
-	// Acquire the frame's render target. None -> skip this frame (surface lost).
-	pub fn begin_frame(&mut self) -> Option<Frame> {
+	/// True once the device or the surface is gone for good, and this whole
+	/// `Gfx` has to be built again. Until then every frame is refused.
+	pub fn lost(&self) -> bool {
+		self.loss.lost() || self.surface_lost.load(Ordering::Relaxed)
+	}
+
+	/// Acquire the frame's render target, or return why there's none this time.
+	/// Never a frame on a lost device, where what draws it could panic in wgpu.
+	pub fn begin_frame(&self) -> Result<Frame, NoFrame> {
+		self.lose_on_purpose();
+		if self.loss.lost() {
+			return Err(NoFrame::Other);
+		}
 		match &self.backend {
 			Backend::Native(surface) => {
-				use wgpu::CurrentSurfaceTexture::*;
+				use wgpu::CurrentSurfaceTexture::{Lost, Occluded, Outdated, Suboptimal, Success};
 				match surface.get_current_texture() {
-					Success(surface_tex) | Suboptimal(surface_tex) => {
-						Some(Frame::Native(surface_tex))
+					// A loss often shows up first at the acquire. Dropping the texture
+					// discards it, and wgpu panics on that for a lost device, so it's
+					// presented instead, which does nothing there.
+					Success(surface_tex) | Suboptimal(surface_tex) if self.loss.lost() => {
+						surface_tex.present();
+						Err(NoFrame::Other)
 					}
-					Outdated | Lost => {
+					Success(surface_tex) | Suboptimal(surface_tex) => Ok(Frame::Native(surface_tex)),
+					Outdated => {
 						surface.configure(&self.device, &self.config);
-						None
+						Err(NoFrame::Other)
 					}
-					_ => None,
+					// wants a new surface, which `lost` asks the caller for
+					Lost => {
+						self.surface_lost.store(true, Ordering::Relaxed);
+						Err(NoFrame::Other)
+					}
+					Occluded => Err(NoFrame::Occluded),
+					_ => Err(NoFrame::Other),
 				}
 			}
-			Backend::Gl { .. } => Some(Frame::Gl),
+			Backend::Gl { .. } => Ok(Frame::Gl),
+			Backend::Gone => Err(NoFrame::Other),
 		}
+	}
+
+	/// A dialog's way back from a lost device: the same window on a new one.
+	/// The old surface goes first, since a Wayland window takes only one, and a
+	/// second is a protocol error that ends the connection. Native backends
+	/// only, as dialogs are. A failure leaves no surface and `lost` still true,
+	/// so the next frame tries again.
+	pub fn regain(&mut self, window: &Arc<Window>) -> anyhow::Result<()> {
+		if matches!(self.backend, Backend::Gl { .. }) {
+			anyhow::bail!("a GL window rebuilds through `release`");
+		}
+		self.backend = Backend::Gone;
+		let want = wanted();
+		*self = Self::on(self.instance.clone(), window.clone(), false, &want.order(), None).or_else(|_| Self::with_backends(window.clone(), wgpu::Backends::PRIMARY, want))?;
+		Ok(())
 	}
 
 	pub fn frame_view(&self, frame: &Frame) -> wgpu::TextureView {
 		match (frame, &self.backend) {
-			(Frame::Native(surface_tex), _) => surface_tex
-				.texture
-				.create_view(&wgpu::TextureViewDescriptor::default()),
+			(Frame::Native(surface_tex), _) => surface_tex.texture.create_view(&wgpu::TextureViewDescriptor::default()),
 			// the scene renders to the offscreen texture (normal orientation)
 			(Frame::Gl, Backend::Gl { offscreen_view, .. }) => offscreen_view.clone(),
 			_ => unreachable!("frame/backend mismatch"),
 		}
 	}
 
-	pub fn end_frame(&self, frame: Frame) {
+	/// Err when the frame never reached the window. Only the GL path can tell:
+	/// a native present reports through wgpu's error handler instead.
+	pub fn end_frame(&self, frame: Frame) -> Result<(), NoFrame> {
 		match (frame, &self.backend) {
-			(Frame::Native(surface_tex), _) => surface_tex.present(),
-			(
-				Frame::Gl,
-				Backend::Gl {
-					ctx,
-					surface,
-					fb_view,
-					blit,
-					..
-				},
-			) => {
+			(Frame::Native(surface_tex), _) => {
+				surface_tex.present();
+				Ok(())
+			}
+			(Frame::Gl, Backend::Gl { ctx, surface, fb_view, blit, .. }) => {
 				// flip-blit the offscreen scene into the GL default framebuffer
-				let mut enc = self
-					.device
-					.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-						label: Some("blit"),
-					});
+				let mut enc = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("blit") });
 				{
-					let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-						label: Some("blit pass"),
-						color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-							view: fb_view,
-							resolve_target: None,
-							depth_slice: None,
-							ops: wgpu::Operations {
-								load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-								store: wgpu::StoreOp::Store,
-							},
-						})],
-						depth_stencil_attachment: None,
-						timestamp_writes: None,
-						occlusion_query_set: None,
-						multiview_mask: None,
-					});
+					let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor { label: Some("blit pass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: fb_view, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None });
 					pass.set_pipeline(&blit.pipeline);
 					pass.set_bind_group(0, &blit.bind, &[]);
 					pass.draw(0..3, 0..1);
 				}
 				self.queue.submit(Some(enc.finish()));
-				let _ = surface.swap_buffers(ctx);
+				// glutin reports a GLX error raised by the swap
+				surface.swap_buffers(ctx).map_err(|_| NoFrame::Other)
 			}
-			_ => {}
+			_ => Ok(()),
 		}
 	}
 
+	/// The surface follows the window up to the largest side the device draws,
+	/// and the part of a window past it isn't drawn. A window manager can make
+	/// a window bigger than the window asked to be (`fit_px`).
 	pub fn resize(&mut self, w: u32, h: u32) {
 		if w == 0 || h == 0 {
 			return;
 		}
+		let (w, h) = fit_px(w, h, self.max_side());
+		let (Some(nonzero_w), Some(nonzero_h)) = (NonZeroU32::new(w), NonZeroU32::new(h)) else {
+			return;
+		};
 		self.config.width = w;
 		self.config.height = h;
 		match &mut self.backend {
 			Backend::Native(surface) => surface.configure(&self.device, &self.config),
-			Backend::Gl {
-				surface,
-				ctx,
-				fb,
-				fb_view,
-				offscreen,
-				offscreen_view,
-				blit,
-			} => {
-				surface.resize(
-					ctx,
-					NonZeroU32::new(w).unwrap(),
-					NonZeroU32::new(h).unwrap(),
-				);
+			Backend::Gone => {}
+			Backend::Gl { surface, ctx, fb, fb_view, offscreen, offscreen_view, blit } => {
+				surface.resize(ctx, nonzero_w, nonzero_h);
 				*fb = default_fb(&self.device, FB_FORMAT, w, h);
 				*fb_view = fb.create_view(&wgpu::TextureViewDescriptor::default());
 				*offscreen = offscreen_tex(&self.device, self.format, w, h);
@@ -667,100 +851,66 @@ impl Gfx {
 			}
 		}
 	}
+
+	/// The largest window side this device draws.
+	pub fn max_side(&self) -> u32 {
+		self.device.limits().max_texture_dimension_2d
+	}
+}
+
+/// A window may be no bigger than the largest texture the device will make. The
+/// GL path renders the scene into an offscreen texture at the window's size, and
+/// wgpu treats a refusal as fatal. So a size from the config or the command line
+/// is capped here, or it ends the launch in `create_texture`. The same cap
+/// applies to the surface of a window the window manager made bigger than that.
+pub fn fit_px(w: u32, h: u32, max_dim: u32) -> (u32, u32) {
+	(w.clamp(1, max_dim), h.clamp(1, max_dim))
 }
 
 // VRAM-content probe (see the Sentinel comment above). All no-ops on the
 // native backend, where sentinel is None.
 impl Gfx {
+	/// Made by glutin, with an ARGB visual and a VT watcher, whether it draws
+	/// through GL right now or in software.
+	pub const fn on_glutin_window(&self) -> bool {
+		self.gl_route.is_some()
+	}
+
 	pub fn is_gl(&self) -> bool {
 		matches!(self.backend, Backend::Gl { .. })
 	}
 
-	// Start an async sentinel readback (both witnesses into one buffer). False
-	// when there's no sentinel (native path) or a probe is already in flight.
+	/// Start an async sentinel readback (both witnesses into one buffer). False
+	/// when there's no sentinel (native path) or a probe is already in flight.
 	pub fn vram_check_start(&mut self) -> bool {
 		let Some(sent) = &mut self.sentinel else {
 			return false;
 		};
-		if sent.inflight.is_some() {
-			return false;
-		}
-		let mut enc = self.device.create_command_encoder(&Default::default());
-		for (tex, offset) in [(&sent.up_tex, 0u64), (&sent.fbo_tex, SENTINEL_BYTES as u64)] {
-			enc.copy_texture_to_buffer(
-				wgpu::TexelCopyTextureInfo {
-					texture: tex,
-					mip_level: 0,
-					origin: wgpu::Origin3d::ZERO,
-					aspect: wgpu::TextureAspect::All,
-				},
-				wgpu::TexelCopyBufferInfo {
-					buffer: &sent.buf,
-					layout: wgpu::TexelCopyBufferLayout {
-						offset,
-						bytes_per_row: Some(SENTINEL_ROW),
-						rows_per_image: Some(SENTINEL_PX),
-					},
-				},
-				wgpu::Extent3d {
-					width: SENTINEL_PX,
-					height: SENTINEL_PX,
-					depth_or_array_layers: 1,
-				},
-			);
-		}
-		self.queue.submit(Some(enc.finish()));
-		let flag = Arc::new(AtomicU8::new(0));
-		let done = flag.clone();
-		sent.buf.slice(..).map_async(wgpu::MapMode::Read, move |r| {
-			done.store(if r.is_ok() { 1 } else { 2 }, Ordering::Release);
-		});
-		sent.inflight = Some(flag);
-		true
+		sent.read.start(&self.device, &self.queue, &[(&sent.up_tex, wgpu::Origin3d::ZERO), (&sent.fbo_tex, wgpu::Origin3d::ZERO)])
 	}
 
-	// Poll an in-flight probe. Some(Lost{..}) = a witness pattern is gone (the
-	// sentinels are reseeded before returning so the caller only rebuilds the
-	// rest). None = still pending / no probe.
+	/// Poll an in-flight probe. Some(Lost{..}) means a witness pattern is gone, and the
+	/// sentinels are reseeded before returning, so the caller only rebuilds the rest.
+	/// None means still pending or no probe.
 	pub fn vram_check_poll(&mut self) -> Option<VramProbe> {
 		let sent = self.sentinel.as_mut()?;
-		let flag = sent.inflight.as_ref()?.clone();
-		if flag.load(Ordering::Acquire) == 0 {
-			// non-blocking pump so the map callback can run
-			let _ = self.device.poll(wgpu::PollType::Poll);
-		}
-		match flag.load(Ordering::Acquire) {
-			0 => None,
-			2 => {
-				sent.inflight = None;
-				Some(VramProbe::MapFailed)
-			}
-			_ => {
-				sent.inflight = None;
-				let (up_ok, fbo_ok) = {
-					let data = sent.buf.slice(..).get_mapped_range();
-					let pattern = sentinel_pattern();
-					(
-						data[..SENTINEL_BYTES] == pattern[..],
-						data[SENTINEL_BYTES..] == pattern[..],
-					)
-				};
-				sent.buf.unmap();
-				if up_ok && fbo_ok {
-					Some(VramProbe::Intact)
-				} else {
-					sent.seed(&self.device, &self.queue, &sentinel_pattern());
-					Some(VramProbe::Lost {
-						uploaded: !up_ok,
-						rendered: !fbo_ok,
-					})
-				}
-			}
+		let read = sent.read.poll(&self.device, |data| {
+			let (up, fbo) = data.split_at(SENTINEL_BYTES);
+			(holds_sentinel(up), holds_sentinel(fbo))
+		})?;
+		let Ok((up_ok, fbo_ok)) = read else {
+			return Some(VramProbe::MapFailed);
+		};
+		if up_ok && fbo_ok {
+			Some(VramProbe::Intact)
+		} else {
+			sent.seed(&self.device, &self.queue, &sentinel_pattern());
+			Some(VramProbe::Lost { uploaded: !up_ok, rendered: !fbo_ok })
 		}
 	}
 
-	// Diagnostic (SILK_VRAMLOSS): zero both sentinels to fake a content loss,
-	// so the detect->rebuild path can be exercised without a real VT switch.
+	/// Diagnostic (`SILK_VRAMLOSS`): zero both sentinels to fake a content loss,
+	/// so the detect->rebuild path can be exercised without a real VT switch.
 	pub fn vram_clobber(&self) {
 		if let Some(sent) = &self.sentinel {
 			sent.seed(&self.device, &self.queue, &vec![0u8; SENTINEL_BYTES]);
@@ -769,8 +919,8 @@ impl Gfx {
 }
 
 impl Gfx {
-	// Diagnostic: read the GL offscreen texture back and save it as a PNG. Bypasses
-	// the compositor/X-pixmap quirks that make screenshotting GL windows unreliable.
+	/// Diagnostic: read the GL offscreen texture back and save it as a PNG. Bypasses
+	/// the compositor/X-pixmap quirks that make screenshotting GL windows unreliable.
 	pub fn dump_offscreen(&self, path: &str) {
 		let Backend::Gl { offscreen, .. } = &self.backend else {
 			return;
@@ -779,34 +929,9 @@ impl Gfx {
 		let unpadded = w * 8; // Rgba16Float = 8 bytes/texel
 		let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
 		let row_stride = unpadded.div_ceil(align) * align;
-		let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("dump"),
-			size: (row_stride * h) as u64,
-			usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-			mapped_at_creation: false,
-		});
+		let buf = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("dump"), size: (row_stride * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
 		let mut enc = self.device.create_command_encoder(&Default::default());
-		enc.copy_texture_to_buffer(
-			wgpu::TexelCopyTextureInfo {
-				texture: offscreen,
-				mip_level: 0,
-				origin: wgpu::Origin3d::ZERO,
-				aspect: wgpu::TextureAspect::All,
-			},
-			wgpu::TexelCopyBufferInfo {
-				buffer: &buf,
-				layout: wgpu::TexelCopyBufferLayout {
-					offset: 0,
-					bytes_per_row: Some(row_stride),
-					rows_per_image: Some(h),
-				},
-			},
-			wgpu::Extent3d {
-				width: w,
-				height: h,
-				depth_or_array_layers: 1,
-			},
-		);
+		enc.copy_texture_to_buffer(wgpu::TexelCopyTextureInfo { texture: offscreen, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row_stride), rows_per_image: Some(h) } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
 		self.queue.submit(Some(enc.finish()));
 		buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
 		let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
@@ -817,15 +942,9 @@ impl Gfx {
 		for row in 0..h {
 			let row_start = (row * row_stride) as usize;
 			for texel in data[row_start..row_start + unpadded as usize].chunks_exact(8) {
-				let ch =
-					|i: usize| f16_to_f32(u16::from_le_bytes([texel[i * 2], texel[i * 2 + 1]]));
+				let ch = |i: usize| f16_to_f32(u16::from_le_bytes([texel[i * 2], texel[i * 2 + 1]]));
 				let to_srgb = crate::config::from_linear_u8;
-				pixels.extend_from_slice(&[
-					to_srgb(ch(0)),
-					to_srgb(ch(1)),
-					to_srgb(ch(2)),
-					(ch(3).clamp(0.0, 1.0) * 255.0 + 0.5) as u8,
-				]);
+				pixels.extend_from_slice(&[to_srgb(ch(0)), to_srgb(ch(1)), to_srgb(ch(2)), (ch(3).clamp(0.0, 1.0) * 255.0 + 0.5) as u8]);
 			}
 		}
 		let _ = image::save_buffer(path, &pixels, w, h, image::ExtendedColorType::Rgba8);
@@ -847,247 +966,647 @@ fn f16_to_f32(bits: u16) -> f32 {
 	if sign == 1 { -magnitude } else { magnitude }
 }
 
-fn request_device(
-	adapter: &wgpu::Adapter,
-) -> impl std::future::Future<Output = Result<(wgpu::Device, wgpu::Queue), wgpu::RequestDeviceError>>
-{
-	adapter.request_device(&wgpu::DeviceDescriptor {
-		label: Some("silkterm device"),
-		required_features: wgpu::Features::empty(),
+// Every device the program makes comes from here. wgpu's default hint,
+// Performance, has the Vulkan and DX12 allocator reserve 128 to 256 MiB blocks
+// of graphics memory and 64 MiB of host memory up front; the dialogs' context
+// was billed about 200 MiB for under 1 MiB of use. MemoryUsage starts at 8 and
+// 4 MiB blocks. GL and Metal ignore the hint. Figures are in the reducing
+// resources design doc.
+fn request_device(adapter: &wgpu::Adapter, label: &str) -> anyhow::Result<(wgpu::Device, wgpu::Queue, Loss)> {
+	if adapter.get_info().device_type != wgpu::DeviceType::Cpu && card_refused_on_purpose() {
+		anyhow::bail!("refused, SILK_REFUSE_CARD");
+	}
+	let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+		label: Some(label),
+		// the wallpaper as BC1 (bc1.rs) where the adapter can; ImageRenderer
+		// keeps it plain where not
+		required_features: adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC,
 		required_limits: adapter.limits(),
+		memory_hints: wgpu::MemoryHints::MemoryUsage,
 		..Default::default()
-	})
+	}))?;
+	let loss = Loss::watch(&device);
+	Ok((device, queue, loss))
+}
+
+impl Gfx {
+	// SILK_LOSE_DEVICE=<file>: a device made before the file was last touched
+	// is lost at its next frame, as every device is in a driver reset. One
+	// made after it is left alone, so the way back can be watched, and a
+	// touch loses that one too. wgpu reports a destroyed device on a poll, and
+	// a real loss inside the call that ran into it, so it's polled at once.
+	fn lose_on_purpose(&self) {
+		static FILE: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+		let Some(file) = FILE.get_or_init(|| std::env::var_os("SILK_LOSE_DEVICE").map(Into::into)) else {
+			return;
+		};
+		if std::fs::metadata(file).and_then(|meta| meta.modified()).is_ok_and(|touched| touched > self.born) {
+			self.device.destroy();
+			let _ = self.device.poll(wgpu::PollType::Poll);
+		}
+	}
+}
+
+// SILK_REFUSE_CARD=<file>: while the file is there, a graphics card refuses
+// every device, as a full one does. Read on each ask, so a refusal can start
+// and stop while the program runs.
+fn card_refused_on_purpose() -> bool {
+	#[cfg(test)]
+	if REFUSE_CARD.with(std::cell::Cell::get) {
+		return true;
+	}
+	std::env::var_os("SILK_REFUSE_CARD").is_some_and(|path| std::path::Path::new(&path).exists())
+}
+
+// The same for one test thread, since the environment is the whole process's.
+#[cfg(test)]
+thread_local! {
+	static REFUSE_CARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+// An instance with no options beyond its backends.
+fn plain_instance(backends: wgpu::Backends) -> wgpu::Instance {
+	wgpu::Instance::new(wgpu::InstanceDescriptor { backends, flags: wgpu::InstanceFlags::default(), memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(), backend_options: wgpu::BackendOptions::default(), display: None })
+}
+
+struct Picked {
+	adapter: wgpu::Adapter,
+	device: wgpu::Device,
+	queue: wgpu::Queue,
+	loss: Loss,
+	info: wgpu::AdapterInfo,
+	drawn: Drawn,
+}
+
+// A device from the first adapter that will make one, trying `order` as
+// `Want::order` gives it. An adapter already tried isn't asked twice, as
+// where software is all there is. A card that refuses is what makes the
+// software device after it a fallback, and `refused` records one that
+// refused before this call (the GL path's).
+fn pick_device(instance: &wgpu::Instance, surface: Option<&wgpu::Surface<'_>>, order: &[bool], mut refused: Option<String>, label: &str) -> anyhow::Result<Picked> {
+	let mut tried: Vec<wgpu::AdapterInfo> = Vec::new();
+	let mut last: Option<anyhow::Error> = None;
+	for &software in order {
+		let adapter = match pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, compatible_surface: surface, force_fallback_adapter: software })) {
+			Ok(adapter) => adapter,
+			Err(e) => {
+				last.get_or_insert_with(|| e.into());
+				continue;
+			}
+		};
+		let info = adapter.get_info();
+		if tried.contains(&info) {
+			continue;
+		}
+		match request_device(&adapter, label) {
+			Ok((device, queue, loss)) => {
+				let drawn = Drawn::of(&info, order.first() == Some(&true), refused.is_some());
+				match (drawn, &refused) {
+					(Drawn::Fallback, Some(why)) => eprintln!("{}: the graphics card couldn't make a device ({why}); drawing in software", crate::config::APP_NAME),
+					(Drawn::Card, _) if order.first() == Some(&true) => {
+						note_no_software(&anyhow::anyhow!("none found"));
+					}
+					_ => {}
+				}
+				return Ok(Picked { adapter, device, queue, loss, info, drawn });
+			}
+			Err(e) => {
+				if info.device_type != wgpu::DeviceType::Cpu {
+					refused = Some(e.to_string());
+				}
+				last = Some(e);
+				tried.push(info);
+			}
+		}
+	}
+	Err(last.unwrap_or_else(|| anyhow::anyhow!("no graphics adapter")))
+}
+
+// Software was asked for and the card drew instead. Reported once a process,
+// since every rebuild would report it again.
+fn note_no_software(why: &anyhow::Error) {
+	static SAID: std::sync::Once = std::sync::Once::new();
+	SAID.call_once(|| {
+		eprintln!("{}: software rendering is on, but no software renderer could draw ({why}); using the graphics card", crate::config::APP_NAME);
+	});
 }
 
 // Surface format + alpha mode + configuration, shared by the cold and prewarmed
-// native paths so the two can't drift. `None` means this adapter cannot present
+// native paths so the 2 can't drift. `None` means this adapter can't present
 // to this surface at all (no formats), which is only reachable on the prewarmed
-// path - see `Gfx::with_dialog_gpu`.
-fn surface_config(
-	surface: &wgpu::Surface<'static>,
-	adapter: &wgpu::Adapter,
-	window: &Window,
-) -> Option<(wgpu::SurfaceConfiguration, wgpu::TextureFormat, bool)> {
+// path. See `Gfx::with_dialog_gpu`.
+fn surface_config(surface: &wgpu::Surface<'static>, adapter: &wgpu::Adapter, window: &Window) -> Option<(wgpu::SurfaceConfiguration, wgpu::TextureFormat, bool)> {
 	let size = window.inner_size();
 	let caps = surface.get_capabilities(adapter);
 	if caps.formats.is_empty() {
 		return None;
 	}
-	let format = caps
-		.formats
-		.iter()
-		.copied()
-		.find(wgpu::TextureFormat::is_srgb)
-		.unwrap_or(caps.formats[0]);
+	let format = caps.formats.iter().copied().find(wgpu::TextureFormat::is_srgb).unwrap_or(caps.formats[0]);
 
-	// Prefer a premultiplied-alpha mode so a translucent background shows the
-	// desktop through. If only Opaque is available (no compositor), stay
-	// opaque - transparency is silently ignored.
-	let alpha_mode = caps
-		.alpha_modes
-		.iter()
-		.copied()
-		.find(|m| *m == wgpu::CompositeAlphaMode::PreMultiplied)
-		.unwrap_or(caps.alpha_modes[0]);
+	let (alpha_mode, transparent) = pick_alpha_mode(&caps.alpha_modes, adapter.get_info().backend);
 
+	// the device is asked for the adapter's own limits (`request_device`)
+	let (width, height) = fit_px(size.width, size.height, adapter.limits().max_texture_dimension_2d);
 	let config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 		format,
-		width: size.width.max(1),
-		height: size.height.max(1),
+		width,
+		height,
 		present_mode: wgpu::PresentMode::AutoVsync,
 		alpha_mode,
 		view_formats: vec![],
-		// Windows: one queued frame, not two. With Fifo + 2-frame DXGI latency
-		// the CPU races ahead then blocks, so the wall-clock dt between frames
-		// alternates short/long and the scroll ease steps unevenly (judder).
-		// One frame paces present to the display -> steady dt -> smooth. The GL
-		// path and other platforms already pace evenly, so leave them.
+		// Windows: one queued frame rather than 2. With Fifo and 2-frame DXGI latency
+		// the CPU races ahead then blocks, so the time between frames alternates short
+		// and long and the scroll eases unevenly. One frame paces present to the display.
+		// The GL path and other platforms already pace evenly.
 		desired_maximum_frame_latency: if cfg!(windows) { 1 } else { 2 },
 	};
-	Some((
-		config,
-		format,
-		alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied,
-	))
+	Some((config, format, transparent))
 }
 
-// A wgpu instance/adapter/device kept for the life of the process and shared by
-// every pop-out dialog.
+// The compositing mode to ask for, and whether it lets a translucent background
+// show the desktop. Premultiplied wherever it's offered, and opaque with no
+// compositor, where transparency is quietly ignored.
 //
-// Dialogs cannot borrow the terminal's context: on X11 that one is a glutin
-// GL/EGL context, and a second GL instance panics in wgpu-hal's EGL teardown. So
-// each dialog used to build a whole PRIMARY context of its own, on the click, and
-// again on every reopen since nothing was retained. Building the instance,
-// adapter and device is most of the time it takes to open a dialog. Warming it
-// once on a worker thread moves that off the click, and keeping it moves it off
-// every later open too.
+// Metal offers only Opaque and PostMultiplied, and Opaque first, so a Mac window
+// stayed opaque. PostMultiplied there only means the CAMetalLayer isn't marked
+// opaque, and Core Animation still reads the layer as premultiplied, which is
+// what the shaders write. Elsewhere PostMultiplied would multiply a second time,
+// so it's taken on Metal only.
+fn pick_alpha_mode(offered: &[wgpu::CompositeAlphaMode], backend: wgpu::Backend) -> (wgpu::CompositeAlphaMode, bool) {
+	use wgpu::CompositeAlphaMode as Mode;
+	if offered.contains(&Mode::PreMultiplied) {
+		return (Mode::PreMultiplied, true);
+	}
+	if backend == wgpu::Backend::Metal && offered.contains(&Mode::PostMultiplied) {
+		return (Mode::PostMultiplied, true);
+	}
+	(offered.first().copied().unwrap_or(Mode::Opaque), false)
+}
+
+// Vulkan loader 1.4.309 (Debian 13) looks a device up by walking every
+// instance's driver list under one lock, and changes those lists under another.
+// So naming an object (debug builds name them all) or making a swapchain on one
+// thread, while another makes an instance, lists adapters or makes a device,
+// reads freed memory (2026100720280486). Loaders from 1.4.350 are fixed (5ee27b3).
+// Every thread that calls into the loader holds this while it does: the winit
+// thread through `HoldsLoader`, the dialogs' warm-up for its whole build.
+static LOADER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+thread_local! {
+	// how deep this thread's holds go, and the lock while they do
+	static LOADER_HELD: std::cell::RefCell<(u32, Option<std::sync::MutexGuard<'static, ()>>)> =
+		const { std::cell::RefCell::new((0, None)) };
+}
+
+/// This thread's turn at the graphics loader (see `LOADER`), until dropped.
+/// Holds nest.
+#[derive(Debug)]
+#[must_use]
+pub struct LoaderHold(std::marker::PhantomData<*const ()>);
+
+pub fn hold_loader() -> LoaderHold {
+	LOADER_HELD.with_borrow_mut(|(depth, lock)| {
+		if *depth == 0 {
+			*lock = Some(lock_loader());
+		}
+		*depth += 1;
+	});
+	LoaderHold(std::marker::PhantomData)
+}
+
+impl Drop for LoaderHold {
+	fn drop(&mut self) {
+		LOADER_HELD.with_borrow_mut(|(depth, lock)| {
+			*depth -= 1;
+			if *depth == 0 {
+				*lock = None;
+			}
+		});
+	}
+}
+
+// Poison is ignored: a panic between loader calls leaves the loader whole.
+fn lock_loader() -> std::sync::MutexGuard<'static, ()> {
+	LOADER.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+// `wait` with this thread's hold let go, since what it waits on may need it.
+fn without_loader<T>(wait: impl FnOnce() -> T) -> T {
+	let (depth, lock) = LOADER_HELD.with_borrow_mut(std::mem::take);
+	drop(lock);
+	let done = wait();
+	if depth > 0 {
+		let lock = lock_loader();
+		LOADER_HELD.with_borrow_mut(|held| *held = (depth, Some(lock)));
+	}
+	done
+}
+
+// Window contexts on the Vulkan loader, counted by `OnVulkan`. With none, the
+// winit thread draws through GL, DX12 or Metal and never waits on the warm-up.
+// Building one holds the loader itself, but the rest of that callback doesn't.
+// That's safe because none is built while a warm-up runs: the first comes
+// before any window shows, a rebuild while the device is gone (the warm-up
+// waits for one), a dialog's after its warm-up is joined.
+static WINDOW_VULKAN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+#[derive(Debug)]
+struct OnVulkan;
+
+impl OnVulkan {
+	fn count(info: &wgpu::AdapterInfo) -> Option<Self> {
+		(info.backend == wgpu::Backend::Vulkan).then(|| {
+			WINDOW_VULKAN.fetch_add(1, Ordering::SeqCst);
+			Self
+		})
+	}
+}
+
+impl Drop for OnVulkan {
+	fn drop(&mut self) {
+		WINDOW_VULKAN.fetch_sub(1, Ordering::SeqCst);
+	}
+}
+
+fn hold_for_windows() -> Option<LoaderHold> {
+	(WINDOW_VULKAN.load(Ordering::SeqCst) > 0).then(hold_loader)
+}
+
+/// The app with the loader held through every event-loop callback while a
+/// window draws on Vulkan, so nothing the winit thread does in wgpu overlaps
+/// the dialogs' warm-up. Every method is passed on; one left to the trait's
+/// default would never reach the app.
+#[derive(Debug)]
+pub struct HoldsLoader<'a, A>(pub &'a mut A);
+
+impl<A: winit::application::ApplicationHandler<T>, T: 'static> winit::application::ApplicationHandler<T> for HoldsLoader<'_, A> {
+	fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: winit::event::StartCause) {
+		let _loader = hold_for_windows();
+		self.0.new_events(event_loop, cause);
+	}
+
+	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+		let _loader = hold_for_windows();
+		self.0.resumed(event_loop);
+	}
+
+	fn user_event(&mut self, event_loop: &ActiveEventLoop, event: T) {
+		let _loader = hold_for_windows();
+		self.0.user_event(event_loop, event);
+	}
+
+	fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: winit::window::WindowId, event: winit::event::WindowEvent) {
+		let _loader = hold_for_windows();
+		self.0.window_event(event_loop, window_id, event);
+	}
+
+	fn device_event(&mut self, event_loop: &ActiveEventLoop, device_id: winit::event::DeviceId, event: winit::event::DeviceEvent) {
+		let _loader = hold_for_windows();
+		self.0.device_event(event_loop, device_id, event);
+	}
+
+	fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+		let _loader = hold_for_windows();
+		self.0.about_to_wait(event_loop);
+	}
+
+	fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+		let _loader = hold_for_windows();
+		self.0.suspended(event_loop);
+	}
+
+	fn exiting(&mut self, event_loop: &ActiveEventLoop) {
+		let _loader = hold_for_windows();
+		self.0.exiting(event_loop);
+	}
+
+	fn memory_warning(&mut self, event_loop: &ActiveEventLoop) {
+		let _loader = hold_for_windows();
+		self.0.memory_warning(event_loop);
+	}
+}
+
+/// A wgpu instance, adapter, and device kept for the life of the process and
+/// shared by every pop-out dialog.
+///
+/// Dialogs can't borrow the terminal's context, since on X11 it's a glutin GL/EGL
+/// context and a second GL instance panics in wgpu-hal's EGL teardown. Building
+/// the instance, adapter, and device is most of the time it takes to open a
+/// dialog, so this is warmed once on a worker thread and kept for every later open.
 #[derive(Clone, Debug)]
 pub struct DialogGpu {
 	instance: wgpu::Instance,
 	adapter: wgpu::Adapter,
 	device: wgpu::Device,
 	queue: wgpu::Queue,
+	loss: Loss,
 	adapter_info: wgpu::AdapterInfo,
+	drawn: Drawn,
+	want: Want,
+}
+
+/// The instance of a `DialogGpu` whose device has been let go: what a rebuild
+/// starts from, since the device is the memory and the instance is the part a
+/// driver may not fully give back (file descriptors stayed open on NVIDIA's
+/// after every instance destroyed). The adapter is picked again, since the
+/// software setting may have changed in between.
+#[derive(Clone, Debug)]
+pub struct DialogSeed {
+	instance: wgpu::Instance,
 }
 
 impl DialogGpu {
-	// Runs off the winit thread, so there is no window to check the adapter
-	// against - `Gfx::with_dialog_gpu` does that later against the real surface.
-	// Not logged: the terminal already reported the GPU, and this picks the same
-	// one on any single-adapter box.
-	pub fn build() -> anyhow::Result<Self> {
-		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-			backends: wgpu::Backends::PRIMARY,
-			flags: wgpu::InstanceFlags::default(),
-			memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-			backend_options: wgpu::BackendOptions::default(),
-			display: None,
-		});
-		let pick = |fallback| {
-			pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-				power_preference: wgpu::PowerPreference::HighPerformance,
-				compatible_surface: None,
-				force_fallback_adapter: fallback,
-			}))
-		};
-		let adapter = pick(false).or_else(|_| pick(true))?;
-		let adapter_info = adapter.get_info();
-		let (device, queue) = pollster::block_on(request_device(&adapter))?;
-		Ok(Self {
-			instance,
-			adapter,
-			device,
-			queue,
-			adapter_info,
-		})
+	/// Runs off the winit thread, so there is no window to check the adapter
+	/// against. `Gfx::with_dialog_gpu` does that later against the real surface.
+	/// Not logged: the terminal already reported the GPU, and this picks the same
+	/// one on any single-adapter box.
+	pub fn build(want: Want) -> anyhow::Result<Self> {
+		Self::on(DialogSeed { instance: plain_instance(wgpu::Backends::PRIMARY) }, want)
+	}
+
+	// A device on an instance that already exists.
+	fn on(seed: DialogSeed, want: Want) -> anyhow::Result<Self> {
+		let picked = pick_device(&seed.instance, None, &want.order(), None, "silkterm device")?;
+		Ok(Self { instance: seed.instance, adapter: picked.adapter, device: picked.device, queue: picked.queue, loss: picked.loss, adapter_info: picked.info, drawn: picked.drawn, want })
+	}
+
+	fn seed(&self) -> DialogSeed {
+		DialogSeed { instance: self.instance.clone() }
 	}
 }
 
-// The warm-up worker and the context it produces. `Failed` is a state of its own
-// rather than an empty `Ready`: a box with no usable adapter fails every time, so
-// without it `start` would spawn another worker on the next event-loop pass and
-// keep paying a full adapter probe (and printing) for the life of the process.
+// The warm-up worker and the context it builds. `Failed` is a state of its own
+// rather than an empty `Ready`, since a box with no usable adapter fails every
+// time, and `start` would otherwise spawn another worker on every event-loop pass
+// for the life of the process. It's generic over the context only so a test can
+// drive the state machine without a GPU.
 #[derive(Debug)]
-enum Warm {
+enum Warm<T> {
 	Idle,
-	Building(std::thread::JoinHandle<Option<DialogGpu>>),
-	Ready(DialogGpu),
+	Building(std::thread::JoinHandle<Option<T>>),
+	Ready(T),
 	Failed,
 }
 
+impl<T> Warm<T> {
+	// Join the worker if there is one, and hand back a state either way. Written
+	// as a by-value transition so the caller can't take the state and forget to
+	// put it back. Doing that dropped an already-built context and left every
+	// later dialog on the cold path.
+	fn settled(self) -> Self {
+		match self {
+			// a panicked worker reads as a failure, same as a returned None
+			Self::Building(job) => without_loader(|| job.join()).ok().flatten().map_or(Self::Failed, Self::Ready),
+			other => other,
+		}
+	}
+}
+
 #[derive(Debug)]
-pub struct GpuWarm(Warm);
+pub struct GpuWarm {
+	state: Warm<DialogGpu>,
+	// what the last context was built on, once its device has been let go
+	seed: Option<DialogSeed>,
+}
 
 impl GpuWarm {
 	pub const fn idle() -> Self {
-		Self(Warm::Idle)
+		Self { state: Warm::Idle, seed: None }
 	}
 
-	// Start warming. Called once the terminal is actually on screen, so the
-	// device build happens in dead time rather than competing with startup.
-	// Repeat calls are no-ops.
+	/// Start warming. Called once the terminal is on screen, so the
+	/// device build happens in dead time rather than competing with startup.
+	/// Repeat calls are no-ops. After a release the device is asked of the
+	/// adapter that was kept, and a cold build is the fallback when that adapter
+	/// no longer works.
 	pub fn start(&mut self) {
-		if !matches!(self.0, Warm::Idle) {
+		self.drop_lost();
+		if !matches!(self.state, Warm::Idle) {
 			return;
 		}
-		self.0 = Warm::Building(std::thread::spawn(|| match DialogGpu::build() {
-			Ok(gpu) => Some(gpu),
-			// A dialog can still be opened without this - it just pays the old
-			// cost - so a failure here is a note, not an error.
-			Err(e) => {
-				eprintln!(
-					"{}: dialog GPU warm-up failed ({e}); dialogs will open more slowly",
-					crate::config::APP_NAME
-				);
-				None
+		let seed = self.seed.take();
+		let want = wanted();
+		self.state = Warm::Building(std::thread::spawn(move || {
+			// The whole build, failures and their drops too. A window drawing on
+			// Vulkan waits for it only if it has work before then.
+			let _loader = hold_loader();
+			let built = match seed {
+				Some(seed) => DialogGpu::on(seed, want).or_else(|_| DialogGpu::build(want)),
+				None => DialogGpu::build(want),
+			};
+			match built {
+				Ok(gpu) => Some(gpu),
+				// A dialog can still be opened without this, at the old cost, so a
+				// failure here is a note rather than an error.
+				Err(e) => {
+					eprintln!("{}: dialog GPU warm-up failed ({e}); dialogs will open more slowly", crate::config::APP_NAME);
+					None
+				}
 			}
 		}));
 	}
 
-	// The warm context, waiting on the worker if it is still going. That wait can
-	// never cost more than building one here would have, since the work is
-	// already under way - and normally it finished seconds ago.
-	pub fn get(&mut self) -> Option<DialogGpu> {
-		if let Warm::Building(job) = std::mem::replace(&mut self.0, Warm::Failed) {
-			// a panicked worker reads as a failure, same as a returned None
-			self.0 = job.join().ok().flatten().map_or(Warm::Failed, Warm::Ready);
+	/// Let the device go, keeping the instance and adapter it was built on for
+	/// the next `start`. The idle release calls this beside the terminal's own.
+	pub fn release(&mut self) {
+		self.state = std::mem::replace(&mut self.state, Warm::Failed).settled();
+		if let Warm::Ready(gpu) = &self.state {
+			self.seed = Some(gpu.seed());
 		}
-		match &self.0 {
+		self.state = Warm::Idle;
+	}
+
+	// A lost device is let go like an idle one, so the next `start` builds
+	// another on the same instance and a dialog doesn't open on a dead one.
+	fn drop_lost(&mut self) {
+		if matches!(&self.state, Warm::Ready(gpu) if gpu.loss.lost()) {
+			self.release();
+		}
+	}
+
+	/// The warm device if it's built, without waiting for it.
+	pub fn ready_device(&mut self) -> Option<&wgpu::Device> {
+		if matches!(&self.state, Warm::Building(job) if job.is_finished()) {
+			self.state = std::mem::replace(&mut self.state, Warm::Failed).settled();
+		}
+		match &self.state {
+			Warm::Ready(gpu) => Some(&gpu.device),
+			_ => None,
+		}
+	}
+
+	/// The warm context, waiting on the worker if it's still going. That wait can
+	/// never cost more than building one here would have, since the work is
+	/// already under way, and normally it finished seconds ago.
+	pub fn get(&mut self) -> Option<DialogGpu> {
+		self.state = std::mem::replace(&mut self.state, Warm::Failed).settled();
+		self.drop_lost();
+		match &self.state {
 			Warm::Ready(gpu) => Some(gpu.clone()),
 			_ => None,
 		}
 	}
 }
 
-// How the About text names an adapter's device type. Shared by the dialog and
-// `--about`, so a bug report reads the same either way.
-pub const fn acceleration(device_type: wgpu::DeviceType) -> &'static str {
-	match device_type {
+/// How the About text shows whether an adapter is accelerated. Shared by the
+/// dialog and `--about`, so a bug report reads the same either way.
+pub fn acceleration(info: &wgpu::AdapterInfo) -> &'static str {
+	if crate::profile::software_adapter(info) {
+		return "Software (CPU)";
+	}
+	match info.device_type {
 		wgpu::DeviceType::Cpu => "Software (CPU)",
 		wgpu::DeviceType::IntegratedGpu => "Hardware (integrated GPU)",
 		wgpu::DeviceType::DiscreteGpu => "Hardware (discrete GPU)",
 		wgpu::DeviceType::VirtualGpu => "Hardware (virtual GPU)",
-		wgpu::DeviceType::Other => "Unknown",
+		// wgpu's GL backend knows integrated and software chips by name only, and
+		// calls the rest Other, a discrete card on X11 included.
+		wgpu::DeviceType::Other => "Hardware (GPU)",
 	}
 }
 
-// Adapter details for `--about`, with no window and no device. Only the adapter
-// is asked for: request_device is the expensive half (measured ~161ms against
-// ~6ms), and nothing here draws. PRIMARY matches what the About dialog runs on,
-// so the two report the same GPU. None on a box with no usable adapter - the
-// rest of the About text is still worth printing.
-pub fn probe_adapter_info() -> Option<wgpu::AdapterInfo> {
-	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-		backends: wgpu::Backends::PRIMARY,
-		flags: wgpu::InstanceFlags::default(),
-		memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-		backend_options: wgpu::BackendOptions::default(),
-		display: None,
-	});
-	let pick = |fallback| {
-		pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-			power_preference: wgpu::PowerPreference::HighPerformance,
-			compatible_surface: None,
-			force_fallback_adapter: fallback,
-		}))
-	};
-	let adapter = pick(false).or_else(|_| pick(true)).ok()?;
-	Some(adapter.get_info())
+// An adapter for a test to describe itself with, since wgpu gives it no default.
+#[cfg(test)]
+pub fn test_adapter(name: &str, device_type: wgpu::DeviceType) -> wgpu::AdapterInfo {
+	wgpu::AdapterInfo { name: name.to_string(), vendor: 0, device: 0, device_type, device_pci_bus_id: String::new(), driver: String::new(), driver_info: String::new(), backend: wgpu::Backend::Vulkan, subgroup_min_size: 4, subgroup_max_size: 128, transient_saves_memory: false }
 }
 
-fn log_renderer(info: &wgpu::AdapterInfo) {
-	eprintln!(
-		"{}: renderer = {} [{:?} / {:?}]",
-		crate::config::APP_NAME,
-		info.name,
-		info.backend,
-		info.device_type,
-	);
+/// Adapter details for `--about`, with no window and no device. Only the adapter
+/// is asked for: `request_device` is the expensive half (measured ~161ms against
+/// ~6ms), and nothing here draws. PRIMARY matches what the About dialog runs on,
+/// so the 2 report the same GPU. None on a box with no usable adapter, since the
+/// rest of the About text is still worth printing.
+pub fn probe_adapter_info() -> Option<wgpu::AdapterInfo> {
+	let instance = plain_instance(wgpu::Backends::PRIMARY);
+	wanted().order().into_iter().find_map(|software| pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, compatible_surface: None, force_fallback_adapter: software })).ok().map(|adapter| adapter.get_info()))
+}
+
+// `transparent` is whether the surface can have alpha at all, which is the first thing
+// to look at when the transparency setting appears to do nothing.
+fn log_renderer(info: &wgpu::AdapterInfo, transparent: bool) {
+	eprintln!("{}: renderer = {} [{:?} / {:?}] alpha = {}", crate::config::APP_NAME, info.name, info.backend, info.device_type, if transparent { "premultiplied" } else { "opaque" });
+}
+
+// Keep the GL path's X errors away from winit. winit holds on to the last X
+// error no hook claimed, and its IME calls on a focus change `expect` to find
+// none. So a GLX error left over from an earlier call, a failed device rebuild
+// say, killed the window the next time it gained or lost focus. glutin has its
+// own hook and still sees every error, since winit calls all of them.
+#[cfg(target_os = "linux")]
+fn quiet_glx_errors() {
+	use std::sync::Once;
+	use std::sync::atomic::AtomicU32;
+	static ONCE: Once = Once::new();
+	static LOGGED: AtomicU32 = AtomicU32::new(0);
+	ONCE.call_once(|| {
+		let Some(glx) = GlxCodes::query() else {
+			return;
+		};
+		winit::platform::x11::register_xlib_error_hook(Box::new(move |_display, event| {
+			// SAFETY: winit hands every hook the XErrorEvent it was called with
+			let event = unsafe { &*(event as *const x11_dl::xlib::XErrorEvent) };
+			if !glx.claims(event.request_code, event.error_code) {
+				return false;
+			}
+			// winit logs only what nobody claimed, so it's logged here. A driver that
+			// fails every frame would otherwise fill the log.
+			if LOGGED.fetch_add(1, Ordering::Relaxed) < 20 {
+				eprintln!("{}: X error {} from GL request {}.{}, not fatal", crate::config::APP_NAME, event.error_code, event.request_code, event.minor_code);
+			}
+			true
+		}));
+	});
+}
+
+// Which X errors belong to GL: any raised by a GLX request or by NVIDIA's
+// private NV-GLX one, and any in GLX's own error range. An opcode of 0 means
+// the extension isn't there.
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+struct GlxCodes {
+	requests: [u8; 2],
+	first_error: u8,
+}
+
+#[cfg(target_os = "linux")]
+impl GlxCodes {
+	// GLXBadContext through GLXBadProfileARB
+	const ERRORS: u16 = 14;
+
+	// Queried on a connection of its own. Opcodes are the server's, so they're
+	// the same on winit's.
+	fn query() -> Option<Self> {
+		use x11rb::protocol::xproto::ConnectionExt as _;
+		let (conn, _) = x11rb::connect(None).ok()?;
+		let ext = |name: &[u8]| conn.query_extension(name).ok()?.reply().ok().filter(|r| r.present);
+		let glx = ext(b"GLX")?;
+		let nv = ext(b"NV-GLX").map_or(0, |r| r.major_opcode);
+		Some(GlxCodes { requests: [glx.major_opcode, nv], first_error: glx.first_error })
+	}
+
+	fn claims(self, request: u8, error: u8) -> bool {
+		let first = u16::from(self.first_error);
+		(request != 0 && self.requests.contains(&request)) || (first != 0 && (first..first + Self::ERRORS).contains(&u16::from(error)))
+	}
+}
+
+#[cfg(target_os = "linux")]
+const WSI_DEBUG: &str = "MESA_VK_WSI_DEBUG";
+
+/// Software rendering on an X server that can't make shared pixmaps, such as
+/// NVIDIA's. Mesa's software Vulkan presents through MIT-SHM pixmaps whenever the
+/// server has DRI3, the server refuses each one, and winit panics at its next
+/// checked call. Mesa's `noshm` makes it use `PutImage` instead. Every Vulkan
+/// instance reads the variable, so it's set once from main while the process is
+/// still single-threaded. Shells started from here inherit it, which keeps a
+/// software Vulkan program run in one off the same fault.
+#[cfg(target_os = "linux")]
+pub fn keep_software_off_shared_pixmaps(on_x11: bool) {
+	if !on_x11 {
+		return;
+	}
+	let Some(shared) = x11_shared_pixmaps() else {
+		return;
+	};
+	let now = std::env::var(WSI_DEBUG).ok();
+	if let Some(value) = wsi_debug_for(now.as_deref(), shared) {
+		// SAFETY: called from main before any other thread exists.
+		unsafe { std::env::set_var(WSI_DEBUG, value) };
+	}
+}
+
+// None when the server has no MIT-SHM, which Mesa takes as no SHM at all.
+#[cfg(target_os = "linux")]
+fn x11_shared_pixmaps() -> Option<bool> {
+	use x11rb::protocol::shm::ConnectionExt as _;
+	let (conn, _) = x11rb::connect(None).ok()?;
+	let reply = conn.shm_query_version().ok()?.reply().ok()?;
+	Some(reply.shared_pixmaps)
+}
+
+// What MESA_VK_WSI_DEBUG has to become, or None to leave it. Mesa splits the
+// value on commas and spaces.
+#[cfg(any(target_os = "linux", test))]
+fn wsi_debug_for(now: Option<&str>, shared_pixmaps: bool) -> Option<String> {
+	let now = now.unwrap_or("").trim();
+	if shared_pixmaps || now.split([',', ' ']).any(|flag| flag == "noshm") {
+		return None;
+	}
+	Some(if now.is_empty() { "noshm".to_string() } else { format!("{now},noshm") })
 }
 
 // Offscreen scene target for the GL path: rendered top-left like the native
 // surface, then flip-blitted into the default framebuffer.
-fn offscreen_tex(
-	device: &wgpu::Device,
-	format: wgpu::TextureFormat,
-	w: u32,
-	h: u32,
-) -> wgpu::Texture {
+fn offscreen_tex(device: &wgpu::Device, format: wgpu::TextureFormat, w: u32, h: u32) -> wgpu::Texture {
 	device.create_texture(&wgpu::TextureDescriptor {
 		label: Some("offscreen"),
-		size: wgpu::Extent3d {
-			width: w.max(1),
-			height: h.max(1),
-			depth_or_array_layers: 1,
-		},
+		size: wgpu::Extent3d { width: w.max(1), height: h.max(1), depth_or_array_layers: 1 },
 		mip_level_count: 1,
 		sample_count: 1,
 		dimension: wgpu::TextureDimension::D2,
 		format,
-		usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-			| wgpu::TextureUsages::TEXTURE_BINDING
-			| wgpu::TextureUsages::COPY_SRC, // for the dump_offscreen diagnostic
+		usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC, // for the dump_offscreen diagnostic
 		view_formats: &[],
 	})
 }
@@ -1096,47 +1615,105 @@ fn offscreen_tex(
 // sRGB-capable, so the blit shader sRGB-encodes explicitly and writes raw here.
 const FB_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
+// wrap glutin's GL context as a wgpu adapter (hal external interop)
+#[cfg(not(target_os = "macos"))]
+fn gl_adapter(instance: &wgpu::Instance, gl_display: &glutin::display::Display) -> anyhow::Result<wgpu::Adapter> {
+	// SAFETY: the caller made the context current on this thread just before,
+	// and all GL work stays on this one thread (see `default_fb`).
+	let exposed = unsafe { wgpu::hal::gles::Adapter::new_external(|name| std::ffi::CString::new(name).map_or(std::ptr::null(), |cstr| gl_display.get_proc_address(&cstr).cast()), wgpu::GlBackendOptions::default()) }.ok_or_else(|| anyhow::anyhow!("wgpu GL external adapter init failed"))?;
+	// SAFETY: an external GL adapter is tied to the current context, not to an
+	// instance, so there is no other instance it could belong to.
+	Ok(unsafe { instance.create_adapter_from_hal::<Gles>(exposed) })
+}
+
+// wgpu builds no GL backend on macOS (Metal only), and the GL path is X11-only
+// anyway, so there it reports itself unavailable and resumed() falls back
+// to the native surface.
+#[cfg(target_os = "macos")]
+fn gl_adapter(_instance: &wgpu::Instance, _gl_display: &glutin::display::Display) -> anyhow::Result<wgpu::Adapter> {
+	anyhow::bail!("no wgpu GL backend on macOS")
+}
+
 // A wgpu texture aliasing the GL default framebuffer (fbo 0 = glutin's window).
+#[cfg(not(target_os = "macos"))]
 fn default_fb(device: &wgpu::Device, format: wgpu::TextureFormat, w: u32, h: u32) -> wgpu::Texture {
-	// Safety: aliasing the GL default framebuffer is sound only while every GL
-	// call stays on the winit main thread - rendering here is single-threaded
-	// by construction; don't move GL work onto helper threads.
 	let hal = wgpu::hal::gles::Texture::default_framebuffer(format);
-	unsafe {
-		device.create_texture_from_hal::<Gles>(
-			hal,
-			&wgpu::TextureDescriptor {
-				label: Some("default fb"),
-				size: wgpu::Extent3d {
-					width: w.max(1),
-					height: h.max(1),
-					depth_or_array_layers: 1,
-				},
-				mip_level_count: 1,
-				sample_count: 1,
-				dimension: wgpu::TextureDimension::D2,
-				format,
-				usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-				view_formats: &[],
-			},
-		)
+	// SAFETY: aliasing the GL default framebuffer is sound only while every GL
+	// call stays on the winit main thread. Rendering here is single-threaded by
+	// construction, so don't move GL work onto helper threads.
+	unsafe { device.create_texture_from_hal::<Gles>(hal, &wgpu::TextureDescriptor { label: Some("default fb"), size: wgpu::Extent3d { width: w.max(1), height: h.max(1), depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT, view_formats: &[] }) }
+}
+
+// Only Backend::Gl calls this, and gl_adapter() above never lets one be built on macOS.
+#[cfg(target_os = "macos")]
+fn default_fb(_: &wgpu::Device, _: wgpu::TextureFormat, _: u32, _: u32) -> wgpu::Texture {
+	unreachable!("no GL backend on macOS")
+}
+
+/// What the quad shader draws for one `RectInstance`. The GPU gets `code` in
+/// `params.x`, and `fs` in `RECT_WGSL` tells them apart by that number.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum QuadMode {
+	Solid,
+	CloseMark,
+	Rounded,
+	Triangle,
+	PickSquare,
+	HueStrip,
+	Curl,
+	Dashes,
+}
+
+impl QuadMode {
+	const ALL: [QuadMode; 8] = [QuadMode::Solid, QuadMode::CloseMark, QuadMode::Rounded, QuadMode::Triangle, QuadMode::PickSquare, QuadMode::HueStrip, QuadMode::Curl, QuadMode::Dashes];
+
+	pub fn code(self) -> f32 {
+		match self {
+			QuadMode::Solid => 0.0,
+			QuadMode::CloseMark => 1.0,
+			QuadMode::Rounded => 2.0,
+			QuadMode::Triangle => 3.0,
+			QuadMode::PickSquare => 4.0,
+			QuadMode::HueStrip => 5.0,
+			QuadMode::Curl => 6.0,
+			QuadMode::Dashes => 7.0,
+		}
 	}
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct RectInstance {
 	pub pos: [f32; 2],
 	pub size: [f32; 2],
 	pub color: [f32; 4],
-	// params.x = mode (0 solid quad, 1 close-"X" mark, 2 rounded quad,
-	// 3 triangle - a submenu arrow, or a move-this-row arrow),
-	// params.y = stroke px for the X, corner radius for the rounded quad,
-	// quarter-turns clockwise for the triangle (0 right, 1 down, 2 left, 3 up).
-	// The X and the arrows are drawn in the fragment shader, so each centers
-	// exactly in its quad (a font glyph never did - baseline metrics vary, and
-	// there is no arrow every interface font carries).
+	/// params.x = mode (0 solid quad, 1 close-"X" mark, 2 rounded quad,
+	/// 3 triangle - a submenu arrow, or the Settings warning mark,
+	/// 4 the color picker's saturation/brightness square, 5 its hue strip,
+	/// 6 a curly underline, 7 a dotted or dashed one),
+	/// params.y = stroke px for the X, corner radius for the rounded quad,
+	/// quarter-turns clockwise for the triangle (0 right, 1 down, 2 left, 3 up),
+	/// the wavelength of the curl, the period of the dashes (on for its first half).
+	/// The curl's stroke is a quarter of the quad's height.
+	/// The X and the arrows are drawn in the fragment shader, so each centers
+	/// exactly in its quad (a font glyph never did, since baseline metrics vary,
+	/// and there's no arrow that every interface font has).
+	///
+	/// Mode 4 reads `color` as sRGB rather than linear, unlike every other mode:
+	/// it's the hue the square mixes toward, and mixing toward white in linear
+	/// light gives a gradient nobody would recognize as a color picker. Modes 4
+	/// and 5 encode the result themselves, so the value that arrives is the one
+	/// the box is showing. Neither may use params.y, since it's a length, and
+	/// `quads_px` scales it.
 	pub params: [f32; 2],
+}
+
+impl RectInstance {
+	/// The mode in `params.x`. Only `QuadMode::code` writes it, so the numbers
+	/// compare exactly.
+	pub fn mode(&self) -> QuadMode {
+		QuadMode::ALL.into_iter().find(|mode| mode.code() == self.params[0]).unwrap_or(QuadMode::Solid)
+	}
 }
 
 #[repr(C)]
@@ -1146,7 +1723,7 @@ struct Uniform {
 	_pad: [f32; 2],
 }
 
-// flat colored quads: backgrounds, cursor, dividers, focus ring
+/// flat colored quads: backgrounds, cursor, dividers, focus ring
 pub struct RectRenderer {
 	pipeline: wgpu::RenderPipeline,
 	instances: wgpu::Buffer,
@@ -1157,62 +1734,28 @@ pub struct RectRenderer {
 	last_res: std::cell::Cell<(f32, f32)>,
 }
 
+impl std::fmt::Debug for RectRenderer {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("RectRenderer").field("capacity", &self.capacity).finish_non_exhaustive()
+	}
+}
+
 impl RectRenderer {
 	pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
-		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-			label: Some("rect shader"),
-			source: wgpu::ShaderSource::Wgsl(RECT_WGSL.into()),
-		});
+		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("rect shader"), source: wgpu::ShaderSource::Wgsl(RECT_WGSL.into()) });
 
-		let uniform = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("rect uniform"),
-			size: std::mem::size_of::<Uniform>() as u64,
-			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			mapped_at_creation: false,
-		});
+		let uniform = device.create_buffer(&wgpu::BufferDescriptor { label: Some("rect uniform"), size: std::mem::size_of::<Uniform>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
 
-		let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("rect bgl"),
-			entries: &[wgpu::BindGroupLayoutEntry {
-				binding: 0,
-				visibility: wgpu::ShaderStages::VERTEX,
-				ty: wgpu::BindingType::Buffer {
-					ty: wgpu::BufferBindingType::Uniform,
-					has_dynamic_offset: false,
-					min_binding_size: None,
-				},
-				count: None,
-			}],
-		});
+		let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("rect bgl"), entries: &[wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::VERTEX, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None }] });
 
-		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-			label: Some("rect bg"),
-			layout: &bgl,
-			entries: &[wgpu::BindGroupEntry {
-				binding: 0,
-				resource: uniform.as_entire_binding(),
-			}],
-		});
+		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("rect bg"), layout: &bgl, entries: &[wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() }] });
 
-		let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("rect layout"),
-			bind_group_layouts: &[Some(&bgl)],
-			immediate_size: 0,
-		});
+		let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("rect layout"), bind_group_layouts: &[Some(&bgl)], immediate_size: 0 });
 
 		let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 			label: Some("rect pipeline"),
 			layout: Some(&layout),
-			vertex: wgpu::VertexState {
-				module: &shader,
-				entry_point: Some("vs"),
-				compilation_options: Default::default(),
-				buffers: &[wgpu::VertexBufferLayout {
-					array_stride: std::mem::size_of::<RectInstance>() as u64,
-					step_mode: wgpu::VertexStepMode::Instance,
-					attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x4, 3 => Float32x2],
-				}],
-			},
+			vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<RectInstance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x4, 3 => Float32x2] }] },
 			fragment: Some(wgpu::FragmentState {
 				module: &shader,
 				entry_point: Some("fs"),
@@ -1225,10 +1768,7 @@ impl RectRenderer {
 					write_mask: wgpu::ColorWrites::ALL,
 				})],
 			}),
-			primitive: wgpu::PrimitiveState {
-				topology: wgpu::PrimitiveTopology::TriangleStrip,
-				..Default::default()
-			},
+			primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
 			depth_stencil: None,
 			multisample: wgpu::MultisampleState::default(),
 			multiview_mask: None,
@@ -1236,21 +1776,9 @@ impl RectRenderer {
 		});
 
 		let capacity = 256;
-		let instances = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("rect instances"),
-			size: capacity * std::mem::size_of::<RectInstance>() as u64,
-			usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-			mapped_at_creation: false,
-		});
+		let instances = device.create_buffer(&wgpu::BufferDescriptor { label: Some("rect instances"), size: capacity * std::mem::size_of::<RectInstance>() as u64, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
 
-		Self {
-			pipeline,
-			instances,
-			capacity,
-			uniform,
-			bind_group,
-			last_res: std::cell::Cell::new((0.0, 0.0)),
-		}
+		Self { pipeline, instances, capacity, uniform, bind_group, last_res: std::cell::Cell::new((0.0, 0.0)) }
 	}
 
 	pub fn set_resolution(&self, queue: &wgpu::Queue, w: f32, h: f32) {
@@ -1259,10 +1787,7 @@ impl RectRenderer {
 			return;
 		}
 		self.last_res.set((w, h));
-		let uniform_data = Uniform {
-			resolution: [w, h],
-			_pad: [0.0, 0.0],
-		};
+		let uniform_data = Uniform { resolution: [w, h], _pad: [0.0, 0.0] };
 		queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&uniform_data));
 	}
 
@@ -1270,12 +1795,7 @@ impl RectRenderer {
 		let needed = data.len() as u64;
 		if needed > self.capacity {
 			self.capacity = needed.next_power_of_two();
-			self.instances = device.create_buffer(&wgpu::BufferDescriptor {
-				label: Some("rect instances"),
-				size: self.capacity * std::mem::size_of::<RectInstance>() as u64,
-				usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-				mapped_at_creation: false,
-			});
+			self.instances = device.create_buffer(&wgpu::BufferDescriptor { label: Some("rect instances"), size: self.capacity * std::mem::size_of::<RectInstance>() as u64, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
 		}
 		if !data.is_empty() {
 			queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(data));
@@ -1293,7 +1813,7 @@ impl RectRenderer {
 	}
 }
 
-const RECT_WGSL: &str = r"
+pub(crate) const RECT_WGSL: &str = r"
 struct Uniform { resolution: vec2<f32>, _pad: vec2<f32> };
 @group(0) @binding(0) var<uniform> u: Uniform;
 
@@ -1328,8 +1848,8 @@ fn vs(in: VsIn) -> VsOut {
 
 // One 45-degree bar of the X: q is the pixel offset from the quad center in the
 // bar's rotated frame (x along the bar, y across it). Box-SDF with ~1px edges,
-// so the bar ends are square caps perpendicular to the stroke - i.e. cut on the
-// diagonal, not flat like a letter X.
+// so the bar ends are square caps perpendicular to the stroke, which means they're cut
+// on the diagonal rather than flat like a letter X.
 fn xbar(q: vec2<f32>, half_len: f32, half_th: f32) -> f32 {
     let d = max(abs(q.x) - half_len, abs(q.y) - half_th);
     return clamp(0.5 - d, 0.0, 1.0);
@@ -1345,9 +1865,9 @@ fn round_box(p: vec2<f32>, half: vec2<f32>, r: f32) -> f32 {
     return length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - r;
 }
 
-// Signed distance to a right-pointing isoceles triangle that fills the quad,
+// Signed distance to a right-pointing isosceles triangle that fills the quad,
 // negative inside. p is the offset from the quad center, half its extent. The
-// two slanted edges are one line mirrored across the x axis; the third is the
+// 2 slanted edges are one line mirrored across the x axis; the third is the
 // flat base at the left.
 fn right_triangle(p: vec2<f32>, half: vec2<f32>) -> f32 {
     let q = vec2<f32>(p.x, abs(p.y));
@@ -1355,7 +1875,7 @@ fn right_triangle(p: vec2<f32>, half: vec2<f32>) -> f32 {
     return max(dot(q - vec2<f32>(half.x, 0.0), n), -half.x - q.x);
 }
 
-// Turn the sample point instead of the shape, so one triangle serves all four
+// Turn the sample point instead of the shape, so one triangle works for all 4
 // directions. An odd number of quarter-turns also swaps the half-extents, or a
 // non-square box would point the arrow at a corner.
 fn turned(p: vec2<f32>, half: vec2<f32>, turns: f32) -> vec2<f32> {
@@ -1371,10 +1891,63 @@ fn turned_half(half: vec2<f32>, turns: f32) -> vec2<f32> {
     return half;
 }
 
+// sRGB -> linear, per channel. The surface encodes on write, so a color the
+// shader builds itself has to arrive linear like every other one.
+fn to_linear(c: vec3<f32>) -> vec3<f32> {
+    let lo = c / 12.92;
+    let hi = pow((c + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    return select(hi, lo, c <= vec3<f32>(0.04045));
+}
+
+// The fully lit color at this hue, sRGB. Mirrored in pick.rs, which needs the
+// same answer on the CPU to place the marker.
+fn hue_rgb(h: f32) -> vec3<f32> {
+    let k = fract(h) * 6.0;
+    return vec3<f32>(
+        clamp(abs(k - 3.0) - 1.0, 0.0, 1.0),
+        clamp(2.0 - abs(k - 2.0), 0.0, 1.0),
+        clamp(2.0 - abs(k - 4.0), 0.0, 1.0),
+    );
+}
+
+// A sine wave one period per p across the quad, its stroke a quarter of the
+// quad tall. Distance over the slope keeps the stroke even on the steep parts.
+fn curl(local: vec2<f32>, size: vec2<f32>, p: f32) -> f32 {
+    let t = size.y * 0.25;
+    let amp = (size.y - t) * 0.5;
+    let k = 6.2831853 / max(p, 1.0);
+    let wave = size.y * 0.5 - amp * sin(local.x * k);
+    let slope = amp * k * cos(local.x * k);
+    let d = abs(local.y - wave) / sqrt(1.0 + slope * slope);
+    return clamp(t * 0.5 + 0.5 - d, 0.0, 1.0);
+}
+
+// How much of a square wave, on for the first half of each period p, has run
+// up to x. The difference across a pixel is its coverage, so dots that don't
+// fall on whole pixels still come out even.
+fn dash_ink(x: f32, p: f32) -> f32 {
+    return floor(x / p) * p * 0.5 + min(fract(x / p) * p, p * 0.5);
+}
+fn dashes(x: f32, period: f32) -> f32 {
+    let p = max(period, 1.0);
+    return clamp(dash_ink(x + 0.5, p) - dash_ink(x - 0.5, p), 0.0, 1.0);
+}
+
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
+    var rgb = in.color.rgb;
     var a = in.color.a;
-    if (in.params.x > 2.5) {
+    if (in.params.x > 6.5) {
+        a = a * dashes(in.local.x, in.params.y);
+    } else if (in.params.x > 5.5) {
+        a = a * curl(in.local, in.size, in.params.y);
+    } else if (in.params.x > 4.5) {
+        rgb = to_linear(hue_rgb(in.local.y / in.size.y));
+    } else if (in.params.x > 3.5) {
+        let s = in.local.x / in.size.x;
+        let v = 1.0 - in.local.y / in.size.y;
+        rgb = to_linear(mix(vec3<f32>(1.0), in.color.rgb, s) * v);
+    } else if (in.params.x > 2.5) {
         let half = in.size * 0.5;
         let p = turned(in.local - half, half, in.params.y);
         // ~1px linear edge, same convention as the X bars
@@ -1394,14 +1967,14 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
         a = a * max(xbar(q, half_len, half_th), xbar(vec2<f32>(q.y, q.x), half_len, half_th));
     }
     // premultiply: lets translucent backgrounds composite over the desktop
-    return vec4<f32>(in.color.rgb * a, a);
+    return vec4<f32>(rgb * a, a);
 }
 ";
 
 // Fullscreen-triangle flip-blit: samples the offscreen scene and writes it to
 // the GL default framebuffer with V flipped (fbo 0 has a bottom-left origin).
-// The offscreen already holds premultiplied rgba, so this is a straight copy.
-const BLIT_WGSL: &str = r#"
+// The offscreen already has premultiplied rgba, so this is a straight copy.
+const BLIT_WGSL: &str = r"
 struct VsOut { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32> };
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> VsOut {
@@ -1409,18 +1982,18 @@ fn vs(@builtin(vertex_index) i: u32) -> VsOut {
     let p = xy[i];
     var o: VsOut;
     o.clip = vec4<f32>(p, 0.0, 1.0);
-    // default framebuffer (fbo 0) is bottom-origin, so DON'T apply the usual
+    // default framebuffer (fbo 0) is bottom-origin, so don't apply the usual
     // top-left flip: clip.y=+1 maps to the window bottom and should sample the
-    // offscreen bottom (uv.y=1) - i.e. uv.y rises with clip.y.
+    // offscreen bottom (uv.y=1), so uv.y rises with clip.y.
     o.uv = vec2<f32>((p.x + 1.0) * 0.5, (p.y + 1.0) * 0.5);
     return o;
 }
 @group(0) @binding(0) var t: texture_2d<f32>;
 @group(0) @binding(1) var s: sampler;
-// linear -> sRGB. The GL default framebuffer (fbo 0) is NOT sRGB-capable here, so
-// wgpu won't encode on write; without this every pixel lands ~half-bright (opaque
-// text then reads as "faded/transparent"). Encode manually and write to a non-sRGB
-// target so there's no double conversion. rgb is premultiplied; encode per-channel.
+// linear -> sRGB. fbo 0 isn't sRGB-capable here, so wgpu won't encode on write,
+// and without this every pixel comes out about half as bright. rgb is
+// premultiplied, and it's encoded per channel into a non-sRGB target, so there's
+// no double conversion.
 fn lin2srgb(c: vec3<f32>) -> vec3<f32> {
     let cl = max(c, vec3<f32>(0.0));
     let lo = cl * 12.92;
@@ -1442,15 +2015,150 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let d = (hash12(p) - hash12(p + vec2<f32>(13.7, 91.3))) / 255.0;
     return vec4<f32>(lin2srgb(c.rgb) + vec3<f32>(d), c.a);
 }
-"#;
+";
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 
+	// `fs` picks a mode by `params.x > N`, top down. Each mode's number has to
+	// pick the branch that calls what draws it, and a quad gives its mode back.
+	// Test ID: ddj83
+	#[test]
+	fn each_quad_mode_reaches_its_own_branch_of_the_shader() {
+		let body = RECT_WGSL.split("fn fs(").nth(1).expect("the fragment shader");
+		let mut branches: Vec<(f32, &str)> = Vec::new();
+		let mut rest = body;
+		while let Some(at) = rest.find("in.params.x > ") {
+			let after = &rest[at + "in.params.x > ".len()..];
+			let bound = after.split(')').next().and_then(|n| n.trim().parse().ok()).expect("a number");
+			let end = after.find("} else").unwrap_or(after.len());
+			branches.push((bound, &after[..end]));
+			rest = &after[end..];
+		}
+		assert_eq!(branches.len(), QuadMode::ALL.len() - 1, "{branches:?}");
+		for mode in QuadMode::ALL {
+			let drawn_by = match mode {
+				QuadMode::Solid => None,
+				QuadMode::CloseMark => Some("xbar("),
+				QuadMode::Rounded => Some("round_box("),
+				QuadMode::Triangle => Some("right_triangle("),
+				QuadMode::PickSquare => Some("mix(vec3<f32>(1.0)"),
+				QuadMode::HueStrip => Some("hue_rgb("),
+				QuadMode::Curl => Some("curl("),
+				QuadMode::Dashes => Some("dashes("),
+			};
+			let branch = branches.iter().find(|(bound, _)| mode.code() > *bound);
+			match (branch, drawn_by) {
+				(None, None) => {}
+				(Some((_, text)), Some(call)) => assert!(text.contains(call), "{mode:?}: {text}"),
+				(branch, call) => panic!("{mode:?}: {branch:?} against {call:?}"),
+			}
+			let quad = RectInstance { params: [mode.code(), 0.0], ..Default::default() };
+			assert_eq!(quad.mode(), mode);
+		}
+	}
+
+	// What the compositor shows through a pane fill, as an encoded value: the
+	// fill's premultiplied pixel after the one encode, plus the desktop at 1 - a.
+	fn shown(fill: [f32; 4], desktop: f32) -> f32 {
+		crate::config::from_linear(fill[0] * fill[3]) + (1.0 - fill[3]) * desktop
+	}
+
+	// A light fill has to let as much of the desktop through as a dark one at the
+	// same opacity. Before, white at 80% showed under half of what black did.
+	// Test ID: dd879
+	#[test]
+	fn a_light_fill_is_as_see_through_as_a_dark_one() {
+		for a in [0.3f32, 0.5, 0.8, 0.95] {
+			for c in [0.0f32, 0.01, 0.2, 0.8, 1.0] {
+				let fill = see_through([c, c, c, a]);
+				let want = a * crate::config::from_linear(c);
+				let got = shown(fill, 0.0);
+				assert!((got - want).abs() < 1e-4, "c {c} a {a}: {got} vs {want}");
+			}
+			let dark = shown(see_through([0.0, 0.0, 0.0, a]), 1.0);
+			let light = shown(see_through([1.0, 1.0, 1.0, a]), 0.0);
+			let (dark_range, light_range) = (dark - 0.0, 1.0 - light);
+			assert!((dark_range - light_range).abs() < 1e-4, "a {a}: dark shows {dark_range}, light {light_range}");
+		}
+		let opaque = [0.3, 0.6, 0.9, 1.0];
+		assert_eq!(see_through(opaque), opaque);
+	}
+
+	// What each platform's surface offers, and what the window must ask for.
+	// Metal lists Opaque first and never PreMultiplied, which left a Mac window
+	// opaque. The other rows are what Linux and Windows already picked.
+	// Test ID: ddce6
+	#[test]
+	fn each_platform_picks_a_see_through_alpha_mode_where_it_has_one() {
+		use wgpu::Backend;
+		use wgpu::CompositeAlphaMode::{Inherit, Opaque, PostMultiplied, PreMultiplied};
+		#[rustfmt::skip]
+		let cases = [
+			(Backend::Metal,  vec![Opaque, PostMultiplied],                         (PostMultiplied, true)),
+			(Backend::Metal,  vec![Opaque],                                         (Opaque, false)),
+			(Backend::Dx12,   vec![PreMultiplied],                                  (PreMultiplied, true)),
+			(Backend::Dx12,   vec![Opaque],                                         (Opaque, false)),
+			(Backend::Vulkan, vec![Opaque],                                         (Opaque, false)),
+			(Backend::Vulkan, vec![Inherit],                                        (Inherit, false)),
+			(Backend::Vulkan, vec![Opaque, PreMultiplied, PostMultiplied, Inherit], (PreMultiplied, true)),
+			(Backend::Vulkan, vec![Opaque, PostMultiplied],                         (Opaque, false)),
+			(Backend::Gl,     vec![PreMultiplied, Opaque],                          (PreMultiplied, true)),
+		];
+		for (backend, offered, want) in cases {
+			assert_eq!(pick_alpha_mode(&offered, backend), want, "{backend:?} offering {offered:?}");
+		}
+	}
+
+	// Numbers from the NVIDIA box where a stray GLX error used to kill the
+	// window at its next focus change: GLX 152 with errors from 158, NV-GLX 156.
+	// Test ID: dcsv5
+	#[cfg(target_os = "linux")]
+	#[test]
+	fn gl_errors_are_claimed_and_others_are_not() {
+		let nvidia = GlxCodes { requests: [152, 156], first_error: 158 };
+		assert!(nvidia.claims(152, 170), "GLXBadWindow from glXDestroyWindow");
+		assert!(nvidia.claims(156, 9), "BadDrawable from NV-GLX");
+		assert!(nvidia.claims(1, 160), "a GLX error on some other request");
+		assert!(!nvidia.claims(20, 3), "BadWindow from GetProperty");
+		assert!(!nvidia.claims(1, 172), "past GLX's error range");
+		let mesa = GlxCodes { requests: [152, 0], first_error: 158 };
+		assert!(!mesa.claims(0, 9));
+		assert!(!mesa.claims(156, 9), "no NV-GLX here");
+	}
+
+	// A built context has to survive being asked for. It didn't once: the state
+	// was taken unconditionally to join the worker and only put back on the
+	// Building arm, so the second dialog open dropped the context and every open
+	// after that paid for a cold one.
+	// Test ID: dc7mx
+	#[test]
+	fn a_settled_context_survives_being_settled_again() {
+		let mut w = Warm::Building(std::thread::spawn(|| Some(7)));
+		for _ in 0..3 {
+			w = w.settled();
+			assert!(matches!(w, Warm::Ready(7)));
+		}
+	}
+
+	// A worker that came back empty stays Failed rather than falling back to
+	// Idle, which would let `start` spawn another probe on the next pass.
+	// Test ID: dc7my
+	#[test]
+	fn a_failed_warm_up_stays_failed() {
+		let mut w = Warm::Building(std::thread::spawn(|| Option::<u32>::None));
+		for _ in 0..3 {
+			w = w.settled();
+			assert!(matches!(w, Warm::Failed));
+		}
+	}
+
 	// The sentinel only detects loss if its pattern can't be mistaken for
 	// trashed VRAM: right size, deterministic, and not a trivial fill.
+	// Test ID: da871
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn sentinel_pattern_is_deterministic_and_varied() {
 		let a = sentinel_pattern();
 		assert_eq!(a.len(), SENTINEL_BYTES);
@@ -1465,11 +2173,444 @@ mod tests {
 		assert_ne!(a, vec![0u8; SENTINEL_BYTES]);
 	}
 
+	// Test ID: da872
 	#[test]
 	fn sentinel_row_is_copy_aligned() {
 		// stride == unpadded row, so the readback compares without de-padding
 		assert_eq!(SENTINEL_ROW % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT, 0);
 		// the second witness reads back at this buffer offset
 		assert_eq!(SENTINEL_BYTES as u64 % wgpu::COPY_BUFFER_ALIGNMENT, 0);
+	}
+
+	// Test ID: ddgxc
+	#[test]
+	fn a_device_is_named_by_what_drew_it_and_why() {
+		let card = test_adapter("RTX", wgpu::DeviceType::DiscreteGpu);
+		let soft = test_adapter("llvmpipe", wgpu::DeviceType::Cpu);
+		assert_eq!(Drawn::of(&card, true, true), Drawn::Card);
+		assert_eq!(Drawn::of(&soft, false, true), Drawn::Fallback);
+		assert_eq!(Drawn::of(&soft, true, true), Drawn::Fallback);
+		assert_eq!(Drawn::of(&soft, true, false), Drawn::Software);
+		assert_eq!(Drawn::of(&soft, false, false), Drawn::NoCard);
+		assert!(Drawn::Software.instead_of_card() && Drawn::Fallback.instead_of_card());
+		assert!(!Drawn::Card.instead_of_card() && !Drawn::NoCard.instead_of_card());
+		assert_eq!(Want::Card.order(), [false, true]);
+		assert_eq!(Want::Software.order(), [true, false]);
+	}
+
+	// A card that refuses a device hands over to software once, rather than
+	// ending the launch, and software asked for comes first. Built the way the
+	// dialogs' warm-up builds, on this thread. Skips without a software adapter.
+	// Test ID: ddgxd
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
+	fn a_card_that_refuses_a_device_falls_back_to_software() {
+		let _loader = hold_loader();
+		let instance = plain_instance(wgpu::Backends::PRIMARY);
+		let first = |software| pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, compatible_surface: None, force_fallback_adapter: software })).ok().map(|adapter| adapter.get_info().device_type);
+		if first(true).is_none() {
+			eprintln!("skipped: no software adapter");
+			return;
+		}
+		let has_card = first(false).is_some_and(|kind| kind != wgpu::DeviceType::Cpu);
+
+		let asked = DialogGpu::build(Want::Software).unwrap();
+		assert_eq!(asked.drawn, Drawn::Software);
+		assert_eq!(asked.adapter_info.device_type, wgpu::DeviceType::Cpu);
+
+		REFUSE_CARD.with(|refuse| refuse.set(true));
+		let fell = DialogGpu::build(Want::Card);
+		let asked_anyway = DialogGpu::build(Want::Software);
+		REFUSE_CARD.with(|refuse| refuse.set(false));
+		let fell = fell.expect("a refused card left no device");
+		assert_eq!(fell.adapter_info.device_type, wgpu::DeviceType::Cpu);
+		assert_eq!(fell.drawn, if has_card { Drawn::Fallback } else { Drawn::NoCard });
+		assert_eq!(asked_anyway.unwrap().drawn, Drawn::Software);
+
+		if has_card {
+			let card = DialogGpu::build(Want::Card).unwrap();
+			assert_eq!(card.drawn, Drawn::Card);
+		}
+	}
+
+	// Test ID: dd5n5
+	#[test]
+	fn every_gpu_is_hardware_and_only_the_cpu_is_software() {
+		use wgpu::DeviceType;
+		assert_eq!(acceleration(&test_adapter("gpu", DeviceType::Cpu)), "Software (CPU)");
+		for (kind, said) in [(DeviceType::DiscreteGpu, "Hardware (discrete GPU)"), (DeviceType::IntegratedGpu, "Hardware (integrated GPU)"), (DeviceType::VirtualGpu, "Hardware (virtual GPU)")] {
+			assert_eq!(acceleration(&test_adapter("gpu", kind)), said);
+		}
+		let unsure = test_adapter("llvmpipe (LLVM 19.1.7, 256 bits)", DeviceType::Other);
+		assert!(!acceleration(&unsure).starts_with("Hardware"));
+	}
+
+	// 2026102807384203: the card on X11's GL path read as Unknown.
+	// Test ID: detz5
+	#[test]
+	fn a_card_on_gl_is_hardware_and_a_software_name_never_is() {
+		use wgpu::DeviceType;
+		let mut card = test_adapter("NVIDIA GeForce RTX 3060 Ti/PCIe/SSE2", DeviceType::Other);
+		card.backend = wgpu::Backend::Gl;
+		assert_eq!(acceleration(&card), "Hardware (GPU)");
+		for name in ["softpipe", "Microsoft Basic Render Driver", "Microsoft Remote Display Adapter"] {
+			for kind in [DeviceType::Other, DeviceType::IntegratedGpu, DeviceType::VirtualGpu] {
+				assert_eq!(acceleration(&test_adapter(name, kind)), "Software (CPU)", "{name} {kind:?}");
+			}
+		}
+	}
+
+	// The dialogs' context reserved 128 + 64 MiB for under 1 MiB of use under
+	// wgpu's default memory hint, in every process. Built the way the warm-up
+	// builds it. Skips where there is no adapter, or no allocator report (GL,
+	// Metal).
+	// Test ID: ddgvg
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
+	fn a_new_device_reserves_little_graphics_memory() {
+		let _loader = hold_loader();
+		let gpu = match DialogGpu::build(Want::Card) {
+			Ok(gpu) => gpu,
+			Err(e) => {
+				eprintln!("skipped: no device ({e})");
+				return;
+			}
+		};
+		let _buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor { label: Some("probe"), size: 64 * 1024, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+		let Some(report) = gpu.device.generate_allocator_report() else {
+			eprintln!("skipped: {:?} has no allocator report", gpu.adapter_info.backend);
+			return;
+		};
+		let reserved_mib = report.total_reserved_bytes / (1024 * 1024);
+		assert!(reserved_mib <= 32, "{reserved_mib} MiB reserved for {} bytes in use on {}", report.total_allocated_bytes, gpu.adapter_info.name);
+	}
+
+	// A wallpaper given as BC1 or BC7 is drawn where the plain one is, padded
+	// to whole blocks and with a border too, and a device without BC gets it
+	// plain. BC7 goes through the device's own decoder here, so a block laid
+	// out wrong in bc7.rs shows even where its own decode agrees with it.
+	// Test ID: ddkq0
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
+	fn a_bc1_wallpaper_draws_like_the_plain_one() {
+		let _loader = hold_loader();
+		let gpu = match DialogGpu::build(Want::Software) {
+			Ok(gpu) => gpu,
+			Err(e) => {
+				eprintln!("skipped: no device ({e})");
+				return;
+			}
+		};
+		if !gpu.device.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC) {
+			eprintln!("skipped: {} has no BC", gpu.adapter_info.name);
+			return;
+		}
+		let (plain_device, plain_queue) = pollster::block_on(gpu.adapter.request_device(&wgpu::DeviceDescriptor { label: Some("no bc"), required_features: wgpu::Features::empty(), ..Default::default() })).expect("a device without BC");
+		// 8 texel squares line up with the 4x4 blocks, so BC keeps each one a
+		// flat color and only a misplaced sample can move a pixel far. Black
+		// speckled with a dark gray both kinds keep exact takes BC7's other mode.
+		for (picture, border, speckled) in [((203, 117), false, false), ((100, 71), true, false), ((70, 66), false, true)] {
+			let rgba = image::RgbaImage::from_fn(picture.0, picture.1, |x, y| {
+				if speckled {
+					let lit = (x * 7 + y * 3) % 5 < 2;
+					image::Rgba(if lit { [8, 12, 8, 255] } else { [0, 0, 0, 255] })
+				} else if (x / 8 + y / 8) % 2 == 0 {
+					image::Rgba([230, 140, 40, 255])
+				} else {
+					image::Rgba([20, 60, 120, 255])
+				}
+			});
+			let ring = 2 * u32::from(border);
+			let held = (picture.0 - ring, picture.1 - ring);
+			let plain = crate::wallpaper::Prepared { summary: crate::autotheme::summarize(&rgba, 1.0), rgba: rgba.clone(), sizing: crate::wallpaper::Sizing { full: (held.0 * 4, held.1 * 4), most: if border { held } else { (held.0 * 4, held.1 * 4) } }, opacity: 1.0, fit: crate::config::Fit::Stretch, anchor: [0.5, 0.5], held, border, blocks: None };
+			for packing in [crate::wallpaper::Packing::Bc1, crate::wallpaper::Packing::Bc7] {
+				let packed = crate::wallpaper::Prepared { blocks: Some(crate::wallpaper::Blocks { packing, bytes: std::sync::Arc::new(packing.encode(&rgba)) }), ..plain.clone() };
+				drawn_alike(&gpu, (&plain_device, &plain_queue), &plain, &packed, picture);
+			}
+		}
+	}
+
+	fn drawn_alike(gpu: &DialogGpu, (plain_device, plain_queue): (&wgpu::Device, &wgpu::Queue), plain: &crate::wallpaper::Prepared, packed: &crate::wallpaper::Prepared, picture: (u32, u32)) {
+		let name = packed.blocks.as_ref().map_or("plain", |b| b.packing.name());
+		let held = plain.held;
+		let window = (held.0 * 3, held.1 * 3);
+		// The loss probe reads the texture back, which GL can't do for a
+		// compressed one: the copy is skipped and the zeros read as lost.
+		let draw = |device: &wgpu::Device, queue: &wgpu::Queue, img| {
+			let mut renderer = crate::bgimage::ImageRenderer::new(device, queue, FB_HDR, img);
+			let probed = renderer.vram_check_start(device, queue);
+			let line = renderer.memdbg_line();
+			(line, probed, draw_offscreen(device, queue, window, &renderer))
+		};
+		let (line, probed, want) = draw(&gpu.device, &gpu.queue, plain);
+		assert!(!line.contains(" as ") && probed, "{line}");
+		let (line, probed, got) = draw(&gpu.device, &gpu.queue, packed);
+		assert!(line.contains(&format!("as {name}")) && !probed, "{line}");
+		let (line, probed, fallback) = draw(plain_device, plain_queue, packed);
+		assert!(!line.contains(" as ") && probed, "{line}");
+		let worst = |a: &[u8], b: &[u8]| a.iter().zip(b).map(|(x, y)| x.abs_diff(*y)).max().unwrap_or(0);
+		assert!(worst(&want, &got) <= 2, "{picture:?}: {name} off by {}", worst(&want, &got));
+		assert!(worst(&want, &fallback) <= 2, "{picture:?}: the plain fallback off by {}", worst(&want, &fallback));
+	}
+
+	const FB_HDR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+
+	// One wallpaper frame over black, read back as sRGB bytes.
+	fn draw_offscreen(device: &wgpu::Device, queue: &wgpu::Queue, (w, h): (u32, u32), renderer: &crate::bgimage::ImageRenderer) -> Vec<u8> {
+		let target = device.create_texture(&wgpu::TextureDescriptor { label: Some("test target"), size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: FB_HDR, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC, view_formats: &[] });
+		let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+		let mix = crate::visibility::Mix { amount: 1.0, perceptual: false };
+		renderer.set_look(queue, w as f32, h as f32, mix, [0.0, 0.0, 0.0, 1.0]);
+		let row = (w * 8).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+		let buf = device.create_buffer(&wgpu::BufferDescriptor { label: Some("test read"), size: u64::from(row * h), usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+		let mut enc = device.create_command_encoder(&Default::default());
+		{
+			let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor { label: Some("test pass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &view, depth_slice: None, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store } })], ..Default::default() });
+			renderer.draw(&mut pass);
+		}
+		enc.copy_texture_to_buffer(wgpu::TexelCopyTextureInfo { texture: &target, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
+		queue.submit(Some(enc.finish()));
+		buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+		let _ = device.poll(wgpu::PollType::wait_indefinitely());
+		let data = buf.slice(..).get_mapped_range();
+		let mut out = Vec::with_capacity((w * h * 3) as usize);
+		for y in 0..h {
+			let start = (y * row) as usize;
+			for texel in data[start..start + (w * 8) as usize].chunks_exact(8) {
+				for c in 0..3 {
+					let bits = u16::from_le_bytes([texel[c * 2], texel[c * 2 + 1]]);
+					out.push(crate::config::from_linear_u8(f16_to_f32(bits)));
+				}
+			}
+		}
+		out
+	}
+
+	// Every dialog open takes the one kept context. Building one per open cost
+	// about 230 ms each time on b23, against about 21 MiB to keep it.
+	// Test ID: ddhn1
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_dialog_open_takes_the_kept_context() {
+		let _loader = hold_loader();
+		let mut warm = GpuWarm::idle();
+		warm.start();
+		let Some(first) = warm.get() else {
+			eprintln!("skipped: no device");
+			return;
+		};
+		let second = warm.get().expect("the context is still kept");
+		// wgpu numbers devices per instance, so == can't tell 2 builds apart.
+		// An error on the second goes to a handler only the first was given.
+		let heard = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+		let flag = heard.clone();
+		first.device.on_uncaptured_error(std::sync::Arc::new(move |_: wgpu::Error| {
+			flag.store(true, std::sync::atomic::Ordering::SeqCst);
+		}));
+		let _bad = second.device.create_buffer(&wgpu::BufferDescriptor { label: Some("both map directions"), size: 4, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation: false });
+		assert!(heard.load(std::sync::atomic::Ordering::SeqCst));
+		warm.release();
+		assert!(warm.ready_device().is_none(), "the idle release lets it go");
+	}
+
+	// A server with no shared pixmaps gets Mesa's noshm, added to whatever the
+	// variable already says. One that has them is left alone.
+	// Test ID: ddkew
+	#[test]
+	fn no_shared_pixmaps_turns_mesa_shm_off() {
+		assert_eq!(wsi_debug_for(None, false).as_deref(), Some("noshm"));
+		assert_eq!(wsi_debug_for(Some(" "), false).as_deref(), Some("noshm"));
+		assert_eq!(wsi_debug_for(Some("sw"), false).as_deref(), Some("sw,noshm"));
+		assert_eq!(wsi_debug_for(Some("sw noshm"), false), None);
+		assert_eq!(wsi_debug_for(Some("noshm,sw"), false), None);
+		assert_eq!(wsi_debug_for(None, true), None);
+		assert_eq!(wsi_debug_for(Some("sw"), true), None);
+	}
+
+	// The warm-up builds a whole instance, adapter and device while the window
+	// draws. On loader 1.4.309 that crashed a debug build now and then, since
+	// naming an object walks the driver lists the warm-up's new instance is
+	// still changing. Each pass here holds the loader as a winit callback does.
+	// Fresh warm-ups, since a kept seed skips the instance. Skips without a
+	// software adapter.
+	// Test ID: ddp6r
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
+	fn a_warm_up_never_overlaps_what_the_window_draws() {
+		let gpu = {
+			let _loader = hold_loader();
+			match DialogGpu::build(Want::Software) {
+				Ok(gpu) => gpu,
+				Err(e) => {
+					eprintln!("skipped: no device ({e})");
+					return;
+				}
+			}
+		};
+		for _ in 0..10 {
+			let mut warm = GpuWarm::idle();
+			warm.start();
+			while matches!(&warm.state, Warm::Building(job) if !job.is_finished()) {
+				let pass = hold_loader();
+				for _ in 0..20 {
+					let encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("pass") });
+					gpu.queue.submit([encoder.finish()]);
+				}
+				drop(pass);
+				std::thread::sleep(Duration::from_millis(1));
+			}
+			let _loader = hold_loader();
+			warm.release();
+			drop(warm);
+		}
+		let _loader = hold_loader();
+		drop(gpu);
+	}
+
+	// A window on GL, DX12 or Metal never makes a loader call between builds,
+	// so it mustn't wait out the warm-up: about 150 ms on b23's card, every
+	// launch. Only a window on Vulkan holds through its callbacks.
+	// Test ID: ddp72
+	#[test]
+	fn only_a_window_on_vulkan_holds_the_loader_through_its_callbacks() {
+		assert!(hold_for_windows().is_none());
+		let mut gl = test_adapter("GL", wgpu::DeviceType::DiscreteGpu);
+		gl.backend = wgpu::Backend::Gl;
+		assert!(OnVulkan::count(&gl).is_none());
+		assert!(hold_for_windows().is_none());
+		let window = OnVulkan::count(&test_adapter("lavapipe", wgpu::DeviceType::Cpu));
+		assert!(hold_for_windows().is_some());
+		drop(window);
+		assert!(hold_for_windows().is_none());
+	}
+
+	// A hold nests, and a wait inside one lets another thread have the loader.
+	// Joining the warm-up from a winit callback deadlocked otherwise.
+	// Test ID: ddp6s
+	#[test]
+	fn a_loader_hold_nests_and_lets_go_for_a_wait() {
+		let _outer = hold_loader();
+		let inner = hold_loader();
+		drop(inner);
+		let other = std::thread::spawn(|| {
+			let _loader = hold_loader();
+			7
+		});
+		assert_eq!(without_loader(|| other.join().unwrap()), 7);
+		assert_eq!(LOADER_HELD.with_borrow(|held| held.0), 1);
+		let blocked = std::thread::spawn(|| LOADER.try_lock().is_err());
+		assert!(blocked.join().unwrap(), "the outer hold came back after the wait");
+	}
+
+	// wgpu reports a lost device only through its callback, so a window that
+	// never asked kept drawing into a dead device for good. Destroying the
+	// device is the loss a test can cause, reported on wgpu's next poll.
+	// Test ID: dfefp
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
+	fn a_lost_device_is_seen() {
+		let _loader = hold_loader();
+		let gpu = match DialogGpu::build(Want::Software) {
+			Ok(gpu) => gpu,
+			Err(e) => {
+				eprintln!("skipped: no device ({e})");
+				return;
+			}
+		};
+		let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+		assert!(!gpu.loss.lost(), "a working device read as lost");
+		gpu.device.destroy();
+		let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+		assert!(gpu.loss.lost(), "the loss went unseen");
+		assert!(gpu.clone().loss.lost(), "a clone of the device missed it");
+	}
+
+	// The dialogs' warm device can be lost too, and a dialog opened on it drew
+	// nothing. It's let go like an idle one, keeping the instance to build
+	// the next on.
+	// Test ID: dfefq
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
+	fn a_lost_warm_device_is_let_go() {
+		let _loader = hold_loader();
+		let gpu = match DialogGpu::build(Want::Software) {
+			Ok(gpu) => gpu,
+			Err(e) => {
+				eprintln!("skipped: no device ({e})");
+				return;
+			}
+		};
+		let mut warm = GpuWarm { state: Warm::Ready(gpu.clone()), seed: None };
+		assert!(warm.get().is_some());
+		gpu.device.destroy();
+		let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+		assert!(warm.get().is_none(), "a dialog was given a lost device");
+		assert!(matches!(warm.state, Warm::Idle));
+		assert!(warm.seed.is_some(), "the instance wasn't kept");
+	}
+
+	// glyphon grows a vertex buffer by mapping a new one, and wgpu panics
+	// mapping one made on a lost device. A loss found partway through a frame
+	// ended the program at the next prepare that grew.
+	// Test ID: dfekm
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
+	fn no_text_is_prepared_on_a_lost_device() {
+		use glyphon::{Attrs, Color, Shaping, TextArea, TextBounds};
+		let _loader = hold_loader();
+		let gpu = match DialogGpu::build(Want::Software) {
+			Ok(gpu) => gpu,
+			Err(e) => {
+				eprintln!("skipped: no device ({e})");
+				return;
+			}
+		};
+		let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+		let mut text = crate::text::TextCtx::new(&gpu.device, &gpu.queue, format, &gpu.loss, 1.0);
+		// far past the 4 KiB each renderer starts with
+		let mut buf = text.new_ui_buffer(4000.0, 4000.0);
+		let lots = format!("{}\n", "Mm".repeat(40)).repeat(40);
+		buf.set_text(&mut text.font_system, &lots, &Attrs::new(), Shaping::Advanced, None);
+		buf.shape_until_scroll(&mut text.font_system, false);
+		let area = || TextArea { buffer: &buf, left: 0.0, top: 0.0, scale: 1.0, bounds: TextBounds { left: 0, top: 0, right: 4000, bottom: 4000 }, default_color: Color::rgb(255, 255, 255), custom_glyphs: &[] };
+		// glyphon leaves out what falls outside the viewport
+		text.update_viewport(&gpu.queue, 4000, 4000);
+		gpu.device.destroy();
+		let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+		assert!(gpu.loss.lost());
+		let queue = &gpu.queue;
+		assert!(text.prepare(&gpu.device, queue, [area()]).is_ok());
+		assert!(text.prepare_overlay(&gpu.device, queue, [area()]).is_ok());
+		assert!(text.prepare_tip(&gpu.device, queue, [area()]).is_ok());
+		assert!(text.prepare_scrim(&gpu.device, queue, [area()]).is_ok());
+	}
+
+	// What a frame makes after its device is lost is invalid, and a write to
+	// it was a validation error that wgpu's own handler panics on. Before the
+	// loss an error is still fatal.
+	// Test ID: dfeks
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
+	fn errors_after_a_loss_go_quietly() {
+		let _loader = hold_loader();
+		let gpu = match DialogGpu::build(Want::Software) {
+			Ok(gpu) => gpu,
+			Err(e) => {
+				eprintln!("skipped: no device ({e})");
+				return;
+			}
+		};
+		let write = || {
+			let buf = gpu.device.create_buffer(&wgpu::BufferDescriptor { label: Some("made late"), size: 16, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+			gpu.queue.write_buffer(&buf, 0, &[0; 4]);
+			// a bad range is an error on a working device too
+			gpu.queue.write_buffer(&buf, 64, &[0; 4]);
+		};
+		let live = crate::testdir::catch_expected_panic(std::panic::AssertUnwindSafe(write));
+		assert!(live.is_err(), "an error on a working device went unseen");
+		gpu.device.destroy();
+		let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+		assert!(gpu.loss.lost());
+		write();
 	}
 }

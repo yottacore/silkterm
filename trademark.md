@@ -4,7 +4,7 @@
 <!-- markdownlint-disable MD055 -- Table pipe style [Expected: leading_and_trailing; Actual: leading_only; Missing trailing pipe] -->
 <!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
 
-# Trademark Policy
+# Trademark policy
 
 **Short version:** the code is free; the name is not. You may fork and redistribute the software under its license, but you may not use our name or logo to identify your version, without written permission.
 
@@ -12,12 +12,11 @@ That said, asking is free - and we'd prefer to say yes. Forks that credibly carr
 
 ## 1. Marks covered
 
-"SilkTerm", the SilkTerm logo, and any stylized variants (the "Marks") are trademarks of Jim Collier (CryptogID: ѳ6ᴚ℈𐀘𐇦ɛ𐊁¥Mﾏb϶Δ𐌞). We claim these Marks under common law and use them in commerce as SilkTerm™.
+"SilkTerm", the SilkTerm logo, and any stylized variants (the "Marks") are trademarks of Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]. We claim these Marks under common law and use them in commerce as SilkTerm™.
 
 ## 2. Relationship to the software license
 
-SilkTerm is distributed under GPLv2+. That license grants rights in **copyright** only. It does not grant, and must not be read as granting, any
-license or right to use the Marks. Trademark rights are expressly reserved.
+SilkTerm is distributed under GPLv2+. That license grants rights in **copyright** only. It does not grant, and must not be read as granting, any license or right to use the Marks. Trademark rights are expressly reserved.
 
 ## 3. Uses that are always permitted
 
@@ -61,7 +60,7 @@ When using the Marks under Section 3:
 
 ## 7. Enforcement and changes
 
-**We may revoke permission for any use that damages the Marks or misleads users**. We may revise this policy at any time; the current version lives at <https://github.com/yottacore/silkterm/>. Requests for permission, and reports of misuse, go to silktermⒶubx9.com.
+**We may revoke permission for any use that damages the Marks or misleads users**. We may revise this policy at any time; the current version lives at <https://github.com/yottacore/silkterm/>. Requests for permission, and reports of misuse, go to silktermⒶyottacore.com.
 
 ---
 

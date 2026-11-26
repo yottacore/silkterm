@@ -6,19 +6,28 @@
 #  shellcheck disable=2181  ## 'Check exit code directly, not indirectly with $?.'
 
 ##	- Purpose:
-##		Headless scroll regression harness. Drives SilkTerm on a private Xvfb with
-##		SILK_SCROLLDBG on and deterministic full-redraw scenes that model how real
-##		full-screen apps repaint, then checks the per-frame trace for the behavior
-##		each app is supposed to have:
+##		Runs SilkTerm on a private Xvfb with SILK_SCROLLDBG on, in scenes that
+##		redraw the whole screen the way real full-screen programs do, then checks
+##		the trace of each frame for what that program should look like:
 ##		   less / vim   - no static top band: the smooth slide engages, monotone (no bounce)
 ##		   nano / muffer - static title bar held still, the region under it slides
-##		Plain shell-output easing is covered by the library tests (cargo test); the
-##		"jumping / re-listing / bottom-up" symptoms map to those monotonicity checks.
-##		Scenes self-scroll on a timer - no key injection (unreliable here), so the
-##		result is deterministic. --real also smoke-tests the actual apps (best effort).
+##		   tmux         - a real scroll region (DECSTBM + linefeeds) slides off the engine's count
+##		   pill         - a pill repainted over a recorded region's edge is held still
+##		   altenter     - a burst still easing when an alt screen takes over comes to rest
+##		   chrome       - output easing under a live block redrawn in place holds the block still
+##		   aptbar       - lines above a pinned status row still ease once the scrollback is full
+##		   paste/pasteil - an input box growing into blank rows pops in rather than sliding down
+##		   prompt       - a shell prompt drawn with insert- and delete-line shows in place
+##		   clear        - every way a shell clears the screen shows at once, nothing eases
+##		   tmuxclear    - a clear inside tmux, drawn as its pane scrolled away, shows at once
+##		Plain shell output easing is tested by cargo test, and its checks that the
+##		text only moves one way catch the "jumping", "re-listing", and "bottom-up"
+##		symptoms. The scenes scroll themselves on a timer, since key injection isn't
+##		reliable here, so each run gives the same result. --real also runs the real
+##		programs, and never fails the run.
 ##	- Syntax:
 ##		run.bash [options]
-##		   --bin PATH      SilkTerm binary (default: target/debug then target/release)
+##		   --bin PATH      SilkTerm binary (default: <target dir>/debug then release)
 ##		   --display :N    headless display (default: $CICD_HEADLESS_DISPLAY or :98)
 ##		   --wayland       run under a headless Wayland compositor (cage) instead of Xvfb,
 ##		                   to prove the Wayland backend scrolls the same as X11
@@ -28,14 +37,21 @@
 ##		   --real          also launch real less/nano/vim.tiny (smoke, non-fatal)
 ##		   --keep          leave the Xvfb up and keep the trace files
 ##		   --strict        treat environment skips as failures
+##		   --only <label>  run one deterministic scene, e.g. tmux
+##		   --list          print each scene's test ID and name, and run nothing
 ##		   -v, --verbose   show per-scene frame counts
 ##		   -h, --help
-##	- Exit: 0 all pass/skip, 1 a real regression was measured.
+##	- Output: one line per scene, "PASS|FAIL|SKIP <ID> scroll scene <label>
+##		(<engine>), <what the check found>". Each scene's ID is the first word of
+##		its row in the scenes table below.
+##	- Exit: 0 all pass (a skipped scene beside passes is still 0), 1 a regression
+##		was measured, 3 nothing ran (no binary, python3, display, or cage).
 ##	- Notes: uses cicd/utility/gui-headless.bash (:98, never :0). Kills only the
 ##		binary it launched (PID + /proc/PID/exe path checked), never by name.
+##	- Test ID: d9j4r
 ##	History: At bottom of script.
 
-##	Copyright © 2026 Jim Collier (CryptogID: ѳ6ᴚ℈𐀘𐇦ɛ𐊁¥Mﾏb϶Δ𐌞)
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
@@ -44,58 +60,138 @@
 set -Eeuo pipefail
 
 meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=cicd/tests/_testdir.bash
+source "${meDir}/../_testdir.bash"; fTestDir_Use
 root="$(cd "${meDir}/../../.." && pwd)"                     ## repo root (github/)
 headless="${root}/cicd/utility/gui-headless.bash"
 
 ## Output helpers, same as cicd.bash: fEcho / fEcho_Clean.
 declare -i _wasLastEchoBlank=0
-fEcho_Clean(){ if [[ -n "${1:-}" ]]; then echo -e "$*"; _wasLastEchoBlank=0; elif [[ $_wasLastEchoBlank -eq 0 ]] && echo; then _wasLastEchoBlank=1; fi; }
-fEcho(){ if [[ -n "$*" ]]; then fEcho_Clean "[ $* ]"; else fEcho_Clean ""; fi; }
-_letterbox="••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
-fSection(){ fEcho_Clean; fEcho_Clean "${_letterbox}"; fEcho "$*"; }
-fDie(){ { fEcho_Clean; fEcho "FAILED: $*"; } >&2; exit 1; }
-trap 'rc=$?; [[ $rc -ne 0 && $rc -ne 1 ]] && printf "\n[ scroll harness ABORTED (exit %s) at line %s: %s ]\n" "$rc" "$LINENO" "$BASH_COMMAND" >&2; exit $rc' ERR
+fEcho_Clean(){ if [[ -n "${1:-}" ]]; then echo -e "${*}"; _wasLastEchoBlank=0; elif [[ ${_wasLastEchoBlank} -eq 0 ]] && echo; then _wasLastEchoBlank=1; fi; }
+fEcho(){ if [[ -n "${*}" ]]; then fEcho_Clean "[ ${*} ]"; else fEcho_Clean ""; fi; }
+_letterbox="•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
+fSection(){ fEcho_Clean; fEcho_Clean "${_letterbox}"; fEcho "${*}"; }
+fDie(){ { fEcho_Clean; fEcho "FAILED: ${*}"; } >&2; exit 1; }
+##  shellcheck source=cicd/tests/scroll/verdict.bash
+source "${meDir}/verdict.bash"
+## 3 means "nothing ran" to cicd, so an abort that happens to exit 3 must not say so
+trap 'rc=$?; [[ $rc -ne 0 && $rc -ne 1 ]] && printf "\n[ scroll harness ABORTED (exit %s) at line %s: %s ]\n" "$rc" "$LINENO" "$BASH_COMMAND" >&2; [[ $rc -eq 3 ]] && rc=1; exit $rc' ERR
 
 ## Options.
 bin=""; display="${CICD_HEADLESS_DISPLAY:-${RPD_HEADLESS_DISPLAY:-:98}}"
-settle=13; capture=16; step=0.15; do_real=0; keep=0; strict=0; verbose=0; wayland=0
-while (($#)); do case "$1" in
+settle=13; capture=16; step=0.15; doReal=0; keep=0; strict=0; verbose=0; wayland=0; only=""; listing=0
+while (($#)); do case "${1}" in
 	--bin)      bin="${2-}"; shift 2 ;;
 	--display)  display="${2-}"; shift 2 ;;
 	--wayland)  wayland=1; shift ;;
 	--settle)   settle="${2-}"; shift 2 ;;
 	--capture)  capture="${2-}"; shift 2 ;;
 	--step)     step="${2-}"; shift 2 ;;
-	--real)     do_real=1; shift ;;
+	--real)     doReal=1; shift ;;
 	--keep)     keep=1; shift ;;
 	--strict)   strict=1; shift ;;
+	--only)     only="${2-}"; shift 2 ;;
+	--list)     listing=1; shift ;;
 	-v|--verbose) verbose=1; shift ;;
 	-h|--help)  sed -n '/^##	- Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
-	*) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
+	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
+## The deterministic scenes, one row each: test ID, label, shape, mode,
+## expect_st and expect_sb when there is one. test-id.py --check reads the IDs
+## from here.
+scenes=(
+	"d9j4s less less slide 0"
+	"d9j4t vim vim slide 0"
+	"d9j4v nano nano slide 1"
+	"d9j4w muffer muffer slide 2"
+	## A real region scroll (tmux, less): the engine's own record drives the slide, and
+	## the one row outside the region is the only band.
+	"d9j4x tmux tmux slide 0 1"
+	## A pill repainted over the last row of a recorded region (muffer scrolling
+	## back): held with the 2 rows under the region.
+	"dcnv6 pill pill slide 2 3"
+	## A burst still easing when the alt screen takes over (git commit opening nano):
+	## no scrollback behind it, so the view must be at rest, with frac 0 on every frame.
+	"dcg0w altenter altenter still -1"
+	## Like muffer: new transcript lines ease in above a block it redraws in
+	## place, which must hold still (3 block rows plus the blank cursor row).
+	"dcg3w chrome chrome pinned -1 4"
+	## apt's progress bar with the scrollback full: the lines above the bar still ease,
+	## and the bar's row is held.
+	"dcswm aptbar aptbar pinned -1 1"
+	## An input box growing on a half-empty screen, repainted and then with
+	## insert-line: the new lines pop in rather than sliding down from behind the
+	## rows above.
+	"dcvbd paste paste popin -1"
+	"dcvbe pasteil pasteil popin -1"
+	## A shell under ble.sh: its prompt comes back after each command, drawn with
+	## insert- and delete-line under the cursor, and is redrawn in place now and
+	## then. It shows where it ends up rather than sliding out from under the output.
+	"ddyq6 prompt prompt popin -1"
+	## clear, tput clear, Ctrl+L and a reset over a full screen, with the scrollback
+	## full and then nearly empty: each shows at once, with nothing easing.
+	"ddx70 clear clear instant -1"
+	## The same inside tmux, which draws a clear as its pane scrolled away, as it
+	## does a burst. The bursts still slide.
+	"de19r tmuxclear tmuxclear wipe -1"
+)
+
+## A scene's result line. The same scene under both engines keeps its one ID,
+## and the name says which engine it ran under.
+engineName="X11"; ((wayland)) && engineName="Wayland"
+## fSceneLine <PASS|FAIL|SKIP> <id> <label> [what the check found]
+fSceneLine(){ printf '%s %s scroll scene %s (%s)%s\n' "${1}" "${2}" "${3}" "${engineName}" "${4:+, ${4}}"; }
+## fSceneLines <PASS|FAIL|SKIP> <why>: the same line for every scene the run takes,
+## for a run that can't start. printf only, since a test runs this with a bare PATH.
+fSceneLines(){
+	local row; local -a f
+	for row in "${scenes[@]}"; do
+		read -r -a f <<<"${row}"
+		[[ -z "${only}" || "${only}" == "${f[1]}" ]] && fSceneLine "${1}" "${f[0]}" "${f[1]}" "${2}"
+	done
+	return 0
+}
+if ((listing)); then
+	for row in "${scenes[@]}"; do
+		read -r -a f <<<"${row}"
+		[[ -z "${only}" || "${only}" == "${f[1]}" ]] && printf '  %-5s  scroll scene %s (%s)\n' "${f[0]}" "${f[1]}" "${engineName}"
+	done
+	exit 0
+fi
+
+## gui-headless.bash reads its display from here and defaults to :99 without it.
+## cicd only exported this from the profiler stage, so a run that got here
+## without that started Xvfb on :99, ran SilkTerm on :98, and every scene skipped.
+export CICD_HEADLESS_DISPLAY="${display}"
 
 fSection "SilkTerm scroll regression (headless)"
 
 ## Resolve the binary: prefer debug (exists after the debug-build stage), then release.
-if [[ -z "$bin" ]]; then
-	for cand in "${root}/target/debug/silkterm" "${root}/target/release/silkterm"; do
-		[[ -x "$cand" ]] && { bin="$cand"; break; }
+if [[ -z "${bin}" ]]; then
+	## cargo's output dir moves with CARGO_TARGET_DIR, so ./target is a guess.
+	## A wrong guess doesn't show, because the harness reports through its pass
+	## count, so a missed binary looks like a clean run that tested nothing.
+	tdir="${CARGO_TARGET_DIR:-target}"
+	[[ "${tdir}" = /* ]] || tdir="${root}/${tdir}"
+	for cand in "${tdir}/debug/silkterm" "${tdir}/release/silkterm"; do
+		[[ -x "${cand}" ]] && { bin="${cand}"; break; }
 	done
 fi
 
-## Environment preconditions -> skip (non-fatal) unless --strict.
+## A missing tool or display is a skip unless --strict. A skip exits 3 rather
+## than 0, so cicd can't print OK for a run that didn't measure anything.
 skip=""
-[[ -n "$bin" && -x "$bin" ]] || skip="no SilkTerm binary (build it first, or pass --bin)"
-[[ -z "$skip" ]] && ! command -v python3 >/dev/null 2>&1 && skip="python3 not found"
+[[ -n "${bin}" && -x "${bin}" ]] || skip="no SilkTerm binary (build it first, or pass --bin)"
+[[ -z "${skip}" ]] && ! command -v python3 >/dev/null 2>&1 && skip="python3 not found"
 if ((wayland)); then
-	[[ -z "$skip" ]] && ! command -v cage >/dev/null 2>&1 && skip="cage not found (no headless Wayland compositor)"
+	[[ -z "${skip}" ]] && ! command -v cage >/dev/null 2>&1 && skip="cage not found (no headless Wayland compositor)"
 else
-	[[ -z "$skip" ]] && ! command -v Xvfb    >/dev/null 2>&1 && skip="Xvfb not found (no headless display)"
-	[[ -z "$skip" ]] && [[ ! -x "$headless" ]] && skip="gui-headless.bash missing: ${headless}"
+	[[ -z "${skip}" ]] && ! command -v Xvfb    >/dev/null 2>&1 && skip="Xvfb not found (no headless display)"
+	[[ -z "${skip}" ]] && [[ ! -x "${headless}" ]] && skip="gui-headless.bash missing: ${headless}"
 fi
-if [[ -n "$skip" ]]; then
-	((strict)) && fDie "scroll harness: ${skip}"
-	fEcho "WARNING: skipped: ${skip}"; exit 0
+if [[ -n "${skip}" ]]; then
+	((strict)) && { fSceneLines FAIL "${skip}"; fDie "scroll harness: ${skip}"; }
+	fSceneLines SKIP "${skip}"; exit 3
 fi
 fEcho_Clean "binary ....: ${bin}"
 if ((wayland)); then
@@ -104,12 +200,19 @@ else
 	fEcho_Clean "engine ....: X11 (${display})   settle ${settle}s  capture ${capture}s  step ${step}s"
 fi
 
-## Throwaway config + temp workspace (nothing personal leaks; cleaned on exit).
+## A throwaway config in a temp folder, removed on exit, so no personal settings get in.
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-scroll.XXXXXX")"
 cfg="${work}/config.shcl"
-cat >"$cfg" <<-'SHCL'
+cat >"${cfg}" <<-'SHCL'
 	## Throwaway config for the scroll harness - not a user config.
+	## No performance profile: the settings below are the scene, and a step
+	## down on a software renderer would turn smooth scrolling off mid-run.
+	performance.automatic: false
+	performance.profile: custom
 	scroll.smooth_apps: true
+	## The scenes watch the text. A minimap column would add a strip that moves
+	## on its own schedule.
+	scroll.minimap.enabled: false
 	transparency.enabled: false
 	text.scrim.enabled: false
 	wallpaper.fallback_builtin: false
@@ -118,141 +221,177 @@ cat >"$cfg" <<-'SHCL'
 	cursor.animation: none
 SHCL
 
-run_dir="/tmp/cicd-gui-headless-${USER}"
-auth="${run_dir}/Xauthority-${display#:}"
+## ${USER} is unset in a cron or ssh context, which `set -u` turns into a
+## "scroll regression" that is nothing of the sort.
+runDir="/tmp/cicd-gui-headless-${USER:-$(id -un)}"
+auth="${runDir}/Xauthority-${display#:}"
 
-## Bring up the private display (with a WM - winit needs one on bare Xvfb to get
-## the events that drive rendering). Only stop it on exit if we started it. The
-## Wayland path needs no persistent display - each scene runs its own cage kiosk.
-started_headless=0
-if ! ((wayland)) && "$headless" status 2>/dev/null | grep -q 'no Xvfb'; then
-	if "$headless" start --wm >/dev/null 2>&1; then started_headless=1
+## The private display gets a window manager, since winit on bare Xvfb doesn't get
+## the events that drive rendering without one. It's stopped on exit only if this
+## run started it. Wayland doesn't need a lasting display, since each scene runs
+## its own cage kiosk.
+startedHeadless=0
+if ! ((wayland)) && [[ "$("${headless}" status 2>/dev/null || true)" == *"no Xvfb"* ]]; then
+	if "${headless}" start --wm >/dev/null 2>&1; then startedHeadless=1
 	else
-		((strict)) && fDie "headless display failed to start"
-		fEcho "WARNING: skipped: headless display failed to start"; exit 0
+		((strict)) && { fSceneLines FAIL "headless display failed to start"; fDie "headless display failed to start"; }
+		fSceneLines SKIP "headless display failed to start"; exit 3
 	fi
 fi
 
-cleanup(){
+fCleanup(){
+	local -r rc=$?
 	if ((keep)); then
 		fEcho_Clean "kept: traces in ${work}  (display left up)"
+		## The traces are inside the run folder, so it stays too.
+		fTestDir_End 1
 	else
-		((started_headless)) && "$headless" stop >/dev/null 2>&1 || true
-		rm -rf "$work" 2>/dev/null || true
+		((startedHeadless)) && "${headless}" stop >/dev/null 2>&1 || true
+		fTestDir_Rm "${work}" || true
+		fTestDir_End "${rc}"
 	fi
 }
-trap cleanup EXIT
+trap fCleanup EXIT
 
-## Kill a PID only if it is still the binary we launched (PID + exe path), never by
-## name - the repo path contains "silkterm" and a dogfood copy may be running.
-kill_ours(){
-	local pid="$1" want; want="$(realpath -e "$2" 2>/dev/null || true)"
+## Kill a PID only if it's still the binary we launched (PID + exe path), never by
+## name, since the repo path contains "silkterm" and a dogfood copy may be running.
+fKillOurs(){
+	local pid="${1}" want; want="$(realpath -e "${2}" 2>/dev/null || true)"
 	local exe; exe="$(realpath -e "/proc/${pid}/exe" 2>/dev/null || true)"
-	if [[ -n "$want" && "$exe" == "$want" ]]; then
-		kill "$pid" 2>/dev/null || true
-		local i; for i in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
-		kill -9 "$pid" 2>/dev/null || true
+	if [[ -n "${want}" && "${exe}" == "${want}" ]]; then
+		kill "${pid}" 2>/dev/null || true
+		local _; for _ in {1..20}; do kill -0 "${pid}" 2>/dev/null || break; sleep 0.1; done
+		kill -9 "${pid}" 2>/dev/null || true
 	fi
 }
 
-## Spawn SilkTerm for one scene, backgrounded; log -> $2, trace -> $3. Sets $spawned_pid.
-## X11: straight onto $display. Wayland: as the single client of a headless cage kiosk
-## (software pixman compositor + software Vulkan), DISPLAY unset so winit can only pick
-## the Wayland backend. cage inherits the child's stderr, so the same SILK_SCROLLDBG
-## trace comes through either way (cage's own stderr lines don't match the trace regex).
-spawn_silk(){
-	local shellcmd="$1" logf="$2" tracef="$3"
+## Starts SilkTerm for one scene in the background; log -> $2, trace -> $3. Sets
+## $spawnedPid. Under Wayland it's the only client of a headless cage kiosk, with
+## DISPLAY unset so winit can only pick Wayland. The child writes to cage's stderr, so
+## the trace comes through either way, and cage's own lines don't match the trace regex.
+## A scene can read its own trace, and leaves a note beside it when it gave up waiting
+## on something there.
+fSpawnSilk(){
+	local shellcmd="${1}" logf="${2}" tracef="${3}"
+	export SILK_SCENE_TRACE="${tracef}" SILK_SCENE_NOTE="${tracef%.trace}.note"
 	if ((wayland)); then
 		WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=1 \
 		XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
-		SILK_SCROLLDBG=1 SILK_SCENE_SETTLE="$settle" SILK_SCENE_STEP="$step" \
+		SILK_SCROLLDBG=1 SILK_SCENE_SETTLE="${settle}" SILK_SCENE_STEP="${step}" \
 		LIBGL_ALWAYS_SOFTWARE=1 VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json SHELL=/bin/dash \
 			cage -- /bin/dash -c 'unset DISPLAY; exec "$0" --config "$1" --shell "$2"' \
-				"$bin" "$cfg" "$shellcmd" >"$logf" 2>"$tracef" &
+				"${bin}" "${cfg}" "${shellcmd}" >"${logf}" 2>"${tracef}" &
 	else
-		SILK_SCROLLDBG=1 SILK_SCENE_SETTLE="$settle" SILK_SCENE_STEP="$step" \
-			DISPLAY="$display" XAUTHORITY="$auth" LIBGL_ALWAYS_SOFTWARE=1 SHELL=/bin/dash \
-			"$bin" --config "$cfg" --shell "$shellcmd" >"$logf" 2>"$tracef" &
+		SILK_SCROLLDBG=1 SILK_SCENE_SETTLE="${settle}" SILK_SCENE_STEP="${step}" \
+			DISPLAY="${display}" XAUTHORITY="${auth}" LIBGL_ALWAYS_SOFTWARE=1 SHELL=/bin/dash \
+			"${bin}" --config "${cfg}" --shell "${shellcmd}" >"${logf}" 2>"${tracef}" &
 	fi
-	spawned_pid=$!
+	spawnedPid=$!
 }
 
-## Stop what spawn_silk started. X11: our SilkTerm PID (exe-path guarded). Wayland: the
-## cage kiosk we launched (exact captured PID, unambiguously ours); killing it takes the
-## SilkTerm child down with it.
-stop_silk(){
-	local pid="$1"
+## Stop what fSpawnSilk started. Under X11 that's our SilkTerm PID, checked by exe path.
+## Under Wayland it's the cage kiosk we launched, and killing it takes SilkTerm with it.
+fStopSilk(){
+	local pid="${1}"
 	if ((wayland)); then
-		kill "$pid" 2>/dev/null || true
-		local i; for i in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
-		kill -9 "$pid" 2>/dev/null || true
+		kill "${pid}" 2>/dev/null || true
+		local _; for _ in {1..20}; do kill -0 "${pid}" 2>/dev/null || break; sleep 0.1; done
+		kill -9 "${pid}" 2>/dev/null || true
 	else
-		kill_ours "$pid" "$bin"
+		fKillOurs "${pid}" "${bin}"
 	fi
 }
 
-pass=0; fail=0; miss=0; spawned_pid=0
+pass=0; fail=0; miss=0; spawnedPid=0
 
-## Run one deterministic scene and judge its trace. shape|mode|expect_st.
-run_scene(){
-	local label="$1" shape="$2" mode="$3" est="$4"
+## Run one deterministic scene and judge its trace, with its one result line.
+## fRunScene <id> <label> <shape> <mode> <expect_st> [expect_sb]
+fRunScene(){
+	local id="${1}" label="${2}" shape="${3}" mode="${4}" est="${5}" esb="${6:--1}"
+	[[ -z "${only}" || "${only}" == "${label}" ]] || return 0
 	local trace="${work}/${label}.trace"
-	spawn_silk "/bin/dash ${meDir}/scenes/scene.bash ${shape}" "${work}/${label}.log" "$trace"
-	local pid=$spawned_pid
+	## a scene with a script of its own runs that; scene.bash has no case for it
+	local script="${meDir}/scenes/${shape}.bash"
+	[[ -f "${script}" ]] || script="${meDir}/scenes/scene.bash"
+	fSpawnSilk "/bin/dash ${script} ${shape}" "${work}/${label}.log" "${trace}"
+	local pid=${spawnedPid}
 
-	## GL warmup under llvmpipe swings widely with machine load (cicd runs this while
-	## the release + cross builds may still be busy), so a fixed sleep can expire before
-	## a single frame renders = a false "0 trace frames" skip. Poll until the scene is
-	## actually producing frames, then stop; bounded by a generous ceiling so a truly
-	## dead binary still exits. The scene self-scrolls forever, so more wall time just
-	## means more frames - never a hang.
-	local want=60 ceiling=$((settle + capture + 60)) frames=0
+	## GL warmup under llvmpipe varies a lot with load, since cicd may run this while
+	## the release and cross builds are still going. A fixed sleep could end before the
+	## first frame and give a false "0 trace frames" skip. So this polls until the scene
+	## draws frames, with a ceiling so a dead binary still exits. The scene scrolls
+	## itself forever, so more time only means more frames, and it can't hang.
+	local want=60 ceiling=$((settle + capture + 60)) frames=0 doneAt=0 lead=0 marked=0
 	SECONDS=0
 	while ((SECONDS < ceiling)); do
-		kill -0 "$pid" 2>/dev/null || break
-		frames=$(grep -c SCROLLDBG "$trace" 2>/dev/null || true); frames=${frames:-0}
-		((frames >= want)) && break
+		kill -0 "${pid}" 2>/dev/null || break
+		## The chrome scene prints its history and then sleeps before the loop
+		## under test starts. A renderer quick off the mark traces that burst
+		## easing, with no block on screen to hold, and it used to fill most of
+		## the frames judged. Count only what comes after, taken right before the
+		## loop can have started.
+		if [[ "${mode}" == pinned ]] && ((! marked && SECONDS >= settle - 1)); then
+			lead=$(fTraceFrames "${trace}"); marked=1
+		fi
+		if [[ "${mode}" == instant ]]; then
+			## Frames at rest print nothing, so wait for the closing alt-screen
+			## scroll rather than a frame count.
+			((doneAt == 0)) && grep -qE 'sh=-([5-9]|[1-9][0-9]+) .*alt=1' "${trace}" 2>/dev/null && doneAt=$((SECONDS + 2))
+			((doneAt && SECONDS >= doneAt)) && break
+		elif [[ "${mode}" == wipe ]]; then
+			((doneAt == 0)) && grep -qE 'sh=5 .*alt=1' "${trace}" 2>/dev/null && doneAt=$((SECONDS + 2))
+			((doneAt && SECONDS >= doneAt)) && break
+		elif [[ "${mode}" == still ]]; then
+			## A still screen builds only when something changes, so it may never
+			## reach the frame count. Stop a few seconds after the swap instead,
+			## which is past any leftover ease.
+			((doneAt == 0)) && grep -q 'alt=1' "${trace}" 2>/dev/null && doneAt=$((SECONDS + 3))
+			((doneAt && SECONDS >= doneAt)) && break
+		else
+			frames=$(fTraceFrames "${trace}")
+			frames=$((frames - lead))
+			[[ "${mode}" != pinned ]] || ((marked)) || frames=0
+			((frames >= want)) && break
+		fi
 		sleep 0.5
 	done
-	stop_silk "$pid"
-	wait "$pid" 2>/dev/null || true
+	fStopSilk "${pid}"
+	wait "${pid}" 2>/dev/null || true
 
-	((verbose)) && fEcho_Clean "  ${label}: $(grep -c SCROLLDBG "$trace" 2>/dev/null || echo 0) trace frames"
-	local rc=0
-	python3 "${meDir}/analyze.py" --mode "$mode" --expect-st "$est" --label "$label" <"$trace" \
-		| sed 's/^/  /' || rc=$?
-	case "$rc" in
-		0) pass=$((pass + 1)) ;;
-		1) fail=$((fail + 1)) ;;
-		*) miss=$((miss + 1)) ;;
+	((verbose)) && fEcho_Clean "  ${label}: $(fTraceFrames "${trace}") trace frames"
+	local rc=0 said
+	said="$(python3 "${meDir}/analyze.py" --mode "${mode}" --expect-st "${est}" --expect-sb "${esb}" --label "${label}" --skip-frames "${lead}" --note "${work}/${label}.note" <"${trace}")" || rc=$?
+	## analyze.py says "[ PASS <label>: <what it found> ]"; the line keeps the what.
+	said="${said##*$'\n'}"; said="${said#\[ * "${label}": }"; said="${said% \]}"
+	case "${rc}" in
+		0) pass=$((pass + 1)); fSceneLine PASS "${id}" "${label}" "${said}" ;;
+		1) fail=$((fail + 1)); fSceneLine FAIL "${id}" "${label}" "${said}" ;;
+		*) miss=$((miss + 1)); fSceneLine SKIP "${id}" "${label}" "${said:-analyze.py exited ${rc}}" ;;
 	esac
 }
 
 fSection "Deterministic scenes"
-run_scene less   less   slide 0
-run_scene vim    vim    slide 0
-run_scene nano   nano   slide 1
-run_scene muffer muffer slide 2
+for row in "${scenes[@]}"; do fRunScene ${row}; done
 
-## Best-effort real-app smoke (never fails the suite): prove the real apps render
-## under SilkTerm (enter alt-screen, no hang) - regresses e.g. the cosmic-text hang
-## and the alt-screen enter/exit hard-cut. No key injection, so it does not assert
-## scroll correctness - that is what the deterministic scenes above are for.
-real_smoke(){
-	local app="$1" exe; exe="$(command -v "$app" 2>/dev/null || true)"
-	[[ -n "$exe" ]] || { fEcho_Clean "  ${app}: not installed, skipped"; return 0; }
+## A quick run of the real programs that never fails the suite. It checks that they
+## draw under SilkTerm, go to the alt screen, and don't hang, which caught the
+## cosmic-text hang and the hard cut on entering and leaving the alt screen. There's
+## no key injection, so it doesn't check scrolling. The scenes above do that.
+fRealSmoke(){
+	local app="${1}" exe; exe="$(command -v "${app}" 2>/dev/null || true)"
+	[[ -n "${exe}" ]] || { fEcho_Clean "  ${app}: not installed, skipped"; return 0; }
 	local file="${work}/${app}.txt" launch="${work}/${app}.launch.bash" trace="${work}/${app}.real.trace"
-	seq 1 400 | sed 's/^/line /' >"$file"
-	printf '#!/bin/dash\nexec %s %s\n' "$exe" "$file" >"$launch"
-	spawn_silk "/bin/dash ${launch}" "${work}/${app}.real.log" "$trace"
-	local pid=$spawned_pid
+	seq 1 400 | sed 's/^/line /' >"${file}"
+	printf '#!/bin/dash\nexec %s %s\n' "${exe}" "${file}" >"${launch}"
+	fSpawnSilk "/bin/dash ${launch}" "${work}/${app}.real.log" "${trace}"
+	local pid=${spawnedPid}
 	sleep "$((settle + 4))"
-	local alive=0; kill -0 "$pid" 2>/dev/null && alive=1
-	stop_silk "$pid"
-	wait "$pid" 2>/dev/null || true
-	## An idle real app only builds on dirty frames, so a handful is expected; the
-	## signal is that it stayed alive (no hang) and rendered the alt screen (frames>0).
-	local n; n="$(grep -c SCROLLDBG "$trace" 2>/dev/null || echo 0)"
+	local alive=0; kill -0 "${pid}" 2>/dev/null && alive=1
+	fStopSilk "${pid}"
+	wait "${pid}" 2>/dev/null || true
+	## An idle program only builds a frame when something changed, so only a few are
+	## expected. It passes if it stayed up and drew the alt screen at least once.
+	local n; n="$(fTraceFrames "${trace}")"
 	if ((alive)) && ((n >= 1)); then
 		fEcho_Clean "  ${app}: OK (alive, entered alt-screen: ${n} frame(s))"
 	else
@@ -260,27 +399,26 @@ real_smoke(){
 	fi
 }
 
-if ((do_real)); then
+if ((doReal)); then
 	fSection "Real-app smoke (best effort)"
-	real_smoke less
-	real_smoke nano
-	real_smoke vim.tiny
+	fRealSmoke less
+	fRealSmoke nano
+	fRealSmoke vim.tiny
 fi
 
 fSection "Summary"
 fEcho_Clean "pass ${pass}   fail ${fail}   skip ${miss}"
-if ((fail)); then
-	fEcho "FAILED: ${fail} scroll regression(s) measured"
-	exit 1
-fi
-if ((miss)) && ((strict)); then
-	fEcho "FAILED: ${miss} scenario(s) skipped under --strict"
-	exit 1
-fi
-fEcho "OK: no scroll regressions"
-exit 0
+rc=0; verdict="$(fScrollVerdict "${pass}" "${fail}" "${miss}" "${strict}")" || rc=$?
+fEcho "${verdict}"
+exit "${rc}"
 
 
 ##	History:
 ##		- 20260706 JC: Created.
 ##		- 20260718 JC: --wayland pass (cage kiosk) alongside the X11 Xvfb pass.
+##		- 20260918 JC: aptbar scene, --only.
+##		- 20261013 JC: clear scene. A scene can read its trace and leave a note.
+##		- 20261014 JC: prompt scene.
+##		- 20261016 JC: tmuxclear scene.
+##		- 20261028: The rule is 79 wide, as cicd.bash has it.
+##		- 20261028: Each scene has a test ID and one PASS, FAIL, or SKIP line. --list.

@@ -3,29 +3,30 @@
 <!-- markdownlint-disable MD033 -- No inline html -->
 <!-- markdownlint-disable MD055 -- Table pipe style [Expected: leading_and_trailing; Actual: leading_only; Missing trailing pipe] -->
 <!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
+
 # Development prerequisites
 
-What to install before you can develop and build SilkTerm, per OS. Once these are in place, [build.md](build.md) has the actual build commands (native + cross), and the CI/CD pipelines (`cicd/cicd.bash` on Linux, `cicd/cicd-win.ps1` on Windows) drive the full lint/test/build/package flow.
+What to install before you can develop and build SilkTerm, per OS. Once these are in place, [build.md](build.md) has the native and cross build commands, and the CI/CD pipelines (`cicd/cicd.bash` on Linux, `cicd/cicd-win.ps1` on Windows) run the full lint, test, build, and package flow.
 
-SilkTerm is a Rust project (edition 2024, rustc >= 1.89). The toolchain channel is pinned in `rust-toolchain.toml` (1.96.0 + rustfmt/clippy + the cross targets); `rustup`-routed cargo picks it up automatically on first build.
+SilkTerm is a Rust project, edition 2024, built and tested on rustc 1.96. The toolchain channel is pinned in `rust-toolchain.toml`, with 1.96.0, rustfmt, clippy, and the cross targets. Cargo run through `rustup` picks it up on the first build.
 
 ## Windows (native)
 
-The Windows box builds and dogfoods natively. Ship target is the **gnu** ABI (self-contained, matches the Linux cross-build); **msvc** is handy for local debugging. The pipeline builds both, so set up both.
+The Windows box builds and dogfoods natively. The release target is the **gnu** ABI, which is self-contained and matches the Linux cross-build. **msvc** is handy for local debugging. The pipeline builds both, so set up both.
 
 ### PowerShell 7
 
-The Windows pipeline (`cicd/cicd-win.ps1`) and the dogfood launcher (`n8runterm.ps1`) require **PowerShell 7+** (`pwsh`), not Windows PowerShell 5.1.
+The Windows pipeline (`cicd/cicd-win.ps1`) and the dogfood launcher (`n8runterm.ps1`, run through the `runterm` wrappers) require **PowerShell 7+** (`pwsh`) rather than Windows PowerShell 5.1. The launcher is one PowerShell script on every platform now, so Linux and macOS need `pwsh` too.
 
-```powershell
+~~~powershell
 choco install powershell-core
-```
+~~~
 
-Scripts here are unsigned local files, so clear the execution policy once (CurrentUser scope, no admin; PS7 and 5.1 keep separate policies - set it from `pwsh`):
+Scripts here are unsigned local files, so clear the execution policy once, for CurrentUser and without admin. PS7 and 5.1 keep separate policies, so set it from `pwsh`:
 
-```powershell
+~~~powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
+~~~
 
 Or bypass per-run without changing anything: `pwsh -ExecutionPolicy Bypass -File cicd\cicd-win.ps1`.
 
@@ -33,111 +34,111 @@ Or bypass per-run without changing anything: `pwsh -ExecutionPolicy Bypass -File
 
 Install `rustup` with the gnu host and the pinned toolchain (the repo's `rust-toolchain.toml` re-pins it anyway):
 
-```powershell
+~~~powershell
 choco install rustup.install
 rustup toolchain install 1.96.0
 rustup target add x86_64-pc-windows-gnu x86_64-pc-windows-msvc
-```
+~~~
 
-`rustup`'s shims live in `%USERPROFILE%\.cargo\bin` (on PATH after a new shell).
+`rustup`'s shims are in `%USERPROFILE%\.cargo\bin`, which is on PATH once a new shell is opened.
 
 ### mingw-w64 (the gnu linker)
 
 The gnu target links with mingw-w64:
 
-```powershell
+~~~powershell
 choco install mingw
-```
+~~~
 
-- Lands at `C:\ProgramData\mingw64\mingw64\bin` - add it to PATH for a gnu build.
-- Gotcha: `.cargo/config.toml` names `x86_64-w64-mingw32-ar`, but mingw ships only plain `ar`. Copy it once (redo if mingw is reinstalled), or override with `CARGO_TARGET_X86_64_PC_WINDOWS_GNU_AR=ar`:
+- It installs to `C:\ProgramData\mingw64\mingw64\bin`. Add that to PATH for a gnu build.
 
-```powershell
+- Gotcha: `.cargo/config.toml` names `x86_64-w64-mingw32-ar`, but mingw comes with only plain `ar`. Copy it once (redo if mingw is reinstalled), or override with `CARGO_TARGET_X86_64_PC_WINDOWS_GNU_AR=ar`:
+
+~~~powershell
 Copy-Item "C:\ProgramData\mingw64\mingw64\bin\ar.exe" "C:\ProgramData\mingw64\mingw64\bin\x86_64-w64-mingw32-ar.exe"
-```
+~~~
 
 ### Visual Studio Build Tools (the msvc linker)
 
-The msvc target needs the VC++ build tools; rustc finds `link.exe` automatically (no dev prompt):
+The msvc target needs the VC++ build tools. Then rustc finds `link.exe` on its own, without a developer prompt:
 
-```powershell
+~~~powershell
 choco install visualstudio2022-workload-vctools
-```
+~~~
 
-### NSIS (optional - installers)
+### NSIS (optional, for installers)
 
 Only needed if you want the pipeline to build the Windows installer `.exe` (stage 5):
 
-```powershell
+~~~powershell
 choco install nsis
-```
+~~~
 
-`makensis` installs to `C:\Program Files (x86)\NSIS`; the pipeline probes there, so it needs no PATH change.
+`makensis` installs to `C:\Program Files (x86)\NSIS`, and the pipeline looks there, so it doesn't need a PATH change.
 
-### ARM64 (optional - either path yields an ARM64 build)
+### ARM64 (optional)
 
-Skip unless you need Windows-on-ARM binaries. Pick one:
+Skip unless you need Windows-on-ARM binaries.
 
-- **gnullvm via zig** (recommended - self-contained, small footprint; the target is preinstalled):
+**gnullvm via zig**: It's self-contained and small, and the target is preinstalled:
 
-	```powershell
-	choco install zig
-	cargo install cargo-zigbuild --version 0.23.0 --locked
-	```
+~~~powershell
+choco install zig
+cargo install cargo-zigbuild --version 0.23.0 --locked
+~~~
 
-	The Linux box uses zig 0.13; if a newer choco zig errors on a version mismatch, pin `zig --version 0.13.0`.
+The Linux box uses zig 0.16. If a newer choco zig fails on a version mismatch, pin `zig --version 0.16.0`.
 
-- **msvc via the VS ARM64 workload** (larger; links the MSVC runtime):
+There is no msvc ARM64 build. It wouldn't add anything the gnullvm one doesn't have, and the reason to keep an msvc build at all is local debugging, which an x86_64 box can't do to an ARM64 exe.
 
-	```powershell
-	choco install visualstudio2022-workload-vctools --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.ARM64"
-	rustup target add aarch64-pc-windows-msvc
-	```
-
-	If the VC tools are already installed, choco may no-op the add - then use the Visual Studio Installer (Modify -> "MSVC v143 ARM64 build tools") instead.
-
-The pipeline auto-detects each ARM path and warn-skips it when its toolchain is absent, so ARM is never a hard requirement.
+The pipeline detects the ARM path, and skips it with a warning when its toolchain isn't installed, so ARM is never a hard requirement.
 
 ### Build
 
-```powershell
-pwsh cicd\cicd-win.ps1 -Quick       # fmt, build, test, lint, release (msvc + gnu)
-pwsh cicd\cicd-win.ps1              # + ARM64 (if set up), installers, dogfood, publish
-```
+~~~powershell
+pwsh cicd\cicd-win.ps1 -Quick            # fmt, build, test, lint, release (msvc + gnu)
+pwsh cicd\cicd-win.ps1 -BacklogRunQuick  # fmt check, lint, test; cicd.bash's other runs too, as -MergeGate, -Long, -List
+pwsh cicd\cicd-win.ps1                   # + ARM64 (if set up), installers, dogfood, publish
+~~~
 
-Or a bare build - see [build.md](build.md#windows-native-msvc).
+Or do a bare build, as in [build.md](build.md#windows-native-msvc).
 
 ## Linux (native, and cross-build host)
 
-Linux x86_64 is the primary dev target and the host that cross-builds Windows + ARM64.
+Linux x86_64 is the primary dev target and the host that cross-builds Windows and ARM64.
 
 ### Rust + native runtime
 
-```sh
+~~~sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
+~~~
 
-Running needs a Vulkan/GL-capable GPU under X11 or Wayland - on a Debian desktop the usual Mesa/Vulkan packages are already present.
+Running it needs a GPU that supports Vulkan or GL, under X11 or Wayland. On a Debian desktop the usual Mesa and Vulkan packages are already installed.
 
 ### Cross toolchains
 
-- Windows x86_64 (gnu): `sudo apt-get install -y gcc-mingw-w64-x86-64` + `rustup target add x86_64-pc-windows-gnu`.
-- ARM64 (Linux + Windows) via `cargo-zigbuild`: install zig 0.13 + `cargo install cargo-zigbuild`, then `rustup target add aarch64-unknown-linux-gnu aarch64-pc-windows-gnullvm`.
+- Windows x86_64 (gnu): `sudo apt-get install -y gcc-mingw-w64-x86-64`, then `rustup target add x86_64-pc-windows-gnu`.
 
-Full commands in [build.md](build.md).
+- ARM64 (Linux and Windows) via `cargo-zigbuild`: install zig 0.16 and run `cargo install cargo-zigbuild`, then `rustup target add aarch64-unknown-linux-gnu aarch64-pc-windows-gnullvm`.
+
+The full commands are in [build.md](build.md).
 
 ### Pipeline helpers (optional)
 
-For the full `cicd/cicd.bash` run (packages, deps check): `cargo install cargo-deny cargo-deb cargo-generate-rpm cargo-zigbuild` and `makensis` (for the Windows installer). Versions are pinned in `cicd/config.bash` (`TOOL_PINS`).
+For the full `cicd/cicd.bash` run (packages, deps check): `cargo install cargo-deny cargo-deb cargo-generate-rpm cargo-zigbuild` and `makensis` (for the Windows installer). Versions are pinned in `cicd/tool-pins.txt`. The PowerShell lint needs `pwsh` with the PSScriptAnalyzer module.
+
+Or skip all of that. With docker installed, `cicd/cicd.bash` runs those stages in a container and needs nothing else. See [build.md](build.md).
+
+A full run needs docker either way, for the test suite under AddressSanitizer, under ThreadSanitizer with `--long`, and under Miri with `--leakcheck` or `--long`, which run in that image. `--no-asan`, `--no-tsan`, and `--no-miri` skip them.
 
 ## macOS (native)
 
-macOS builds natively on a Mac (there's no Linux->macOS cross set up here - it needs the Apple SDK).
+macOS builds natively on a Mac. There's no Linux->macOS cross build set up here, since it needs the Apple SDK.
 
-```sh
+~~~sh
 xcode-select --install
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 cargo build --release
-```
+~~~
 
-wgpu uses the Metal backend automatically; no extra system packages beyond the Xcode command-line tools.
+wgpu uses the Metal backend on its own, and there aren't any system packages to install beyond the Xcode command-line tools.

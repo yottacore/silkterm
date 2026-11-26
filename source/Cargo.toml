@@ -1,11 +1,11 @@
 [package]
 name = "silkterm"
-version = "1.0.0-beta3"
+version = "1.0.0-beta4"
 edition = "2024"
-rust-version = "1.89"
+rust-version = "1.96"
 description = "Smooth-scrolling GUI terminal emulator with split panes"
 license = "GPL-2.0-or-later"
-repository = "https://github.com/jim-collier/silkterm"
+repository = "https://github.com/yottacore/silkterm"
 
 [[bin]]
 name = "silkterm"
@@ -36,6 +36,13 @@ priority = "optional"
 assets = [
 	["target/release/silkterm", "usr/bin/", "755"],
 	["../cicd/packaging/linux/silkterm.desktop", "usr/share/applications/", "644"],
+	["../cicd/packaging/linux/icons/16x16/silkterm.png", "usr/share/icons/hicolor/16x16/apps/", "644"],
+	["../cicd/packaging/linux/icons/24x24/silkterm.png", "usr/share/icons/hicolor/24x24/apps/", "644"],
+	["../cicd/packaging/linux/icons/32x32/silkterm.png", "usr/share/icons/hicolor/32x32/apps/", "644"],
+	["../cicd/packaging/linux/icons/48x48/silkterm.png", "usr/share/icons/hicolor/48x48/apps/", "644"],
+	["../cicd/packaging/linux/icons/64x64/silkterm.png", "usr/share/icons/hicolor/64x64/apps/", "644"],
+	["../cicd/packaging/linux/icons/128x128/silkterm.png", "usr/share/icons/hicolor/128x128/apps/", "644"],
+	["../cicd/packaging/linux/icons/256x256/silkterm.png", "usr/share/icons/hicolor/256x256/apps/", "644"],
 ]
 
 [package.metadata.generate-rpm]
@@ -43,6 +50,13 @@ summary = "Smooth-scrolling GUI terminal emulator with split panes"
 assets = [
 	{ source = "target/release/silkterm", dest = "/usr/bin/silkterm", mode = "755" },
 	{ source = "../cicd/packaging/linux/silkterm.desktop", dest = "/usr/share/applications/silkterm.desktop", mode = "644" },
+	{ source = "../cicd/packaging/linux/icons/16x16/silkterm.png", dest = "/usr/share/icons/hicolor/16x16/apps/silkterm.png", mode = "644" },
+	{ source = "../cicd/packaging/linux/icons/24x24/silkterm.png", dest = "/usr/share/icons/hicolor/24x24/apps/silkterm.png", mode = "644" },
+	{ source = "../cicd/packaging/linux/icons/32x32/silkterm.png", dest = "/usr/share/icons/hicolor/32x32/apps/silkterm.png", mode = "644" },
+	{ source = "../cicd/packaging/linux/icons/48x48/silkterm.png", dest = "/usr/share/icons/hicolor/48x48/apps/silkterm.png", mode = "644" },
+	{ source = "../cicd/packaging/linux/icons/64x64/silkterm.png", dest = "/usr/share/icons/hicolor/64x64/apps/silkterm.png", mode = "644" },
+	{ source = "../cicd/packaging/linux/icons/128x128/silkterm.png", dest = "/usr/share/icons/hicolor/128x128/apps/silkterm.png", mode = "644" },
+	{ source = "../cicd/packaging/linux/icons/256x256/silkterm.png", dest = "/usr/share/icons/hicolor/256x256/apps/silkterm.png", mode = "644" },
 ]
 
 [dependencies]
@@ -68,7 +82,8 @@ anyhow = "1"
 # Config format. Zero dependencies, and its parser is forgiving by design: one
 # bad line yields a diagnostic instead of sinking the whole file, so the config
 # layer needs no hand-rolled error recovery of its own.
-shcl = "1.2.0"
+shcl = "3.0.0-beta1"
+knobs = { path = "../knobs" }
 copypasta = "0.10"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 # X11 per-pixel transparency: wgpu's GLES surface can't bind the window's ARGB
@@ -87,14 +102,57 @@ pprof = { version = "0.14", features = ["flamegraph"], optional = true }
 
 [features]
 profiling = ["dep:pprof"]
+# The heap-growth test (heap_growth.rs) with dhat as the allocator. Only test
+# builds read it, so a release build with it is the same binary. The leak
+# checks in `cicd.bash` turn it on.
+dhat-heap = []
+
+# Test builds only. dhat counts the heap for the heap-growth test.
+[dev-dependencies]
+dhat = "=0.3.3"
 
 [lints]
 workspace = true
 
 # X11: set _KDE_NET_WM_BLUR_BEHIND_REGION so a KWin/picom compositor blurs the
-# desktop behind the translucent window (transparent_background_blur).
+# desktop behind the translucent window (transparent_background_blur), and read
+# a monitor's size in mm through RandR (monitor.rs), and ask MIT-SHM whether the
+# server makes shared pixmaps (gfx.rs). winit already turns randr on.
 [target.'cfg(target_os = "linux")'.dependencies]
-x11rb = "0.13"
+x11rb = { version = "0.13", features = ["randr", "shm"] }
+# XErrorEvent, for the GLX error hook in gfx.rs. Already in the tree through winit.
+x11-dl = "2.21"
+# The outputs a Wayland window is on and their sizes in the layout, which winit
+# keeps in its toolkit's state and doesn't hand out (monitor.rs), and the
+# dialog's parent, which winit can't set there (dialog.rs). These are the
+# versions winit links; a test fails when its toolkit moves on without us.
+smithay-client-toolkit = { version = "0.19", default-features = false }
+wayland-backend = { version = "0.3", features = ["client_system"] }
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+
+# macOS: the system font sizes (sysfont.rs), the part of the screen a window
+# can use, below the menu bar and clear of the Dock (dialog.rs), and the menu
+# bar itself (macmenu.rs), and the alert when no device can be made
+# (app/dialogs.rs). Already in the tree through wgpu and glutin.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSGeometry", "NSString"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "objc2-core-foundation",
+    "NSAlert",
+    "NSApplication",
+    "NSCell",
+    "NSEvent",
+    "NSFont",
+    "NSMenu",
+    "NSMenuItem",
+    "NSResponder",
+    "NSScreen",
+    "NSView",
+    "NSWindow",
+] }
 
 # Unix: tcgetpgrp() on the PTY master to read the foreground program for tab titles.
 [target.'cfg(unix)'.dependencies]
@@ -107,11 +165,18 @@ libc = "0.2"
 # main.rs), join the launching console so the CLI-only flags can print, ask
 # whether standard input is a console at all (config::launched_from_shell), and
 # walk the process table for the shell's live child (copy-output's stand-in for a
-# foreground process group - see term.rs at_shell_prompt).
+# foreground process group - see term.rs at_shell_prompt), ask whether a
+# settings file's name is only waiting for its delete (config.rs delete_pending),
+# read a monitor's EDID and the mouse buttons (monitor.rs), count a
+# thread's CPU cycles for a timing test (pane.rs), and keep DLLs loaded by
+# name off PATH and the working folder (dllsearch.rs).
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
+    "Wdk_Foundation",
+    "Wdk_Storage_FileSystem",
     "Wdk_System_Threading",
     "Win32_Foundation",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_Storage_FileSystem",
@@ -119,8 +184,18 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Diagnostics_Debug",
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Environment",
+    "Win32_System_IO",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Pipes",
     "Win32_System_Registry",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_SystemInformation",
     "Win32_System_Threading",
+    "Win32_System_Time",
+    "Win32_System_WindowsProgramming",
+    "Win32_UI_Accessibility",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
 

@@ -1,0 +1,36 @@
+## A SilkTerm config in this release's spellings: quoted text, Windows
+## paths, a comma list, a monitor key led by a digit, a date and escapes.
+font:
+	family: "Iosevka Term"  ## a note after a value
+	size: 13.5
+window:
+	columns: 120
+	monitors:
+		1920x1080_100pct:
+			columns: 100
+			rows: 30
+wallpaper:
+	image: "C:\\Users\\me\\Pictures\\sea.jpg"
+shell:
+	startup_directory: \\\\server\\share\\home
+themes:
+	mine:
+		name: "Mine # 2"
+		dark:
+			background: "#102030"
+			ansi: "#000000", "#111111", "#222222", "#333333", "#444444", "#555555", "#666666", "#777777", "#888888", "#999999", "#aaaaaa", "#bbbbbb", "#cccccc", "#dddddd", "#eeeeee", "#ffffff"
+shells:
+	zsh:
+		title: "Zsh, login"
+		command: "/usr/bin/zsh -l"
+		active: false
+		last_seen: 2026-08-20
+		comment: "it's a \"login\" shell\tz"
+
+#
+# This config file format is SHCL.
+# "Simple Hierarchical Config Language"
+#    Home     https://github.com/jim-collier/shcl
+#    Syntax   https://github.com/jim-collier/shcl/blob/main/project/spec.md
+#    Legal    SHCL is Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]. License: MIT. No warranty.
+#

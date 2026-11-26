@@ -1,6 +1,6 @@
 # Shows a "Sponsor" button on the repo. Fill in each platform you set up;
 # leave the rest commented. github must be a GitHub Sponsors profile that exists.
 github: [jim-collier]
-# ko_fi: your-handle
+ko_fi: jimcollier
 # liberapay: your-handle
 custom: ["https://github.com/yottacore/silkterm/blob/HEAD/DONATE.md"]

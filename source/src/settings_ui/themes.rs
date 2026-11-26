@@ -1,0 +1,691 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
+use super::{EditState, PROMPT_ROW, Prompt, PromptFocus, PromptJob, SettingsDialog};
+use crate::config;
+use crate::fields;
+use crate::ui_spec::Key;
+
+/// The theme row's 4 buttons, in the order they are declared.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum ThemeBtn {
+	Save,
+	SaveAs,
+	Rename,
+	Delete,
+}
+
+impl ThemeBtn {
+	pub(super) fn of(part: u16) -> ThemeBtn {
+		match part {
+			0 => ThemeBtn::Save,
+			1 => ThemeBtn::SaveAs,
+			2 => ThemeBtn::Rename,
+			_ => ThemeBtn::Delete,
+		}
+	}
+}
+
+impl SettingsDialog {
+	// The saved theme the `theme` setting currently names, if it names one.
+	fn user_theme_index(&self) -> Option<usize> {
+		let name = self.edited.theme.trim();
+		self.edited.user_themes.iter().position(|t| t.name.eq_ignore_ascii_case(name))
+	}
+
+	/// A color changed under the theme picked: the dropdown says `Name *`, and the
+	/// changes are saved apart from the theme, so this survives a restart. A font that
+	/// differs from a saved theme's counts too, while fonts follow themes.
+	pub(super) fn theme_dirty(&self) -> bool {
+		!fields::changed(&self.edited, Key::Theme).is_empty()
+	}
+
+	// The dialog row key for palette color `i` (same order as PALETTE_KEYS).
+	fn palette_key(i: usize) -> Key {
+		match i {
+			0 => Key::ColBg,
+			1 => Key::ColFg,
+			2 => Key::ColCursor,
+			3 => Key::ColHighlight,
+			4 => Key::ColFocus,
+			5 => Key::ColMenuBg,
+			6 => Key::ColMenuFg,
+			7 => Key::ColDialogBg,
+			8 => Key::ColDialogFg,
+			_ => Key::ColGutter,
+		}
+	}
+
+	pub(super) fn theme_btn_enabled(&self, which: ThemeBtn) -> bool {
+		match which {
+			ThemeBtn::Save => self.theme_dirty(),
+			ThemeBtn::SaveAs => true,
+			// a built-in isn't the user's to rename or throw away; saving over its
+			// name first makes a copy that is
+			ThemeBtn::Rename | ThemeBtn::Delete => self.user_theme_index().is_some(),
+		}
+	}
+
+	// The wallpaper's text colors follow the picture, so a theme keeps the
+	// ones under them.
+	fn col_to_save(&self, key: Key) -> [u8; 3] {
+		fields::without_switch(&self.edited, key).and_then(|v| config::parse_hex(v.as_text())).unwrap_or_else(|| self.get_col(key))
+	}
+
+	// Pick a theme by name, as the dropdown would. Its "*" changes go.
+	fn pick_theme(&mut self, name: &str) {
+		let v = knobs::Value::Text(name.to_string());
+		fields::set(&mut self.edited, Key::Theme, &v, self.monitor.as_deref());
+	}
+
+	/// Store the colors and the font on screen under `name`, replacing a saved
+	/// theme of that name or adding one. The variant the dialog isn't showing
+	/// is taken from whatever `name` resolves to today, so a theme is
+	/// always complete. The font is kept whether or not fonts follow themes.
+	pub(super) fn save_theme_as(&mut self, name: &str) {
+		let name = name.trim().to_string();
+		let dark_now = self.edited.theme_mode.is_dark(config::is_dark());
+		let other = crate::theme::resolve_in(&self.edited.user_themes, &self.edited.theme, if dark_now { crate::theme::Mode::Light } else { crate::theme::Mode::Dark }, config::is_dark());
+		let mut shown = other; // start from a full palette, then overwrite with the edits
+		for i in 0..crate::theme::PALETTE_KEYS.len() {
+			shown.set(i, self.col_to_save(Self::palette_key(i)));
+		}
+		shown.ansi = self.edited.ansi;
+		let (dark, light) = if dark_now { (shown, other) } else { (other, shown) };
+		let existing = self.edited.user_themes.iter().position(|t| t.name.eq_ignore_ascii_case(&name));
+		let slug = match existing {
+			Some(theme_index) => self.edited.user_themes[theme_index].slug.clone(),
+			None => self.free_slug(&name),
+		};
+		let font = crate::theme::ThemeFont { family: Some(self.edited.font_family.clone()), size: Some(self.edited.font_size), line_height_scale: Some(self.edited.line_height_scale) };
+		let theme = crate::theme::UserTheme { slug, name: name.clone(), dark, light, font };
+		match existing {
+			Some(k) => self.edited.user_themes[k] = theme,
+			None => self.edited.user_themes.push(theme),
+		}
+		// the changes are the theme's own colors now
+		self.pick_theme(&name);
+	}
+
+	// A config path segment for a new theme: the name reduced to something a path
+	// can use, then made unique among the themes loaded. The save makes it unique
+	// in the file too. The slug never changes afterwards, so a rename rewrites one
+	// line rather than moving a subtree.
+	fn free_slug(&self, name: &str) -> String {
+		let base: String = name.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '_' }).collect();
+		let trimmed = base.trim_matches('_');
+		let base = if trimmed.is_empty() { "theme" } else { trimmed };
+		crate::theme::free_slug(base, |s| self.edited.user_themes.iter().any(|t| t.slug == s))
+	}
+
+	/// Why OK can't accept the typed name, if it can't.
+	pub(super) fn name_problem(&self, which: ThemeBtn, name: &str) -> Option<String> {
+		let name = name.trim();
+		if name.is_empty() {
+			return Some("Enter a name.".into());
+		}
+		// A theme isn't in its own way. Rename opens on the theme's current name,
+		// so OK with nothing changed has to go through, and so does a change of
+		// case alone, since that's the only way to make one.
+		let mine = (which == ThemeBtn::Rename).then(|| self.user_theme_index()).flatten();
+		let clashes = self.edited.user_themes.iter().enumerate().any(|(k, t)| Some(k) != mine && t.name.eq_ignore_ascii_case(name));
+		// Save as over a saved theme's name replaces it, which is a fair reading of
+		// the button; a rename onto another theme's name would merge two into one.
+		if which == ThemeBtn::Rename && clashes {
+			return Some("That name is already taken.".into());
+		}
+		None
+	}
+
+	/// Press a theme button: Save acts at once, the other 3 ask first.
+	pub(super) fn theme_action(&mut self, which: ThemeBtn) {
+		if !self.theme_btn_enabled(which) {
+			return;
+		}
+		self.commit_edit();
+		match which {
+			ThemeBtn::Save => {
+				let name = self.edited.theme.clone();
+				self.save_theme_as(&name);
+			}
+			ThemeBtn::SaveAs | ThemeBtn::Rename => {
+				let (title, seed) = if which == ThemeBtn::SaveAs { ("Enter a name for the new theme".to_string(), String::new()) } else { ("Enter a new name for this theme".to_string(), self.edited.theme.clone()) };
+				// a rename opens on the existing name, selected, the way a rename
+				// field does everywhere else
+				let mut edit = EditState::new(PROMPT_ROW, seed);
+				edit.sel = (!edit.buf.is_empty()).then_some(0);
+				self.edit = Some(edit);
+				self.prompt = Some(Prompt { job: PromptJob::Theme(which), title, focus: PromptFocus::Field, warn: None });
+			}
+			ThemeBtn::Delete => {
+				self.prompt = Some(Prompt { job: PromptJob::Theme(which), title: format!("Really delete theme \"{}\"?", self.edited.theme), focus: PromptFocus::Ok, warn: None });
+			}
+		}
+	}
+
+	pub(super) fn rename_theme(&mut self, name: &str) {
+		let name = name.trim().to_string();
+		if let Some(theme_index) = self.user_theme_index() {
+			let old = std::mem::replace(&mut self.edited.user_themes[theme_index].name, name.clone());
+			// still the same theme, so its "*" changes go with it
+			fields::rename_preset(&mut self.edited, Key::Theme, &old, &name);
+		}
+	}
+
+	/// Drop the saved theme. A built-in of the same name comes back out from behind
+	/// it; otherwise the selection falls to the first theme left.
+	pub(super) fn delete_theme(&mut self) {
+		let Some(theme_index) = self.user_theme_index() else {
+			return;
+		};
+		let name = self.edited.user_themes.remove(theme_index).name;
+		let next = if crate::theme::is_builtin(&name) { name } else { crate::theme::all_names(&self.edited.user_themes).into_iter().next().unwrap_or(name) };
+		self.pick_theme(&next);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::super::SettingsDialog;
+	use super::super::tests::{mk_dialog, on_theme};
+	use crate::config;
+	use crate::ui_spec::Key;
+
+	fn theme_row(d: &SettingsDialog) -> usize {
+		d.specs.iter().position(|s| matches!(s.kind, super::super::Kind::Buttons(_))).expect("the theme actions row")
+	}
+
+	// Nothing records that a theme has unsaved changes. A color that disagrees with
+	// the theme is the record, and it's stored in the config file, so the result is
+	// the same after a restart.
+	// Test ID: davcp
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_edited_color_is_what_makes_the_theme_dirty() {
+		let mut d = on_theme("Matrix");
+		let row = theme_row(&d);
+		assert!(!d.theme_dirty());
+		assert!(!d.theme_btn_enabled(super::super::ThemeBtn::Save));
+		assert!(d.part_disabled(row, 0), "Save starts grayed");
+
+		d.set_col(Key::ColFg, [1, 2, 3]);
+		assert!(d.theme_dirty());
+		assert!(!d.part_disabled(row, 0), "Save wakes up on an edit");
+		// Save as is always available; the other 2 need a theme of the user's own
+		assert!(!d.part_disabled(row, 1));
+		assert!(d.part_disabled(row, 2), "Rename needs a saved theme");
+		assert!(d.part_disabled(row, 3), "Delete needs a saved theme");
+	}
+
+	// Saving folds the edits into the theme itself, so the per-color overrides
+	// have nothing left to say and are queued to be commented back out.
+	// Test ID: davcq
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn saving_folds_the_edits_into_the_theme() {
+		let mut d = on_theme("Matrix");
+		d.set_col(Key::ColFg, [1, 2, 3]);
+		d.save_theme_as("Mine");
+
+		assert_eq!(d.edited.theme, "Mine");
+		let saved = crate::theme::find_user(&d.edited.user_themes, "Mine").expect("saved");
+		assert_eq!(saved.dark.fg, [1, 2, 3]);
+		// the mode the dialog wasn't showing still comes out complete
+		assert_eq!(saved.light.fg, crate::theme::resolve("Matrix", crate::theme::Mode::Light, true).fg);
+		// and the ANSI set came along, so the theme stands on its own
+		assert_eq!(saved.dark.ansi, crate::theme::resolve("Matrix", crate::theme::Mode::Dark, true).ansi);
+
+		assert!(!d.theme_dirty(), "the edit is the theme's own color now");
+		assert!(crate::fields::lines_of(&d.edited).iter().all(|(p, _)| !p.starts_with("kept.changes.theme")), "no change is left to save under it");
+	}
+
+	// The text colors a picture picked follow the picture, so a saved theme
+	// takes the ones under them: the theme's, with any change made by hand.
+	// Test ID: ddwma
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_saved_theme_never_takes_the_wallpaper_s_text_colors() {
+		use knobs::Value;
+		let mut d = on_theme("Matrix");
+		super::super::tests::custom(&mut d);
+		super::super::tests::own(&mut d, &[(Key::BgEnabled, Value::Bool(true)), (Key::ColFromWallpaper, Value::Bool(true))]);
+		d.set_col(Key::ColBg, [4, 5, 6]);
+		d.edited.wallpaper_summary = Some(crate::autotheme::Summary { luma_hi: 0.3, luma_lo: 0.02, luma_mean: 0.13, spread: [[0.13; 3]; crate::autotheme::SPREAD], alpha: 1.0, hue: 250.0, chroma: 0.08, opacity: 0.35 });
+		crate::fields::fill(&mut d.edited, None);
+		let matrix = crate::theme::resolve("Matrix", crate::theme::Mode::Dark, true);
+		let derived = (d.edited.fg, d.edited.cursor);
+		assert_ne!(derived.0, matrix.fg, "the picture should pick the text color");
+
+		d.save_theme_as("Mine");
+		let saved = crate::theme::find_user(&d.edited.user_themes, "Mine").expect("saved");
+		assert_eq!((saved.dark.fg, saved.dark.cursor), (matrix.fg, matrix.cursor));
+		assert_eq!(saved.dark.bg, [4, 5, 6], "a change by hand is saved");
+		assert!(d.get_toggle(Key::ColFromWallpaper), "the switch stays on");
+		assert_eq!(d.edited.fg, derived.0, "and the picture still picks the text");
+	}
+
+	// Saving grays Save out, so the control the keyboard was on drops out of the
+	// Tab ring. Focus has to go on to the next button rather than snapping
+	// back to the first control on the tab.
+	// Test ID: davev
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn focus_stays_when_the_control_under_it_grays_out() {
+		let mut d = on_theme("Matrix");
+		let row = theme_row(&d);
+		d.tab = d.specs[row].tab;
+		d.set_col(Key::ColFg, [1, 2, 3]);
+		d.focus = Some(super::super::Focus::Row(row, 0));
+		d.theme_action(super::super::ThemeBtn::Save);
+		assert!(d.part_disabled(row, 0), "Save grays out once it has saved");
+		d.focus_move(true);
+		assert_eq!(d.focus, Some(super::super::Focus::Row(row, 1)));
+		// and backwards off the same gap goes to the row above, not the last button
+		d.focus = Some(super::super::Focus::Row(row, 0));
+		d.focus_move(false);
+		assert!(matches!(d.focus, Some(super::super::Focus::Row(i, _)) if i < row));
+	}
+
+	// A theme may take a built-in's name and stand in for it; deleting it puts the
+	// built-in back rather than leaving the name pointing at nothing.
+	// Test ID: davcr
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_saved_theme_shadows_a_builtin_and_delete_uncovers_it() {
+		let mut d = on_theme("Matrix");
+		let builtin_fg = d.get_col(Key::ColFg);
+		d.set_col(Key::ColFg, [9, 9, 9]);
+		d.save_theme_as("Matrix");
+		assert_eq!(d.get_col(Key::ColFg), [9, 9, 9]);
+		// it is the user's theme now, so it can be renamed or thrown away
+		let row = theme_row(&d);
+		assert!(!d.part_disabled(row, 2) && !d.part_disabled(row, 3));
+		// the name is listed once, not twice
+		let names = crate::theme::all_names(&d.edited.user_themes);
+		assert_eq!(names.iter().filter(|n| *n == "Matrix").count(), 1);
+
+		d.delete_theme();
+		assert_eq!(d.edited.theme, "Matrix");
+		assert_eq!(d.get_col(Key::ColFg), builtin_fg);
+	}
+
+	// The colors on screen are no longer the theme the box names, so the box stops
+	// naming it. The popup still highlights the theme the edits started from, and
+	// picking it back adopts its colors and the box says its name again.
+	// Test ID: dcx27
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_edited_theme_reads_as_unsaved_in_the_box() {
+		let mut d = on_theme("Matrix");
+		let row = d.specs.iter().position(|s| s.key == Key::Theme).expect("the theme row");
+		assert_eq!(d.dd_closed_label(row), "Matrix");
+
+		let mode = d.specs.iter().position(|s| s.key == Key::ThemeMode).expect("the mode row");
+
+		d.set_col(Key::ColFg, [1, 2, 3]);
+		assert_eq!(d.dd_closed_label(row), "Matrix *");
+		// only this one box: every other dropdown still says what it is on
+		assert_eq!(d.dd_closed_label(mode), "Dark");
+		// the list itself is untouched, and the highlight still finds Matrix
+		let names = d.dd_options(row);
+		assert!(!names.iter().any(|n| n.ends_with('*')));
+		assert_eq!(names[d.get_radio(Key::Theme)], "Matrix");
+
+		d.set_radio(Key::Theme, d.get_radio(Key::Theme));
+		assert_eq!(d.dd_closed_label(row), "Matrix", "re-picking discards");
+
+		// saving under a new name makes the edits that theme's own
+		d.set_col(Key::ColFg, [1, 2, 3]);
+		d.save_theme_as("Mine");
+		assert_eq!(d.dd_closed_label(row), "Mine");
+	}
+
+	// Left on the first theme, or Right on Custom at the end, can't move the
+	// box. It used to pick the same theme again, which put its colors back
+	// without anything on screen to show it, and the next OK saved them.
+	// Test ID: dfehd
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_arrow_at_the_end_of_the_theme_box_keeps_the_changes() {
+		let first = crate::theme::names().next().unwrap();
+		for (name, dir) in [(first, -1), (knobs::CUSTOM, 1)] {
+			let mut d = on_theme(name);
+			let row = d.specs.iter().position(|s| s.key == Key::Theme).expect("the theme row");
+			let at = d.get_radio(Key::Theme);
+			let end = if dir < 0 { 0 } else { d.dd_len(row) - 1 };
+			assert_eq!(at, end, "{name} isn't at the end the arrow heads for");
+			d.set_col(Key::ColFg, [1, 2, 3]);
+			let dirty = d.theme_dirty();
+			d.tab = d.specs[row].tab;
+			d.focus = Some(super::super::Focus::Row(row, 0));
+			d.key_horizontal(dir);
+			assert_eq!(d.get_radio(Key::Theme), at, "{name}");
+			assert_eq!(d.get_col(Key::ColFg), [1, 2, 3], "{name} lost its color");
+			assert_eq!(d.theme_dirty(), dirty, "{name}");
+		}
+	}
+
+	// Picking a theme takes on its colors. Keeping the old theme's tweaks would
+	// make the picker look broken on every color that had been edited.
+	// Test ID: davcs
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn picking_a_theme_adopts_its_colors() {
+		let mut d = on_theme("SilkTerm");
+		d.set_col(Key::ColFg, [1, 2, 3]);
+		let i = d.specs.iter().position(|s| s.key == Key::Theme).expect("the theme row");
+		let names = d.dd_options(i);
+		let k = names.iter().position(|n| n == "Matrix").expect("Matrix");
+		d.set_radio(Key::Theme, k);
+
+		assert_eq!(d.edited.theme, "Matrix");
+		assert_eq!(d.get_col(Key::ColFg), crate::theme::resolve("Matrix", crate::theme::Mode::Dark, true).fg);
+		assert!(!d.theme_dirty(), "a fresh theme starts unmodified");
+	}
+
+	// Picking a theme drops the changes made under the one before, so nothing of
+	// the old palette is saved over the new one.
+	// Test ID: davew
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn picking_a_theme_drops_the_changes_under_the_last() {
+		let mut d = on_theme("SilkTerm");
+		d.set_col(Key::ColFg, [1, 2, 3]);
+		d.set_col(Key::ColBg, [4, 5, 6]);
+		assert!(d.theme_dirty());
+		let names = crate::theme::all_names(&d.edited.user_themes);
+		let matrix = names.iter().position(|n| n == "Matrix").unwrap();
+		d.set_radio(Key::Theme, matrix);
+		assert!(crate::fields::lines_of(&d.edited).iter().all(|(p, _)| !p.starts_with("kept.changes.theme")), "the changes went with the pick");
+		assert!(!d.theme_dirty(), "the new palette is not a change");
+	}
+
+	// Renaming moves the name and the selection together; the slug behind it doesn't
+	// move, so the config subtree stays where it is.
+	// Test ID: dcq55
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_theme_can_be_renamed_to_its_own_name_or_a_different_case() {
+		let mut d = on_theme("Matrix");
+		d.save_theme_as("Mine");
+		// Rename opens on the theme's own name, so OK with nothing changed used
+		// to say "that name is taken" and keep the box up.
+		assert!(d.name_problem(super::super::ThemeBtn::Rename, "Mine").is_none());
+		assert!(d.name_problem(super::super::ThemeBtn::Rename, "MINE").is_none());
+
+		let slug = d.edited.user_themes[0].slug.clone();
+		d.rename_theme("MINE");
+		assert_eq!(d.edited.theme, "MINE");
+		assert_eq!(d.edited.user_themes[0].slug, slug, "still the same theme");
+
+		// another saved theme's name is still refused
+		d.save_theme_as("Other");
+		assert!(d.name_problem(super::super::ThemeBtn::Rename, "mine").is_some());
+	}
+
+	// Test ID: davct
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rename_moves_the_name_and_the_selection() {
+		let mut d = on_theme("Matrix");
+		d.set_col(Key::ColFg, [4, 5, 6]);
+		d.save_theme_as("Mine");
+		let slug = d.edited.user_themes[0].slug.clone();
+
+		d.rename_theme("Ours");
+		assert_eq!(d.edited.theme, "Ours");
+		assert_eq!(d.edited.user_themes[0].slug, slug);
+		assert_eq!(d.get_col(Key::ColFg), [4, 5, 6]);
+
+		// no pair of themes can share a name, or one would swallow the other
+		d.save_theme_as("Theirs");
+		assert_eq!(d.edited.user_themes.len(), 2);
+		assert!(d.name_problem(super::super::ThemeBtn::Rename, "ours").is_some());
+		assert!(d.name_problem(super::super::ThemeBtn::Rename, "  ").is_some());
+		assert!(d.name_problem(super::super::ThemeBtn::Rename, "Third").is_none());
+		// Save as over an existing name replaces it, which is a fair reading
+		assert!(d.name_problem(super::super::ThemeBtn::SaveAs, "ours").is_none());
+	}
+
+	// A saved theme has to come back after a restart, or saving it meant nothing.
+	// Test ID: davcx
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_saved_theme_survives_a_relaunch() {
+		let _guard = config::test_config_lock();
+		let _ = config::settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_theme_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let _ = std::fs::write(&path, "");
+		config::set_config_override(path.clone());
+		let base = config::reload_from_disk();
+
+		let mut d = mk_dialog(4000.0);
+		d.orig = base.clone();
+		d.edited = base.clone();
+		let names = crate::theme::all_names(&d.edited.user_themes);
+		let matrix = names.iter().position(|n| n == "Matrix").unwrap();
+		d.set_radio(Key::Theme, matrix);
+		d.set_col(Key::ColFg, [0x12, 0x34, 0x56]);
+		d.save_theme_as("Saved One");
+		assert!(config::persist(&base, &d.edited));
+
+		let back = config::reload_from_disk();
+		let saved = crate::theme::find_user(&back.user_themes, "Saved One").expect("on disk");
+		assert_eq!(
+			// which variant an edit goes in follows the mode, so name it. This last broke on
+			// a mode that came from somebody else's config file, and the colors alone don't
+			// show that
+			saved.dark.fg,
+			[0x12, 0x34, 0x56],
+			"mode {:?}",
+			d.edited.theme_mode
+		);
+		assert_eq!(saved.dark.ansi, crate::theme::resolve("Matrix", crate::theme::Mode::Dark, true).ansi);
+		assert_eq!(back.theme, "Saved One");
+		assert_eq!(back.fg, [0x12, 0x34, 0x56], "and it is what the terminal uses");
+
+		// deleting it takes the whole subtree with it
+		let mut d2 = mk_dialog(4000.0);
+		d2.orig = back.clone();
+		d2.edited = back.clone();
+		d2.delete_theme();
+		assert!(config::persist(&back, &d2.edited));
+		let after = config::reload_from_disk();
+		assert!(after.user_themes.is_empty(), "gone from the file");
+		assert!(!std::fs::read_to_string(&path).unwrap().contains("Saved One"), "and nothing of it is left behind");
+
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A font of its own, with both system font switches off.
+	fn own_font(d: &mut SettingsDialog, family: &str, size: f64, line: f64) {
+		use knobs::Value;
+		super::super::tests::own(d, &[(Key::SystemFont, Value::Bool(false)), (Key::SystemFontSize, Value::Bool(false)), (Key::FontFamily, Value::Text(family.into())), (Key::FontSize, Value::Float(size)), (Key::LineHeight, Value::Float(line))]);
+	}
+
+	fn follow_themes(d: &mut SettingsDialog) {
+		super::super::tests::own(d, &[(Key::FontIgnoresThemes, knobs::Value::Bool(false))]);
+	}
+
+	fn font_of(d: &SettingsDialog) -> (String, f32, f32) {
+		(d.edited.font_family.clone(), d.edited.font_size, d.edited.line_height_scale)
+	}
+
+	fn pick(d: &mut SettingsDialog, name: &str) {
+		let names = crate::theme::all_names(&d.edited.user_themes);
+		let k = names.iter().position(|n| n == name).expect("listed");
+		d.set_radio(Key::Theme, k);
+	}
+
+	// A saved theme keeps the font on screen beside its colors, whether or not
+	// fonts follow themes, since a theme is stored whole.
+	// Test ID: ddwkt
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn saving_a_theme_keeps_the_font_on_screen() {
+		let mut d = on_theme("Matrix");
+		assert!(d.edited.font_ignores_themes, "on by default");
+		own_font(&mut d, "Mono One", 31.0, 1.5);
+		d.save_theme_as("Mine");
+		let saved = crate::theme::find_user(&d.edited.user_themes, "Mine").expect("saved");
+		assert_eq!(saved.font, crate::theme::ThemeFont { family: Some("Mono One".into()), size: Some(31.0), line_height_scale: Some(1.5) });
+	}
+
+	// Picking a theme leaves the font alone until fonts follow themes. Then a
+	// saved theme brings its font, and a built-in, which has none, changes none.
+	// Test ID: ddwkv
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_theme_pick_takes_its_font_only_once_fonts_follow_themes() {
+		let mut d = on_theme("Matrix");
+		own_font(&mut d, "Mono One", 31.0, 1.5);
+		d.save_theme_as("Mine");
+		pick(&mut d, "Matrix");
+		own_font(&mut d, "Mono Two", 12.0, 1.1);
+		let two = ("Mono Two".to_string(), 12.0, 1.1);
+
+		pick(&mut d, "Mine");
+		assert_eq!(font_of(&d), two, "fonts ignore themes by default");
+		assert!(!d.theme_dirty());
+		pick(&mut d, "Matrix");
+
+		follow_themes(&mut d);
+		pick(&mut d, "Matrix");
+		assert_eq!(font_of(&d), two, "a built-in has no font");
+		pick(&mut d, "Mine");
+		assert_eq!(font_of(&d), ("Mono One".to_string(), 31.0, 1.5));
+		assert!(!d.theme_dirty(), "the font is the theme's own");
+		assert_eq!(d.dd_closed_label(theme_box(&d)), "Mine");
+	}
+
+	fn theme_box(d: &SettingsDialog) -> usize {
+		d.specs.iter().position(|s| s.key == Key::Theme).expect("the theme row")
+	}
+
+	// A theme that sets a font wins over the system font, the way a font typed
+	// in does: the switch for each value it changes turns off.
+	// Test ID: ddwkw
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_theme_font_wins_over_the_system_font() {
+		use knobs::Value;
+		let mut d = on_theme("Matrix");
+		own_font(&mut d, "Mono One", 31.0, 1.5);
+		d.save_theme_as("Mine");
+		pick(&mut d, "Matrix");
+		own_font(&mut d, "Mono Two", 12.0, 1.1);
+		super::super::tests::own(&mut d, &[(Key::SystemFont, Value::Bool(true)), (Key::SystemFontSize, Value::Bool(true))]);
+		follow_themes(&mut d);
+		pick(&mut d, "Mine");
+		assert_eq!(font_of(&d), ("Mono One".to_string(), 31.0, 1.5));
+		assert!(!d.edited.use_system_font && !d.edited.use_system_font_size);
+	}
+
+	// Saving picks the theme again, and its font is the one showing, so no
+	// system font switch is turned off by it.
+	// Test ID: ddwkx
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn saving_a_theme_turns_no_font_switch_off() {
+		let mut d = on_theme("Matrix");
+		follow_themes(&mut d);
+		assert!(d.edited.use_system_font && d.edited.use_system_font_size);
+		let before = font_of(&d);
+		d.save_theme_as("Mine");
+		assert!(d.edited.use_system_font && d.edited.use_system_font_size);
+		assert_eq!(font_of(&d), before);
+		assert!(!d.theme_dirty());
+	}
+
+	// While fonts follow themes, a font that differs from the saved theme's is a
+	// change to it like a color: the box says `*`, Save wakes up, the tip names
+	// the row, and Save keeps it. While fonts ignore themes it is none of that.
+	// Test ID: ddwky
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_changed_font_reads_as_a_change_once_fonts_follow_themes() {
+		let mut d = on_theme("Matrix");
+		own_font(&mut d, "Mono One", 31.0, 1.5);
+		d.save_theme_as("Mine");
+		let row = theme_row(&d);
+		super::super::tests::own(&mut d, &[(Key::FontSize, knobs::Value::Float(30.0))]);
+		assert!(!d.theme_dirty());
+		assert_eq!(d.dd_closed_label(theme_box(&d)), "Mine");
+
+		follow_themes(&mut d);
+		assert!(d.theme_dirty());
+		assert_eq!(d.dd_closed_label(theme_box(&d)), "Mine *");
+		assert!(!d.part_disabled(row, 0), "Save wakes up");
+		let line = crate::fields::state_line(&d.edited, Key::Theme, None, &|_, v| v.show());
+		assert!(line.contains("Font changed here: Size."), "{line}");
+
+		d.theme_action(super::super::ThemeBtn::Save);
+		assert!(!d.theme_dirty());
+		let saved = crate::theme::find_user(&d.edited.user_themes, "Mine").expect("saved");
+		assert_eq!(saved.font.size, Some(30.0));
+	}
+
+	// The font goes to the file with the theme and comes back, and the switch
+	// with it.
+	// Test ID: ddwkz
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_theme_font_survives_a_relaunch() {
+		let _guard = config::test_config_lock();
+		let _ = config::settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_themefont_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let _ = std::fs::write(&path, "");
+		config::set_config_override(path.clone());
+		let base = config::reload_from_disk();
+
+		let mut d = mk_dialog(4000.0);
+		d.orig = base.clone();
+		d.edited = base.clone();
+		own_font(&mut d, "Mono One", 31.0, 1.5);
+		follow_themes(&mut d);
+		d.save_theme_as("Saved Font");
+		assert!(config::persist(&base, &d.edited));
+
+		let back = config::reload_from_disk();
+		assert!(!back.font_ignores_themes);
+		let saved = crate::theme::find_user(&back.user_themes, "Saved Font").expect("on disk");
+		assert_eq!(saved.font.family.as_deref(), Some("Mono One"));
+		assert_eq!(saved.font.size, Some(31.0));
+		assert_eq!(saved.font.line_height_scale, Some(1.5));
+
+		let mut d2 = mk_dialog(4000.0);
+		d2.orig = back.clone();
+		d2.edited = back.clone();
+		own_font(&mut d2, "Mono Two", 12.0, 1.1);
+		pick(&mut d2, "Matrix");
+		pick(&mut d2, "Saved Font");
+		assert_eq!(font_of(&d2), ("Mono One".to_string(), 31.0, 1.5));
+
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Rename opens on the theme's own name, all of it selected, so typing
+	// replaces it.
+	// Test ID: dd5qy
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn rename_opens_on_the_name_selected() {
+		let mut d = on_theme("Matrix");
+		d.save_theme_as("Mine");
+		d.theme_action(super::super::ThemeBtn::Rename);
+		let edit = d.edit.as_ref().expect("the name field");
+		assert_eq!(edit.buf, "Mine");
+		assert_eq!(edit.sel, Some(0), "the name is not selected");
+		assert_eq!(edit.cur, edit.buf.len(), "the caret is not at the end");
+		d.char_input('X');
+		d.prompt_accept();
+		assert!(d.prompt.is_none());
+		assert_eq!(d.edited.theme, "X");
+		assert_eq!(d.edited.user_themes.len(), 1);
+		assert_eq!(d.edited.user_themes[0].name, "X");
+	}
+}

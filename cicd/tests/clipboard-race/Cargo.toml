@@ -1,0 +1,7 @@
+[package]
+name = "clipracer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+x11-clipboard = "0.9.3"

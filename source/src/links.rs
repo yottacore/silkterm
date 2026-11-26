@@ -1,38 +1,28 @@
-// Hyperlinks in terminal output: find URLs in a row of grid text, and hand one
-// to the desktop's handler.
-//
-// Detection is allowlisted BY SCHEME and that is load-bearing twice over: it
-// keeps the false-positive rate near zero (a bare word with a slash in it is not
-// a link), and it is what stops `javascript:` / `data:` from ever reaching the
-// opener. A scheme absent from SCHEMES is not a link, so it cannot be opened.
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
+//! Hyperlinks in terminal output: find URLs in a row of grid text, and hand one
+//! to the desktop's handler.
+//!
+//! Detection is allowlisted by scheme, for 2 reasons. False positives stay near
+//! zero, since a bare word with a slash in it isn't a link. And `javascript:` and
+//! `data:` never get as far as the opener. A scheme missing from SCHEMES isn't a
+//! link, so it can't be opened.
 
 use std::io;
 use std::process::{Command, Stdio};
 
 // (scheme, needs "//"). Ordered longest-first within a family so "https" is
-// tested before "http" - every candidate is tried anyway, but the order keeps
-// the common case one comparison.
-const SCHEMES: [(&str, bool); 8] = [
-	("https", true),
-	("http", true),
-	("ftps", true),
-	("ftp", true),
-	("file", true),
-	("sftp", true),
-	("ssh", true),
-	("mailto", false),
-];
+// tested before "http". Every candidate is tried anyway, but this way the
+// common case takes one comparison.
+const SCHEMES: [(&str, bool); 8] = [("https", true), ("http", true), ("ftps", true), ("ftp", true), ("file", true), ("sftp", true), ("ssh", true), ("mailto", false)];
 
-// Characters a URL may carry. ASCII only: percent-encoding covers the rest, and
-// admitting non-ASCII would swallow the CJK sentence that follows a link. The
-// exclusions are the delimiters RFC 3986 leaves out plus the quotes a shell
-// wraps a URL in.
+// Characters allowed in a URL. ASCII only, since percent-encoding handles the
+// rest, and admitting non-ASCII would swallow the CJK sentence that follows a
+// link. The exclusions are the delimiters RFC 3986 leaves out plus the quotes a
+// shell wraps a URL in.
 fn is_url_char(c: char) -> bool {
-	c.is_ascii_graphic()
-		&& !matches!(
-			c,
-			'"' | '\'' | '<' | '>' | '`' | '{' | '}' | '|' | '\\' | '^'
-		)
+	c.is_ascii_graphic() && !matches!(c, '"' | '\'' | '<' | '>' | '`' | '{' | '}' | '|' | '\\' | '^')
 }
 
 // A link can't start mid-word, or "xhttp://x" reads as a link one char in.
@@ -44,10 +34,7 @@ fn boundary_before(text: &[char], start: usize) -> bool {
 }
 
 fn matches_scheme(text: &[char], start: usize, scheme: &str) -> bool {
-	scheme.chars().enumerate().all(|(i, want)| {
-		text.get(start + i)
-			.is_some_and(|&c| c.eq_ignore_ascii_case(&want))
-	})
+	scheme.chars().enumerate().all(|(i, want)| text.get(start + i).is_some_and(|&c| c.eq_ignore_ascii_case(&want)))
 }
 
 // Sentence punctuation clings to the end of a URL far more often than it belongs
@@ -106,8 +93,8 @@ fn link_from(text: &[char], start: usize) -> Option<(usize, usize)> {
 	})
 }
 
-// The link covering char `hit`, as (start, end, url). `text` is one logical
-// line's chars; the caller maps the range back to grid cells.
+/// The link covering char `hit`, as (start, end, url). `text` is one logical
+/// line's chars; the caller maps the range back to grid cells.
 pub fn find_at(text: &[char], hit: usize) -> Option<(usize, usize, String)> {
 	if hit >= text.len() {
 		return None;
@@ -127,63 +114,67 @@ pub fn find_at(text: &[char], hit: usize) -> Option<(usize, usize, String)> {
 	None
 }
 
-// Hand `url` to the desktop. `open_command` (config) overrides the platform
-// default: argv-split, the URL appended as the last argument. Runs detached -
-// the child is reaped on its own thread so a browser launch can't zombie.
+/// Hand `url` to the desktop. A set `open_command` replaces the platform default,
+/// split into arguments with the URL last. The child is reaped on its own thread,
+/// so a browser launch can't leave a zombie.
 pub fn open(url: &str, open_command: &str) -> io::Result<()> {
 	let mut cmd = if open_command.trim().is_empty() {
 		default_command(url)
 	} else {
-		let argv = crate::cli::shell_split(open_command)
-			.map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-		let (program, args) = argv
-			.split_first()
-			.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "empty open command"))?;
+		let argv = crate::config::command_argv(open_command).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "bad open command"))?;
+		let (program, args) = argv.split_first().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "empty open command"))?;
 		let mut cmd = Command::new(program);
 		cmd.args(args).arg(url);
 		cmd
 	};
-	let mut child = cmd
-		.stdin(Stdio::null())
-		.stdout(Stdio::null())
-		.stderr(Stdio::null())
-		.spawn()?;
+	let mut child = cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
 	std::thread::spawn(move || {
 		let _ = child.wait();
 	});
 	Ok(())
 }
 
-#[cfg(target_os = "windows")]
-fn default_command(url: &str) -> Command {
-	use std::os::windows::process::CommandExt;
-	// cmd's own parser sees the command line before argument quoting means
-	// anything, so the metacharacters a query string carries have to be escaped
-	// for it. The empty "" is start's title argument - without it start takes the
-	// URL as the title and opens nothing.
-	let mut escaped = String::with_capacity(url.len() + 8);
-	for ch in url.chars() {
-		if matches!(ch, '&' | '|' | '^' | '<' | '>' | '(' | ')') {
-			escaped.push('^');
-		}
-		escaped.push(ch);
+// Which platform's opener to use. A parameter rather than a `cfg!` at the use
+// site so every arm can be checked from any box.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Host {
+	Windows,
+	MacOs,
+	Other,
+}
+
+fn this_host() -> Host {
+	if cfg!(target_os = "windows") {
+		Host::Windows
+	} else if cfg!(target_os = "macos") {
+		Host::MacOs
+	} else {
+		Host::Other
 	}
-	let mut cmd = Command::new("cmd");
-	cmd.args(["/C", "start", "\"\""]).raw_arg(&escaped);
-	cmd
 }
 
-#[cfg(target_os = "macos")]
-fn default_command(url: &str) -> Command {
-	let mut cmd = Command::new("open");
-	cmd.arg(url);
-	cmd
+/// The program a link goes to when no open command is set.
+pub fn desktop_opener() -> &'static str {
+	opener_argv(this_host(), "").0
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+// The program that hands a URL to the desktop, and the URL as one plain argument.
+// Windows doesn't use `cmd /C start`, since cmd expands percent variables before
+// any escaping, so a URL printed by a remote host could start a second command.
+// explorer takes its arguments the ordinary way.
+fn opener_argv(host: Host, url: &str) -> (&'static str, String) {
+	let program = match host {
+		Host::Windows => "explorer.exe",
+		Host::MacOs => "open",
+		Host::Other => "xdg-open",
+	};
+	(program, url.to_string())
+}
+
 fn default_command(url: &str) -> Command {
-	let mut cmd = Command::new("xdg-open");
-	cmd.arg(url);
+	let (program, arg) = opener_argv(this_host(), url);
+	let mut cmd = Command::new(program);
+	cmd.arg(arg);
 	cmd
 }
 
@@ -195,6 +186,21 @@ mod tests {
 		s.chars().collect()
 	}
 
+	// Terminal output is untrusted, so every platform hands the URL to its own opener
+	// as one plain argument. The Windows opener used to go through cmd, and no
+	// escaping is safe there.
+	// Test ID: dcbe8
+	#[test]
+	fn a_url_reaches_the_opener_exactly_as_it_was_printed() {
+		let nasty = "https://example.com/?a=%USERPROFILE%&b=x^y|z<>()\"'`$ q";
+		for host in [Host::Windows, Host::MacOs, Host::Other] {
+			let (program, arg) = opener_argv(host, nasty);
+			assert_eq!(arg, nasty, "{host:?} altered the url");
+			assert!(!program.contains("cmd") && !program.contains("sh"), "{host:?} opens through a shell ({program})");
+		}
+		assert_eq!(opener_argv(Host::Windows, nasty).0, "explorer.exe");
+	}
+
 	// Find the link covering the first char of `needle`.
 	fn at(line: &str, needle: &str) -> Option<String> {
 		let text = chars(line);
@@ -202,6 +208,7 @@ mod tests {
 		find_at(&text, hit).map(|(_, _, url)| url)
 	}
 
+	// Test ID: dattx
 	#[test]
 	fn a_plain_url_is_found_anywhere_inside_it() {
 		let line = "see https://example.com/a?b=1&c=2 for more";
@@ -209,52 +216,36 @@ mod tests {
 		let (start, end, url) = find_at(&text, 10).expect("link");
 		assert_eq!(url, "https://example.com/a?b=1&c=2");
 		assert_eq!((start, end), (4, 33));
-		// every cell of the span answers with the same span
+		// every cell of the span returns the same span
 		for hit in start..end {
 			assert_eq!(find_at(&text, hit).map(|l| l.2), Some(url.clone()));
 		}
-		assert_eq!(
-			find_at(&text, start - 1),
-			None,
-			"the space before is not one"
-		);
+		assert_eq!(find_at(&text, start - 1), None, "the space before is not one");
 		assert_eq!(find_at(&text, end), None, "the space after is not one");
 	}
 
+	// Test ID: datty
 	#[test]
 	fn sentence_punctuation_and_brackets_come_off_the_end() {
-		assert_eq!(
-			at("visit http://example.com/x.", "http"),
-			Some("http://example.com/x".into())
-		);
-		assert_eq!(
-			at("(see http://example.com/x)", "http"),
-			Some("http://example.com/x".into())
-		);
+		assert_eq!(at("visit http://example.com/x.", "http"), Some("http://example.com/x".into()));
+		assert_eq!(at("(see http://example.com/x)", "http"), Some("http://example.com/x".into()));
 		// a closer the URL itself opened is part of it
-		assert_eq!(
-			at("http://en.wikipedia.org/wiki/Ruby_(gem)", "http"),
-			Some("http://en.wikipedia.org/wiki/Ruby_(gem)".into())
-		);
-		assert_eq!(
-			at("quoted 'https://example.com/q' here", "https"),
-			Some("https://example.com/q".into())
-		);
+		assert_eq!(at("http://en.wikipedia.org/wiki/Ruby_(gem)", "http"), Some("http://en.wikipedia.org/wiki/Ruby_(gem)".into()));
+		assert_eq!(at("quoted 'https://example.com/q' here", "https"), Some("https://example.com/q".into()));
 	}
 
-	// The allowlist is the security boundary, not a convenience: a scheme that
-	// isn't listed must never become clickable.
+	// The allowlist is the security boundary. A scheme that isn't listed must
+	// never become clickable.
+	// Test ID: dattz
 	#[test]
 	fn only_allowlisted_schemes_are_links() {
 		assert_eq!(at("javascript:alert(1)", "javascript"), None);
 		assert_eq!(at("data:text/html;base64,AAAA", "data"), None);
 		assert_eq!(at("vbscript:msgbox", "vbscript"), None);
-		assert_eq!(
-			at("mail me at mailto:a@b.com now", "mailto"),
-			Some("mailto:a@b.com".into())
-		);
+		assert_eq!(at("mail me at mailto:a@b.com now", "mailto"), Some("mailto:a@b.com".into()));
 	}
 
+	// Test ID: datv0
 	#[test]
 	fn ordinary_text_with_a_colon_is_not_a_link() {
 		assert_eq!(at("aspect ratio 3:4 here", "3:4"), None);
@@ -265,15 +256,106 @@ mod tests {
 		assert_eq!(at("https://", "https"), None, "no body");
 	}
 
+	// Test ID: datv1
 	#[test]
 	fn the_scheme_is_case_insensitive_and_several_links_coexist() {
-		assert_eq!(
-			at("HTTPS://Example.COM/A", "HTTPS"),
-			Some("HTTPS://Example.COM/A".into())
-		);
+		assert_eq!(at("HTTPS://Example.COM/A", "HTTPS"), Some("HTTPS://Example.COM/A".into()));
 		let line = "a http://one.example b ftp://two.example c";
 		assert_eq!(at(line, "http"), Some("http://one.example".into()));
 		assert_eq!(at(line, "ftp"), Some("ftp://two.example".into()));
 		assert_eq!(at(line, " c"), None);
+	}
+
+	// A hostile scheme is the whole reason detection is allowlisted, so it gets a
+	// directed test as well as the fuzz below. These are the ones that turn a
+	// printed line into code. Of these, 2 run script in a browser, one runs it in
+	// the Windows shell, and the rest open a handler no terminal should offer.
+	// Test ID: dcdjb
+	#[test]
+	fn a_hostile_scheme_never_becomes_a_link() {
+		#[rustfmt::skip]
+		let schemes = [
+			"javascript", "JavaScript", "data", "vbscript", "jar", "about",
+			"chrome", "view-source", "ms-msdt", "search-ms", "shell", "res",
+			"blob", "filesystem", "intent", "smb",
+			// An allowlisted scheme with something hidden inside it. A zero-width
+			// character reads as nothing on screen and as a different scheme here.
+			"htt\u{200b}ps", "ht\u{feff}tps", "http\u{ad}s",
+		];
+		for scheme in schemes {
+			for body in ["//example.com/x", ":alert(1)", "//x"] {
+				let line = format!("{scheme}:{body}");
+				let text: Vec<char> = line.chars().collect();
+				for hit in 0..text.len() {
+					assert!(find_at(&text, hit).is_none(), "{line:?} was offered as a link at char {hit}");
+				}
+			}
+		}
+	}
+
+	// A printed line is untrusted text, and the scan below is all that stands
+	// between it and a process launch. Whatever the scan returns must be a whole
+	// allowlisted URL, copied as is from the row, made only of URL characters.
+	mod fuzz {
+		use super::super::{SCHEMES, find_at, is_url_char};
+		use crate::fuzz;
+
+		// Rows built from the pieces that sit around a link in real output: the
+		// schemes themselves, near-misses, the delimiters that end one, and the
+		// brackets and punctuation the tail trimmer has to reason about.
+		#[rustfmt::skip]
+		const PIECES: [&str; 30] = [
+			"http", "https", "HTTPS", "ftp", "ftps", "sftp", "ssh", "file",
+			"mailto", "javascript", "data", "httpss", "xhttp", ":", "//", "/",
+			"://", ".", ",", ";", "?", "!", ")", "(", "[", "]", " ", "a1",
+			"example.com", "\u{4e2d}",
+		];
+
+		fn row(rng: &mut fuzz::Rng) -> Vec<u8> {
+			let mut out = String::new();
+			for _ in 0..rng.below(24) {
+				if rng.chance(6) {
+					out.push_str(&fuzz::text(rng));
+				} else {
+					out.push_str(rng.pick(&PIECES));
+				}
+			}
+			out.into_bytes()
+		}
+
+		fn check(line: &[u8]) {
+			let text: Vec<char> = String::from_utf8_lossy(line).chars().collect();
+			for hit in 0..text.len() {
+				let Some((start, end, url)) = find_at(&text, hit) else {
+					continue;
+				};
+				assert!(start < end && end <= text.len(), "range {start}..{end}");
+				assert!((start..end).contains(&hit), "{hit} is outside {start}..{end}");
+				assert_eq!(url, text[start..end].iter().collect::<String>(), "the url is not what was on the row");
+				let lower = url.to_ascii_lowercase();
+				assert!(
+					SCHEMES.iter().any(|&(scheme, slashes)| {
+						let want = if slashes { format!("{scheme}://") } else { format!("{scheme}:") };
+						lower.starts_with(&want) && lower.len() > want.len()
+					}),
+					"{url:?} is not an allowlisted scheme"
+				);
+				assert!(url.chars().skip_while(|&c| c != ':').all(is_url_char), "{url:?} has a character a url may not");
+			}
+		}
+
+		// Test ID: dcdjc
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn only_an_allowlisted_url_is_ever_offered_to_the_opener() {
+			let corpus = fuzz::corpus("links");
+			for case in &corpus {
+				check(case);
+			}
+			fuzz::soak("links", |seed| {
+				let mut rng = fuzz::Rng::new(seed);
+				check(&fuzz::input(&mut rng, &corpus, row));
+			});
+		}
 	}
 }

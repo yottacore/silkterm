@@ -29,3 +29,8 @@ __pycache__/
 
 # Local cicd run artifacts (flamegraphs, run logs) - regenerated, never committed
 /cicd/artifacts/
+
+# Working clones of the two patched dependencies. Each carries its own remote,
+# so they are backed up without being tracked here - and they sit outside
+# /target so a cargo clean cannot take them.
+/forks/

@@ -33,9 +33,15 @@
 ##	Notes:
 ##		Display/size is overridable via CICD_HEADLESS_DISPLAY / CICD_HEADLESS_SIZE
 ##		(legacy RPD_* names still honored as fallbacks).
+##		start --wm waits up to CICD_HEADLESS_WM_WAIT seconds (10) for the WM.
+##		A server belongs to the process that ran `start` (the calling script).
+##		While that process lives, only it may stop the server, and another run's
+##		`start` on the same number is refused rather than shared. Once it has
+##		exited, as after a start by hand, anyone may stop the server or take it
+##		over. A number some other X server is using is refused outright.
 ##	History: At bottom of script.
 
-##	Copyright © 2026 Bubbles (ID: XଌฅრX۳ᛟԃლፀƅꓩหδლც)
+##	Copyright (c) 2026 Bubbles
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
@@ -46,75 +52,198 @@ set -euo pipefail
 display="${CICD_HEADLESS_DISPLAY:-${RPD_HEADLESS_DISPLAY:-:99}}"
 size="${CICD_HEADLESS_SIZE:-${RPD_HEADLESS_SIZE:-1920x1080x24}}"
 num="${display#:}"
-run_dir="/tmp/cicd-gui-headless-${USER}"
-mkdir -p "$run_dir"
-xvfb_pid="$run_dir/xvfb-${num}.pid"
-wm_pid="$run_dir/wm-${num}.pid"
-apps_pids="$run_dir/apps-${num}.pids"
-auth="$run_dir/Xauthority-${num}"
+## ${USER} is unset in a cron or ssh context, and `set -u` then reports this
+## as "headless display failed to start".
+runDir="/tmp/cicd-gui-headless-${USER:-$(id -un)}"
+## The name is predictable, so somebody else can get there first. Refuse anything
+## we don't own, and anything that is a link to somewhere else - the pid files
+## under here are read and acted on, and the auth cookie is a key to the display.
+mkdir -p "${runDir}"
+if [[ -L "${runDir}" || ! -d "${runDir}" || ! -O "${runDir}" ]]; then
+	echo "${runDir} is not ours; refusing to use it" >&2
+	exit 1
+fi
+chmod 700 "${runDir}"
 
-alive() { [[ -f "$1" ]] && kill -0 "$(cat "$1")" 2>/dev/null; }
+## Run something on our private display. Clearing the Wayland vars matters as much
+## as setting DISPLAY: winit and GTK both prefer Wayland when they see it, so on a
+## Wayland session (WSLg included) the window opens on the real desktop instead and
+## nothing here can find it. SESSION_MANAGER goes too: xfwm4 joined the desktop's
+## session through it, and the desktop restarted each one we stopped, onto this
+## display, where it took the next run's screen.
+## --bg is for a background job: it execs, so $! is the program itself. Without
+## it $! was a subshell, and stop killed that and left the program running.
+fOnX(){ local how=""; [[ "${1:-}" == "--bg" ]] && { how="exec"; shift; }; ${how} env -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE -u SESSION_MANAGER DISPLAY="${display}" "${@}"; }
 
-start() {
-	if alive "$xvfb_pid"; then
-		echo "Xvfb already on $display (pid $(cat "$xvfb_pid"))"
+xvfbPid="${runDir}/xvfb-${num}.pid"
+wmPid="${runDir}/wm-${num}.pid"
+appsPids="${runDir}/apps-${num}.pids"
+auth="${runDir}/Xauthority-${num}"
+
+ownerFile="${runDir}/owner-${num}"
+xLock="/tmp/.X${num}-lock"
+
+## A pid alone isn't a process: a run killed before `stop` leaves its pid file,
+## and the number can come back as anything. The start time from /proc goes with
+## it, so a record names one process and no other.
+fStartedAt() { local s; { read -r s <"/proc/${1}/stat"; } 2>/dev/null || return 1; s="${s##*) }"; set -- ${s}; echo "${20}"; }
+fRecord() { echo "${1} $(fStartedAt "${1}")"; }
+fSame() { local p t; read -r p t <<<"${1}"; [[ -n "${t}" && "$(fStartedAt "${p}" || true)" == "${t}" ]]; }
+fAlive() { [[ -f "${1}" ]] && fSame "$(<"${1}")"; }
+fPidOf() { local p _; read -r p _ <"${1}"; echo "${p}"; }
+## Kill a recorded process and wait for it to go. A server still shutting down
+## holds the lock, and a start right after a stop found the number taken.
+fEndIt() {
+	local i
+	fSame "${1}" || return 0
+	kill "${1%% *}" 2>/dev/null || true
+	for ((i = 0; i < 50; i++)); do fSame "${1}" || return 0; sleep 0.1; done
+	kill -9 "${1%% *}" 2>/dev/null || true
+}
+
+## Who is asking: the script that ran this one.
+me="$(fRecord "${PPID}")"
+fOwnedByOther() { [[ -f "${ownerFile}" ]] && [[ "$(<"${ownerFile}")" != "${me}" ]] && fSame "$(<"${ownerFile}")"; }
+
+fStart() {
+	local fresh=""
+	if fAlive "${xvfbPid}"; then
+		if fOwnedByOther; then
+			echo "Xvfb on ${display} belongs to another run (pid $(fPidOf "${ownerFile}")); not sharing it" >&2
+			exit 1
+		fi
+		echo "${me}" > "${ownerFile}"
+		echo "Xvfb already on ${display} (pid $(fPidOf "${xvfbPid}"))"
 	else
-		: > "$auth"
-		Xvfb "$display" -screen 0 "$size" -nolisten tcp -auth "$auth" \
-			>"$run_dir/xvfb-${num}.log" 2>&1 &
-		echo $! > "$xvfb_pid"
-		# Wait for the server to accept connections before returning.
+		## Another X server on this number would answer xdpyinfo in our place,
+		## while our own Xvfb quits at once.
+		local held; held="$(tr -dc '0-9' 2>/dev/null <"${xLock}" || true)"
+		if [[ -n "${held}" && -d "/proc/${held}" ]]; then
+			echo "${display} is taken by another X server (pid ${held})" >&2
+			exit 1
+		fi
+		## The cookie is a key to the display; the ambient umask left it readable.
+		(umask 077; : > "${auth}")
+		Xvfb "${display}" -screen 0 "${size}" -nolisten tcp -auth "${auth}" \
+			>"${runDir}/xvfb-${num}.log" 2>&1 &
+		local pid=$!
+		fRecord "${pid}" > "${xvfbPid}"
+		echo "${me}" > "${ownerFile}"
+		## Up means ours is still running, has the number, and takes connections.
 		local ok=""
-		for _ in $(seq 1 50); do
-			if DISPLAY="$display" xdpyinfo >/dev/null 2>&1; then ok=1; break; fi
+		for _ in {1..50}; do
+			kill -0 "${pid}" 2>/dev/null || break
+			if [[ "$(tr -dc '0-9' 2>/dev/null <"${xLock}" || true)" == "${pid}" ]] \
+				&& DISPLAY="${display}" xdpyinfo >/dev/null 2>&1; then ok=1; break; fi
 			sleep 0.1
 		done
-		[[ -n "$ok" ]] || { echo "Xvfb did not come up; see $run_dir/xvfb-${num}.log" >&2; exit 1; }
-		echo "Started Xvfb on $display (pid $(cat "$xvfb_pid"), $size)"
+		if [[ -z "${ok}" ]]; then
+			kill "${pid}" 2>/dev/null || true
+			rm -f "${xvfbPid}" "${ownerFile}"
+			echo "Xvfb didn't come up on ${display}; see ${runDir}/xvfb-${num}.log" >&2
+			exit 1
+		fi
+		fresh=1
+		echo "Started Xvfb on ${display} (pid ${pid}, ${size})"
 	fi
-	if [[ "${1:-}" == "--wm" ]] && ! alive "$wm_pid"; then
-		DISPLAY="$display" xfwm4 --compositor=off >"$run_dir/wm-${num}.log" 2>&1 &
-		echo $! > "$wm_pid"
-		echo "Started xfwm4 on $display (pid $(cat "$wm_pid"))"
+	if [[ "${1:-}" == "--wm" ]]; then
+		if ! fAlive "${wmPid}"; then
+			fOnX --bg xfwm4 --compositor=off >"${runDir}/wm-${num}.log" 2>&1 &
+			fRecord $! > "${wmPid}"
+			echo "Started xfwm4 on ${display} (pid $(fPidOf "${wmPid}"))"
+		fi
+		## xfwm4 is still setting up when the fork returns, and a caller that
+		## asks for the WM right away finds none (2026100512560044).
+		fWmWait || {
+			local why="did not come up within ${wmWaitSecs}s"
+			fAlive "${wmPid}" || why="exited"
+			echo "xfwm4 ${why} on ${display}; see ${runDir}/wm-${num}.log" >&2
+			[[ -f "${wmPid}" ]] && fEndIt "$(cat "${wmPid}")"
+			rm -f "${wmPid}"
+			## A display started just now would be left behind by a caller that
+			## only stops what it saw start.
+			if [[ -n "${fresh}" ]]; then
+				fEndIt "$(cat "${xvfbPid}")"
+				rm -f "${xvfbPid}" "${ownerFile}"
+			fi
+			exit 1
+		}
 	fi
 }
 
-launch() {
-	[[ $# -gt 0 ]] || { echo "usage: launch <cmd...>" >&2; exit 2; }
-	alive "$xvfb_pid" || start
-	DISPLAY="$display" "$@" >"$run_dir/app-${num}.log" 2>&1 &
-	echo $! >> "$apps_pids"
-	echo "Launched on $display (pid $!); log: $run_dir/app-${num}.log"
+## Digits only: the value goes into arithmetic, which would run a $( ) in it.
+wmWaitSecs="${CICD_HEADLESS_WM_WAIT:-10}"
+[[ "${wmWaitSecs}" =~ ^[0-9]+$ ]] || wmWaitSecs=10
+## Up per EWMH: the root names a check window, and that window names itself.
+## A WM that died leaves the root property behind, so the first half alone lies.
+fWmUp() {
+	local id self
+	id="$(fOnX xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null || true)"
+	[[ "${id}" == *"window id # "* ]] || return 1
+	id="${id##* }"
+	self="$(fOnX xprop -id "${id}" _NET_SUPPORTING_WM_CHECK 2>/dev/null || true)"
+	[[ "${self##* }" == "${id}" ]]
 }
-
-shot() {
-	local out="${1:-}"
-	[[ -n "$out" ]] || { echo "usage: shot <out.png>" >&2; exit 2; }
-	alive "$xvfb_pid" || { echo "no Xvfb on $display - run 'start' first" >&2; exit 1; }
-	import -display "$display" -window root "$out"
-	echo "Wrote $out"
-}
-
-stop() {
-	if [[ -f "$apps_pids" ]]; then
-		while read -r p; do kill "$p" 2>/dev/null || true; done < "$apps_pids"
-		rm -f "$apps_pids"
-	fi
-	for f in "$wm_pid" "$xvfb_pid"; do
-		[[ -f "$f" ]] && { kill "$(cat "$f")" 2>/dev/null || true; rm -f "$f"; }
+fWmWait() {
+	local i
+	for ((i = 0; i < wmWaitSecs * 10; i++)); do
+		fAlive "${wmPid}" || return 1
+		fWmUp && return 0
+		sleep 0.1
 	done
-	echo "Stopped headless session on $display"
+	return 1
+}
+
+fLaunch() {
+	[[ $# -gt 0 ]] || { echo "usage: launch <cmd...>" >&2; exit 2; }
+	fAlive "${xvfbPid}" || fStart
+	fOnX --bg "${@}" >"${runDir}/app-${num}.log" 2>&1 &
+	fRecord $! >> "${appsPids}"
+	echo "Launched on ${display} (pid $!); log: ${runDir}/app-${num}.log"
+}
+
+fShot() {
+	local out="${1:-}"
+	[[ -n "${out}" ]] || { echo "usage: shot <out.png>" >&2; exit 2; }
+	fAlive "${xvfbPid}" || { echo "no Xvfb on ${display} - run 'start' first" >&2; exit 1; }
+	import -display "${display}" -window root "${out}"
+	echo "Wrote ${out}"
+}
+
+fStop() {
+	if fAlive "${xvfbPid}" && fOwnedByOther; then
+		echo "Xvfb on ${display} belongs to another run (pid $(fPidOf "${ownerFile}")); leaving it" >&2
+		return 1
+	fi
+	local line f
+	if [[ -f "${appsPids}" ]]; then
+		while read -r line; do fEndIt "${line}"; done < "${appsPids}"
+		rm -f "${appsPids}"
+	fi
+	for f in "${wmPid}" "${xvfbPid}"; do
+		[[ -f "${f}" ]] || continue
+		fEndIt "$(cat "${f}")"
+		rm -f "${f}"
+	done
+	rm -f "${ownerFile}"
+	echo "Stopped headless session on ${display}"
 }
 
 case "${1:-}" in
-	start)  shift; start "${1:-}" ;;
-	launch) shift; launch "$@" ;;
-	shot)   shift; shot "${1:-}" ;;
-	status) alive "$xvfb_pid" && echo "Xvfb up on $display (pid $(cat "$xvfb_pid"))" || echo "no Xvfb on $display" ;;
-	stop)   stop ;;
+	start)  shift; fStart "${1:-}" ;;
+	launch) shift; fLaunch "${@}" ;;
+	shot)   shift; fShot "${1:-}" ;;
+	status) fAlive "${xvfbPid}" && echo "Xvfb up on ${display} (pid $(fPidOf "${xvfbPid}"))" || echo "no Xvfb on ${display}" ;;
+	stop)   fStop ;;
 	*) echo "usage: gui-headless.bash {start [--wm]|launch <cmd...>|shot <out.png>|status|stop}" >&2; exit 2 ;;
 esac
 
 
 ##	Script history:
 ##		- 20260701: Created.
+##		- 20260917: A pid file has the start time, so a reused pid isn't
+##		  ours; start refuses a number another server is using and reports success
+##		  only for its own; a server belongs to the run that started it.
+##		- 20261005: start --wm waits for the WM to answer, and fails if it
+##		  doesn't. Background pids are the programs, not a subshell, and
+##		  stop waits for them to exit.

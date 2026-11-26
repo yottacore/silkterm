@@ -1,0 +1,15 @@
+# Exec= escaping, one case per line: the install path, a tab, what the Exec value
+# between the quotes has to be. Both installers are checked against this list.
+#
+# Exec is read twice - the desktop-entry string rules first, then the Exec quoting
+# rules - so an escaping backslash written for the second ends up doubled by the
+# first. A literal backslash therefore needs four, and '%' needs doubling or it
+# reads as a field code. GLib refuses an entry carrying '%%' rather than running
+# it, which is still better than the plain '%' it silently drops half of.
+/opt/plain/silkterm	/opt/plain/silkterm
+/home/my dir/silkterm	/home/my dir/silkterm
+/home/a$b/silkterm	/home/a\\$b/silkterm
+/home/a\b/silkterm	/home/a\\\\b/silkterm
+/home/50%/silkterm	/home/50%%/silkterm
+/home/q"t/silkterm	/home/q\\"t/silkterm
+/home/ti`ck/silkterm	/home/ti\\`ck/silkterm

@@ -1,0 +1,2 @@
+cd /srv/log
+tail -f app.log

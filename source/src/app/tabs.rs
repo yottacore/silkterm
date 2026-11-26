@@ -1,0 +1,1067 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
+//! The tab strip: each tab's label and width, its hover tip, and opening,
+//! closing, and moving tabs.
+
+use super::{CHROME_HAIRLINE, OverlayAt, OverlayLefts, State, TAB_CLOSE_M, TAB_CLOSE_W, TAB_EDIT_INSET, TAB_EDIT_PAD, TAB_TIP_GAP, TAB_TIP_PAD, TAB_TIP_REFRESH, TAB_TITLE_PAD, TAB_TOP_PAD};
+use crate::config;
+use crate::pane::{Pane, PaneManager, Rect, TabFacts};
+use crate::term::{PaneId, UserEvent};
+use crate::text::TextCtx;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use winit::event_loop::EventLoopProxy;
+
+/// The tab strip as drawn: which tab it starts at, and per tab shown, how wide
+/// it is and what it says. Tabs vary in width, so a position on the bar is a
+/// running total rather than a multiplication (see tabtitle).
+#[derive(Debug, Default)]
+pub(super) struct TabLayout {
+	key: (u32, usize, usize, usize, u32, u64),
+	pub(super) first: usize,
+	pub(super) widths: Vec<f32>,
+	pub(super) labels: Vec<String>,
+}
+
+impl TabLayout {
+	fn shown(&self) -> usize {
+		self.widths.len()
+	}
+
+	fn x(&self, i: usize) -> Option<f32> {
+		(i >= self.first && i < self.first + self.shown()).then(|| crate::tabtitle::slot_x(&self.widths, i - self.first))
+	}
+
+	fn w(&self, i: usize) -> Option<f32> {
+		self.widths.get(i.checked_sub(self.first)?).copied()
+	}
+
+	fn at_x(&self, x: f32) -> Option<usize> {
+		crate::tabtitle::slot_at_x(&self.widths, x).map(|slot| self.first + slot)
+	}
+}
+
+// What one tab's label is made from. It's kept beside the forms built from it,
+// so a frame can tell whether they're current by comparing rather than building.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct LabelFacts {
+	// the text being typed, while this tab is the one being renamed
+	edit: Option<String>,
+	title_override: Option<String>,
+	// the focused pane's own title, and the program it was started with
+	said: String,
+	launched: Option<String>,
+	command: Option<Vec<String>>,
+	task: crate::term::Task,
+	cwd: Option<PathBuf>,
+}
+
+// The same facts lent from the tab, so a frame compares them where they are and
+// copies them only when they changed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LabelView<'a> {
+	edit: Option<&'a str>,
+	tab: TabFacts<'a>,
+}
+
+impl LabelFacts {
+	fn view(&self) -> LabelView<'_> {
+		LabelView { edit: self.edit.as_deref(), tab: TabFacts { title_override: self.title_override.as_deref(), said: &self.said, launched: self.launched.as_deref(), command: self.command.as_deref(), task: &self.task, cwd: self.cwd.as_deref() } }
+	}
+}
+
+impl LabelView<'_> {
+	fn to_facts(self) -> LabelFacts {
+		let tab = self.tab;
+		LabelFacts { edit: self.edit.map(str::to_string), title_override: tab.title_override.map(str::to_string), said: tab.said.to_string(), launched: tab.launched.map(str::to_string), command: tab.command.map(<[String]>::to_vec), task: tab.task.clone(), cwd: tab.cwd.map(std::path::Path::to_path_buf) }
+	}
+}
+
+// What tab `pm`'s label is made from. A rename in progress is the whole label,
+// so the shell isn't asked. A title of the tab's own is only one of the parts,
+// since the template says where it goes.
+fn label_view<'a>(edit: Option<&'a str>, pm: &'a mut PaneManager) -> LabelView<'a> {
+	if edit.is_some() {
+		return LabelView { edit, tab: TabFacts::NONE };
+	}
+	LabelView { edit: None, tab: pm.tab_facts() }
+}
+
+// One tab's label forms, longest first, and the room the longest and the
+// shortest of them want.
+#[derive(Debug)]
+struct TabLabel {
+	facts: LabelFacts,
+	forms: Vec<String>,
+	demand: crate::tabtitle::Demand,
+}
+
+/// Every tab's label, kept between frames. A frame still reads each tab's facts,
+/// since a shell's task and folder are only known by asking, but forms are built
+/// and measured again only for a tab whose facts moved, and for all of them when
+/// the settings or the font did. Entries go by position, so a moved tab is
+/// rebuilt the first time its slot reads differently.
+#[derive(Debug, Default)]
+pub(super) struct TabLabels {
+	tabs: Vec<Option<TabLabel>>,
+	// What every entry was built against. Any settings change is a new snapshot,
+	// and any font, zoom, or scale change a new text context.
+	settings: Option<Arc<config::Settings>>,
+	text: u64,
+	// moves whenever an entry does, so the layout knows to measure again
+	revision: u64,
+	// forms built so far
+	builds: usize,
+}
+
+impl TabLabels {
+	fn fit(&mut self, count: usize) {
+		if self.tabs.len() != count {
+			self.tabs.resize_with(count, || None);
+			self.revision += 1;
+		}
+	}
+
+	// Bring tab `index` up to date with `facts`, building its forms only if they
+	// changed since last time. Nothing is copied or allocated when they didn't.
+	fn keep(&mut self, index: usize, facts: LabelView<'_>, settings: &Arc<config::Settings>, text: &mut TextCtx) {
+		let same_settings = self.settings.as_ref().is_some_and(|seen| Arc::ptr_eq(seen, settings));
+		if !same_settings || self.text != text.generation {
+			self.settings = Some(Arc::clone(settings));
+			self.text = text.generation;
+			self.tabs.iter_mut().for_each(|tab| *tab = None);
+			self.revision += 1;
+		}
+		let Some(slot) = self.tabs.get_mut(index) else {
+			return;
+		};
+		if slot.as_ref().is_some_and(|tab| tab.facts.view() == facts) {
+			return;
+		}
+		let forms = label_forms_from(facts, settings);
+		// what a tab spends on itself rather than on its label
+		let chrome = 2.0 * config::dip(TAB_TITLE_PAD, text.scale) + config::dip(TAB_CLOSE_W, text.scale);
+		let attrs = crate::text::ui_attrs();
+		let mut width_of = |form: Option<&String>| form.map_or(0.0, |s| text.measure_ui_text(s, &attrs));
+		let demand = crate::tabtitle::Demand { natural: width_of(forms.first()) + chrome, floor: width_of(forms.last()) + chrome };
+		*slot = Some(TabLabel { facts: facts.to_facts(), forms, demand });
+		self.builds += 1;
+		self.revision += 1;
+	}
+
+	pub(super) fn forms(&self, index: usize) -> &[String] {
+		self.tabs.get(index).and_then(Option::as_ref).map_or(&[], |tab| tab.forms.as_slice())
+	}
+}
+
+// Everything a tab could say, longest form first (see tabtitle): the tab text
+// template filled in with the name typed on the tab or given by `--title`, the
+// program's own title, and the shell's name from the Shells list, plus what
+// that shell reports. That's the command it's running, the last one it ran, or
+// where it is if it hasn't run anything.
+fn label_forms_from(facts: LabelView<'_>, settings: &config::Settings) -> Vec<String> {
+	// A rename in progress is what the tab says, so what's typed is what's seen.
+	// It's one form and never shortened, or the caret would sit off the end of a
+	// shortened label.
+	if let Some(text) = facts.edit {
+		return vec![text.to_string()];
+	}
+	let facts = facts.tab;
+	let command_line = tab_command_line(facts.command);
+	let friendly = crate::shells::friendly(&command_line, &settings.shells);
+	let cwd = facts.cwd.map(|dir| dir.to_string_lossy().into_owned());
+	let home = config::home_dir().map(|dir| dir.to_string_lossy().into_owned());
+	let task = match facts.task {
+		crate::term::Task::Running(program) => Some(crate::tabtitle::Task::Running(program)),
+		crate::term::Task::Last(program) => Some(crate::tabtitle::Task::Last(program)),
+		crate::term::Task::Idle => None,
+	};
+	let template = crate::tabtitle::tab_template_or_default(&settings.tab_text);
+	crate::tabtitle::label_forms(&template, crate::tabtitle::Facts { typed: facts.title_override, shell: &friendly, title: crate::tabtitle::program_title(config::rights(), facts.said, facts.launched), task, cwd: cwd.as_deref(), home: home.as_deref() }, crate::tabtitle::Style::native())
+}
+
+/// Tab strip: each tab has its own pane split tree.
+#[derive(Debug)]
+pub(super) struct Tabs {
+	pub(super) list: Vec<PaneManager>,
+	pub(super) active: usize,
+}
+
+impl Tabs {
+	pub(super) fn cur(&self) -> &PaneManager {
+		&self.list[self.active]
+	}
+	pub(super) fn cur_mut(&mut self) -> &mut PaneManager {
+		&mut self.list[self.active]
+	}
+	pub(super) fn len(&self) -> usize {
+		self.list.len()
+	}
+	/// `PaneIds` are globally unique, and the pane may be in any tab, since shells
+	/// in background tabs reply to ESC[6n too.
+	pub(super) fn find_pane(&self, id: PaneId) -> Option<&Pane> {
+		self.list.iter().find_map(|pm| pm.panes.get(&id))
+	}
+	pub(super) fn find_pane_mut(&mut self, id: PaneId) -> Option<&mut Pane> {
+		self.list.iter_mut().find_map(|pm| pm.panes.get_mut(&id))
+	}
+	fn next(&mut self) {
+		self.active = tab_step(self.active, self.list.len(), true);
+	}
+	fn prev(&mut self) {
+		self.active = tab_step(self.active, self.list.len(), false);
+	}
+	pub(super) fn move_active(&mut self, fwd: bool) {
+		self.active = move_tab(&mut self.list, self.active, fwd);
+	}
+	/// Runs each pane's check of what's running once it's due, in every tab, since
+	/// a background tab names its shell's program too. True when a result changed.
+	pub(super) fn recheck_tasks(&mut self, now: std::time::Instant) -> bool {
+		let mut moved = false;
+		for pane in self.list.iter_mut().flat_map(|pm| pm.panes.values_mut()) {
+			if pane.term.task_wake().is_some_and(|at| now >= at) {
+				moved |= pane.term.recheck_task();
+			}
+		}
+		moved
+	}
+	/// When the next of those checks is due after `now`.
+	pub(super) fn task_wake(&self, now: std::time::Instant) -> Option<std::time::Instant> {
+		self.list.iter().flat_map(|pm| pm.panes.values()).filter_map(|pane| pane.term.task_wake()).filter(|&at| at > now).min()
+	}
+}
+
+// The tab beside `i` of `n`, wrapping at both ends.
+fn tab_step(i: usize, n: usize, forward: bool) -> usize {
+	if forward { (i + 1) % n } else { (i + n - 1) % n }
+}
+
+// The active tab once the one at `index` has gone and `len` are left. The same
+// tab where it can be, else the one that took its place, else the last. A tab
+// opened beside another goes back to that one (`opener`, where it is now).
+fn active_after_close(active: usize, index: usize, len: usize, opener: Option<usize>) -> usize {
+	if active == index
+		&& let Some(back) = opener
+	{
+		return back;
+	}
+	let active = if active > index { active - 1 } else { active };
+	active.min(len.saturating_sub(1))
+}
+
+// Put a new tab just right of the active one, or at the end, and return where
+// it went. It becomes the active tab either way.
+fn insert_tab<T>(list: &mut Vec<T>, active: usize, tab: T, beside: bool) -> usize {
+	let at = if beside { (active + 1).min(list.len()) } else { list.len() };
+	list.insert(at, tab);
+	at
+}
+
+// Swap the tab at `i` with its neighbor and return where it went, so the
+// active tab follows. Past either end it trades places with the far one.
+fn move_tab<T>(list: &mut [T], i: usize, forward: bool) -> usize {
+	if list.len() < 2 {
+		return i;
+	}
+	let j = tab_step(i, list.len(), forward);
+	list.swap(i, j);
+	j
+}
+
+/// Top and height of a tab button inside the bar: inset at the top, and the bar's
+/// bottom hairline left showing under it. The draw and the text centering both
+/// use this.
+pub(super) fn tab_button_v(bar_y: f32, tab_h: f32, scale: f32) -> (f32, f32) {
+	let top = config::dip(TAB_TOP_PAD, scale);
+	let rule = config::dip(CHROME_HAIRLINE, scale);
+	(bar_y + top, tab_h - top - rule)
+}
+
+/// The close-"x" button box within a tab: a square with equal top/right/bottom
+/// margins (the extra room falls to the left, separating it from the title).
+/// Shared by the rect draw, the glyph placement, and the click hit-test so they
+/// can't drift apart.
+pub(super) fn tab_close_box(tab_x: f32, tab_w: f32, bar_y: f32, tab_h: f32, scale: f32) -> Rect {
+	let m = config::dip(TAB_CLOSE_M, scale);
+	let side = (tab_h - 2.0 * m).max(config::dip(8.0, scale));
+	Rect { x: tab_x + tab_w - m - side, y: bar_y + m, w: side, h: side }
+}
+/// The box a tab being renamed types into: a real text field inside the tab
+/// button, stopping short of the close column and as tall as a line of text plus
+/// its own padding, or the button itself where that is shorter.
+pub(super) fn tab_edit_box(tab_x: f32, tab_w: f32, bar_y: f32, tab_h: f32, line_h: f32, scale: f32) -> Rect {
+	let inset = config::dip(TAB_EDIT_INSET, scale);
+	let (btn_y, btn_h) = tab_button_v(bar_y, tab_h, scale);
+	let h = (line_h + 2.0 * config::dip(TAB_EDIT_PAD, scale)).min(btn_h - 2.0 * inset);
+	let x = tab_x + inset;
+	let right = tab_x + tab_w - config::dip(TAB_CLOSE_W, scale) - inset;
+	Rect { x, y: btn_y + (btn_h - h) / 2.0, w: (right - x).max(config::dip(8.0, scale)), h }
+}
+
+/// How much of a tab its title gets: the button less its own inset on both sides
+/// and the close-button column it must never run under. The draw and the fit both
+/// use this, or a title gets shortened to a width it isn't given.
+pub(super) fn tab_title_w(tab_w: f32, scale: f32) -> f32 {
+	let pad = config::dip(TAB_TITLE_PAD, scale);
+	(tab_w - 2.0 * pad - config::dip(TAB_CLOSE_W, scale)).max(config::dip(8.0, scale))
+}
+
+// The command line behind a tab, for naming the shell it runs. Every pane
+// resolves its own at spawn (see `spawn_pane`), so None here means nothing is
+// switched on and the engine picked its own default. There's no way to name
+// that, and a guess from the list once labeled a PowerShell pane Command Prompt.
+fn tab_command_line(command: Option<&[String]>) -> String {
+	command.map_or_else(String::new, crate::shells::command_line)
+}
+
+/// A tab's hover tip: what it runs, how it was started, where it is, and how
+/// long it's been open. The lines are built on a timer rather than per frame,
+/// since naming the shell looks up its program on disk, and the clock at the
+/// bottom has to tick anyway.
+#[derive(Debug)]
+pub(super) struct TabTip {
+	tab: usize,
+	// one table row per line, before it's fitted to the window
+	lines: Vec<String>,
+	built: Instant,
+	fit: Option<TipFit>,
+}
+
+// The lines fitted to a width, and the widest of them, kept until the lines,
+// the width, or the text context change.
+#[derive(Debug)]
+struct TipFit {
+	generation: u64,
+	budget: u32,
+	widest: f32,
+	rows: Vec<FitRow>,
+	// every row's pieces in one list for the frame, None when nothing wrapped
+	wrapped: Option<Vec<String>>,
+}
+
+// One line as fitted. It's kept per line, since the clock line changes every
+// second, and wrapping a long path again with it measured the path a dozen
+// more times.
+#[derive(Debug)]
+struct FitRow {
+	line: String,
+	widest: f32,
+	pieces: Option<Vec<String>>,
+}
+
+impl TabTip {
+	// The widest line once fitted to `budget`, measured once per line rather than
+	// per frame. A new text context (a font or zoom change) or a new width fits
+	// every line again.
+	fn lay(&mut self, generation: u64, budget: f32, mut measure: impl FnMut(&str) -> f32) -> f32 {
+		let budget_bits = budget.to_bits();
+		let mut old = match self.fit.take() {
+			Some(fit) if fit.generation == generation && fit.budget == budget_bits => {
+				let same = fit.rows.len() == self.lines.len() && fit.rows.iter().zip(&self.lines).all(|(row, line)| row.line == *line);
+				if same {
+					let widest = fit.widest;
+					self.fit = Some(fit);
+					return widest;
+				}
+				fit.rows
+			}
+			_ => Vec::new(),
+		};
+		let rows: Vec<FitRow> = self
+			.lines
+			.iter()
+			.map(|line| {
+				if let Some(at) = old.iter().position(|row| row.line == *line) {
+					return old.swap_remove(at);
+				}
+				let (pieces, widest) = crate::tabtitle::fit_tip_line(line, budget, &mut measure);
+				FitRow { line: line.clone(), widest, pieces }
+			})
+			.collect();
+		let widest = rows.iter().fold(0.0f32, |widest, row| widest.max(row.widest));
+		let wrapped = rows.iter().any(|row| row.pieces.is_some()).then(|| rows.iter().flat_map(|row| row.pieces.as_deref().unwrap_or(std::slice::from_ref(&row.line))).cloned().collect());
+		self.fit = Some(TipFit { generation, budget: budget_bits, widest, rows, wrapped });
+		widest
+	}
+
+	/// The lines as last laid out, lent to the frame that draws them (`Overlay`).
+	pub(super) fn shown(&self) -> &[String] {
+		self.fit.as_ref().and_then(|fit| fit.wrapped.as_deref()).unwrap_or(&self.lines)
+	}
+}
+
+impl State {
+	// Measure the strip again: what each tab's label wants, the least each can be
+	// given, which tabs that leaves on the page, and the widest form that fits the
+	// width each one ends up with.
+	//
+	// Kept rather than recomputed per call, so labels aren't measured on every
+	// mouse move or frame. `tab_layout` rebuilds only when an input in
+	// `tab_layout_key` changed, and the labels' revision is one of them, so a
+	// changed label is measured again (see TabLabels).
+	fn rebuild_tab_layout(&mut self) {
+		// the count may have moved since the last frame read the labels
+		self.refresh_tab_labels(None);
+		let total = self.surface_px.0 as f32;
+		let scale = self.text.scale;
+		let attrs = crate::text::ui_attrs();
+		// every slot was filled just above
+		let demands: Vec<crate::tabtitle::Demand> = self.tab_labels.tabs.iter().map(|tab| tab.as_ref().map(|tab| tab.demand).unwrap_or_default()).collect();
+		let floors: Vec<f32> = demands.iter().map(|d| d.floor).collect();
+		// Bring the active tab onto the page when it changes, and only then, so a
+		// page the wheel moved to stays put. This runs off the change rather than
+		// from each place that sets `tabs.active`, so no path misses it. Otherwise
+		// `tab_first` is only a preference, clamped on read, so opening or closing
+		// a tab can't strand it.
+		if self.tab_followed != self.tabs.active {
+			self.tab_followed = self.tabs.active;
+			self.tab_first = crate::tabtitle::page_for(self.tab_first, self.tabs.active, &floors, total);
+		}
+		let first = crate::tabtitle::clamp_page(self.tab_first, &floors, total);
+		let shown = crate::tabtitle::tabs_that_fit(total, &floors, first).min(self.tabs.len().saturating_sub(first));
+		let settings = config::settings();
+		// The tab in front takes what the row can spare, so the strip has to know
+		// which slot it's in on this page, or that it's on another page.
+		let active_slot = self.tabs.active.checked_sub(first).filter(|slot| *slot < shown);
+		let widths = crate::tabtitle::widths(total, &demands[first..first + shown], settings.tab_regular_pct, settings.tab_max_pct, active_slot);
+		// The widest form that fits the space this tab ended up with, else the
+		// shortest. That still names the shell, so it reads as a tab even clipped.
+		let labels = widths
+			.iter()
+			.enumerate()
+			.map(|(slot, w)| {
+				let title_w = tab_title_w(*w, scale);
+				let tab = self.tab_labels.forms(first + slot);
+				tab.iter().find(|form| self.text.measure_ui_text(form, &attrs) <= title_w).or_else(|| tab.last()).cloned().unwrap_or_default()
+			})
+			.collect();
+		self.tab_layout = TabLayout { key: self.tab_layout_key(), first, widths, labels };
+	}
+
+	// What the strip was measured from. A mouse move isn't on the list, which
+	// is the point of having one.
+	fn tab_layout_key(&self) -> (u32, usize, usize, usize, u32, u64) {
+		(self.surface_px.0, self.tabs.len(), self.tabs.active, self.tab_first, self.text.scale.to_bits(), self.tab_labels.revision)
+	}
+
+	/// Bring the kept labels up to date: every tab's, or only one. Reading a tab's
+	/// facts is cheap; building its forms is the part that is skipped.
+	pub(super) fn refresh_tab_labels(&mut self, only: Option<usize>) {
+		let settings = config::settings();
+		self.tab_labels.fit(self.tabs.len());
+		let tabs = only.map_or(0..self.tabs.len(), |index| index..index + 1);
+		for index in tabs {
+			let edit = self.tab_edit.as_ref().filter(|edit| edit.tab == index).map(|edit| edit.text.as_str());
+			let Some(pm) = self.tabs.list.get_mut(index) else {
+				continue;
+			};
+			self.tab_labels.keep(index, label_view(edit, pm), &settings, &mut self.text);
+		}
+	}
+
+	/// While the bar is hidden nothing is built or measured, but every tab's
+	/// shell is still asked what it runs. A shell only learns its last command
+	/// by being asked while that command runs, so skipping this would lose one
+	/// that started and finished before the bar came back.
+	pub(super) fn probe_tabs(&mut self) {
+		for pm in &mut self.tabs.list {
+			let _ = pm.tab_facts();
+		}
+	}
+
+	/// The strip as drawn, measured again only if one of its inputs moved.
+	pub(super) fn tab_layout(&mut self) -> &TabLayout {
+		if self.tab_layout.key != self.tab_layout_key() {
+			self.rebuild_tab_layout();
+		}
+		&self.tab_layout
+	}
+
+	/// Where tab `i` is on the bar and how wide it is, or None when it's on
+	/// another page. Drawing and both hit tests use this, so a click never goes to
+	/// a different tab than the one under the pointer.
+	pub(super) fn tab_box(&mut self, i: usize) -> Option<(f32, f32)> {
+		let layout = self.tab_layout();
+		Some((layout.x(i)?, layout.w(i)?))
+	}
+
+	/// Which tab a pointer at `x` is over. It's the inverse of `tab_box`, and the
+	/// only thing the 2 hit tests may use.
+	pub(super) fn tab_at(&mut self, x: f32) -> Option<usize> {
+		self.tab_layout().at_x(x)
+	}
+
+	/// The close button of tab `i`, if that tab is on the page.
+	pub(super) fn tab_close_box_at(&mut self, i: usize, bar_y: f32, tab_h: f32) -> Option<Rect> {
+		let (x, w) = self.tab_box(i)?;
+		Some(tab_close_box(x, w, bar_y, tab_h, self.text.scale))
+	}
+
+	/// A wheel over the tab bar turns the page. Without it a tab past the edge
+	/// could only be reached from the keyboard or the Tabs menu.
+	pub(super) fn scroll_tab_strip(&mut self, lines: f32) {
+		let first = self.tab_layout().first;
+		let step = if lines > 0.0 { first.saturating_sub(1) } else { first.saturating_add(1) };
+		if step != self.tab_first {
+			self.tab_first = step;
+			self.dirty = true;
+		}
+	}
+
+	/// Everything tab `index` could say, built afresh (see `label_forms_from`).
+	/// The strip reads the kept copy in `tab_labels` instead.
+	pub(super) fn tab_label_forms(&mut self, index: usize) -> Vec<String> {
+		let settings = config::settings();
+		let edit = self.tab_edit.as_ref().filter(|edit| edit.tab == index).map(|edit| edit.text.as_str());
+		self.tabs.list.get_mut(index).map_or_else(|| vec![config::APP_NAME.to_string()], |pm| label_forms_from(label_view(edit, pm), &settings))
+	}
+
+	/// Which tab the pointer is over, and since when. A drag or an open menu
+	/// takes the pointer instead, so no tip appears under one. Nor does one in a
+	/// window without the focus.
+	pub(super) fn note_tab_hover(&mut self, x: f32, y: f32) {
+		let busy = !self.tip_focus.tips() || self.bar_dragging.is_some() || self.map_dragging.is_some() || self.dragging_pane.is_some() || self.tab_edit.is_some() || self.menu.is_some() || self.bar_open.is_some() || self.tab_close_arm.is_some();
+		let bar_y = self.menubar_h();
+		let over = if busy || !self.tab_bar_visible() || y < bar_y || y >= bar_y + self.tab_bar_h() { None } else { self.tab_at(x) };
+		if self.tab_hover.point_at(over) && self.tab_tip.take().is_some() {
+			self.dirty = true;
+		}
+	}
+
+	/// Bring the tab tip up once the pointer has rested, and keep what it says
+	/// current while it is up. Returns true when the frame has to be redrawn.
+	pub(super) fn update_tab_tip(&mut self) -> bool {
+		let limit = Duration::try_from_secs_f32(config::settings().tab_tip_max_s).unwrap_or_default();
+		let Some(tab) = self.tab_hover.ripe_for(limit) else {
+			return self.tab_hover.wake().is_none() && self.tab_tip.take().is_some();
+		};
+		let now = Instant::now();
+		let stale = self.tab_tip.as_ref().is_none_or(|tip| tip.tab != tab || now.duration_since(tip.built) >= TAB_TIP_REFRESH);
+		if !stale {
+			return false;
+		}
+		if self.tab_tip.is_none() {
+			crate::perf::allocs_note("tab tip up");
+		}
+		let lines = self.tab_tip_lines(tab);
+		let kept = self.tab_tip.take_if(|tip| tip.tab == tab).map(|tip| (tip.lines == lines, tip.fit));
+		let changed = !kept.as_ref().is_some_and(|(same, _)| *same);
+		self.tab_tip = Some(TabTip {
+			tab,
+			lines,
+			built: now,
+			// what's fitted is kept per line, so only a line that changed is fitted again
+			fit: kept.and_then(|(_, fit)| fit),
+		});
+		changed
+	}
+
+	/// When the loop next has to wake for the tip: to raise one once the pointer
+	/// has rested, or to re-read one that's up, since its clock ticks.
+	pub(super) fn tab_tip_wake(&self) -> Option<Instant> {
+		match &self.tab_tip {
+			Some(tip) => Some(tip.built + TAB_TIP_REFRESH),
+			None => self.tab_hover.wake(),
+		}
+	}
+
+	// What a tip says, as key/value pairs padded to one column (tabtitle::tip_lines).
+	// The path is shown whole here. The tab is where it gets shortened, and the tip
+	// is where to look when the short form isn't enough. A value that has a space
+	// or a quote is quoted, so its edges are never in doubt.
+	fn tab_tip_lines(&mut self, index: usize) -> Vec<String> {
+		let Some(pm) = self.tabs.list.get_mut(index) else {
+			return Vec::new();
+		};
+		let created = pm.created;
+		let facts = pm.tab_facts();
+		let settings = config::settings();
+		let command_line = tab_command_line(facts.command);
+		let quoted = crate::tabtitle::tip_value;
+		let mut rows: Vec<(&str, String)> = Vec::new();
+		if let Some(title) = facts.title_override {
+			rows.push(("Tab title", quoted(title)));
+		}
+		if let Some(said) = crate::tabtitle::program_title(config::rights(), facts.said, facts.launched) {
+			rows.push(("Program title", quoted(said)));
+		}
+		rows.push(("Shell name", quoted(&crate::shells::friendly(&command_line, &settings.shells))));
+		if !command_line.is_empty() {
+			rows.push(("Shell command", quoted(&command_line)));
+		}
+		// Only what is running now. A tab already says so itself, but it says it in
+		// the width it has left; the tip has the whole name.
+		if let crate::term::Task::Running(program) = facts.task {
+			rows.push(("Running", quoted(program)));
+		}
+		rows.push((
+			"Current path",
+			facts.cwd.map_or_else(
+				// not a value, so it takes no quotes, since a directory called
+				// "(not reported)" isn't what this line means
+				|| "(not reported)".to_string(),
+				|dir| quoted(&crate::tabtitle::path_forms(&dir.to_string_lossy(), None, crate::tabtitle::Style::native()).into_iter().next().unwrap_or_default()),
+			),
+		));
+		// a clock reading, not a value either
+		rows.push(("Open", crate::tabtitle::elapsed(created.elapsed().as_secs())));
+		crate::tabtitle::tip_lines(&rows)
+	}
+
+	/// The tip's box, and where each of its lines goes in it. Measured in the
+	/// terminal font, the only place the chrome uses it, since the lines are a
+	/// key/value table padded with spaces. The box fits the longest line, and a
+	/// line wider than the window wraps. It hangs off its own tab rather than the
+	/// pointer, so it doesn't jitter, and it's pushed back inside the window
+	/// rather than running off the right edge.
+	pub(super) fn tab_tip_layout(&mut self) -> Option<OverlayAt> {
+		let generation = self.text.generation;
+		let text = &mut self.text;
+		let tip = self.tab_tip.as_mut()?;
+		if tip.lines.is_empty() {
+			return None;
+		}
+		let pad = text.dip(TAB_TIP_PAD);
+		let win_w = self.surface_px.0 as f32;
+		// a line wider than the window wraps, so the box always fits in it
+		let budget = (win_w - 2.0 * pad).max(1.0);
+		let text_w = tip.lay(generation, budget, |line| text.measure_mono_text(line));
+		let (tab, count) = (tip.tab, tip.shown().len());
+		let line_h = self.text.cell_h;
+		let w = text_w + 2.0 * pad;
+		let h = line_h * count as f32 + 2.0 * pad;
+		// A tab paged off the strip while its tip was up takes the tip with it.
+		// Otherwise the tip would sit at the bar's left end, pointing at whatever
+		// tab is there.
+		let x = self.tab_box(tab)?.0.min((win_w - w).max(0.0)).max(0.0);
+		let y = self.menubar_h() + self.tab_bar_h() + self.text.dip(TAB_TIP_GAP);
+		Some(OverlayAt { rect: Rect { x, y, w, h }, top: y + pad, line_h, lefts: OverlayLefts::Even(x + pad) })
+	}
+
+	pub(super) fn new_tab(&mut self, proxy: &EventLoopProxy<UserEvent>) {
+		self.new_tab_with(proxy, None, false);
+	}
+
+	/// `shell` is a shell picked by name from the Tabs menu; None inherits from
+	/// the pane that was active, as a plain new tab does. The directory is
+	/// inherited either way, since picking a shell says nothing about where to start.
+	/// `in_tmux` starts the tab's pane in a tmux session of its own, as "New
+	/// tab in tmux" asks for. With "Always run in new tmux session" on, every
+	/// new tab gets one.
+	pub(super) fn new_tab_with(&mut self, proxy: &EventLoopProxy<UserEvent>, shell: Option<Vec<String>>, in_tmux: bool) {
+		self.commit_tab_edit();
+		let in_tmux = in_tmux || config::settings().tmux_new_session;
+		// the area with the bar shown, since there's about to be more than one tab.
+		// It's a provisional box, and relayout_all sets the exact rects right after.
+		let bar = self.menubar_h() + self.tab_bar_h();
+		let area = Rect { x: 0.0, y: bar, w: self.surface_px.0 as f32, h: (self.surface_px.1 as f32 - bar).max(1.0) };
+		// inherit shell + directory from the pane that was active when the tab
+		// was opened; a default-shell pane has None -> still the default
+		let (cmd, cwd) = self.tabs.list.get(self.tabs.active).map_or((None, None), PaneManager::inherit_spawn);
+		let cmd = shell.or(cmd).or_else(config::default_shell_argv);
+		if let Ok(pm) = PaneManager::new(&mut self.text, proxy, area, cmd, cwd, in_tmux) {
+			let beside = config::settings().new_tab_beside;
+			let made = pm.focused;
+			self.tab_opener = self.tabs.list.get(self.tabs.active).filter(|_| beside).map(|from| (made, from.focused));
+			self.tabs.active = insert_tab(&mut self.tabs.list, self.tabs.active, pm, beside);
+			if self.tabs.active + 1 < self.tabs.len() {
+				self.forget_tab_pointer();
+			}
+			self.relayout_all(); // existing tab(s) shrink for the now-shown bar
+			self.update_title();
+			self.dirty = true;
+		}
+	}
+
+	// What the pointer was doing to a tab is keyed by its position, so any change
+	// to the order drops it. A held close button would close whichever tab took
+	// its place on release.
+	fn forget_tab_pointer(&mut self) {
+		self.tab_close_arm = None;
+		self.tab_dbl = None;
+		self.tab_hover.point_at(None);
+		self.tab_tip = None;
+	}
+
+	/// Close tab from a menu or hotkey. A tab with a pane in tmux may ask
+	/// first (closing.rs).
+	pub(super) fn close_tab(&mut self) {
+		self.request_close_tab(self.tabs.active);
+	}
+
+	/// Move the shown tab one place left or right, wrapping at the ends.
+	pub(super) fn move_tab(&mut self, forward: bool) {
+		self.tabs.move_active(forward); // same tab follows - nothing was frozen
+		self.forget_tab_pointer();
+		self.update_title();
+		self.dirty = true;
+	}
+
+	/// the tab to the left or right, round the end
+	pub(super) fn step_tab(&mut self, forward: bool) {
+		if forward {
+			self.tabs.next();
+		} else {
+			self.tabs.prev();
+		}
+		self.freeze_catchup();
+		self.update_title();
+		self.dirty = true;
+	}
+
+	/// Close the tab at `idx`, which may not be the active one, since a background
+	/// tab's shell can exit. Keeps `active` pointing at the same tab where it can.
+	pub(super) fn close_tab_at(&mut self, idx: usize) {
+		// A rename is keyed by position, so any change to the list ends it.
+		self.cancel_tab_edit();
+		self.forget_tab_pointer();
+		if self.tabs.list.len() <= 1 {
+			self.quit = true; // closing the only tab closes the window
+			return;
+		}
+		let showed = idx == self.tabs.active;
+		let opener = match self.tab_opener {
+			Some((made, from)) if self.tabs.list[idx].panes.contains_key(&made) => {
+				self.tab_opener = None;
+				Some(from)
+			}
+			_ => None,
+		};
+		self.tabs.list.remove(idx);
+		let opener = opener.and_then(|from| self.tabs.list.iter().position(|pm| pm.panes.contains_key(&from)));
+		self.tabs.active = active_after_close(self.tabs.active, idx, self.tabs.len(), opener);
+		if showed {
+			self.freeze_catchup(); // closing the shown tab reveals a frozen one
+		}
+		self.relayout_all(); // if back to 1 tab, the bar hides and panes grow
+		self.update_title();
+		self.dirty = true;
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{tab_close_box, tab_command_line, tab_title_w};
+	use crate::config;
+	use crate::shells::ShellEntry;
+	use crate::text::TextCtx;
+	use std::time::Instant;
+	// One frame's pass over the strip's labels, as the render makes it. Returns
+	// how many tabs built their forms.
+	fn label_frame(labels: &mut super::TabLabels, tabs: &[super::LabelFacts], settings: &std::sync::Arc<config::Settings>, text: &mut TextCtx) -> usize {
+		let before = labels.builds;
+		labels.fit(tabs.len());
+		for (index, facts) in tabs.iter().enumerate() {
+			labels.keep(index, facts.view(), settings, text);
+		}
+		labels.builds - before
+	}
+
+	fn label_settings(shell_title: &str) -> std::sync::Arc<config::Settings> {
+		std::sync::Arc::new(config::Settings { tab_text: crate::tabtitle::DEFAULT_TAB_TEXT.to_string(), shells: vec![ShellEntry { slug: "silk-test-sh".into(), title: shell_title.into(), command: "silk-test-sh".into(), active: true, comment: String::new(), last_seen: String::new() }], ..(*config::settings()).clone() })
+	}
+
+	fn label_tab(n: usize) -> super::LabelFacts {
+		super::LabelFacts { command: Some(vec!["silk-test-sh".into()]), cwd: Some(format!("/srv/work/project{n}/src").into()), ..super::LabelFacts::default() }
+	}
+
+	// The strip used to build and measure every tab's label on every frame,
+	// with nothing on screen changing.
+	// Test ID: ddgfs
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn idle_frames_build_no_tab_labels() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let settings = label_settings("Work shell");
+		let tabs: Vec<_> = (0..3).map(label_tab).collect();
+		let mut labels = super::TabLabels::default();
+		// 4 seconds at 60 frames a second
+		let built: usize = (0..240).map(|_| label_frame(&mut labels, &tabs, &settings, &mut text)).sum();
+		assert!(built <= tabs.len(), "{built} label builds over 240 idle frames");
+	}
+
+	// A frame used to copy every tab's facts only to compare them with the last
+	// frame's. Now they're compared where they are, so an idle frame allocates
+	// nothing.
+	// Test ID: dfe46
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn idle_frames_copy_no_tab_facts() {
+		use crate::term::Task;
+		let mut text = TextCtx::new_cpu(1.0);
+		let settings = label_settings("Work shell");
+		let mut tabs: Vec<_> = (0..3).map(label_tab).collect();
+		tabs[0].said = "notes.txt - vim".into();
+		tabs[0].launched = Some("silk-test-sh".into());
+		tabs[1].task = Task::Running("make".into());
+		tabs[2].task = Task::Last("make".into());
+		tabs[2].title_override = Some("Logs".into());
+		let mut labels = super::TabLabels::default();
+		assert_eq!(label_frame(&mut labels, &tabs, &settings, &mut text), 3);
+		let before = crate::perf::thread_allocs();
+		for _ in 0..240 {
+			label_frame(&mut labels, &tabs, &settings, &mut text);
+		}
+		let spent = crate::perf::thread_allocs() - before;
+		assert_eq!(spent, 0, "allocations over 240 idle frames");
+		// a fact that changed is still copied, which also shows the counter counts
+		tabs[1].cwd = Some("/srv/elsewhere".into());
+		let before = crate::perf::thread_allocs();
+		assert_eq!(label_frame(&mut labels, &tabs, &settings, &mut text), 1);
+		if cfg!(debug_assertions) {
+			assert!(crate::perf::thread_allocs() > before);
+		}
+	}
+
+	// Whatever a label shows makes that tab build again, and only that tab: its
+	// title, task, folder, rename, or own title. The settings and the font make
+	// every tab build. A move the strip missed would show a stale label until
+	// something else happened.
+	// Test ID: ddgft
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_tab_label_builds_again_when_what_it_shows_moves() {
+		use crate::term::Task;
+		let mut text = TextCtx::new_cpu(1.0);
+		let settings = label_settings("Work shell");
+		let mut tabs: Vec<_> = (0..3).map(label_tab).collect();
+		let mut labels = super::TabLabels::default();
+		assert_eq!(label_frame(&mut labels, &tabs, &settings, &mut text), 3);
+		assert!(labels.forms(0)[0].contains("Work shell"), "{:?}", labels.forms(0));
+		let moves: [(&str, fn(&mut super::LabelFacts)); 7] = [("program title", |tab| tab.said = "notes.txt - vim".into()), ("launched", |tab| tab.launched = Some("vim".into())), ("task", |tab| tab.task = Task::Running("make".into())), ("last task", |tab| tab.task = Task::Last("make".into())), ("folder", |tab| tab.cwd = Some("/srv/elsewhere".into())), ("own title", |tab| tab.title_override = Some("Logs".into())), ("rename", |tab| tab.edit = Some("Lo".into()))];
+		for (what, change) in moves {
+			let revision = labels.revision;
+			change(&mut tabs[1]);
+			assert_eq!(label_frame(&mut labels, &tabs, &settings, &mut text), 1, "{what}");
+			assert_ne!(labels.revision, revision, "{what} reaches the layout");
+			assert_eq!(label_frame(&mut labels, &tabs, &settings, &mut text), 0, "{what}, again");
+		}
+		assert_eq!(labels.forms(1), ["Lo"]);
+		// a tab moved along the strip: both slots read differently now
+		tabs.swap(0, 2);
+		assert_eq!(label_frame(&mut labels, &tabs, &settings, &mut text), 2);
+		// closed, then opened
+		let revision = labels.revision;
+		tabs.pop();
+		assert_eq!(label_frame(&mut labels, &tabs, &settings, &mut text), 0);
+		assert_ne!(labels.revision, revision, "a closed tab reaches the layout");
+		tabs.push(label_tab(7));
+		assert_eq!(label_frame(&mut labels, &tabs, &settings, &mut text), 1);
+		// The bar hidden: no frame reads the strip while a folder moves, and the
+		// first one after it shows again has the new one.
+		tabs[0].cwd = Some("/srv/later".into());
+		assert_eq!(label_frame(&mut labels, &tabs, &settings, &mut text), 1);
+		// the shell renamed in the list
+		let renamed = label_settings("Build box");
+		assert_eq!(label_frame(&mut labels, &tabs, &renamed, &mut text), 3);
+		assert!(labels.forms(0)[0].contains("Build box"), "{:?}", labels.forms(0));
+		// a font or zoom change is a new text context
+		let mut zoomed = TextCtx::new_cpu(1.5);
+		assert_eq!(label_frame(&mut labels, &tabs, &renamed, &mut zoomed), 3);
+		assert_eq!(label_frame(&mut labels, &tabs, &renamed, &mut zoomed), 0);
+	}
+
+	// A new tab goes just right of the active one and becomes active, or at
+	// the end with the setting off. Every tab past it moves along one, so a
+	// label kept by position has to follow its tab, not stay in the slot.
+	// Test ID: ddj50
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_new_tab_goes_next_to_the_current_one() {
+		use super::{active_after_close, insert_tab};
+		let mut list = vec![0, 1, 2, 3];
+		assert_eq!(insert_tab(&mut list, 1, 9, true), 2);
+		assert_eq!(list, [0, 1, 9, 2, 3]);
+		assert_eq!(insert_tab(&mut list, 4, 8, true), 5, "from the last tab");
+		assert_eq!(list, [0, 1, 9, 2, 3, 8]);
+		assert_eq!(insert_tab(&mut list, 0, 7, false), 6, "setting off");
+		assert_eq!(list, [0, 1, 9, 2, 3, 8, 7]);
+		let mut one = vec![0];
+		assert_eq!(insert_tab(&mut one, 0, 1, true), 1);
+
+		// closing: of 4 left, as (active, closed, opener)
+		assert_eq!(active_after_close(2, 0, 4, None), 1, "an earlier tab");
+		assert_eq!(active_after_close(2, 3, 4, None), 2, "a later tab");
+		assert_eq!(active_after_close(2, 2, 4, None), 2, "the one in its place");
+		assert_eq!(active_after_close(4, 4, 4, None), 3, "the last");
+		assert_eq!(active_after_close(2, 2, 4, Some(1)), 1, "back to its maker");
+		assert_eq!(active_after_close(3, 2, 4, Some(1)), 2, "not the shown one");
+
+		let mut text = TextCtx::new_cpu(1.0);
+		let settings = label_settings("Work shell");
+		let mut tabs: Vec<_> = (0..4).map(label_tab).collect();
+		let mut labels = super::TabLabels::default();
+		label_frame(&mut labels, &tabs, &settings, &mut text);
+		let revision = labels.revision;
+		assert_eq!(insert_tab(&mut tabs, 1, label_tab(9), true), 2);
+		assert_eq!(label_frame(&mut labels, &tabs, &settings, &mut text), 3, "the new tab and the two it moved along");
+		assert_ne!(labels.revision, revision);
+		for (index, tab) in tabs.iter().enumerate() {
+			assert_eq!(labels.forms(index), super::label_forms_from(tab.view(), &settings), "tab {index}");
+		}
+	}
+
+	// The tip's lines are a table in the terminal font, measured line by line.
+	// That used to happen on every frame the tip was up.
+	// Test ID: ddgfv
+	#[test]
+	fn the_tab_tip_is_measured_once_per_set_of_lines() {
+		let mut tip = super::TabTip { tab: 0, lines: vec!["Shell name: Bash".into(), "Open:       2m".into()], built: Instant::now(), fit: None };
+		let measured = std::cell::Cell::new(0);
+		let measure = |line: &str| {
+			measured.set(measured.get() + 1);
+			line.len() as f32
+		};
+		for _frame in 0..120 {
+			assert_eq!(tip.lay(1, f32::MAX, measure), 16.0);
+		}
+		assert_eq!(measured.get(), 2, "{} lines measured over 120 frames", measured.get());
+		// a new text context measures again
+		tip.lay(2, f32::MAX, measure);
+		assert_eq!(measured.get(), 4);
+	}
+
+	// A tip with a long path or command was as wide as its longest line, so in a
+	// narrow window it ran off the right edge. It wraps to the window now, and
+	// keeps the wrap until the lines or the width change.
+	// Test ID: dfe68
+	#[test]
+	fn a_tab_tip_wraps_to_the_window_it_is_in() {
+		let path = "/tmp/a-long-temp-folder/20261117-094038_001/run/sh";
+		let mut tip = super::TabTip { tab: 0, lines: crate::tabtitle::tip_lines(&[("Shell command", path.to_string()), ("Open", "2m 05s".to_string())]), built: Instant::now(), fit: None };
+		// a monospace face 10 px to the char
+		let mono = |line: &str| line.chars().count() as f32 * 10.0;
+		let wide = tip.lay(1, 2000.0, mono);
+		assert_eq!(tip.shown(), tip.lines.as_slice(), "it fits, so it's the lines as built");
+		assert_eq!(wide, mono(&tip.lines[0]));
+		let budget = 300.0;
+		let narrow = tip.lay(1, budget, mono);
+		assert!(narrow <= budget, "{narrow} is wider than {budget}");
+		let shown = tip.shown();
+		assert!(shown.len() > tip.lines.len(), "{shown:?}");
+		assert!(shown.iter().all(|line| mono(line) <= budget), "{shown:?}");
+		assert_eq!(shown.last().map(String::as_str), Some("Open:          2m 05s"));
+		// the same width again is kept rather than fitted again
+		let kept = tip.shown().as_ptr();
+		tip.lay(1, budget, |_| panic!("measured again"));
+		assert!(std::ptr::eq(kept, tip.shown().as_ptr()));
+		// a tick of the clock fits that line alone again, not the path
+		let path_lines = tip.shown().len() - 1;
+		tip.lines[1] = "Open:          2m 06s".to_string();
+		let measured = std::cell::Cell::new(0);
+		tip.lay(1, budget, |line| {
+			measured.set(measured.get() + 1);
+			mono(line)
+		});
+		assert_eq!(measured.get(), 1);
+		assert_eq!(tip.shown().len(), path_lines + 1);
+		assert_eq!(tip.shown().last().map(String::as_str), Some("Open:          2m 06s"));
+	}
+
+	// The width a title is fitted to and the width it's shaped at are the the same
+	// number. A path shortened to a width the tab doesn't give it gets its last
+	// part clipped anyway, which the shortening is there to avoid.
+	// Test ID: dbjdw
+	#[test]
+	fn a_title_is_fitted_to_the_width_it_is_given() {
+		for scale in [1.0, 1.5, 2.0] {
+			for tab_w in [60.0, 140.0, 300.0] {
+				let title_w = tab_title_w(tab_w, scale);
+				let close = tab_close_box(0.0, tab_w, 0.0, 30.0, scale);
+				assert!(title_w > 0.0, "no room at all for a title");
+				assert!(title_w <= tab_w, "a title wider than its own tab: {title_w} in {tab_w}");
+				// and it stops short of the close button rather than running under it
+				assert!(title_w <= close.x || tab_w < config::dip(40.0, scale), "title {title_w} runs under the close box at {}", close.x);
+			}
+		}
+	}
+
+	// A tab may only name the shell it can see. A pane resolves its own command
+	// at spawn, so an unresolved one means nothing was switched on and the engine
+	// chose for itself. A guess from the list once labeled a PowerShell pane
+	// Command Prompt.
+	// Test ID: dbjdx
+	#[test]
+	fn a_tab_names_only_the_shell_it_can_see() {
+		assert_eq!(tab_command_line(None), "");
+		// An argument with a space survives the round trip back into one line,
+		// so the name lookup splits it the same way the launch did.
+		let argv = vec!["C:/Program Files/x.exe".to_string(), "a b".to_string()];
+		assert_eq!(tab_command_line(Some(&argv)), "\"C:/Program Files/x.exe\" \"a b\"");
+	}
+
+	// Test ID: dd5pe
+	#[test]
+	fn changing_tab_wraps_at_both_ends() {
+		use super::tab_step;
+		assert_eq!(tab_step(0, 3, true), 1);
+		assert_eq!(tab_step(2, 3, true), 0);
+		assert_eq!(tab_step(0, 3, false), 2);
+		assert_eq!(tab_step(1, 3, false), 0);
+		assert_eq!(tab_step(0, 1, true), 0);
+		assert_eq!(tab_step(0, 1, false), 0);
+	}
+
+	// Test ID: dd5pf
+	#[test]
+	fn a_moved_tab_trades_places_with_its_neighbour_and_stays_active() {
+		use super::move_tab;
+		let mut tabs = ['a', 'b', 'c'];
+		assert_eq!(move_tab(&mut tabs, 1, true), 2);
+		assert_eq!(tabs, ['a', 'c', 'b']);
+		assert_eq!(move_tab(&mut tabs, 2, true), 0, "past the end");
+		assert_eq!(tabs, ['b', 'c', 'a']);
+		assert_eq!(move_tab(&mut tabs, 0, false), 2, "past the start");
+		assert_eq!(tabs, ['a', 'c', 'b']);
+		let mut one = ['a'];
+		assert_eq!(move_tab(&mut one, 0, true), 0);
+	}
+
+	// A held close button, the double-click and the hover tip are kept by tab
+	// position. A background tab closing under a held press slid the next tab
+	// into its place, and the release closed that one without asking. Every
+	// change to the order has to drop them, wherever it's made.
+	// Test ID: dfejm
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn tab_reorder_drops_pointer_state() {
+		let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/app");
+		let mut texts = vec![include_str!("../app.rs").to_string()];
+		for entry in std::fs::read_dir(dir).unwrap().flatten() {
+			texts.push(std::fs::read_to_string(entry.path()).unwrap());
+		}
+		assert!(texts.len() > 1, "found nothing under app/");
+		let reorders = ["tabs.list.remove(", "tabs.list.insert(", "tabs.list.swap(", "tabs.list.retain(", "tabs.list.drain(", "tabs.list.truncate(", "tabs.list.sort", "insert_tab(&mut", "tabs.move_active("];
+		let mut fns: Vec<String> = Vec::new();
+		for text in &texts {
+			let body = text.replace("\r\n", "\n");
+			let body = body.split("\nmod tests {").next().unwrap_or_default();
+			fns.push(String::new());
+			for line in body.lines() {
+				let head = line.trim_start();
+				let head = head.strip_prefix("pub(super) ").unwrap_or(head);
+				let head = head.strip_prefix("pub(crate) ").unwrap_or(head);
+				let head = head.strip_prefix("pub ").unwrap_or(head);
+				if head.starts_with("fn ") {
+					fns.push(String::new());
+				}
+				let last = fns.last_mut().expect("a chunk");
+				last.push_str(line);
+				last.push('\n');
+			}
+		}
+		let mut seen = 0;
+		for chunk in &fns {
+			if !reorders.iter().any(|r| chunk.contains(r)) {
+				continue;
+			}
+			seen += 1;
+			let name = chunk.lines().next().unwrap_or_default().trim();
+			assert!(chunk.contains("forget_tab_pointer()"), "{name} changes the tab order but keeps the pointer's hold");
+		}
+		// new_tab_with, close_tab_at, and move_tab
+		assert!(seen >= 3, "found {seen} places that change the order");
+	}
+}

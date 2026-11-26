@@ -1,111 +1,192 @@
+<!-- markdownlint-disable MD007 -- Unordered list indentation -->
+<!-- markdownlint-disable MD010 -- No hard tabs -->
+<!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
+
+<!-- TOC ignore:true -->
 # Style guide
 
-The canonical style reference for SilkTerm. It covers prose, comments, naming, Rust conventions, formatting, and commit messages. When something here conflicts with a language's own well-established idioms or its enforced formatter, the idiom and the formatter win - see [Formatting](#formatting).
+The style reference for SilkTerm's code, scripts, and commit messages. Where it conflicts with a language's own idioms or its formatter, those win. See [Formatting](#formatting).
 
-## Contents
+<!-- TOC ignore:true -->
+## Table of contents
 
-- [Prose and documentation](#prose-and-documentation)
+<!-- TOC -->
+
 - [Comments](#comments)
 - [File headers and licensing](#file-headers-and-licensing)
 - [Naming](#naming)
 - [Rust](#rust)
+	- [Errors](#errors)
+	- [Ownership and borrowing](#ownership-and-borrowing)
+	- [Unsafe code](#unsafe-code)
+	- [Control flow](#control-flow)
+	- [Types and abstraction](#types-and-abstraction)
+	- [Iterators](#iterators)
+	- [Documentation](#documentation)
+- [Bash](#bash)
+- [PowerShell](#powershell)
+- [Python](#python)
 - [Formatting](#formatting)
 - [Commit messages](#commit-messages)
 
-## Prose and documentation
-
-This applies to the README, design docs, backlog, this guide, and any other Markdown in the tree.
-
-- Write for a reader in a hurry. Short sentences. One idea each.
-- Avoid run-on sentences that chain several ideas with dashes, semicolons, and parentheticals. Split them, or break them into nested bullets.
-- Prefer nested bullet points over dense paragraphs when laying out several related points.
-- Go easy on emphasis. Reserve bold, italics, and ALL-CAPS for the rare word that genuinely needs the weight.
-- Skip flowery adjectives and adverbs. State what the thing does.
-- ASCII only. Use `->` not an arrow glyph, `-` not an em or en dash. The one exception is `©` in copyright lines.
-- Never hard-wrap. Treat a Markdown file like a word processor that wraps on its own: one paragraph or one bullet is one physical line. Use newlines, tabs, and spaces only for real structure - paragraph breaks, bullets, nesting, code blocks.
-- Indent with tabs.
-- Filenames are lowercase, except `README.md`.
+<!-- /TOC -->
 
 ## Comments
 
-- Terse and plain. Explain *why*, not *what* - the code already says what.
-- No narration that restates the next line, and no banner dividers or decorative flowerboxing.
-- ASCII only, same as prose above. Do not use Unicode in a comment unless you are documenting something that is itself about Unicode.
-- Follow the surrounding file: match its comment density, its section-header style, and its idioms rather than introducing a new house style mid-file.
-- Where a language has a well-established comment idiom (Rust doc comments, for example), that idiom overrides these preferences.
+- Explain *why*, not *what*.
+
+- No banner or flowerbox comments. The docs gate fails on a banner rule in Rust code.
 
 ## File headers and licensing
 
-- Every source file carries an SPDX identifier and a copyright line at the top:
+- Every source file starts with an SPDX identifier and a copyright line:
 
-	```rust
+	~~~rust
 	// SPDX-License-Identifier: GPL-2.0-or-later
-	// Copyright © 2026 Jim Collier
-	```
+	// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+	~~~
 
 - The project itself is licensed GPL-2.0-or-later.
+
 - Standalone helper and utility scripts are usually MIT, regardless of the project license. Give those their own MIT header.
 
 ## Naming
 
-- Use meaningful, searchable names. It should be easy to read and to search-and-replace `upperBound`; a bare `ub` is not.
-- Do not overcorrect. A name does not need to be long or globally unique - it needs to be clear and easy to locate. Short conventional names are fine where they read cleanly.
-- Single-letter loop counters and iterators (`for i in ...`) are fine when that is the idiomatic choice for the language.
-- Follow the language's canonical case and word-order conventions (snake_case in Rust, and so on).
+- Use meaningful, searchable names. `upperBound` is easy to find and replace by hand, and a bare `ub` isn't.
+	- A name doesn't need to be long or globally unique. It needs to be clear and easy to find. Short conventional names are fine.
+
+- Single-letter loop counters and iterators (`for i in ...`) are fine when that's the idiomatic choice.
+
+- Follow the language's canonical case and word-order conventions (snake_case in Rust).
 
 ## Rust
 
-Edition 2024. The guiding aim is code that is consistent within and across files: the same error strategy, the same naming, the same module layout throughout.
+Edition 2024. Code should look the same from one file to the next, with one way of handling errors and one naming scheme.
 
 ### Errors
 
 - Errors are values. Return `Result<T, E>` and propagate with `?`.
-- No `panic!`, `unwrap()`, or `expect()` outside tests, examples, or provably-unreachable cases. When a case really is unreachable, justify it with a short comment.
+
+- No `panic!`, `unwrap()`, or `expect()` outside tests, except where a case can't happen. Then say why in a short comment. Clippy refuses `unwrap()` and `expect()` there.
+
 - Prefer `thiserror` for library-style error types and `anyhow` for application-level error handling.
+	- SilkTerm is an application, so a function that can fail returns `anyhow::Result`, with `.context()` naming the file or step. Print one with `{e:#}`, or the reason under the context is lost.
+	- A small enum takes its place where the error is a name rather than a message, as `Buried` in config.rs is. build.rs keeps `String` errors, since each one only becomes a cargo warning.
 
 ### Ownership and borrowing
 
-- Borrow first. Do not reach for `.clone()` to satisfy the borrow checker - restructure, borrow, or take a reference instead.
-- If a clone is genuinely needed, add a comment saying why.
+- Borrow first. Don't use `.clone()` to get past the borrow checker. Restructure or take a reference instead.
+
+- If a clone is needed, add a comment saying why.
+
 - Avoid gratuitous `Rc<RefCell<...>>`.
+
 - Prefer `&str` over `String` and slices over `Vec` in arguments. Return owned types.
+
+### Unsafe code
+
+- Every `unsafe` block and `unsafe impl` has a `// SAFETY:` comment right above it. It says why the block is sound here: what the call needs, and why that's true. Clippy refuses an unsafe block without one.
+
+- No `mem::forget` on a value that owns something, since what it owns is never freed. Clippy refuses it. Where the leak is the point, such as a test leaving a file behind the way a crash would, allow the lint at that line and give the reason.
 
 ### Control flow
 
 - Return early to keep the happy path at minimum indentation. Use guard clauses.
-- `let ... else { return ... }` for "extract or bail".
-- `?` to propagate instead of nesting `match` or `if let`.
+
+- Use `let ... else { return ... }` for "extract or bail".
+
+- Use `?` to propagate instead of nesting `match` or `if let`.
+
 - No `else` after a `return`.
+
 - Collapse nested `if let` with `let`-else or, where it reads well, let-chains (`if let ... && ...`).
-- Prefer flat combinators (`map`, `and_then`, `unwrap_or_else`) on `Option` and `Result` when they read cleanly. Fall back to `match` for genuine multi-arm logic.
+
+- Prefer flat combinators like `map` and `and_then` on `Option` and `Result` when they read cleanly. Use `match` when there are several arms.
 
 ### Types and abstraction
 
-- Model mutually-exclusive states with enums and exhaustive `match`, not boolean flags. Avoid a catch-all `_` arm unless it is truly needed.
-- Use the type system to make invalid states unrepresentable where it is cheap - newtypes, typestate.
-- Traits and generics for abstraction; `dyn` only for heterogeneity. Compose; do not reach for inheritance-shaped designs.
-- Derive rather than hand-roll (`Debug`, `Clone`, `PartialEq`, and so on). Derive `Debug` on all public types.
+- Model mutually exclusive states with enums and exhaustive `match` rather than boolean flags. Avoid a catch-all `_` arm unless it's needed.
+
+- Where it's cheap, use newtypes or typestate so invalid states can't be built.
+
+- Use traits and generics for abstraction, and `dyn` only when the types differ. Prefer composition to class hierarchies.
+
+- Derive `Debug`, `Clone`, `PartialEq`, and the rest rather than writing them by hand. Every public type derives `Debug`.
 
 ### Iterators
 
 - Prefer iterator chains over manual loops while they stay readable.
-- Break to a plain `for` loop when a chain would need more than about three combinators, or when clarity suffers.
+
+- Break to a plain `for` loop when a chain would need more than about 3 combinators, or when clarity suffers.
 
 ### Documentation
 
-- Document public items with `///`.
-- Name things fully; no cryptic abbreviations.
+- Document public items with `///`. A comment on anything declared `pub` is a `///` doc, never a plain `//`. A name that already says all there is to say doesn't need a doc, since one would only repeat it. A note about a group of items is a plain `//` right above the group, with a blank line above the note, since a `///` only belongs to the one item below it.
+
+- A file that opens with a comment about itself uses `//!` for it.
+
+- A lint reason goes in the attribute's `reason = "..."` rather than in a comment above it.
+
+- Name things fully, without cryptic abbreviations.
+
+## Bash
+
+- Scripts end in `.bash`.
+
+- Functions are fCamelCase, such as `fDie` or `fTestDir_Use`. Variables are camelCase. Settings read from a config file, and environment variables, are UPPER_SNAKE_CASE.
+
+- Use `[[ ]]` for tests, not `[ ]`.
+
+- Brace and quote expansions: `"${name}"`, not `$name`.
+
+- Indent with tabs. There is no formatter, but scripts must pass `shellcheck` at warning level.
+
+- `cicd/utility/bash-style.bash` checks the braces, the brackets, and the function names. Scripts shared with other projects are left out of it. A script run by sh or dash keeps `[ ]`, since it doesn't have `[[ ]]`.
+
+## PowerShell
+
+- Functions are fCamelCase, the same as in Bash, rather than PowerShell's Verb-Noun. This is a choice for this project only. `PSUseApprovedVerbs` is off in `cicd/PSScriptAnalyzerSettings.psd1` for that reason, and each other rule turned off there says why.
+
+- Scripts must pass PSScriptAnalyzer at warning level with those settings.
+
+- A command that takes 3 or more arguments gets them by name, and common parameters use their full names, such as `-ErrorAction` rather than `-EA`. `cicd/utility/ps-lint.ps1` checks both, since PSScriptAnalyzer doesn't have a rule for either at warning level.
+
+- Each script has comment-based help under its copyright lines, and sets `Set-StrictMode -Version Latest`. A file that is dot-sourced leaves StrictMode to the script that loads it. `source/src/shell_integration.ps1` has neither, since it's written into the user's own profile.
+
+- A list built in a loop is a `List[T]` or the loop's own output, rather than an array grown with `+=`.
+
+- Indent with tabs. Spaces may follow the tabs to line up a continuation.
+
+## Python
+
+- Names follow PEP 8: snake_case for functions and variables.
+
+- Every function signature has type hints.
+
+- Strings are built with f-strings, not `%` or `.format()`. Paths go through `pathlib`, not `os.path`.
+
+- A file a script opens is closed by a `with` block, and every `subprocess.run` says `check=` one way or the other.
+
+- An `except` names the errors it expects. Where catching everything is the point, the line says so with `# noqa: BLE001` and a short reason.
+
+- Indent with tabs, like the rest of the repo, rather than PEP 8's 4 spaces. Spaces may follow the tabs to line up a continuation. One older script uses spaces and is left as it is.
+
+- Scripts must pass ruff with the rules in `ruff.toml`, and mypy with `mypy.ini`.
 
 ## Formatting
 
-- Rust is formatted by `rustfmt`. Run it and let its output win - do not hand-format against it.
-- The project sets `rustfmt` to hard tabs at width four (`rustfmt.toml`). Tabs indent; spaces align. This is the one deliberate deviation from `rustfmt` defaults; everything else follows the defaults.
+- Rust is formatted by `rustfmt`. Run it and let its output win over hand formatting.
+
+- The project sets `rustfmt` to hard tabs at width 4 (`rustfmt.toml`). Tabs indent, and spaces align. This is the one deliberate change from the `rustfmt` defaults, and everything else follows them.
+
 - Protect intentional hand-formatted data tables (a color matrix, a layout table) from reflow with `#[rustfmt::skip]` rather than fighting the tool.
+
 - Code is expected to pass `clippy`. The build gate runs `clippy -D warnings`. Writing to the stricter `clippy::pedantic` bar is encouraged.
-- Scripts with an enforced linter (Bash under `shellcheck`) must pass it.
+
+- Bash, PowerShell, and Python scripts must pass shellcheck, PSScriptAnalyzer, and ruff.
 
 ## Commit messages
 
-- Keep them brief and high-level - a short summary of what changed, the way you would jot it in a hurry.
-- Put real detail in the issue, the pull request, or the code, not in a long enumerated commit body.
-- No attribution trailers.
+- Keep them short. A one-line summary of what changed is enough.
+
+- Put the details in the issue or pull request.

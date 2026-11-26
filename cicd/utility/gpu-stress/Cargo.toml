@@ -1,0 +1,13 @@
+[package]
+name = "gpu-stress"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# kept on the terminal's own wgpu
+wgpu = "29"
+pollster = "0.4"
+
+[profile.release]
+opt-level = 3

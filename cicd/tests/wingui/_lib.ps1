@@ -1,0 +1,502 @@
+##	Copyright (C) 2026 Jim Collier
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	Helpers for a scenario running inside the console session.
+.DESCRIPTION
+	Dot-sourced by _run.ps1, which has already checked that there is a desktop
+	to draw on, and which sets StrictMode for the scenario and these helpers.
+.NOTES
+	History: At bottom of file.
+#>
+
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+
+##	run.bash sends the guard along beside this file; in the clone it's in utility.
+$saferm = Join-Path $PSScriptRoot 'saferm.ps1'
+if (-not (Test-Path -LiteralPath $saferm)) { $saferm = Join-Path $PSScriptRoot '..\..\utility\include\saferm.ps1' }
+. $saferm
+
+##	What an earlier run of the scenario left in $Dir, a folder in $OutDir.
+function fClearOut([string]$Dir) {
+	if ((Test-Path -LiteralPath $Dir) -and -not (fSafeRm_Under $OutDir $Dir)) { throw "could not clear $Dir" }
+}
+Add-Type -Namespace Silk -Name Win -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr c);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+[DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+[DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint f);
+[DllImport("user32.dll")] public static extern IntPtr OpenInputDesktop(uint f, bool i, uint a);
+[DllImport("user32.dll")] public static extern bool CloseDesktop(IntPtr h);
+[DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool GetUserObjectInformation(IntPtr h, int i, System.Text.StringBuilder p, int n, out uint need);
+[DllImport("user32.dll")] public static extern int GetSystemMetrics(int i);
+[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+[DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, IntPtr e);
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
+[DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
+[DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool attach);
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+[DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, System.Text.StringBuilder s, int n);
+[DllImport("user32.dll")] public static extern IntPtr GetFocus();
+[DllImport("user32.dll")] public static extern bool SystemParametersInfoW(uint a, uint b, out RECT r, uint c);
+[DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+[DllImport("wtsapi32.dll")] public static extern bool WTSQuerySessionInformationW(IntPtr srv, int id, int cls, out IntPtr buf, out int bytes);
+[DllImport("wtsapi32.dll")] public static extern void WTSFreeMemory(IntPtr p);
+public struct RECT { public int Left, Top, Right, Bottom; }
+'@
+
+##	MainWindowHandle returns whatever window the process registered first, which
+##	for this app is a 16x16 helper window. So the real one has to be picked out by
+##	size from every window the process owns.
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public static class SilkEnum {
+	delegate bool EnumProc(IntPtr h, IntPtr p);
+	[DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr p);
+	[DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+	[DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+	[DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out R r);
+	struct R { public int L, T, Rt, B; }
+	public static IntPtr[] All(uint want) {
+		var found = new List<IntPtr>();
+		EnumWindows((h, _) => {
+			uint pid; GetWindowThreadProcessId(h, out pid);
+			if (pid == want && IsWindowVisible(h)) found.Add(h);
+			return true;
+		}, IntPtr.Zero);
+		return found.ToArray();
+	}
+	public static IntPtr Largest(uint want) {
+		IntPtr best = IntPtr.Zero; long area = 0;
+		EnumWindows((h, _) => {
+			uint pid; GetWindowThreadProcessId(h, out pid);
+			if (pid != want || !IsWindowVisible(h)) return true;
+			R r; if (!GetWindowRect(h, out r)) return true;
+			long a = (long)(r.Rt - r.L) * (r.B - r.T);
+			if (a > area) { area = a; best = h; }
+			return true;
+		}, IntPtr.Zero);
+		return best;
+	}
+}
+'@
+
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class SilkKeys {
+	[StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx, dy; public uint data, flags, time; public IntPtr extra; }
+	[StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort vk, scan; public uint flags, time; public IntPtr extra; }
+	[StructLayout(LayoutKind.Explicit)] struct UNION { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
+	[StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public UNION u; }
+	[DllImport("user32.dll", SetLastError=true)] static extern uint SendInput(uint n, INPUT[] p, int cb);
+	[DllImport("user32.dll")] public static extern short VkKeyScanW(char c);
+	const uint KEYUP = 0x0002, UNICODE = 0x0004;
+
+	static void Send(INPUT[] a) { SendInput((uint)a.Length, a, Marshal.SizeOf(typeof(INPUT))); }
+	static INPUT Vk(ushort vk, bool up) {
+		var i = new INPUT(); i.type = 1;
+		i.u.ki.vk = vk; i.u.ki.flags = up ? KEYUP : 0;
+		return i;
+	}
+	static INPUT Uni(char c, bool up) {
+		var i = new INPUT(); i.type = 1;
+		i.u.ki.scan = c; i.u.ki.flags = UNICODE | (up ? KEYUP : 0);
+		return i;
+	}
+	public static void Tap(ushort vk) { Send(new[] { Vk(vk, false), Vk(vk, true) }); }
+	public static void Chord(ushort[] mods, ushort vk) {
+		var a = new INPUT[mods.Length * 2 + 2];
+		int n = 0;
+		foreach (var m in mods) a[n++] = Vk(m, false);
+		a[n++] = Vk(vk, false); a[n++] = Vk(vk, true);
+		for (int j = mods.Length - 1; j >= 0; j--) a[n++] = Vk(mods[j], true);
+		Send(a);
+	}
+	// Unicode injection arrives as VK_PACKET, which not every window reads. Typing
+	// through the layout produces the same messages a keyboard does.
+	public static void Text(string s) {
+		foreach (char c in s) {
+			short m = VkKeyScanW(c);
+			if (m == -1) { Send(new[] { Uni(c, false), Uni(c, true) }); continue; }
+			ushort vk = (ushort)(m & 0xFF);
+			int st = (m >> 8) & 0xFF;
+			var a = new System.Collections.Generic.List<INPUT>();
+			if ((st & 1) != 0) a.Add(Vk(0x10, false));
+			if ((st & 2) != 0) a.Add(Vk(0x11, false));
+			if ((st & 4) != 0) a.Add(Vk(0x12, false));
+			a.Add(Vk(vk, false)); a.Add(Vk(vk, true));
+			if ((st & 4) != 0) a.Add(Vk(0x12, true));
+			if ((st & 2) != 0) a.Add(Vk(0x11, true));
+			if ((st & 1) != 0) a.Add(Vk(0x10, true));
+			Send(a.ToArray());
+		}
+	}
+	public static void TextUnicode(string s) {
+		foreach (char c in s) Send(new[] { Uni(c, false), Uni(c, true) });
+	}
+}
+'@
+
+$script:checks   = [System.Collections.Generic.List[string]]::new()
+$script:failures = 0
+$script:shotDir  = $null
+
+function fCheck([string]$What, [bool]$Ok) {
+	if ($ok) { $script:checks.Add("  ok   $what") }
+	else     { $script:checks.Add("  FAIL $what"); $script:failures++ }
+	$ok
+}
+
+function fNote([string]$Text) { $script:checks.Add("  note $text") }
+
+##	Whether anyone could see or type into this desktop. A locked session still
+##	runs windows, and PrintWindow still works there, but screen grabs come back
+##	black and injected input goes to the lock screen. So a scenario that needs
+##	either must stop rather than quietly measure nothing.
+##	Windows tracks the lock state itself, so ask it first. Reading the state off
+##	the lock screen went wrong. Once the display sleeps, a locked session has
+##	nothing in front and LockApp is suspended, and LockApp also stays that way
+##	after an unlock.
+##	The other 2 tests stay for a build that doesn't report the state. The
+##	desktop name catches the old style of lock, which sends input to Winlogon.
+function fSessionUsable {
+	if ((fLockState) -eq "locked") { return $false }
+	$fg = [Silk.Win]::GetForegroundWindow()
+	if ($fg -ne [IntPtr]::Zero) {
+		$owner = 0
+		[void][Silk.Win]::GetWindowThreadProcessId($fg, [ref]$owner)
+		$name = fProcessName $owner
+		if ($name -in @("LockApp", "LogonUI")) { return $false }
+	}
+	$d = [Silk.Win]::OpenInputDesktop(0, $false, 0x0100)
+	if ($d -eq [IntPtr]::Zero) { return $false }
+	$sb = New-Object System.Text.StringBuilder 256
+	$n = 0
+	$got = [Silk.Win]::GetUserObjectInformation($d, 2, $sb, 256, [ref]$n)
+	[void][Silk.Win]::CloseDesktop($d)
+	$got -and $sb.ToString() -eq "Default"
+}
+
+##	WTSSessionInfoEx for this session. The level-1 record starts at offset 8, and
+##	SessionFlags is its third field: 0 locked, 1 unlocked.
+function fLockState {
+	$id = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+	$buf = [IntPtr]::Zero; $n = 0
+	if (-not [Silk.Win]::WTSQuerySessionInformationW([IntPtr]::Zero, $id, 25, [ref]$buf, [ref]$n)) { return "unknown" }
+	$level = [Runtime.InteropServices.Marshal]::ReadInt32($buf, 0)
+	$flags = [Runtime.InteropServices.Marshal]::ReadInt32($buf, 16)
+	[Silk.Win]::WTSFreeMemory($buf)
+	if ($level -ne 1) { return "unknown" }
+	switch ($flags) { 0 { "locked" } 1 { "unlocked" } default { "unknown" } }
+}
+
+##	A config to start from. Rating the hardware swallows input for several seconds
+##	after launch, so anything that types has to switch it off or wait it out.
+##	Waiting makes the scenario slow and its timing a guess. Only the ladder
+##	scenario wants the rating.
+function fFreshConfig([string]$Path, [string[]]$Extra = @()) {
+	Remove-Item $path -ErrorAction SilentlyContinue
+	$body = @("performance:", "`tautomatic: false", "`tprofile: `"custom`"") + $extra
+	Set-Content -Path $path -Value $body -Encoding UTF8
+}
+
+function fStartSilk([string]$Exe, [string[]]$SilkArgs, [hashtable]$EnvVars, [string]$WorkDir = "") {
+	foreach ($k in $envVars.Keys) { [Environment]::SetEnvironmentVariable($k, $envVars[$k]) }
+	$more = @{}
+	if ($workDir) { $more.WorkingDirectory = $workDir }
+	$p = Start-Process $exe -ArgumentList $silkArgs -PassThru @more
+	foreach ($k in $envVars.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
+	fTrack $p
+	$p
+}
+
+##	What _stop.ps1 may end, and nothing else.
+function fTrack([System.Diagnostics.Process]$P) {
+	if ($script:startedList) { Add-Content -Path $script:startedList -Value "$($p.Id) $($p.StartTime.ToUniversalTime().Ticks)" }
+}
+
+function fWaitWindow([System.Diagnostics.Process]$P, [int]$Seconds = 30) {
+	for ($i = 0; $i -lt ($seconds * 4); $i++) {
+		if ($p.HasExited) { return [IntPtr]::Zero }
+		$h = [SilkEnum]::Largest([uint32]$p.Id)
+		if ($h -ne [IntPtr]::Zero) {
+			$r = fRect $h
+			if ($r.w -gt 200 -and $r.h -gt 100) { return $h }
+		}
+		Start-Sleep -Milliseconds 250
+	}
+	[IntPtr]::Zero
+}
+
+##	A window the process owns that isn't the one already known. The dialog is a
+##	second window in the same process, so it can't be found by pid alone.
+function fWaitOther([System.Diagnostics.Process]$P, [IntPtr]$Known, [int]$Seconds = 20) {
+	for ($i = 0; $i -lt ($seconds * 4); $i++) {
+		foreach ($h in [SilkEnum]::All([uint32]$p.Id)) {
+			if ($h -eq $known) { continue }
+			$r = fRect $h
+			if ($r.w -gt 200 -and $r.h -gt 200) { return $h }
+		}
+		Start-Sleep -Milliseconds 250
+	}
+	[IntPtr]::Zero
+}
+
+##	Windows only hands the foreground to a process that owns it already or that
+##	received the last input. On a session just reconnected to the console nobody
+##	owns either, so a bare SetForegroundWindow is refused. Press a harmless key
+##	first, and borrow the current owner's input queue.
+function fFocus([IntPtr]$H) {
+	$escaped = [System.Collections.Generic.List[uint32]]::new()
+	for ($try = 0; $try -lt 4; $try++) {
+		##	Search and the Start menu take the foreground and hold it, and no amount
+		##	of asking gets it back while they are open. Escape closes them. A Search
+		##	host left over from the logon can ignore Escape and sit there for hours,
+		##	so one that is still in front on the next try is ended instead. All of
+		##	these come back on demand, so nothing is lost.
+		$fg = [Silk.Win]::GetForegroundWindow()
+		if ($fg -ne [IntPtr]::Zero -and -not (fForegroundIsOurs $h)) {
+			$owner = 0
+			[void][Silk.Win]::GetWindowThreadProcessId($fg, [ref]$owner)
+			$name = fProcessName $owner
+			if ($name -in @("SearchHost", "StartMenuExperienceHost", "ShellExperienceHost", "TextInputHost")) {
+				if ($owner -in $escaped) {
+					Stop-Process -Id $owner -Force -ErrorAction SilentlyContinue
+					fNote "ended $name $owner, which kept the foreground after Escape"
+					Start-Sleep -Milliseconds 1500
+				} else {
+					[SilkKeys]::Tap([uint16]0x1B)        ## escape
+					$escaped.Add($owner)
+					Start-Sleep -Milliseconds 500
+				}
+			}
+		}
+		[void][Silk.Win]::ShowWindow($h, 9)          ## SW_RESTORE
+		[SilkKeys]::Tap([uint16]0x12)                ## a bare Alt: claims last input
+		$mine = [Silk.Win]::GetCurrentThreadId()
+		$theirs = [Silk.Win]::GetWindowThreadProcessId([Silk.Win]::GetForegroundWindow(), [IntPtr]::Zero)
+		if ($theirs -ne 0 -and $theirs -ne $mine) { [void][Silk.Win]::AttachThreadInput($mine, $theirs, $true) }
+		[void][Silk.Win]::BringWindowToTop($h)
+		[void][Silk.Win]::SetForegroundWindow($h)
+		if ($theirs -ne 0 -and $theirs -ne $mine) { [void][Silk.Win]::AttachThreadInput($mine, $theirs, $false) }
+		Start-Sleep -Milliseconds 400
+		##	Any window of ours in front counts. The app owns more than one, and the
+		##	handle Windows reports isn't always the one we went looking for.
+		if (fForegroundIsOurs $h) { return $true }
+	}
+	$false
+}
+
+function fForegroundIsOurs([IntPtr]$H) {
+	$fg = [Silk.Win]::GetForegroundWindow()
+	if ($fg -eq $h) { return $true }
+	if ($fg -eq [IntPtr]::Zero) { return $false }
+	$want = 0; $got = 0
+	[void][Silk.Win]::GetWindowThreadProcessId($h, [ref]$want)
+	[void][Silk.Win]::GetWindowThreadProcessId($fg, [ref]$got)
+	$want -ne 0 -and $want -eq $got
+}
+
+##	What has the foreground, for when it isn't us.
+function fForeground {
+	$fg = [Silk.Win]::GetForegroundWindow()
+	if ($fg -eq [IntPtr]::Zero) { return "nothing has the foreground" }
+	$pid2 = 0
+	[void][Silk.Win]::GetWindowThreadProcessId($fg, [ref]$pid2)
+	$sb = New-Object System.Text.StringBuilder 256
+	[void][Silk.Win]::GetWindowTextW($fg, $sb, 256)
+	$name = fProcessName $pid2
+	"hwnd $fg pid $pid2 ($name) '$($sb.ToString())'"
+}
+
+##	$null for a process that has gone, which happens between two lines here.
+function fProcessName([uint32]$Id) {
+	$proc = Get-Process -Id $Id -ErrorAction SilentlyContinue
+	if ($proc) { $proc.ProcessName } else { $null }
+}
+
+##	Clicking moves the real pointer, because there is only one. Fine on a machine
+##	nobody is sitting at, which is the only kind this runs on.
+function fClick([int]$X, [int]$Y, [bool]$Double = $false) {
+	[void][Silk.Win]::SetCursorPos([int]$x, [int]$y)
+	Start-Sleep -Milliseconds 120
+	foreach ($n in 1..$(if ($double) { 2 } else { 1 })) {
+		[Silk.Win]::mouse_event(0x0002, 0, 0, 0, [IntPtr]::Zero)
+		[Silk.Win]::mouse_event(0x0004, 0, 0, 0, [IntPtr]::Zero)
+		Start-Sleep -Milliseconds 60
+	}
+	Start-Sleep -Milliseconds 350
+}
+
+$script:vks = @{
+	ctrl = 0x11; shift = 0x10; alt = 0x12
+	tab = 0x09; escape = 0x1B; enter = 0x0D; space = 0x20
+	f4 = 0x73; f11 = 0x7A; win = 0x5B
+	left = 0x25; right = 0x27
+}
+
+##	Literal text, typed through the keyboard layout the way a keyboard does.
+function fSend([string]$Text) { [SilkKeys]::Text($text); Start-Sleep -Milliseconds 250 }
+
+##	The other way a character gets to a window: handed over whole instead of
+##	typed. The touch keyboard, text expanders, and some accessibility tools all
+##	send the characters their layout has no key for this way.
+function fSendChars([string]$Text) { [SilkKeys]::TextUnicode($text); Start-Sleep -Milliseconds 400 }
+
+##	One chord, spelled "ctrl+shift+t" or "alt+f" or "escape". A single character is
+##	looked up through the keyboard layout so a comma is a comma wherever its key is.
+function fPress([string]$Combo) {
+	$parts = $combo.ToLower() -split '\+'
+	$key = $parts[-1]
+	$mods = @(foreach ($m in $parts[0..([math]::Max(0, $parts.Count - 2))]) {
+		if ($m -ne $key -and $script:vks.ContainsKey($m)) { [uint16]$script:vks[$m] }
+	})
+	if ($parts.Count -eq 1) { $mods = @() }
+	$vk = if ($script:vks.ContainsKey($key)) { [uint16]$script:vks[$key] }
+	      else { [uint16]([SilkKeys]::VkKeyScanW([char]$key) -band 0xFF) }
+	if ($mods.Count) { [SilkKeys]::Chord([uint16[]]$mods, $vk) } else { [SilkKeys]::Tap($vk) }
+	Start-Sleep -Milliseconds 300
+}
+
+function fRect([IntPtr]$H) {
+	$r = New-Object Silk.Win+RECT
+	[void][Silk.Win]::GetWindowRect($h, [ref]$r)
+	@{ x = $r.Left; y = $r.Top; w = $r.Right - $r.Left; h = $r.Bottom - $r.Top }
+}
+
+##	A screen grab is the true picture, since it's what the compositor put up, and
+##	it's the only one that sees a window drawn without a redirection bitmap (the
+##	transparent path). PrintWindow is the fallback for a session nobody can see.
+function fShot([IntPtr]$H, [string]$Name) {
+	$r = fRect $h
+	if ($r.w -le 0 -or $r.h -le 0) { return $null }
+	$bmp = New-Object System.Drawing.Bitmap $r.w, $r.h
+	$g = [System.Drawing.Graphics]::FromImage($bmp)
+	$how = "screen"
+	if (fSessionUsable) {
+		$g.CopyFromScreen($r.x, $r.y, 0, 0, (New-Object System.Drawing.Size $r.w, $r.h))
+	} else {
+		$dc = $g.GetHdc()
+		[void][Silk.Win]::PrintWindow($h, $dc, 2)
+		$g.ReleaseHdc($dc)
+		$how = "printwindow"
+	}
+	##	The boxes pull into one directory, so the name has to say which box.
+	if ($script:shotDir) {
+		New-Item -ItemType Directory -Force -Path $script:shotDir | Out-Null
+		$bmp.Save((Join-Path $script:shotDir "$env:COMPUTERNAME-$name.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+	}
+	$bmp | Add-Member -NotePropertyName How -NotePropertyValue $how -PassThru
+}
+
+##	GetPixel makes one interop call per pixel, and a check samples 35k to 60k
+##	of them, which took seconds. These read the locked bitmap a row at a time.
+##	Format32bppArgb is B, G, R, A in memory, whatever the source format. Each
+##	row starts stride bytes after the one above it, and the stride is negative
+##	for a bitmap stored bottom-up.
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class SilkPix {
+	public static double Ink(IntPtr scan0, int stride, int w, int h, int step) {
+		if (step < 1) step = 1;
+		var row = new byte[w * 4];
+		long lit = 0, seen = 0;
+		for (int y = 0; y < h; y += step) {
+			Marshal.Copy(IntPtr.Add(scan0, y * stride), row, 0, row.Length);
+			for (int x = 0; x < w; x += step) {
+				int i = x * 4;
+				seen++;
+				if (row[i] + row[i + 1] + row[i + 2] > 40) lit++;
+			}
+		}
+		return seen == 0 ? 0.0 : Math.Round((double)lit / seen, 4);
+	}
+	public static double Diff(IntPtr scanA, int strideA, IntPtr scanB, int strideB, int w, int h, int step) {
+		if (step < 1) step = 1;
+		var ra = new byte[w * 4]; var rb = new byte[w * 4];
+		long moved = 0, seen = 0;
+		for (int y = 0; y < h; y += step) {
+			Marshal.Copy(IntPtr.Add(scanA, y * strideA), ra, 0, ra.Length);
+			Marshal.Copy(IntPtr.Add(scanB, y * strideB), rb, 0, rb.Length);
+			for (int x = 0; x < w; x += step) {
+				int i = x * 4;
+				seen++;
+				if (Math.Abs(ra[i] - rb[i]) + Math.Abs(ra[i + 1] - rb[i + 1]) + Math.Abs(ra[i + 2] - rb[i + 2]) > 24) moved++;
+			}
+		}
+		return seen == 0 ? 0.0 : Math.Round((double)moved / seen, 4);
+	}
+}
+'@
+
+function fLockBits([System.Drawing.Bitmap]$Bmp) {
+	$rect = New-Object System.Drawing.Rectangle 0, 0, $bmp.Width, $bmp.Height
+	$bmp.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::ReadOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+}
+
+##	Fraction of sampled pixels with any light. A window that came up but never
+##	drew reads near zero, which is the difference between a real capture and the
+##	black rectangle a locked session returns.
+function fInk([System.Drawing.Bitmap]$Bmp, [int]$Step = 4) {
+	if (-not $bmp) { return 0.0 }
+	$d = fLockBits $bmp
+	try { [SilkPix]::Ink($d.Scan0, $d.Stride, $bmp.Width, $bmp.Height, $step) }
+	finally { $bmp.UnlockBits($d) }
+}
+
+##	How much of the picture moved. Ink saturates on a wallpaper, so 'did anything
+##	happen' has to be asked as a difference rather than a brightness.
+function fDiff([System.Drawing.Bitmap]$A, [System.Drawing.Bitmap]$B, [int]$Step = 3) {
+	if (-not $a -or -not $b) { return 1.0 }
+	if ($a.Width -ne $b.Width -or $a.Height -ne $b.Height) { return 1.0 }
+	##	A bitmap can't be locked twice, and nothing moved anyway.
+	if ([object]::ReferenceEquals($a, $b)) { return 0.0 }
+	$da = fLockBits $a
+	try {
+		$db = fLockBits $b
+		try { [SilkPix]::Diff($da.Scan0, $da.Stride, $db.Scan0, $db.Stride, $a.Width, $a.Height, $step) }
+		finally { $b.UnlockBits($db) }
+	} finally { $a.UnlockBits($da) }
+}
+
+##	One value out of a written config, and whether the file says it. A
+##	setting left at its default stays commented in the template, so a
+##	scenario that can't tell those apart reads an empty value and calls it a bug.
+function fSetting([string]$Path, [string]$Dotted) {
+	if (-not (Test-Path $path)) { return @{ value = $null; source = "no file" } }
+	$block, $leaf = $dotted -split '\.', 2
+	$in = $false
+	$fallback = $null
+	foreach ($line in (Get-Content $path)) {
+		if ($line -match '^[^\s#]') { $in = ($line -match "^${block}\s*:"); continue }
+		if (-not $in) { continue }
+		if ($line -match "^\s+${leaf}\s*:\s*(.*?)\s*$") { return @{ value = $Matches[1].Trim('"'); source = "set" } }
+		if ($line -match "^\s+#\s*${leaf}\s*:\s*(.*?)\s*(##.*)?$") { $fallback = $Matches[1].Trim().Trim('"') }
+	}
+	if ($null -ne $fallback) { @{ value = $fallback; source = "default" } } else { @{ value = $null; source = "absent" } }
+}
+
+##	The usable part of the screen: what is left once the taskbar has had its share.
+##	A window may be smaller than the display and still not fit.
+function fWorkArea {
+	$r = New-Object Silk.Win+RECT
+	if (-not [Silk.Win]::SystemParametersInfoW(0x0030, 0, [ref]$r, 0)) { return $null }
+	@{ x = $r.Left; y = $r.Top; w = $r.Right - $r.Left; h = $r.Bottom - $r.Top }
+}
+
+function fStop([System.Diagnostics.Process]$P) {
+	if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+}
+
+##	History:
+##		- 20260908 JC: Created.
+##		- 20261006 JC: Help block, typed parameters, checks kept in a list.
+##		- 20261014 JC: fStartSilk takes a working folder.
+##		- 20261117: fInk and fDiff read the locked bitmap rather than a pixel a call.

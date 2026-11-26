@@ -19,17 +19,28 @@
 ## shellcheck disable=2053  ## 'Quote the right-hand sid of = in [[ ]] to prevent glob matching.' Disable for Yoda Notation.
 ## shellcheck disable=2143  ## 'Use grep -q instead of echo | grep'
 
-##	- Purpose: Local CI/CD pipeline. Generic engine, per-project settings live in config.bash.
+##	- Purpose: Local CI/CD pipeline. Generic engine, per-project settings are in config.bash.
 ##	- Stages (fail-fast, any error aborts before the next stage):
 ##	   0. remote sync (fetch; fast-forward if safely behind; abort if diverged)
 ##	   1. format (cargo fmt)
 ##	   2. debug build (this is what the tests + profiler run against)
-##	   3. regression tests + lints (clippy gating, cargo-deny advisory, scroll harness)
-##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy)
-##	   5. release build (native + cross targets; optimized, for packaging + dogfood)
-##	   6. packages (.deb/.rpm per Linux arch; NSIS installer .exe per Windows arch)
-##	   7. dogfood (install native release locally)
-##	   8. backup + publish to git (runs from repo root)
+##	   3. regression tests, lints, and the fuzz soak. Clippy for Linux, Windows,
+##	      and macOS and the advisory scan fail the run, and the rest of cargo-deny
+##	      only warns. The tests run again under ASan and LSan in the container
+##	      image, then the leak checks there: the heap-growth test under dhat and
+##	      the soak test under heaptrack. --long adds the tests under TSan, and
+##	      --leakcheck or --long adds them under Miri, which takes hours. Then the
+##	      scroll harness.
+##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy), on
+##	      the card through a headless sway, and always on this box
+##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
+##	      then a check that every Windows binary has its icon and version block
+##	   6. packages (.deb/.rpm per Linux arch; NSIS installer .exe per Windows arch),
+##	      then the private runner (macOS on a Mac, the Microsoft Store bundle)
+##	   7. dogfood (install each build to the synced app dir for its platform)
+##	   8. backup + publish to git (runs from repo root), committing only the
+##	      tracked files the run changed: what the formatter and the demo rewrote
+##	      of files that matched HEAD before the step
 ##	- Syntax:
 ##	  cicd/cicd.bash [options]
 ##	  Options:
@@ -40,20 +51,93 @@
 ##	   --no-fmt            skip the formatter (cargo fmt) stage
 ##	   --no-cross          skip cross-target release builds
 ##	   --no-arm            skip the ARM64 release builds + packages (x86_64 only)
+##	   --no-windows        skip the Windows cross targets (Linux artifacts only) -
+##	                       what a Windows box's own pipeline delegates here
 ##	   --no-package        skip the packages stage (.deb/.rpm/installer)
+##	   --with-private      also run the private repo beside this one: its script
+##	                       tests, and its runner as stage 6 (macOS, Microsoft Store)
+##	   --no-remote         skip every other box: the Windows scenarios, the ARM64
+##	                       smoke run, and the private runner's Mac and Microsoft
+##	                       Store jobs
+##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
+##	   --no-asan           skip the test suite under ASan and LSan
+##	   --no-tsan           skip the test suite under TSan, under --long
+##	   --no-miri           skip the test suite under Miri, under --leakcheck or --long
+##	   --no-leakcheck      skip every leak check (the heap-growth test under dhat,
+##	                       the soak test, CodeQL, Miri)
+##	   --leakcheck         every leak check, the slow ones too: the soak test under
+##	                       --quick, CodeQL, over half an hour, and the test suite
+##	                       under Miri, which takes hours; not with
+##	                       --backlog-run-quick
+##	   --codeql            add CodeQL to the leak checks (off by default; slow)
+##	   --long              everything, the steps that take hours too: the test
+##	                       suite under TSan and under Miri, and CodeQL. Also
+##	                       --with-private, when the private repo is here. Not
+##	                       with --quick or --backlog-run-quick
+##	   --slow              another name for --long
 ##	   --no-profile        skip the profiler stage
-##	   --no-dogfood        skip installing the native release locally
+##	   --no-dogfood        skip the dogfood install
 ##	   --no-publish        skip the git backup + publish stage
 ##	   --no-sync           skip the remote sync check (stage 0)
-##	   --demo              re-record the demo video (off by default)
-##	   --quick             skip the slow stages (cross-builds + packages + profiling)
-##	   --gate              merge gate only: fmt --check + clippy + tests, then exit
-##	                       (fast local stand-in for hosted CI; the pre-push hook runs it)
+##	   --no-demo           skip the demo video re-record
+##	   --demo              re-record the demo video, under --quick too
+##	   --no-rust-tests     skip cargo test; fuzz, the leak checks, and the sanitizer
+##	                       runs have their own options
+##	   --no-clippy         skip the 3 clippy runs (Linux, Windows, macOS)
+##	   --no-script-lint    skip shellcheck, the bash style check, and the PowerShell
+##	                       and Python lints
+##	   --no-scrub          skip the content scrub
+##	   --no-deny           skip cargo-deny: the advisory scan and its tests, and the
+##	                       license, ban, and source checks
+##	   --no-script-tests   skip the test scripts under cicd/tests, dpirand, and the
+##	                       launcher harness included
+##	   --no-docs           skip the docs, table of contents, table, and test ID
+##	                       checks, and the wallpaper gallery check
+##	   --no-scroll         skip the scroll harness
+##	   --no-wingui         skip the Windows scenarios
+##	   --no-release        skip the release builds, native and cross, and their
+##	                       checks, and with them the packages, the ARM64 smoke run,
+##	                       dogfood, and the demo
+##	   --no-cleanup        leave what earlier runs left: stale run folders, old
+##	                       build dirs, stopped containers, and Zig caches
+##	   --quick             only the quick lints and tests, and the x86_64 release builds;
+##	                       skips the ARM64 builds, packages, profiling, the fuzz soak,
+##	                       the ASan and TSan runs, the soak test, the slow window
+##	                       tests, and anything that needs another box
+##	   --backlog-run-quick [AREA...]
+##	                       the fast checks only, then exit: every area, or the ones
+##	                       named. Areas: fmt (cargo fmt --check), clippy (Linux),
+##	                       tests (cargo test), scripts (shellcheck, the bash style
+##	                       check, and the PowerShell and Python lints), docs (markdown
+##	                       spacing, tables of contents, tables, test IDs)
+##	   --gate              another name for --backlog-run-quick
+##	   --backlog-run-full  every check of the default run, the other boxes too, with
+##	                       the format checked, not rewritten; no sync, dogfood, demo,
+##	                       or publish, and no prompt
+##	   --merge-gate        the same checks, before a merge to main
+##	   --ci                another name for --merge-gate
+##	   --fmt-check         check the format instead of rewriting it
+##	   --container         stages 1-6 in the pinned image from cicd/container/Dockerfile,
+##	                       with its own target dir (target/container); sync, stage 6,
+##	                       dogfood, the demo, and publish stay here, and so do
+##	                       the steps that need the card: the profiler and the render
+##	                       node test, run here once the container is done. With
+##	                       --backlog-run-quick, that runs there. The default whenever
+##	                       docker is here.
+##	   --no-container      stages 1-6 on this box instead; the default with no docker
+##	   --keep-temp         keep the run's temp folders and containers when it ends,
+##	                       and print where they are
+##	   --list              print the steps and test IDs the other options would run,
+##	                       and run nothing
+##	  With no options every stage runs, in about an hour; --long adds the rest.
+##	  CICD_MEM_CAP caps each step's memory, such as 24g, or none for no cap. The
+##	  default is a third of RAM, 4g to 32g, and 48g for CodeQL. A step over it
+##	  is killed, and exits 137.
 ## - Reuse: copy the cicd/ directory into another project and edit config.bash.
 
 ##	History: At bottom of script.
 
-##	Copyright © 2026 Jim Collier (CryptogID: ѳ6ᴚ℈𐀘𐇦ɛ𐊁¥Mﾏb϶Δ𐌞)
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
@@ -64,124 +148,461 @@ set -Eeuo pipefail
 ## Find the repo root and load project config.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "${here}/.." && pwd)"   # the git repo root (cicd/..)
+## The memory cap (utility/include/memcap.bash), before anything starts: this
+## side runs again in a systemd scope under it, and each container takes it too.
+## A step killed at the cap exits 137.
+##  shellcheck source=cicd/utility/include/memcap.bash
+source "${here}/utility/include/memcap.bash"
+fMemCap_Scope "${BASH_SOURCE[0]}" "${@}" || exit 2
 export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${PATH}"       ## rustup toolchain (cross targets, edition 2024) + zig must beat system rust.
+## Stages 1-6 run in the image whenever docker is here, and --no-container runs them
+## on this box. The container build uses its own target dir, and config.bash derives
+## every build path from CARGO_TARGET_DIR, so it is set before the config loads. The
+## run inside gets the same value, so the 2 sides of the mount agree on where
+## everything is.
+useContainer=0
+case " ${*} " in
+	*" --no-container "*) ;;
+	*" --container "*) useContainer=1 ;;
+	*) [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]] || ! command -v "${SILK_DOCKER:-docker}" >/dev/null 2>&1 || useContainer=1 ;;
+esac
+((! useContainer)) || export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${root}/target/container}"
 source "${here}/config.bash"
 source "${here}/utility/include/gfs-rotate.bash"                  ## gfs_rotate() for the profiler artifacts
+source "${here}/utility/include/remote-git.bash"                  ## fRemoteGit / fRemoteGh, as the folder's own account
+##  shellcheck source=cicd/utility/include/saferm.bash
+source "${here}/utility/include/saferm.bash"                      ## fSafeRm, fSafeRm_Under: every recursive removal
+##  shellcheck source=cicd/utility/include/sweep.bash
+source "${here}/utility/include/sweep.bash"                       ## what earlier runs left, once it is stale
+##  shellcheck source=cicd/utility/include/echo.bash
+source "${here}/utility/include/echo.bash"                        ## fEcho, fEcho_Clean, fSection, fDie
+##  shellcheck source=cicd/utility/built-from.bash
+source "${here}/utility/built-from.bash"                          ## the artifacts' provenance note
 declare -p FMT_CMD &>/dev/null || FMT_CMD=()                      ## tolerate a config without the fmt stage
+declare -p FMT_CHECK_CMD &>/dev/null || FMT_CHECK_CMD=()
+## Every cross target the config has, before --no-arm or --no-windows drop some,
+## since a run that skips one still keeps its build dir for the next.
+allCrossTargets=(); declare -p CROSS_TARGETS &>/dev/null && allCrossTargets=("${CROSS_TARGETS[@]}")
 
-## Cap compile/test parallelism to at most half the cores so a pipeline run
-## doesn't peg every CPU and leaves the machine usable. cargo's jobserver bounds
-## total rustc + codegen parallelism to CARGO_BUILD_JOBS (covers build, test,
-## clippy, and the zigbuild cross-builds); RUST_TEST_THREADS bounds the test run.
-## A project can override CICD_MAX_JOBS in config.bash.
-cores="$(nproc 2>/dev/null || echo 2)"
-: "${CICD_MAX_JOBS:=$(( cores / 2 ))}"
-(( CICD_MAX_JOBS >= 1 )) || CICD_MAX_JOBS=1
-export CARGO_BUILD_JOBS="${CICD_MAX_JOBS}"
-export RUST_TEST_THREADS="${CICD_MAX_JOBS}"
+##  shellcheck source=cicd/utility/include/jobs.bash
+source "${here}/utility/include/jobs.bash"                        ## fJobs, fJobs_LowPriority
+
+## Half the CPUs, or a quarter when the box is busy or the step is a hard one,
+## worked out again before each step. cargo's jobserver bounds rustc and codegen
+## to CARGO_BUILD_JOBS, which applies to build, test, clippy, and the zigbuild
+## cross builds; RUST_TEST_THREADS bounds the test run. A project can cap
+## CICD_MAX_JOBS in config.bash.
+fJobs_LowPriority
+fJobs
 
 cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assume_yes=0; quiet=0; quick=0; gate=0; no_arm=0; sync=1; cli_message=""
-while (($#)); do case "$1" in
-	-y|--yes)                 assume_yes=1; shift ;;
-	-q|--quiet)               quiet=1; assume_yes=1; shift ;;   ## quiet + unattended; publish runs quiet too
-	--gate)                   gate=1; shift ;;                  ## merge gate only, then exit
-	--no-fmt)                 FMT_CMD=(); shift ;;
-	--no-cross)               BUILD_CROSS=0; shift ;;
-	--no-arm)                 no_arm=1; shift ;;                ## drop ARM64 builds + packages
-	--no-package)             PACKAGE_ENABLE=0; shift ;;
-	--no-profile)             PROFILE_ENABLE=0; shift ;;
-	--no-dogfood)             DOGFOOD_FIXED_DESTS=(); DOGFOOD_ROTATING_DESTS=(); shift ;;
+assumeYes=0; quiet=0; quick=0; long=0; noRemote=0; skipLog=""; gate=0; gateAreas=(); fullRun=0; fullRunName=""; fmtCheck=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; withPrivate=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; keepTemp=0; listing=0; innerArgs=()
+noRustTests=0; noClippy=0; noScriptLint=0; noScrub=0; noDeny=0; noScriptTests=0; noDocs=0; noScroll=0; noWingui=0; noRelease=0; noCleanup=0
+while (($#)); do case "${1}" in
+	-y|--yes)                 assumeYes=1; shift ;;
+	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
+	--backlog-run-quick)      gate=1; shift; while (($#)) && [[ "${1}" != -* ]]; do gateAreas+=("${1}"); shift; done ;;   ## the fast checks only, then exit
+	--gate)                   echo "--gate is another name for --backlog-run-quick" >&2; set -- --backlog-run-quick "${@:2}" ;;
+	--backlog-run-full|--merge-gate) fullRun=1; fullRunName="${1}"; shift ;;   ## every check of the default run, and nothing that writes or prompts
+	--ci)                     echo "--ci is another name for --merge-gate" >&2; set -- --merge-gate "${@:2}" ;;
+	--fmt-check)              fmtCheck=1; innerArgs+=("${1}"); shift ;;
+	--container)              container=1; shift ;;             ## stages 1-6 in the image; innerArgs collects what goes in with them
+	--no-container)           noContainer=1; shift ;;           ## stages 1-6 on this box
+	--keep-temp)              keepTemp=1; shift ;;
+	--list)                   listing=1; shift ;;               ## what would run, then exit
+	--no-fmt)                 FMT_CMD=(); innerArgs+=("${1}"); shift ;;
+	--no-cross)               BUILD_CROSS=0; innerArgs+=("${1}"); shift ;;
+	--no-arm)                 noArm=1; innerArgs+=("${1}"); shift ;;                ## drop ARM64 builds + packages
+	--no-windows)             noWindows=1; innerArgs+=("${1}"); shift ;;            ## drop the Windows cross targets
+	--no-package)             PACKAGE_ENABLE=0; innerArgs+=("${1}"); shift ;;
+	--with-private)           withPrivate=1; innerArgs+=("${1}"); shift ;;       ## its tests run inside too
+	--no-remote)              noRemote=1; shift ;;              ## no other box; the container never connects to one anyway
+	--no-profile)             PROFILE_ENABLE=0; innerArgs+=("${1}"); shift ;;
+	--no-dogfood)             DOGFOOD_DESTS=(); shift ;;
 	--no-publish)             GIT_PUBLISH=(); shift ;;
 	--no-sync)                sync=0; shift ;;
-	--demo)                   DEMO_ENABLE=1; shift ;;
-	--quick)                  quick=1; BUILD_CROSS=0; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; shift ;;   ## skip the slow stages
-	--message=*|--msg=*|-m=*) cli_message="${1#*=}"; shift ;;
-	-m|--message|--msg)       cli_message="${2-}"; shift; (($#)) && shift ;;
+	--demo)                   DEMO_ENABLE=1; demoAsked=1; shift ;;
+	--no-demo)                DEMO_ENABLE=0; shift ;;
+	## So a test batch can run past a part that fails (2026102319535661).
+	--no-rust-tests)          noRustTests=1; innerArgs+=("${1}"); shift ;;
+	--no-clippy)              noClippy=1; innerArgs+=("${1}"); shift ;;
+	--no-script-lint)         noScriptLint=1; innerArgs+=("${1}"); shift ;;
+	--no-scrub)               noScrub=1; innerArgs+=("${1}"); shift ;;
+	--no-deny)                noDeny=1; innerArgs+=("${1}"); shift ;;
+	--no-script-tests)        noScriptTests=1; innerArgs+=("${1}"); shift ;;
+	--no-docs)                noDocs=1; innerArgs+=("${1}"); shift ;;
+	--no-scroll)              noScroll=1; innerArgs+=("${1}"); shift ;;
+	--no-wingui)              noWingui=1; shift ;;              ## the container never connects to the boxes
+	--no-release)             noRelease=1; innerArgs+=("${1}"); shift ;;
+	--no-cleanup)             noCleanup=1; innerArgs+=("${1}"); shift ;;
+	--quick)                  quick=1; noArm=1; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;   ## skip the slow stages
+	--long|--slow)            long=1; innerArgs+=(--long); shift ;;   ## the steps that take hours too
+	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
+	--no-asan)                ASAN_CMD=(); innerArgs+=("${1}"); shift ;;
+	--no-tsan)                TSAN_CMD=(); innerArgs+=("${1}"); shift ;;
+	--no-miri)                MIRI_CMD=(); innerArgs+=("${1}"); shift ;;
+	--leakcheck)              leakcheck=1; leakAsked=1; innerArgs+=("${1}"); shift ;;   ## every leak check, the slow ones too
+	--no-leakcheck)           leakcheck=0; innerArgs+=("${1}"); shift ;;
+	--codeql)                 codeql=1; innerArgs+=("${1}"); shift ;;                ## CodeQL in the leak checks; off until 2026102211462005
+	--message=*|--msg=*|-m=*) cliMessage="${1#*=}"; shift ;;
+	-m|--message|--msg)       cliMessage="${2-}"; shift; (($#)) && shift ;;
 	-h|--help)                sed -n '/^##	- Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
-	*) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
+	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
+if ((noContainer)); then container=0; fi
+## --long runs everything, so it takes the private repo too when it's beside
+## this one. The run inside the container is handed --with-private instead.
+privDefault="$(cd "${root}/../.." && pwd)/${PRIVATE_DIR}/repo/cicd/run.bash"
+if ((long && ! withPrivate)) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" && -x "${PRIVATE_RUNNER:-${privDefault}}" ]]; then
+	withPrivate=1; innerArgs+=(--with-private)
+fi
+## The private repo is opt-in, by --with-private or --long, so a plain clone
+## never looks for it.
+if ((withPrivate)); then
+	PRIVATE_RUNNER="${PRIVATE_RUNNER:-${privDefault}}"
+	export SILK_PRIVATE_RUNNER="${PRIVATE_RUNNER}"   ## the test ID check reads it
+else
+	PRIVATE_RUNNER=""; unset SILK_PRIVATE_RUNNER
+fi
+## Its own script tests, beside its runner. They run against stand-ins, so they
+## need no box.
+PRIVATE_TESTS="${PRIVATE_RUNNER:+${PRIVATE_RUNNER%/cicd/*}/cicd/tests}"
+[[ -d "${PRIVATE_TESTS}" ]] || PRIVATE_TESTS=""
+## Inside the container only those tests run. Stage 6 runs out here.
+[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || PRIVATE_RUNNER=""
+## The backlog runs and the merge gate never sync, dogfood, publish, rewrite a
+## tracked file or prompt. The demo rewrites the README gif, so it stays off too.
+gateAreasAll="fmt clippy tests scripts docs"
+if ((gate && fullRun)); then echo "--backlog-run-quick and ${fullRunName} are different runs; pick one" >&2; exit 2; fi
+if ((fullRun && quick)); then echo "${fullRunName} runs every check of the default run, so not --quick" >&2; exit 2; fi
+if ((long && quick)); then echo "--long runs everything, so not --quick" >&2; exit 2; fi
+if ((long && gate)); then echo "--backlog-run-quick runs the fast checks only, so not --long" >&2; exit 2; fi
+## TSan and CodeQL take about half an hour each, so they wait for --long, which
+## keeps the default run to about an hour. --leakcheck takes CodeQL too, because
+## it's every leak check.
+if ((long || (leakAsked && leakcheck))); then codeql=1; fi
+## Miri takes hours even for the tests it's fast on, so only --leakcheck and
+## --long ask for it (2026102320591323). A later --no-leakcheck drops it with the rest.
+miri=0; if ((leakcheck && (long || leakAsked))); then miri=1; fi
+for area in "${gateAreas[@]}"; do case " ${gateAreasAll} " in *" ${area} "*) ;; *) echo "unknown area: ${area} (areas: ${gateAreasAll})" >&2; exit 2 ;; esac; done
+if ((gate && ${#gateAreas[@]} == 0)); then read -r -a gateAreas <<< "${gateAreasAll}"; fi
+if ((fullRun)); then assumeYes=1; sync=0; DOGFOOD_DESTS=(); GIT_PUBLISH=(); DEMO_ENABLE=0; fmtCheck=1; innerArgs+=(--fmt-check); fi
+if ((fmtCheck && ${#FMT_CMD[@]})); then FMT_CMD=("${FMT_CHECK_CMD[@]}"); fi
+if ((gate && leakAsked && leakcheck)); then echo "--leakcheck adds to a full run; the backlog quick run leaves it out" >&2; exit 2; fi
+if ((gate && codeql)); then echo "--codeql is one of the leak checks, which the backlog quick run leaves out" >&2; exit 2; fi
+if ((gate)); then leakcheck=0; fi   ## on by default, --quick too, since the heap-growth test takes under a minute
+## The soak test takes about 2.5 minutes, so --quick leaves it out unless --leakcheck asks.
+soak=0; if ((leakcheck && (! quick || leakAsked))) && [[ -n "${LEAKCHECK_SOAK:-}" ]]; then soak=1; fi
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
 ## x86_64-only. Native x86_64 is untouched; the Windows/Linux x86_64 crosses stay.
-if ((no_arm)) && declare -p CROSS_TARGETS &>/dev/null; then
+if ((noArm)) && declare -p CROSS_TARGETS &>/dev/null; then
 	kept=()
-	for t in "${CROSS_TARGETS[@]}"; do case "$t" in *arm64*|*aarch64*) ;; *) kept+=("$t") ;; esac; done
+	for t in "${CROSS_TARGETS[@]}"; do case "${t}" in *arm64*|*aarch64*) ;; *) kept+=("${t}") ;; esac; done
+	CROSS_TARGETS=("${kept[@]}")
+fi
+
+## --no-windows: drop the Windows cross targets. For a Windows box driving this
+## through WSL, which has already built its own Windows binaries natively - and
+## natively is the only way to get the msvc one at all.
+if ((noWindows)) && declare -p CROSS_TARGETS &>/dev/null; then
+	kept=()
+	for t in "${CROSS_TARGETS[@]}"; do case "${t}" in *windows*) ;; *) kept+=("${t}") ;; esac; done
 	CROSS_TARGETS=("${kept[@]}")
 fi
 declare -p PACKAGE_ENABLE &>/dev/null || PACKAGE_ENABLE=0   ## tolerate a config predating the packages stage
 
-## Publish commit message: -m wins, then config, then a default when unattended.
-## Empty -> publish interactively (git commit opens an editor); when interactive
-## we offer to capture a message at the preflight prompt below.
-publish_msg=""
-if   [[ -n "$cli_message" ]];              then publish_msg="$cli_message"
-elif [[ -n "${PUBLISH_AUTO_MESSAGE:-}" ]]; then publish_msg="$PUBLISH_AUTO_MESSAGE"
-elif ((assume_yes));                       then publish_msg="${APP_NAME} CI/CD ${stamp}"
+## Publish commit message: -m wins, then config, then what's typed at the
+## prompt below. A blank answer, or --yes, takes the automatic one. The publisher
+## runs quiet and never opens an editor, so the plan and the prompt show the
+## message a blank answer commits.
+autoMsg="${APP_NAME} CI/CD ${stamp}"
+## fPublishMessage <cli> <config> <answer>
+fPublishMessage(){
+	if   [[ -n "${1}" ]]; then echo "${1}"
+	elif [[ -n "${2}" ]]; then echo "${2}"
+	elif [[ -n "${3}" ]]; then echo "${3}"
+	else echo "${autoMsg}"
+	fi
+}
+publishMsg=""
+if [[ -n "${cliMessage}" || -n "${PUBLISH_AUTO_MESSAGE:-}" ]] || ((assumeYes)); then
+	publishMsg="$(fPublishMessage "${cliMessage}" "${PUBLISH_AUTO_MESSAGE:-}" "")"
 fi
 
-## Output helpers: fEcho / fEcho_Clean, blank-collapsing.
-## fEcho "msg" -> "[ msg ]" status line; fEcho_Clean "msg" -> plain line, and a
-## bare call collapses repeated blanks. fSection draws the leading-blank + rule
-## letterbox before a major stage header; fDie prints a fatal line and exits.
-declare -i _wasLastEchoBlank=0
-fEcho_ResetBlankCounter(){ _wasLastEchoBlank=0; }
-fEcho_Clean(){ if [[ -n "${1:-}" ]]; then echo -e "$*"; _wasLastEchoBlank=0; elif [[ $_wasLastEchoBlank -eq 0 ]] && echo; then _wasLastEchoBlank=1; fi; }
-fEcho(){       if [[ -n "$*"     ]]; then fEcho_Clean "[ $* ]"; else fEcho_Clean ""; fi; }
-fEcho_Force(){ fEcho_ResetBlankCounter; fEcho "$*"; }
-_letterbox="••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
-fSection(){ fEcho_Clean; fEcho_Clean "${_letterbox}"; fEcho "$*"; }
-fDie(){ { fEcho_Force "FAILED: $*"; } >&2; exit 1; }
-## True if a running process is executing the given binary (its own exe, not a
-## substring match), so an in-use dogfood copy isn't pruned. Checks /proc/*/exe.
-in_use(){
-	local -r bin="$(realpath -e "$1" 2>/dev/null || true)"
-	[[ -n "$bin" ]] || return 1
-	local exe
-	for e in /proc/[0-9]*/exe; do
-		exe="$(realpath -e "$e" 2>/dev/null || true)"
-		[[ "$exe" == "$bin" ]] && return 0
+## A test script's ID, from the "Test ID:" line in its header.
+fTestId(){ sed -n '/Test ID:/{s/.*Test ID:[[:space:]]*//;s/[[:space:]].*//;p;q;}' "${root}/${1}" 2>/dev/null || true; }
+## Where a test script's stdout goes while it runs. It goes with the run's folder,
+## unless --keep-temp or the test folder was handed in.
+fTestOut(){ local name="${1//\//_}"; echo "${SILKTERM_TEST_DIR:-${TMPDIR:-/tmp}}/output_${name%.*}.txt"; }
+## fTestLine <PASS|FAIL|SKIP> <script> <label> [why]: a test's one result line.
+fTestLine(){ local id; id="$(fTestId "${2}")"; fEcho_Clean "${1} ${id:------} ${3}${4:+, ${4}}"; }
+## fTestOut_Fail <out> <script> <label> <failure>: the end of a failed test's
+## output into the log, its FAIL line, then the failure line aborts the run. It
+## names the file only when the file outlives the run.
+fTestOut_Fail(){
+	local -r out="${1}" script="${2}" label="${3}" failure="${4}"
+	local -i lines=0
+	local where="output kept in ${out}"
+	[[ -f "${out}" ]] && lines="$(wc -l <"${out}")"
+	if ((lines > 200)); then fEcho_Clean "last 200 of ${lines} lines of output:"; tail -n 200 "${out}"
+	elif ((lines)); then cat "${out}"; fi
+	fTestLine FAIL "${script}" "${label}"
+	if ((! ${keepTemp:-0})) && [[ -n "${runDir:-}" && "${SILKTERM_TEST_DIR:-}" == "${runDir}" ]]; then where="--keep-temp keeps its output"; fi
+	fDie "${failure} ($(fTestId "${script}")), ${where}"
+}
+## fRunTest <script> <label> [failure]: runs a test script under the repo root,
+## if it is there. Its PASS line on a pass, with its output dropped. The failure
+## text, by default "<label> test failed", aborts the run, after the test's
+## output and its FAIL line.
+## A test never sees this run's publish ledger. The engine runs a test starts
+## would add their own files to it, and add its mount to their docker lines.
+fRunTest(){
+	local -r script="${1}" label="${2}" failure="${3:-${2} test failed}"
+	[[ -x "${root}/${script}" ]] || return 0
+	((! ${noScriptTests:-0})) || return 0
+	if ((listing)); then fListTest "${script}" "${label}"; return 0; fi
+	fEcho_Clean "${label} ..."
+	local out; out="$(fTestOut "${script}")"
+	env -u SILK_PUBLISH_LEDGER "${root}/${script}" >"${out}" || fTestOut_Fail "${out}" "${script}" "${label}" "${failure}"
+	rm -f "${out}"
+	fTestLine PASS "${script}" "${label}"
+}
+## fRunTest_MaySkip <script> <label> [why]: the same, for a test whose exit 3
+## means it couldn't run. That is a SKIP line, with the last "skip: <why>" the
+## test printed, or else the why given. In the image a "skip: no <tool>" fails
+## instead, since the image is meant to have every tool the tests use, and a
+## skip there went unseen for a week.
+fRunTest_MaySkip(){
+	local -r script="${1}" label="${2}" why="${3:-could not run}"
+	[[ -x "${root}/${script}" ]] || return 0
+	((! ${noScriptTests:-0})) || return 0
+	if ((listing)); then fListTest "${script}" "${label}"; return 0; fi
+	fEcho_Clean "${label} ..."
+	local rc=0 out said; out="$(fTestOut "${script}")"
+	env -u SILK_PUBLISH_LEDGER "${root}/${script}" >"${out}" || rc=$?
+	if ((rc == 3)); then
+		said="$(sed -n 's/^[[:space:]]*skip: //p' "${out}" | tail -n 1)"
+		if [[ -n "${SILK_CICD_IN_CONTAINER:-}" && "${said}" =~ ^no\ [^[:space:]]+$ ]]; then
+			fTestOut_Fail "${out}" "${script}" "${label}" "${label}: the image has ${said}; add it to cicd/container/Dockerfile"
+		fi
+	fi
+	case "${rc}" in
+		0) rm -f "${out}"; fTestLine PASS "${script}" "${label}" ;;
+		3) rm -f "${out}"; fTestLine SKIP "${script}" "${label}" "${said:-${why}}" ;;
+		*) fTestOut_Fail "${out}" "${script}" "${label}" "${label} test failed" ;;
+	esac
+}
+## fListTest <script> <label>: a test's line under --list.
+fListTest(){ local id; id="$(fTestId "${1}")"; printf '  %-5s  %s\n' "${id:------}" "${2}"; }
+## --list: the Rust tests cargo test runs, as ID and name.
+fListRustTests(){
+	local found=""
+	local -a lines=()
+	if [[ -x "${root}/cicd/utility/test-id.py" ]] && command -v python3 >/dev/null 2>&1; then found="$("${root}/cicd/utility/test-id.py" --list)"; fi
+	[[ -z "${found}" ]] || mapfile -t lines <<<"${found}"
+	fEcho_Clean "Rust tests (${TEST_CMD[*]}, ${#lines[@]}):"
+	((! ${#lines[@]})) || printf '  %s\n' "${lines[@]}"
+}
+## Runs cargo test with each result line as status, test ID and name. Every other
+## line goes through untouched, and the command's own exit status is kept.
+fTestLines(){
+	if [[ -x "${root}/cicd/utility/test-id.py" ]] && command -v python3 >/dev/null 2>&1; then
+		"${@}" | "${root}/cicd/utility/test-id.py" --annotate
+	else
+		"${@}"
+	fi
+}
+## True when a process here is running the file at $1. Reads /proc, since fuser isn't
+## on every distro. A Windows build in the synced dir is never run from there.
+## -ef is a builtin stat, so only a process running that very file costs a fork.
+## The readlink after it keeps a hard link elsewhere, or a process in another
+## mount namespace, from counting.
+fInUse(){ local want exe; want="$(readlink -f "${1}" 2>/dev/null)" || return 1; [[ -n "${want}" ]] || return 1
+	for exe in /proc/[0-9]*/exe; do
+		if [[ "${exe}" -ef "${want}" && "$(readlink "${exe}" 2>/dev/null)" == "${want}" ]]; then return 0; fi
+	done; return 1
+}
+## Tag for a build copy: '<toolchain: gnu|msvc><built on: l|m|b|w><target: l|m|b|w><arch: i|a>'.
+## Built-on is this host; the target and arch come from the os-arch label the build
+## was made under, so a cross-build is tagged for where it will RUN. Prints nothing
+## for anything unrecognized - no tag beats a wrong one.
+fBuildTag(){
+	local -r osarch="${1:-}"
+	local here target arch
+	case "$(uname -s)" in
+		Linux)                here=l ;;
+		Darwin)               here=m ;;
+		*BSD|DragonFly)       here=b ;;
+		MINGW*|MSYS*|CYGWIN*) here=w ;;
+		*)                    return 0 ;;
+	esac
+	case "${osarch%%-*}" in
+		linux)   target=l ;;
+		macos)   target=m ;;
+		windows) target=w ;;
+		*)       return 0 ;;
+	esac
+	case "${osarch#*-}" in
+		x86_64)  arch=i ;;
+		arm64)   arch=a ;;
+		*)       return 0 ;;
+	esac
+	printf 'gnu%s%s%s' "${here}" "${target}" "${arch}"
+}
+## First writable dir out of a '|'-separated candidate list, or nothing. It makes
+## no dirs, since the preflight calls it too, and a plan that's never confirmed
+## mustn't leave any behind.
+fDogfoodDest(){
+	local dir
+	local -a dirs=()
+	IFS='|' read -r -a dirs <<< "${1:-}"
+	for dir in "${dirs[@]}"; do
+		if [[ -d "${dir}" && -w "${dir}" ]]; then
+			printf '%s' "${dir}"
+			return 0
+		fi
+	done
+	return 0
+}
+## Whether the copy's mkdir -p of a dest dir would work: the nearest part of the
+## path that is there is a writable dir.
+fDogfoodMakeable(){
+	local dir="${1:-}"
+	while [[ ! -e "${dir}" && "${dir}" == /?* ]]; do dir="$(dirname "${dir}")"; done
+	[[ -d "${dir}" && -w "${dir}" ]]
+}
+## Whether this run builds the os-arch a dest names. The Mac build isn't known
+## until the private runner is back, so it never counts here.
+fDogfoodPlanned(){
+	local t rest
+	[[ "${1:-}" == "${RELEASE_NATIVE_OSARCH:-native}" ]] && return 0
+	((${BUILD_CROSS:-0})) || return 1
+	for t in "${CROSS_TARGETS[@]}"; do
+		rest="${t#*|}"
+		[[ "${rest%%|*}" == "${1:-}" ]] && return 0
 	done
 	return 1
 }
-## Tag for a build copy: '<toolchain: gnu|msvc><built on: l|m|b|w><target: l|m|b|w><arch: i|a>'.
-## The rotating copy is always the NATIVE release, so built-on and target are this host.
-## Prints nothing on an unrecognised host - no tag beats a wrong one.
-build_tag(){
-	local os arch
-	case "$(uname -s)" in
-		Linux)                os=l ;;
-		Darwin)               os=m ;;
-		*BSD|DragonFly)       os=b ;;
-		MINGW*|MSYS*|CYGWIN*) os=w ;;
-		*)                    return 0 ;;
+## A default or --quick run that can't dogfood a build it makes fails, so it stops
+## before the tests rather than at the copy, an hour in.
+fDogfoodPreflight(){
+	local xd xosarch xrest xdirs
+	for xd in "${DOGFOOD_DESTS[@]}"; do
+		xosarch="${xd%%|*}"; xrest="${xd#*|}"; xdirs="${xrest#*|}"
+		fDogfoodPlanned "${xosarch}" || continue
+		[[ -n "$(fDogfoodDest "${xdirs}")" ]] || fDogfoodMakeable "${xdirs%%|*}" \
+			|| fDie "no dogfood dest writable for ${xosarch} (${xdirs//|/, }); --no-dogfood skips the copy"
+	done
+}
+## Copy each build this run made to its dogfood dest. A target the run didn't build
+## is passed over, since a flag such as --no-windows said so, or the Mac box was
+## off. A build that can't be copied fails the run, once the others are in.
+fDogfoodInstall(){
+	local xd xosarch xrest xname xdirs xsrc pair xdest xtag problem
+	local -a problems=()
+	local installed=0
+	for xd in "${DOGFOOD_DESTS[@]}"; do
+		xosarch="${xd%%|*}"; xrest="${xd#*|}"; xname="${xrest%%|*}"; xdirs="${xrest#*|}"
+
+		xsrc=""
+		for pair in "${builtArts[@]}"; do
+			[[ "${pair%%|*}" == "${xosarch}" ]] && { xsrc="${pair#*|}"; break; }
+		done
+		if [[ -z "${xsrc}" ]]; then
+			fEcho_Clean "no ${xosarch} build this run; nothing to dogfood for it"
+			continue
+		fi
+
+		## Make the first candidate when none is there yet, so a fresh box needs no
+		## setup step of its own.
+		xdest="$(fDogfoodDest "${xdirs}")"
+		if [[ -z "${xdest}" ]]; then
+			mkdir -p "${xdirs%%|*}" 2>/dev/null || true
+			xdest="$(fDogfoodDest "${xdirs}")"
+		fi
+		if [[ -z "${xdest}" ]]; then
+			problems+=("no dogfood dest writable for ${xosarch} (${xdirs//|/, })")
+			continue
+		fi
+
+		if [[ -e "${xdest}/${xname}" ]] && fInUse "${xdest}/${xname}"; then
+			problems+=("${xdest}/${xname} is running, so it can't be replaced; close it and run again")
+			continue
+		fi
+
+		## -p: the launcher dates a build by its mtime, so the copy has to keep it.
+		if ! cp -pf "${xsrc}" "${xdest}/${xname}" || ! chmod +x "${xdest}/${xname}"; then
+			problems+=("could not copy the ${xosarch} build to ${xdest}/${xname}")
+			continue
+		fi
+
+		## A cross-build says nothing about the box that later reads it, so the tag
+		## goes in a sidecar rather than being guessed at the far end.
+		xtag="${DOGFOOD_TAG-$(fBuildTag "${xosarch}")}"
+		if [[ -n "${xtag}" ]]; then printf '%s\n' "${xtag}" > "${xdest}/${xname}.tag"
+		else rm -f "${xdest}/${xname}.tag"; fi
+
+		if [[ -n "${DOGFOOD_ICON:-}" && -f "${root}/${DOGFOOD_ICON}" ]]; then
+			cp -f "${root}/${DOGFOOD_ICON}" "${xdest}/${EXE_NAME}.png"
+		fi
+
+		fEcho "OK: installed (${xosarch}${xtag:+, ${xtag}}) -> ${xdest}/${xname}"
+		installed=$((installed + 1))
+	done
+	if ((! installed && ! ${#problems[@]})); then problems+=("this run built none of the dogfood targets"); fi
+	if ((${#problems[@]})); then
+		for problem in "${problems[@]}"; do fEcho "ERROR: ${problem}"; done
+		fDie "dogfood: ${#problems[@]} build(s) not installed"
+	fi
+}
+## Where this run is happening, for the plan header: the skips differ per host, so
+## say which one it is up front. WSL is told from its kernel string; the Windows
+## pipeline sets CICD_LINUX_HALF when it hands the Linux stages over.
+fHostLine(){
+	local kernel="" os=""
+	[[ -r /proc/version ]] && kernel="$(</proc/version)"
+	[[ -r /etc/os-release ]] && os="$(. /etc/os-release 2>/dev/null; printf '%s' "${PRETTY_NAME:-${NAME:-}}")"
+	fHostDescribe "$(uname -s)" "$(uname -m)" "${kernel}" "${os}"
+}
+## fHostDescribe <uname -s> <uname -m> <kernel version string> <distribution>
+fHostDescribe(){
+	local -r sys="${1}" arch="${2}" kernel="${3}" os="${4}" distro="${WSL_DISTRO_NAME:-}"
+	case "${sys}" in
+		MINGW*|MSYS*|CYGWIN*)
+			printf 'Windows (MSYS bash) - cicd-win.ps1 is the pipeline for this box' ;;
+		Linux)
+			if [[ "${kernel,,}" == *microsoft* ]]; then
+				local gen="WSL"; [[ "${kernel}" == *WSL2* ]] && gen="WSL2"
+				if [[ -n "${CICD_LINUX_HALF:-}" ]]; then
+					printf '%s%s on Windows, the Linux half of a cicd-win.ps1 run' "${gen}" "${distro:+ (${distro})}"
+				else
+					printf '%s%s on Windows, run on its own' "${gen}" "${distro:+ (${distro})}"
+				fi
+			else
+				printf 'Linux%s, %s' "${os:+ (${os})}" "${arch}"
+			fi ;;
+		*) printf '%s, %s' "${sys}" "${arch}" ;;
 	esac
-	case "$(uname -m)" in
-		x86_64|amd64)  arch=i ;;
-		aarch64|arm64) arch=a ;;
-		*)             return 0 ;;
-	esac
-	printf 'gnu%s%s%s' "$os" "$os" "$arch"
 }
 ## Run a build command, retrying it a few times before calling it a failure. Every
-## profile that reaches here uses fat LTO, and rustc has repeatedly died part way
-## through one inside LLVM - a different pass and a different signal each time
-## (SIGILL, SIGSEGV, SIGBUS) - then compiled the identical source clean on the next
-## try. It has crashed twice in a row, so one retry is not enough. Stage 2 has
-## already compiled everything bar the feature-gated profiler hooks, so a genuine
-## error surfaces in seconds here and the extra tries cost nothing on that path.
-retry_build(){
-	local -r what="$1"; shift
-	local -i tries="${BUILD_ATTEMPTS:-3}"
+## profile built here uses fat LTO, and rustc has died part way through one inside
+## LLVM several times, at a different pass with a different signal each time, then
+## built the same source clean on the next try. It has crashed twice in a row, so
+## one retry isn't enough. Stage 2 has already compiled all but the profiler hooks,
+## so a real error shows up in seconds and the extra tries cost little.
+fRetryBuild(){
+	local -r what="${1}"; shift
+	local -i tries="${BUILD_ATTEMPTS:-5}"
 	((tries >= 1)) || tries=1
 	local -i n=0 rc=0
 	while ((n < tries)); do
 		n+=1
 		rc=0
-		"$@" || rc=$?
+		"${@}" || rc=$?
 		((rc)) || return 0
 		if ((n < tries)); then
 			fEcho "WARNING: ${what} build failed (attempt ${n} of ${tries}) - retrying, since a compiler crash here has been a toolchain flake"
@@ -189,40 +610,943 @@ retry_build(){
 	done
 	fDie "${what} build failed ${tries}x - a real error, or the fat-LTO crash is no longer occasional"
 }
+## The artifact files this configuration is meant to produce, whatever this run
+## did. --quick, --no-cross and friends leave part of the set behind and a
+## package step that can't find its tool only warns, so the note has to say what a
+## whole set looks like rather than list what happened to be there.
+fReleaseExpects(){
+	local -a want=("${EXE_NAME}-${ver}-${RELEASE_NATIVE_OSARCH}")
+	local -a osarchs=("${RELEASE_NATIVE_OSARCH}")
+	local t rest osarch art
+	if ((${#CROSS_TARGETS[@]})); then
+		for t in "${CROSS_TARGETS[@]}"; do
+			rest="${t#*|}"; osarch="${rest%%|*}"; rest="${rest#*|}"; art="${rest%%|*}"
+			if [[ "${art}" == *.exe ]]; then
+				want+=("${EXE_NAME}-${ver}-${osarch}.exe")
+			else
+				want+=("${EXE_NAME}-${ver}-${osarch}")
+			fi
+			osarchs+=("${osarch}")
+		done
+	fi
+	if ((PACKAGE_ENABLE)); then
+		for osarch in "${osarchs[@]}"; do
+			case "${osarch}" in
+				linux-*)   want+=("${EXE_NAME}-${ver}-${osarch}.deb" "${EXE_NAME}-${ver}-${osarch}.rpm") ;;
+				windows-*) want+=("${EXE_NAME}-${ver}-${osarch}-setup.exe") ;;
+			esac
+		done
+	fi
+	printf '%s\n' "${want[@]}"
+}
+
 ## (Re)write the sha256sums file over every artifact in the release dir except the
 ## sums file itself. Run after stage 5 (binaries) and again after stage 6 (packages),
-## so the checksums cover the packages too. Uses the script-scope art_dir/ver/sums.
-write_sums(){
-	[[ -n "${art_dir:-}" && -d "${art_dir:-/nonexist}" ]] || return 0
-	( cd "${art_dir}"
-	  files=(); for x in "${EXE_NAME}-${ver}-"*; do [[ "$x" == "$sums" || ! -f "$x" ]] && continue; files+=("$x"); done
-	  ((${#files[@]})) && sha256sum "${files[@]}" > "${sums}" )
+## so the checksums cover the packages too. Uses the script-scope artDir/ver/sums.
+fWriteSums(){
+	[[ -n "${artDir:-}" && -d "${artDir:-/nonexist}" ]] || return 0
+	( cd "${artDir}"
+	  ## the signature covers the sums file, so it can never be inside it
+	  files=(); for x in "${EXE_NAME}-${ver}-"*; do [[ "${x}" == "${sums}" || "${x}" == *.sig || ! -f "${x}" ]] && continue; files+=("${x}"); done
+	  if ((${#files[@]})); then sha256sum "${files[@]}" > "${sums}"; fi )
+	local -a expects=()
+	mapfile -t expects < <(fReleaseExpects)
+	fWriteBuiltFrom "${artDir}" "${builtFromState:-}" "${expects[@]}"
 }
-trap 'rc=$?; printf "\n[ CICD ABORTED (exit %s) at line %s: %s ]\n" "$rc" "$LINENO" "$BASH_COMMAND" >&2; exit $rc' ERR
+trap 'rc=$?; printf "\n[ CICD ABORTED (exit %s) at line %s: %s ]\n\n" "$rc" "$LINENO" "$BASH_COMMAND" >&2; exit $rc' ERR
 
-## Gate mode: the local merge gate (what a bare-bones hosted CI would run).
-## fmt --check + clippy -D warnings + tests, fail-fast, nothing mutated, no
-## artifacts/log-tee/publish. Wired as the pre-push hook for main/dev, so
-## nothing reaches an integration branch unverified even outside a full run.
+## --container: the image is built from cicd/container/Dockerfile with the versions
+## in tool-pins.txt and rust-toolchain.toml as build args, and its tag hashes the
+## recipe plus those args, so a change to any of them is a new image. The run inside
+## sees this tree at its own path, the target dir CARGO_TARGET_DIR named before the
+## config loaded, and a named volume for its home and the crate cache.
+docker="${SILK_DOCKER:-docker}"
+## Every container, image, and volume the pipeline makes is labeled with the
+## project and the run, so a cleanup takes only its own from a shared docker.
+## runName is the run folder's name, set once that folder is made (fRunDir_Make).
+projectLabel="dev.project=${EXE_NAME}"
+runName=""; dockerUsed=0; runEnded=0
+## The run's folder goes under this, resolved now, before TMPDIR points into it,
+## and since a container mount needs the real path.
+runBase="$(realpath -m -- "${HOST_TEMP:-${TMPDIR:-/tmp}}")/${EXE_NAME}"; runDir=""
+cacheVolume="${EXE_NAME}-cicd-cache"; zigVolume="${EXE_NAME}-zig-cache"
+zigStamp=".cicd-zig-version"
+fLabels(){ printf '%s\n' --label "${projectLabel}" --label "dev.run=${runName:?}"; }
+containerRecipe="${here}/container/Dockerfile"
+## The build args: the toolchain and its targets, then VER_<pin> for each pin the
+## recipe takes, so a pin the image doesn't install changes nothing.
+fContainerArgs(){
+	local pin name ver recipe
+	printf 'VER_rust=%s\n' "$(sed -n 's/^channel *= *"\(.*\)".*/\1/p' "${root}/rust-toolchain.toml")"
+	printf 'RUST_TARGETS=%s\n' "$(sed -n '/^targets *= *\[/,/\]/p' "${root}/rust-toolchain.toml" | grep -oE '"[^"]+"' | tr -d '"' | paste -sd' ')"
+	printf 'RUST_NIGHTLY=%s\n' "${SANITIZER_TOOLCHAIN:-}"
+	recipe=$'\n'"$(<"${containerRecipe}")"$'\n'
+	for pin in "${TOOL_PINS[@]}"; do
+		name="${pin%%|*}"; name="${name//-/_}"; ver="${pin#*|}"; ver="${ver%%|*}"
+		if [[ "${recipe}" == *$'\n'"ARG VER_${name}"$'\n'* ]]; then printf 'VER_%s=%s\n' "${name}" "${ver}"; fi
+	done
+}
+fContainerImage(){ printf '%s-cicd:%s' "${EXE_NAME}" "$({ cat "${containerRecipe}"; fContainerArgs; } | sha256sum | cut -c1-12)"; }
+## fRunDir_Make: the run's folder, HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with
+## TMPDIR, TEMP and TMP pointed at it, so what the tools write goes there and
+## goes with it. It's the tests' folder too, unless one was handed in. Its name
+## names the run in the labels and container names.
+fRunDir_Make(){
+	fSweep_RunDir "${runBase}" runDir || return 1
+	export TMPDIR="${runDir}" TEMP="${runDir}" TMP="${runDir}"
+	[[ -n "${SILKTERM_TEST_DIR:-}" ]] || export SILKTERM_TEST_DIR="${runDir}"
+	fTestDir_Make || return 1
+	runName="${runDir##*/}"
+	## The publish ledger. A run in the container is handed the one outside.
+	if ((${#GIT_PUBLISH[@]})) && [[ -z "${SILK_PUBLISH_LEDGER:-}" ]]; then
+		mkdir "${runDir}/publish" && : >"${runDir}/publish/changed.txt" || return 1
+		export SILK_PUBLISH_LEDGER="${runDir}/publish/changed.txt"
+	fi
+}
+## fRunChanged <pathspec>... -- <command>...: runs the command, then adds to the
+## publish ledger the tracked files under the pathspecs that it changed and that
+## matched HEAD before it ran. Publish commits only those. A file that was already
+## edited can hold another session's work, so it's never taken.
+fRunChanged(){
+	local -a specs=() list=(); local -A before=(); local f="" rc=0
+	while (($#)) && [[ "${1}" != -- ]]; do specs+=("${1}"); shift; done; shift
+	if [[ -z "${SILK_PUBLISH_LEDGER:-}" || ${#specs[@]} -eq 0 ]]; then "${@}"; return; fi
+	mapfile -d '' list < <(git -C "${root}" diff -z --name-only HEAD -- "${specs[@]}" 2>/dev/null)
+	for f in "${list[@]}"; do before["${f}"]=1; done
+	"${@}" || rc=$?
+	mapfile -d '' list < <(git -C "${root}" diff -z --name-only HEAD -- "${specs[@]}" 2>/dev/null)
+	for f in "${list[@]}"; do
+		[[ -n "${before["${f}"]:-}" || "${f}" == *$'\n'* ]] || printf '%s\n' "${f}" >>"${SILK_PUBLISH_LEDGER}"
+	done
+	return "${rc}"
+}
+## fRunDir_End <status>: removes the run's folder, failed or not. --keep-temp
+## keeps it and says where.
+fRunDir_End(){
+	local -r dir="${runDir}"
+	local why="" err="" kb=""
+	[[ -n "${dir}" ]] || return 0
+	runDir=""
+	if ((keepTemp)); then echo "kept the run's temp folder (--keep-temp): ${dir}" >&2; return 0; fi
+	why="$(fSweep_RunDirNotOurs "${dir}")"
+	if [[ -n "${why}" ]]; then echo "cleanup: left ${dir} in place: ${why}" >&2; return 0; fi
+	## Out of it first, should a step have left the shell there.
+	[[ "${PWD}" != "${dir}" && "${PWD}" != "${dir}"/* ]] || cd / || true
+	kb="$(du -sk -- "${dir}" 2>/dev/null)" || true
+	err="$(fSafeRm "${dir}" 2>&1)" || { echo "cleanup: couldn't remove ${dir}${err:+: ${err}}" >&2; return 0; }
+	kb="${kb%%[[:space:]]*}"; [[ ! "${kb}" =~ ^[0-9]+$ ]] || __sweepBytes+=$((kb * 1024))
+	fSweep_Note "the run's temp folder"
+	((! ${1:-0})) || echo "removed the run's temp folder ${dir}; --keep-temp keeps it" >&2
+}
+## fStaleRuns: run folders over 2 days old whose run.pid process is gone, which
+## a killed run or a failed lone test left. Every run outside the container
+## removes them, the backlog quick run too, since rounds run that one most.
+fStaleRuns(){
+	[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || return 0
+	fSweep_StaleRuns "${runBase}" "${CLEANUP_STALE_DAYS:-2}" "stale run folders"
+}
+## fDockerStart: the run has used docker, so its end tidies up after it.
+fDockerStart(){ dockerUsed=1; }
+## fDockerBytes: the total of docker system df's sizes on stdin, which docker
+## gives in powers of 1000.
+fDockerBytes(){
+	awk -F'|' '{
+		n = $2 + 0; u = $2; sub(/^[0-9.]+/, "", u)
+		m = (u == "kB") ? 1e3 : (u == "MB") ? 1e6 : (u == "GB") ? 1e9 : (u == "TB") ? 1e12 : 1
+		t += n * m
+	} END { printf "%.0f\n", t }'
+}
+## fContainerBuild <image>: builds it when it isn't there.
+fContainerBuild(){
+	local -r image="${1}"
+	local arg
+	local -a args=() labels=()
+	fDockerStart
+	if "${docker}" image inspect "${image}" >/dev/null 2>&1; then fEcho_Clean "image ${image}"; return 0; fi
+	fEcho_Clean "building ${image} (the recipe or a pin changed; this takes a while)"
+	while IFS= read -r arg; do args+=(--build-arg "${arg}"); done < <(fContainerArgs)
+	mapfile -t labels < <(fLabels)
+	"${docker}" build -t "${image}" "${labels[@]}" "${args[@]}" --build-arg "JOBS=${CICD_MAX_JOBS}" "${here}/container" || fDie "image build failed"
+}
+## fContainerVolume <name>: makes the volume with the labels when it isn't there,
+## since one that docker run makes on the fly has no labels.
+fContainerVolume(){
+	local -a labels=()
+	"${docker}" volume inspect "${1}" >/dev/null 2>&1 && return 0
+	mapfile -t labels < <(fLabels)
+	"${docker}" volume create "${labels[@]}" "${1}" >/dev/null || echo "WARNING: couldn't make the volume ${1}" >&2
+}
+## Removes our stopped containers. One is left behind that way when the docker
+## daemon restarts under --rm. A running one is left alone, since it can be
+## another run's.
+fContainerStopped(){
+	local id
+	local -i gone=0
+	while IFS= read -r id; do
+		[[ -n "${id}" ]] || continue
+		if "${docker}" rm "${id}" >/dev/null 2>&1; then gone+=1; fi
+	done < <("${docker}" ps -aq --filter "label=${projectLabel}" --filter status=exited --filter status=created --filter status=dead 2>/dev/null || true)
+	fSweep_Count "stopped containers" "${gone}"
+}
+## fContainerTags <image>: keeps the image this run used and the newest one before
+## it, and removes older ones. A plain image rm leaves one that a container still
+## uses, for a later run to remove.
+fContainerTags(){
+	local -r image="${1}"
+	local line old
+	local -i held=0 gone=0
+	while IFS= read -r line; do
+		old="${line#*|}"
+		[[ -n "${old}" && "${old}" != "${image}" && "${old}" != *"<none>"* ]] || continue
+		if ((held < 1)); then held+=1; continue; fi
+		if "${docker}" image rm "${old}" >/dev/null 2>&1; then gone+=1; fi
+	done < <("${docker}" image ls "${image%%:*}" --filter "label=${projectLabel}" --format '{{.CreatedAt}}|{{.Repository}}:{{.Tag}}' 2>/dev/null | sort -r || true)
+	((! gone)) || echo "count|older container images|${gone}"
+}
+## fContainerVolumes: removes a cache volume of ours that's over the cap, whole,
+## and the Zig one once another Zig version filled it. docker refuses a volume
+## that a container still uses, such as another run's, so that one stays.
+fContainerVolumes(){
+	local name size stamped zigNow why seen=""
+	local -r capBytes=$(( ${CLEANUP_CACHE_CAP_MB:-2048} * 1048576 )) tidy="${EXE_NAME}-${runName}-tidy"
+	local -a ours=() mounts=() labels=()
+	fMemCap_DockerArgs || return 0
+	mapfile -t ours < <("${docker}" volume ls -q --filter "label=${projectLabel}" 2>/dev/null | grep -xF -e "${cacheVolume}" -e "${zigVolume}" || true)
+	((${#ours[@]})) || return 0
+	for name in "${ours[@]}"; do mounts+=(-v "${name}:/v/${name}:ro"); done
+	mapfile -t labels < <(fLabels)
+	## No --rm: it can return before the container is gone, which still uses the
+	## volumes. A plain rm waits.
+	# shellcheck disable=2154  ## memCapArgs is set by memcap.bash's fMemCap_DockerArgs.
+	seen="$("${docker}" run "${labels[@]}" "${memCapArgs[@]}" --name "${tidy}" "${mounts[@]}" "${containerImage}" bash -c '
+		for d in /v/*; do
+			s=""; [[ -f "${d}/${1}" ]] && read -r s <"${d}/${1}"
+			printf "%s|%s|%s|%s\n" "${d##*/}" "$(du -sb "${d}" | cut -f1)" "${s}" "$(zig version)"
+		done' _ "${zigStamp}" 2>/dev/null || true)"
+	"${docker}" rm "${tidy}" >/dev/null 2>&1 || true
+	while IFS='|' read -r name size stamped zigNow; do
+		why=""
+		[[ "${size}" =~ ^[0-9]+$ ]] || continue
+		if [[ "${name}" == "${zigVolume}" && -n "${stamped}" && "${stamped}" != "${zigNow}" ]]; then why="filled by zig ${stamped}"
+		elif ((size > capBytes)); then why="over ${CLEANUP_CACHE_CAP_MB:-2048} MB"; fi
+		[[ -n "${why}" ]] || continue
+		if "${docker}" volume rm "${name}" >/dev/null 2>&1; then fEcho_Clean "cleanup: removed the volume ${name}, ${why}"; echo "count|cache volumes|1"
+		else fEcho_Clean "cleanup: left the volume ${name} (${why}), still in use"; fi
+	done <<<"${seen}"
+}
+## fContainerEnd <status>: runs at the end of a run, failed or stopped too. It
+## removes the run's containers by label, unless --keep-temp, then our untagged
+## images, older tags once this run has passed, and cache volumes over the cap.
+## The build cache is every project's, so the daemon's own GC trims it. Nothing
+## is printed until the work is done, since Ctrl+C takes the log tee down too,
+## and a write to it then ends the run. What was removed, and what it freed, goes
+## on the run's one cleanup line.
+fContainerEnd(){
+	local said="" line what n
+	((dockerUsed)) && [[ -n "${runName}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]] || return 0
+	dockerUsed=0
+	said="$(fContainerEnd_Work "${1:-0}" 2>&1)" || true
+	while IFS= read -r line; do
+		case "${line}" in
+			count\|*) what="${line#count|}"; n="${what##*|}"; what="${what%|*}"; [[ ! "${n}" =~ ^[0-9]+$ ]] || fSweep_Count "${what}" "${n}" ;;
+			freed\|*) n="${line#freed|}"; [[ ! "${n}" =~ ^[0-9]+$ ]] || __sweepBytes+=${n} ;;
+			?*) printf '%s\n' "${line}" ;;
+		esac
+	done <<<"${said}"
+}
+fContainerEnd_Work(){
+	local -ri rc="${1:-0}"
+	local id before after
+	local -i gone=0
+	local -a ids=() names=()
+	before="$("${docker}" system df --format '{{.Type}}|{{.Size}}' 2>/dev/null | fDockerBytes || true)"
+	mapfile -t ids < <("${docker}" ps -aq --filter "label=dev.run=${runName}" --filter "label=${projectLabel}" 2>/dev/null | grep . || true)
+	if ((keepTemp)); then
+		mapfile -t names < <("${docker}" ps -a --filter "label=dev.run=${runName}" --filter "label=${projectLabel}" --format '{{.Names}}' 2>/dev/null | grep . || true)
+		((! ${#names[@]})) || fEcho_Clean "kept the run's containers (--keep-temp): ${names[*]}"
+	elif ((${#ids[@]})); then
+		"${docker}" stop -t 10 "${ids[@]}" >/dev/null 2>&1 || true
+		"${docker}" rm "${ids[@]}" >/dev/null 2>&1 || true
+		echo "count|of the run's containers|${#ids[@]}"
+	fi
+	while IFS= read -r id; do
+		[[ -n "${id}" ]] || continue
+		if "${docker}" image rm "${id}" >/dev/null 2>&1; then gone+=1; fi
+	done < <("${docker}" image ls -q --filter dangling=true --filter "label=${projectLabel}" 2>/dev/null || true)
+	((! gone)) || echo "count|untagged images|${gone}"
+	if ((rc == 0)) && [[ -n "${containerImage}" ]]; then fContainerTags "${containerImage}"; fi
+	if ((! keepTemp)) && [[ -n "${containerImage}" ]]; then fContainerVolumes; fi
+	after="$("${docker}" system df --format '{{.Type}}|{{.Size}}' 2>/dev/null | fDockerBytes || true)"
+	if [[ "${before}" =~ ^[0-9]+$ && "${after}" =~ ^[0-9]+$ ]] && ((before > after)); then echo "freed|$((before - after))"; fi
+}
+## fStepMem <step>: the step's own default memory cap, when it has one, which
+## CICD_MEM_CAP still overrides. CodeQL peaked at 32.1 GB in the 2 weeks to
+## 2026-11-09, over the general cap, so it gets 48g, and so does an engine run
+## that runs CodeQL inside.
+fStepMem(){
+	if [[ "${1}" == codeql ]]; then echo 48g
+	elif [[ "${1}" == engine && -n "${CODEQL_SUITE:-}" ]] && ((${leakcheck:-0} && ${codeql:-0})); then echo 48g; fi
+	return 0
+}
+## fContainerRun <image> <script> <options...>: runs a pipeline script in the
+## container, such as the engine or the ASan run, against this tree. Its /tmp is a
+## new folder in the run's folder, so the X sockets inside never meet this box's,
+## and a killed run leaves no lock or socket for the next. That folder is removed
+## with the run's folder, or as soon as the step passes. The container starts as
+## root only to give this uid a passwd entry, since the terminal looks its user up
+## and a bare --user has none, and to make the X socket folder. Then it drops to
+## the uid. The run gets its own session bus, which xfwm4 needs, and this box's
+## time zone, so a name stamped inside sorts with the ones made here.
+fContainerRun(){
+	local -r image="${1}" script="${2}"; shift 2
+	local gitCommon privTests zone="${TZ:-}" runTmp="" runToken="" why="" step="${script##*/}"
+	local -i rc=0
+	local -a labels=() rmArg=(--rm) keepArgs=() privArgs=()
+	step="${step%.bash}"; [[ "${1:-}" != --backlog-run-quick ]] || step=gate; [[ "${step}" != cicd ]] || step=engine
+	fMemCap_DockerArgs "$(fStepMem "${step}")" || return 1
+	## --keep-temp: a test folder handed in is never removed, so the run inside
+	## keeps its own too.
+	((! keepTemp)) || { rmArg=(); keepArgs=(-e "SILKTERM_TEST_DIR=/tmp/test_${EXE_NAME}_${step}"); }
+	fDockerStart
+	mapfile -t labels < <(fLabels)
+	fContainerVolume "${cacheVolume}"; fContainerVolume "${zigVolume}"
+	fSweep_MakeDir "${runDir:?}" "container-${step}" runTmp runToken || return 1
+	## Zig's global cache on a volume of its own, stamped with the Zig that filled it.
+	local -a mounts=(-v "${root}:${root}" -v "${cacheVolume}:/cache" -v "${zigVolume}:/zig-cache" -v "${runTmp}:/tmp") zoneArgs=()
+	if [[ -z "${zone}" ]]; then
+		zone="$(realpath -e /etc/localtime 2>/dev/null || true)"
+		if [[ "${zone}" == */zoneinfo/* ]]; then zone="${zone#*/zoneinfo/}"; else zone=""; fi
+	fi
+	if [[ -n "${zone}" ]]; then zoneArgs=(-e "TZ=${zone}"); fi
+	[[ "${containerTarget}" == "${root}/"* ]] || mounts+=(-v "${containerTarget}:${containerTarget}")
+	gitCommon="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
+	## The publish ledger, so the format step inside adds to the one out here.
+	[[ -z "${SILK_PUBLISH_LEDGER:-}" ]] || mounts+=(-v "${SILK_PUBLISH_LEDGER%/*}:${SILK_PUBLISH_LEDGER%/*}" -e SILK_PUBLISH_LEDGER)
+	## The private repo, read only, so the test ID check inside sees its tests as
+	## it does here, and they run. Those tests read its runner, helpers, and build
+	## scripts, so the whole repo is mounted. The runner itself isn't run inside,
+	## since stage 6 runs it out here.
+	[[ -z "${PRIVATE_TESTS}" ]] || privArgs=(-v "${PRIVATE_TESTS%/cicd/*}:${PRIVATE_TESTS%/cicd/*}:ro" -e "SILK_PRIVATE_RUNNER=${PRIVATE_TESTS%/cicd/*}/cicd/run.bash")
+	# shellcheck disable=2154  ## memCapArgs is set by memcap.bash's fMemCap_DockerArgs.
+	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --cpus "${CICD_MAX_JOBS}" --cpu-shares 256 "${memCapArgs[@]}" --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" "${privArgs[@]}" -w "${root}" \
+		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" -e "SILK_RELEASE=${SILK_RELEASE:-0}" \
+		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e "CICD_CORES=${CICD_CORES}" -e SILK_CICD_STEP_AT -e SILK_CICD_STEP_TOTAL -e XDG_RUNTIME_DIR=/tmp/xdg-runtime -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "${zoneArgs[@]}" "${keepArgs[@]}" \
+		"${image}" bash -c 'echo "${USER}:x:${1}:${2}:${USER}:${HOME}:/bin/bash" >>/etc/passwd && echo "${USER}:x:${2}:" >>/etc/group \
+			&& mkdir -m 700 -p "${XDG_RUNTIME_DIR}" && chown "${1}:${2}" "${XDG_RUNTIME_DIR}" && mkdir -m 1777 -p /tmp/.X11-unix \
+			&& { [[ -s "/zig-cache/${3}" ]] || zig version >"/zig-cache/${3}" || true; } && chown "${1}:${2}" /zig-cache \
+			&& exec setpriv --reuid="${1}" --regid="${2}" --init-groups -- dbus-run-session -- bash "${@:4}"' _ "$(id -u)" "$(id -g)" "${zigStamp}" "${script}" "${@}" \
+		|| rc=$?
+	if ((keepTemp)); then
+		echo "kept the container's /tmp (--keep-temp): ${runTmp}" >&2
+	elif ((! rc)); then
+		why="$(fSweep_NotOurs "${runTmp}" "${runToken}")"
+		if [[ -z "${why}" ]]; then fSafeRm "${runTmp}" || true
+		else echo "cleanup: left ${runTmp} in place: ${why}" >&2; fi
+	fi
+	return "${rc}"
+}
+## What the run in the container made, named as stage 5 names them, for the stages
+## here. Every binary this configuration builds has to be there: the run inside made
+## them all, or it failed and this was never reached.
+fContainerArtifacts(){
+	local t rest osarch art
+	[[ -f "${RELEASE_NATIVE_BIN}" ]] || fDie "the container run left no native release binary: ${RELEASE_NATIVE_BIN}"
+	builtArts=("${RELEASE_NATIVE_OSARCH:-native}|${RELEASE_NATIVE_BIN}")
+	if ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
+		for t in "${CROSS_TARGETS[@]}"; do
+			rest="${t#*|}"; osarch="${rest%%|*}"; rest="${rest#*|}"; art="${rest%%|*}"
+			[[ -f "${art}" ]] || fDie "the container run left no ${t%%|*} binary: ${art}"
+			builtArts+=("${osarch}|${art}")
+		done
+	fi
+	ver="$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "${root}/${VERSION_MANIFEST}" | head -1)"
+	artDir="${root}/${RELEASE_ARTIFACT_DIR:-cicd/artifacts/release}"
+}
+containerImage=""; containerTarget=""; containerTmpLedger=""
+if ((container)); then
+	[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || fDie "already in the container; --container would start another"
+	command -v "${docker}" >/dev/null 2>&1 || fDie "--container needs docker, or SILK_DOCKER naming a stand-in"
+elif ((! noContainer)) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	fEcho_Clean "no docker here, so stages 1-6 run on this box with whatever it has installed"
+fi
+## The ASan run needs the nightly, which only the image has, so a full run on this
+## box does that one step in the image. Without docker it's skipped with a warning,
+## like the other steps missing a tool, so a plain run needs no extra flags.
+asanInImage=0; asanSkipped=""
+if ((! container && ! gate && ! quick)) && ((${#ASAN_CMD[@]})) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	if command -v "${docker}" >/dev/null 2>&1; then asanInImage=1
+	else asanSkipped="no docker here for the image with the nightly"; fi
+fi
+## The TSan run the same way, on the same nightly, under --long.
+tsanInImage=0; tsanSkipped=""
+if ((! container && ! gate && ! quick && long)) && ((${#TSAN_CMD[@]})) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	if command -v "${docker}" >/dev/null 2>&1; then tsanInImage=1
+	else tsanSkipped="no docker here for the image with the nightly"; fi
+fi
+## The Miri run the same way, on the same nightly, under --leakcheck or --long.
+miriInImage=0; miriSkipped=""
+if ((! container && miri)) && ((${#MIRI_CMD[@]})) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	if command -v "${docker}" >/dev/null 2>&1; then miriInImage=1
+	else miriSkipped="no docker here for the image with the nightly"; fi
+fi
+## CodeQL, one of the leak checks, is in the image only too. Off unless --codeql,
+## --leakcheck, or --long asks, since a run takes over half an hour and 19 GB here
+## (2026102211462005).
+codeqlInImage=0; codeqlSkipped=""
+if ((! container && leakcheck && codeql)) && [[ -n "${CODEQL_SUITE:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	if command -v "${docker}" >/dev/null 2>&1; then codeqlInImage=1
+	else codeqlSkipped="no docker here for the image with CodeQL"; fi
+fi
+## The soak test needs heaptrack, Xvfb, and xfwm4 at the image's pins, so it goes
+## there the same way, with the debug build this box made.
+soakInImage=0; soakSkipped=""
+if ((! container && soak)) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	if command -v "${docker}" >/dev/null 2>&1; then soakInImage=1
+	else soakSkipped="no docker here for the image with heaptrack"; fi
+fi
+if ((container || asanInImage || tsanInImage || miriInImage || codeqlInImage || soakInImage)); then
+	[[ -f "${containerRecipe}" ]] || fDie "missing ${containerRecipe}"
+	containerImage="$(fContainerImage)"
+	## Its real path, since a target dir linked to another disk would dangle inside.
+	containerTarget="$(mkdir -p "${TARGET_DIR}" && cd -P "${TARGET_DIR}" && pwd -P)"
+	containerTmpLedger="${containerTarget}/.cicd-container-tmp"
+fi
+if ((container)); then
+	## The engine inside takes this run's stage options and none of the stages that
+	## need this box: sync, dogfood, the demo, and publish. Stage 6 stays out here.
+	innerArgs=(-y --no-sync --no-dogfood --no-publish --no-demo "${innerArgs[@]}")
+	((quiet)) && innerArgs[0]=-q
+fi
+
+## One folder for every file the tests write, made before the gate, or once a full
+## run is past its prompt, so every test shares it. It isn't made before the
+## prompt, since a run stopped there would make one for nothing.
+# shellcheck source=cicd/tests/_testdir.bash
+source "${root}/cicd/tests/_testdir.bash"
+
+## The script lints and the docs checks, in stage 3 and in --backlog-run-quick.
+fLintScripts(){
+	## First-party shell scripts, at warning level.
+	if command -v shellcheck >/dev/null 2>&1; then
+		mapfile -t shellFiles < <(git -C "${root}" ls-files '*.bash' '*.sh' cicd/utility/n8git_backup-and-publish utility/git-hooks/pre-commit utility/git-hooks/pre-push utility/runterm)
+		(cd "${root}" && shellcheck -S warning "${shellFiles[@]}") || fDie "shellcheck found problems"
+		fEcho "OK: shell scripts clean"
+		styleOut="$("${root}/cicd/utility/bash-style.bash" 2>&1)" || { fEcho_Clean "${styleOut}"; fDie "shell scripts drift from the house style (cicd/utility/bash-style.bash)"; }
+		fEcho "OK: shell scripts in house style"
+	else
+		fEcho "WARNING: shellcheck not installed; shell scripts not linted"
+	fi
+	## A config fixture writes a monitor's key in quotes, as the program does.
+	## Bare, shcl 3.0 reads it with an E014 error, which no user's file has, so
+	## the test would run on a config no user can have.
+	bareKeys="$(grep -rnE '(^|[^"0-9])[0-9]+x[0-9]+_[0-9]+pct:' "${root}/cicd/tests" --include='*.bash' --include='*.py' --include='*.ps1' || true)"
+	[[ -z "${bareKeys}" ]] || { fEcho_Clean "${bareKeys}"; fDie "a test fixture writes a monitor's key bare; quote it as the program does"; }
+	fEcho "OK: fixture monitor keys quoted"
+	## First-party PowerShell scripts, at warning level too.
+	if command -v pwsh >/dev/null 2>&1; then
+		psRc=0
+		pwsh -NoProfile -NonInteractive -File "${root}/cicd/utility/ps-lint.ps1" || psRc=$?
+		case "${psRc}" in
+			0) fEcho "OK: PowerShell scripts clean" ;;
+			2) fEcho "WARNING: PSScriptAnalyzer not installed; PowerShell scripts not linted" ;;
+			*) fDie "PSScriptAnalyzer found problems" ;;
+		esac
+	else
+		fEcho "WARNING: pwsh not installed; PowerShell scripts not linted"
+	fi
+	## First-party Python scripts, with the rules in ruff.toml and mypy.ini.
+	pyRc=0
+	python3 "${root}/cicd/utility/py-lint.py" || pyRc=$?
+	case "${pyRc}" in
+		0) fEcho "OK: Python scripts clean" ;;
+		2) fEcho "WARNING: ruff not installed; Python scripts not linted" ;;
+		*) fDie "the Python lint found problems" ;;
+	esac
+}
+fCheckDocs(){
+	## Its checks go with --no-docs, not --no-script-tests.
+	local noScriptTests=0
+	## Every table of contents, which no markdown linter regenerates. design.md had
+	## been missing 8 of its headings.
+	fRunTest cicd/tests/toc/run.py "tables of contents" "a table of contents is out of date - run cicd/tests/toc/run.py --fix"
+	## Every markdown table, laid out as comparison.md's generated one is. Hand-written
+	## ones had drifted to trailing pipes and ragged columns.
+	fRunTest cicd/tests/tables/run.py "markdown tables" "a markdown table is not canonical - run cicd/tests/tables/run.py --fix"
+	if ((listing)); then [[ ! -x "${root}/cicd/tests/docs/run.py" ]] || fListTest cicd/tests/docs/run.py "markdown spacing, banner rules, doc comments"; return 0; fi
+	## Blank lines between top-level bullets and around headings, which no markdown
+	## linter here checks. The README and style guide had drifted. Also banner rules
+	## in .rs comments, and plain comments on pub items.
+	if [[ -x "${root}/cicd/tests/docs/run.py" ]]; then
+		fEcho_Clean "markdown spacing, banner rules, doc comments ..."
+		docsOut="$("${root}/cicd/tests/docs/run.py" 2>&1)" || { echo "${docsOut}"; fTestLine FAIL cicd/tests/docs/run.py "markdown spacing, banner rules, doc comments"; fDie "a markdown file is missing a blank line, or a .rs file has a banner rule or a plain comment on a pub item - see above ($(fTestId cicd/tests/docs/run.py))"; }
+		fTestLine PASS cicd/tests/docs/run.py "markdown spacing, banner rules, doc comments"
+	fi
+	## Every test has an ID, and no two share one.
+	if [[ -x "${root}/cicd/utility/test-id.py" ]]; then
+		fEcho_Clean "test IDs ..."
+		testIds="$("${root}/cicd/utility/test-id.py" --check 2>&1)" || { echo "${testIds}"; fDie "a test has no ID or shares one - make IDs with cicd/utility/test-id.py"; }
+		fEcho "OK: test IDs"
+	fi
+}
+
+## The advisory scan's own tests, run after the scan.
+fAdvisoryTests(){
+	fRunTest_MaySkip cicd/tests/advscope/run.bash "advisory scan scope"
+	fRunTest_MaySkip cicd/tests/yankfresh/run.bash "advisory scan sees new yanks"
+}
+## Software rendering on an X server with no shared pixmaps, at launch and switched
+## on later. It needs a compositor drawing on the card, so it runs on this box, and
+## a container run takes it up here once the container is done. Exit 3 is a skip:
+## no binary, sway, Xwayland with DRI3, render node, or tools.
+fRenderNodeTest(){
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then fEcho_Clean "the render node test runs outside the container"; return 0; fi
+	fRunTest_MaySkip cicd/tests/swnoshm/run.bash "software rendering without shared pixmaps"
+}
+## Graphical scenarios on the Windows boxes. Neither box is build hardware, so an
+## unreachable or locked one is reported and stepped over; a scenario that
+## ran and failed aborts. Skipped under --quick and --no-remote, and inside the
+## container, which has no way to the boxes; the run outside takes it up once the
+## container is done.
+fWinGuiScenarios(){
+	if ((quick)) || [[ -z "${WINGUI_HARNESS+x}" ]] || ((${#WINGUI_HARNESS[@]} == 0)) || [[ ! -x "${root}/${WINGUI_HARNESS[0]}" ]]; then return 0; fi
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then fEcho_Clean "windows gui scenarios run outside the container"; return 0; fi
+	if ((noRemote)); then fEcho_Clean "windows gui scenarios skipped (--no-remote)"; return 0; fi
+	if ((${noWingui:-0})); then ((listing)) || fEcho_Clean "windows gui scenarios skipped (--no-wingui)"; return 0; fi
+	if ((listing)); then fListTest "${WINGUI_HARNESS[0]}" "windows gui scenarios"; return 0; fi
+	fEcho_Clean "windows gui scenarios ..."
+	local -ri before="$(fSkipCount)"
+	if SILK_CICD_SKIPS="${skipLog}" "${root}/${WINGUI_HARNESS[0]}" "${WINGUI_HARNESS[@]:1}"; then
+		fStepDone "windows gui scenarios" "${before}"
+	else
+		fDie "a windows gui scenario failed"
+	fi
+}
+## The Linux ARM64 build's --version on the arm64 VM, locked, woken, and put back
+## through the VM state helper. Its first line has to match the native build's
+## name, version, and build number. A box that isn't there is a skip, with its SKIP
+## line in this run's list. Skipped under --quick, --no-remote, and --no-arm, and
+## inside the container, which has no way to the boxes; the run outside takes it up.
+fArmSmoke(){
+	local pair art="" expect="" rc=0
+	if ((quick || listing)); then return 0; fi
+	for pair in "${builtArts[@]}"; do [[ "${pair%%|*}" != linux-arm64 ]] || art="${pair#*|}"; done
+	[[ -n "${art}" ]] || return 0
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then fEcho_Clean "arm64 smoke run runs outside the container"; return 0; fi
+	if ((noRemote)); then fEcho_Clean "arm64 smoke run skipped (--no-remote)"; return 0; fi
+	fEcho_Clean "arm64 smoke run ..."
+	expect="$(env -u DISPLAY -u WAYLAND_DISPLAY "${RELEASE_NATIVE_BIN}" --version </dev/null | head -1 | cut -d' ' -f1-4)" || true
+	[[ "${expect}" == *" build "* ]] || fDie "the native build's --version gave no build line: '${expect}'"
+	local -ri before="$(fSkipCount)"
+	SILK_CICD_SKIPS="${skipLog}" "${here}/utility/arm-smoke.bash" "${art}" "${expect}" </dev/null || rc=$?
+	case "${rc}" in
+		0|3) fStepDone "arm64 smoke run" "${before}" ;;
+		*) fDie "the Linux ARM64 build's --version failed on the arm64 box" ;;
+	esac
+}
+## Stage 3's test scripts and harnesses. --list goes through it too, with each
+## test printing its line rather than running.
+fScriptTests(){
+	if ((noScriptTests && ! listing)); then fEcho_Clean "test scripts skipped (--no-script-tests)"; fi
+	## A release may only publish what was built from the source being tagged.
+	fRunTest cicd/tests/release/run.bash "release provenance"
+	## The release notes link every download by name, and only those uploaded.
+	fRunTest cicd/tests/release-notes/run.bash "release notes table" "release notes test failed"
+	## Installer and rig hygiene: no secret on a command line, no plain-http
+	## redirect, no adopting somebody else's directory in a shared temp folder.
+	fRunTest cicd/tests/install/run.bash "installer hygiene"
+	## The packaging step and the Windows pipeline both look for binaries stage 5
+	## built, and CARGO_TARGET_DIR decides where those are.
+	fRunTest cicd/tests/packaging/run.bash "packaging paths" "packaging path test failed"
+	## Renaming the project has to leave a tree that still builds. Skipped under
+	## --quick: it clones the repository.
+	((quick)) || fRunTest cicd/tests/rename/run.bash "project rename"
+	## Every file a test writes goes under the run folder. Skipped under --quick: it
+	## runs the Rust tests again.
+	((quick)) || fRunTest cicd/tests/testdir/run.bash "test run folder"
+	## The git hooks act on a commit or a push, where a mistake is awkward to undo.
+	fRunTest cicd/tests/hooks/run.bash "git hooks" "git hook test failed"
+	## The publish script commits and pushes, so no input may go to a shell in it.
+	fRunTest cicd/tests/publish/run.bash "publish script safety"
+	## The harness's own exit code, which once printed OK after running no scenes.
+	fRunTest cicd/tests/scroll/verdict-test.bash "scroll harness verdict"
+	## The demo recorder's own window manager session, which once wrote over the
+	## desktop's settings and outlived the recording.
+	fRunTest cicd/tests/demo/run.py "demo recorder session"
+	## The showdown table writers, which once took quick, scaled, and wrong-grid runs.
+	fRunTest cicd/tests/showdown/run.py "showdown table writers" "showdown table test failed"
+	## Every measured row of that table has a rig entry that can take it again.
+	fRunTest cicd/tests/showdown/rigs.py "showdown rig entries" "showdown rig entry test failed"
+	## The startup gates, which once marked a run as seen while it was being written.
+	fRunTest cicd/tests/gates/run.bash "startup gates" "startup gate test failed"
+	## The test ID tool makes IDs in the new form and the check refuses any other.
+	fRunTest cicd/tests/testid/run.py "test IDs" "test ID test failed"
+	## Old config files converted by the program just built: in place where shcl
+	## can migrate them, written new where it can't, the old file kept either way.
+	## Exit 3 means there was no binary to run, which is a SKIP line and never a PASS.
+	fRunTest_MaySkip cicd/tests/config-convert/run.bash "config conversion" "no binary to run"
+	## --quick skips the window tests below that take 30 s to 2 min each. The
+	## rest take 25 s or less.
+	## The window shows at the size it keeps, maximized and fullscreen too, with
+	## no jump after. Exit 3 is a skip: no binary, display, window manager, or python-xlib.
+	fRunTest_MaySkip cicd/tests/startsize/run.bash "window size at launch"
+	## A window herded off a monitor that went dark keeps its size, and is back
+	## at that monitor's size once it's lit. Exit 3 is a skip: no binary, sway,
+	## Xwayland, or python3.
+	fRunTest_MaySkip cicd/tests/monwake/run.bash "window size after a monitor wakes"
+	## Under xfwm4 that window goes back where it was, too. Exit 3 is a skip: no
+	## binary, sway, Xwayland, xfwm4, xdotool, or python-xlib.
+	fRunTest_MaySkip cicd/tests/herdback/run.bash "window place after a monitor wakes"
+	## Under xfwm4 Settings stays above the terminal, as its modal, and off the
+	## taskbar and pager. Exit 3 is a skip: no binary, xfwm4, xdotool, or xprop.
+	fRunTest_MaySkip cicd/tests/dlgtie/run.bash "Settings tied to its window"
+	## On native Wayland Settings names the terminal's toplevel as its parent, so
+	## sway floats it above the terminal. Exit 3 is a skip: no binary, sway,
+	## wtype, python3, or software Vulkan.
+	fRunTest_MaySkip cicd/tests/dlgwl/run.bash "Settings tied to its window on Wayland"
+	## After a lost GPU device, the terminal and Settings each get a new one,
+	## and the window draws again without any input. Exit 3 is a skip: no
+	## binary, sway, wtype, or software Vulkan.
+	fRunTest_MaySkip cicd/tests/devlost/run.bash "a new device after a lost GPU device"
+	## A window made wider than the device's largest texture stays up, on X11
+	## with and without a window manager and on Wayland. Exit 3 is a skip: no
+	## binary, Xvfb, xfwm4, xdotool, sway, software Vulkan, or free display.
+	fRunTest_MaySkip cicd/tests/oversize/run.bash "a window past the texture limit"
+	## On native Wayland a window takes each output's own size once moved or
+	## dropped there, even with a sliver left on another output. Exit 3 is a skip: no
+	## binary, sway, python3, or software Vulkan.
+	((quick)) || fRunTest_MaySkip cicd/tests/monwl/run.bash "window size per Wayland output"
+	## On native Wayland the clipboard and the primary are Wayland's, both ways,
+	## and nothing calls an X server. Exit 3 is a skip: no binary, sway, wtype,
+	## python3, or software Vulkan.
+	fRunTest_MaySkip cicd/tests/wlclip/run.bash "clipboard on Wayland"
+	## The same on random layouts, scales, and steps, judged against a model of
+	## what the window should do. A failure prints its seed and the line that runs
+	## it again. Exit 3 is a skip: no binary, sway, wtype, xdotool, or software Vulkan.
+	if ((! quick)) && [[ "${DPIRAND_SECS:-0}" != 0 ]]; then
+		SILK_DPIRAND_SECS="${DPIRAND_SECS}" fRunTest_MaySkip cicd/tests/dpirand/run.py "window size per monitor, random cases"
+	fi
+	## A save after the config was deleted writes it again, keeping what it had.
+	## Exit 3 is a skip: no binary, display, or xdotool.
+	fRunTest_MaySkip cicd/tests/delcfg/run.bash "save after the config was deleted"
+	## The wallpaper is stored at the size it is drawn at, and again after a resize.
+	## Exit 3 is a skip: no binary, display, or xdotool.
+	((quick)) || fRunTest_MaySkip cicd/tests/wpresize/run.bash "wallpaper held at window size"
+	## A window waking from the idle release shows a small copy of its wallpaper
+	## until the real one is prepared again. Exit 3 is a skip: no binary, display,
+	## window manager, or tools.
+	fRunTest_MaySkip cicd/tests/wakepic/run.bash "wallpaper kept through an idle wake"
+	## A prepared wallpaper is kept on disk and the next launch reads it back.
+	## Exit 3 is a skip: no binary, display, or xdotool.
+	((quick)) || fRunTest_MaySkip cicd/tests/wpkept/run.bash "prepared wallpaper kept on disk"
+	## A save in one window shows in another on the same settings file, and in
+	## no window on another file. Exit 3 is a skip: no binary, display, xdotool,
+	## xwd, or ImageMagick.
+	((quick)) || fRunTest_MaySkip cicd/tests/livecfg/run.bash "settings shared between windows"
+	## The minimap column comes and goes with what runs, when it starts and not
+	## at the next redraw. Exit 3 is a skip: no binary, display, dash, or xdotool.
+	((quick)) || fRunTest_MaySkip cicd/tests/mapfollow/run.bash "minimap column follows what runs"
+	## A tab names a command that prints nothing, with the cursor not blinking.
+	## Exit 3 is a skip: no binary, display, dash, xdotool, or xprop.
+	fRunTest_MaySkip cicd/tests/quiettab/run.bash "tab names a quiet command"
+	## With "Always run in new tmux session" on, a plain launch and a new tab
+	## each start a session, and a command-line layout starts none. Exit 3 is a
+	## skip: no binary, display, dash, or xdotool.
+	fRunTest_MaySkip cicd/tests/tmuxalways/run.bash "tmux sessions for a launch and a new tab"
+	## An unfocused window on screen lets its device go after "Minutes
+	## otherwise", read from the file. About a minute. Exit 3 is a skip: no
+	## binary, display, dash, xdotool, or xprop.
+	((quick)) || fRunTest_MaySkip cicd/tests/idleother/run.bash "idle release after Minutes otherwise"
+	((quick)) || fRunTest_MaySkip cicd/tests/deskswitch/run.bash "idle release through a desktop switch"
+	## A window showing tmux lets go though its status line clock ticks, and
+	## one whose shell prints inside tmux holds on. About 90 s. Exit 3 is a
+	## skip: no binary, display, tmux, dash, xdotool, or xprop.
+	((quick)) || fRunTest_MaySkip cicd/tests/idletmux/run.bash "idle release with a tmux clock"
+	## Heap allocations per frame at rest and in a drag select, against a limit.
+	## Exit 3 is a skip: no debug binary, display, window manager, or xdotool.
+	fRunTest_MaySkip cicd/tests/allocs/run.bash "allocations per frame"
+	fRenderNodeTest
+	## This script's own steps: the build retry, the dogfood tag, the options, the
+	## running-copy check, the build number, and the host line.
+	fRunTest cicd/tests/engine/run.bash "pipeline steps" "pipeline step test failed"
+	## --container: the image tag, the recipe's pins, what goes in with the run, and
+	## what the run here picks up after it.
+	fRunTest cicd/tests/container/run.bash "container run" "container run test failed"
+	## The profiler's own settings tree, since the live file's tmux setting once
+	## doubled its text shaping share.
+	fRunTest cicd/tests/profsettings/run.bash "profiler settings tree"
+	## What a run removes of what earlier runs left, and what it never touches.
+	fRunTest cicd/tests/cleanup/run.bash "stale run cleanup"
+	## A failed test's output, which once went nowhere and left only its name.
+	fRunTest cicd/tests/testout/run.bash "failed test output"
+	## Stage 0, which has to stop a diverged tree before anything is built.
+	fRunTest cicd/tests/sync/run.bash "remote sync"
+	## The rotation that prunes run logs and flamegraphs.
+	fRunTest cicd/tests/rotate/run.bash "log rotation"
+	## The guard every recursive removal goes through.
+	fRunTest cicd/tests/saferm/run.bash "safe removal"
+	## The private repo's own script tests, when it is checked out beside this
+	## one. Both run against stand-ins, so they need no box.
+	if [[ -n "${PRIVATE_TESTS}" ]]; then
+		privTests="$(realpath --relative-to="${root}" "${PRIVATE_TESTS}")"
+		fRunTest "${privTests}/hosts/run.bash" "private runner's boxes"
+		fRunTest "${privTests}/macsize/run.bash" "Mac build sizes"
+	fi
+	## One tool pin list for both pipelines, and the docs quoting it.
+	fRunTest cicd/tests/pins/run.bash "tool pins" "tool pin test failed"
+	fRunTest cicd/tests/jobs/run.bash "step jobs and priority" "step jobs test failed"
+	## The memory cap on each step, which stops a runaway one from taking the box.
+	fRunTest cicd/tests/memcap/run.bash "step memory cap" "step memory cap test failed"
+	## The Mac CI's failed test names, which a split result line once hid.
+	fRunTest cicd/tests/ci-mac/run.bash "Mac CI failed test names"
+	## The PowerShell lint this stage gates on has to fail on a finding.
+	fRunTest cicd/tests/pslint/run.bash "PowerShell lint"
+	## The Python lint, the same way.
+	fRunTest cicd/tests/pylint/run.bash "Python lint"
+	## The Windows runner, which steps over a box that is off.
+	fRunTest cicd/tests/win-remote/run.bash "windows runner"
+	## The arm64 smoke run, which wakes the VM and puts it back.
+	fRunTest cicd/tests/armsmoke/run.bash "arm64 smoke runner"
+	## The parts of the Windows pipeline that run anywhere.
+	fRunTest cicd/tests/cicd-win/run.bash "windows pipeline pieces" "windows pipeline test failed"
+	if ((! noDocs)); then fCheckDocs
+	elif ((! listing)); then fEcho_Clean "docs checks and the wallpaper gallery skipped (--no-docs)"; fi
+	## The Windows scenario harness, which once tested whatever the box last built
+	## and stopped every SilkTerm on a shared box.
+	fRunTest cicd/tests/wingui/harness-test.bash "windows scenario harness"
+	## The scenarios' ink and diff checks, which once took seconds each.
+	fRunTest cicd/tests/wingui/pixels-test.bash "windows scenario pixel checks"
+	## The wine launcher, which once left dead file types on the desktop.
+	fRunTest cicd/tests/wine/run.bash "wine launcher"
+	## The wallpaper gallery and contact sheet are rendered, so they go stale in
+	## silence when the pack changes. Both showed 9 removed images for a month.
+	if ((noDocs)); then :
+	elif [[ -f "${root}/cicd/utility/wallpaper-gallery.bash" ]] && ((listing)); then
+		fListTest cicd/utility/wallpaper-gallery.bash "wallpaper gallery"
+	elif [[ -f "${root}/cicd/utility/wallpaper-gallery.bash" ]]; then
+		fEcho_Clean "wallpaper gallery ..."
+		bash "${root}/cicd/utility/wallpaper-gallery.bash" --check || fDie "the wallpaper gallery doesn't match the pack"
+		fEcho "OK: wallpaper gallery"
+	fi
+	fWinGuiScenarios
+	## Headless scroll regression harness (slow; skipped under --quick). A measured
+	## regression aborts here. Exit 3 means it couldn't run at all (no Xvfb, cage or
+	## binary), which is a SKIP line for that arm and never a PASS.
+	if ((noScroll)); then
+		((listing)) || fEcho_Clean "scroll harness skipped (--no-scroll)"
+	elif ((! quick)) && [[ -n "${SCROLL_HARNESS+x}" ]] && ((${#SCROLL_HARNESS[@]})) && ((listing)); then
+		fListTest "${SCROLL_HARNESS[0]}" "scroll harness (X11)"
+		"${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" --list
+		if [[ "${SCROLL_HARNESS_WAYLAND:-0}" == 1 ]]; then
+			fListTest "${SCROLL_HARNESS[0]}" "scroll harness (Wayland)"
+			"${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" --wayland --list
+		fi
+	elif ((! quick)) && [[ -n "${SCROLL_HARNESS+x}" ]] && ((${#SCROLL_HARNESS[@]})); then
+		fEcho_Clean "scroll regression harness (headless, X11) ..."
+		scrollRc=0; "${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" || scrollRc=$?
+		case "${scrollRc}" in
+			0) fTestLine PASS "${SCROLL_HARNESS[0]}" "scroll harness (X11)" ;;
+			3) fTestLine SKIP "${SCROLL_HARNESS[0]}" "scroll harness (X11)" "nothing was measured" ;;
+			*) fTestLine FAIL "${SCROLL_HARNESS[0]}" "scroll harness (X11)"; fDie "scroll regression harness reported a regression (X11)" ;;
+		esac
+		if [[ "${SCROLL_HARNESS_WAYLAND:-0}" == 1 ]]; then
+			fEcho_Clean "scroll regression harness (headless, Wayland) ..."
+			scrollRc=0; "${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" --wayland || scrollRc=$?
+			case "${scrollRc}" in
+				0) fTestLine PASS "${SCROLL_HARNESS[0]}" "scroll harness (Wayland)" ;;
+				3) fTestLine SKIP "${SCROLL_HARNESS[0]}" "scroll harness (Wayland)" "nothing was measured" ;;
+				*) fTestLine FAIL "${SCROLL_HARNESS[0]}" "scroll harness (Wayland)"; fDie "scroll regression harness reported a regression (Wayland)" ;;
+			esac
+		fi
+	elif ((quick && ! listing)); then
+		fEcho_Clean "scroll harness skipped (--quick)"
+	fi
+	## Dogfood launcher: it shares a path with the release installer, so what it does
+	## to a file it didn't create needs a gate. Runs in a sandboxed HOME.
+	if ((noScriptTests)); then :
+	elif [[ -n "${LAUNCHER_HARNESS+x}" ]] && ((${#LAUNCHER_HARNESS[@]})) && ((listing)); then
+		fListTest "${LAUNCHER_HARNESS[0]}" "launcher harness"
+	elif [[ -n "${LAUNCHER_HARNESS+x}" ]] && ((${#LAUNCHER_HARNESS[@]})); then
+		if command -v pwsh >/dev/null 2>&1; then
+			fEcho_Clean "dogfood launcher harness ..."
+			if pwsh -NoProfile -File "${root}/${LAUNCHER_HARNESS[0]}" "${LAUNCHER_HARNESS[@]:1}"; then
+				fTestLine PASS "${LAUNCHER_HARNESS[0]}" "launcher harness"
+			else
+				fTestLine FAIL "${LAUNCHER_HARNESS[0]}" "launcher harness"; fDie "dogfood launcher harness failed"
+			fi
+		else
+			fTestLine SKIP "${LAUNCHER_HARNESS[0]}" "launcher harness" "pwsh not found"
+		fi
+	fi
+}
+
+## fRunEnd <status>: the EXIT trap's cleanup. --keep-temp keeps the run's
+## folder, pass or fail, and says where it is. Nothing is printed until the
+## cleanup is done, since Ctrl+C takes the log tee down, and a write to it then
+## ends the run before the run's folder is removed.
+fRunEnd(){
+	local said=""
+	((! runEnded)) || return 0
+	runEnded=1
+	((! ${1})) || fStep_End FAIL >&2
+	said="$({ fContainerEnd "${1}"; fTestDir_End "${1}"; fRunDir_End "${1}"; fSweep_Summary; } 2>&1)" || true
+	[[ -z "${said}" ]] || printf '%s\n' "${said}"
+}
+
+## A box or VM that isn't there is a skip, never a failure. A step that uses
+## another box hands its scripts this run's skip list as SILK_CICD_SKIPS, and each
+## one adds a "SKIP <what>, <why>" line for what it couldn't run. Only those steps
+## get it, so a test of one of those scripts can't add to the real list. skipLog
+## is made with the test run folder.
+fSkipCount(){ if [[ -s "${skipLog}" ]]; then grep -c '^SKIP ' "${skipLog}" || true; else echo 0; fi ;}
+
+## The run's steps, in the order they run. stepsOn is what this run takes and
+## counts, stepsOff "<name>|<flag or reason>" what it leaves out, for the plan. The
+## run in the container takes its part only, numbered from where the run outside
+## put it (SILK_CICD_STEP_AT, of SILK_CICD_STEP_TOTAL).
+stepsOn=(); stepsOff=()
+fStepIf(){ if [[ -z "${2:-}" ]]; then stepsOn+=("${1}"); else stepsOff+=("${1}|${2}"); fi; }
+## fStepOff_Why <flag>: the flag, or the full run that turned it off.
+fStepOff_Why(){ if ((fullRun)); then echo "${fullRunName}"; else echo "${1}"; fi; }
+fPlanSteps(){
+	local t why rel onHost=1
+	stepsOn=(); stepsOff=()
+	[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || onHost=0
+	if ((onHost)); then why=""; ((sync)) || why="$(fStepOff_Why --no-sync)"; fStepIf "Remote sync" "${why}"; fi
+	((! container)) || fStepIf "Container image"
+	why=""; ((${#FMT_CMD[@]})) || why="--no-fmt"; fStepIf "Format" "${why}"
+	fStepIf "Debug build"
+	fStepIf "Regression tests"
+	if ((onHost && ! container)); then why=""; ((PROFILE_ENABLE)) || why="$( ((quick)) && echo --quick || echo --no-profile)"; fStepIf "Profiler" "${why}"; fi
+	rel=""; ((! ${noRelease:-0})) || rel="--no-release"
+	fStepIf "Release build: native" "${rel}"
+	for t in "${allCrossTargets[@]}"; do
+		if [[ -n "${rel}" ]]; then why="${rel}"
+		elif ! ((BUILD_CROSS)); then why="--no-cross"
+		elif [[ " ${CROSS_TARGETS[*]:-} " == *" ${t} "* ]]; then why=""
+		elif [[ "${t}" == *windows* ]] && ((noWindows)); then why="--no-windows"
+		else why="$( ((quick)) && echo --quick || echo --no-arm)"; fi
+		fStepIf "Release build: ${t%%|*}" "${why}"
+	done
+	fStepIf "Release artifacts" "${rel}"
+	why="${rel}"; ((PACKAGE_ENABLE)) || why="$( ((quick)) && echo --quick || echo --no-package)"; fStepIf "Packages" "${why}"
+	if ((! onHost)); then fStepNumbers; return 0; fi
+	if ((container)); then
+		fStepIf "Checks on this box"
+		why=""; ((PROFILE_ENABLE)) || why="$( ((quick)) && echo --quick || echo --no-profile)"; fStepIf "Profiler" "${why}"
+	fi
+	if ((quick)); then why="--quick"; elif ((noRemote)); then why="--no-remote"
+	elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then why=""
+	elif ((! withPrivate)); then why="needs --with-private or --long"
+	else why="not checked out"; fi
+	fStepIf "Private runner" "${why}"
+	why="${rel}"; ((${#DOGFOOD_DESTS[@]})) || why="$(fStepOff_Why --no-dogfood)"; fStepIf "Dogfood" "${why}"
+	if ! ((${DEMO_ENABLE:-0})); then why="$(fStepOff_Why --no-demo)"
+	elif [[ -n "${rel}" ]]; then why="${rel}"
+	elif ((quick && ! demoAsked)); then why="--quick; --demo adds it"
+	elif [[ ! -f "${root}/cicd/utility/demo-video/demo-video.py" ]]; then why="no recorder in this tree"
+	else why=""; fi
+	fStepIf "Demo video" "${why}"
+	why=""; ((${#GIT_PUBLISH[@]})) || why="$(fStepOff_Why --no-publish)"; fStepIf "Backup + publish" "${why}"
+	fStepNumbers
+}
+## The step numbers the run outside handed in, checked, since they end up in
+## arithmetic. export -n keeps them from the tests this run starts, which number
+## steps of their own.
+export -n SILK_CICD_STEP_AT SILK_CICD_STEP_TOTAL
+stepBase=0
+fStepNumbers(){
+	stepBase=0; _stepTotal="${#stepsOn[@]}"
+	if [[ "${SILK_CICD_STEP_AT:-}" =~ ^[0-9]{1,3}$ && "${SILK_CICD_STEP_TOTAL:-}" =~ ^[0-9]{1,3}$ ]]; then
+		stepBase="${SILK_CICD_STEP_AT}"; _stepTotal="${SILK_CICD_STEP_TOTAL}"
+	fi
+}
+## fStepAt <name>: its number in this run, or nothing when the run doesn't take it.
+fStepAt(){ local -i i; for i in "${!stepsOn[@]}"; do [[ "${stepsOn[i]}" != "${1}" ]] || { echo $((stepBase + i + 1)); return 0; }; done; return 1; }
+## fStepOpen <name>: the step's Starting line, or false when it's off.
+fStepOpen(){
+	local at; at="$(fStepAt "${1}")" || return 1
+	__stepSkips="$(fSkipCount)"
+	fStep_Start "${at}" "${1}"
+}
+## fStepClose: its closing line, SKIP when it left something out for want of a box.
+fStepClose(){
+	local -i n=$(( $(fSkipCount) - ${__stepSkips:-0} ))
+	if ((n > 0)); then fStep_End SKIP "${n} not run, listed at the end"; else fStep_End PASS; fi
+}
+## The plan's lines for the steps.
+fPlanSteps_Show(){
+	local t
+	fEcho_Clean "Steps ...............: ${#stepsOn[@]}$( ((${#stepsOff[@]})) && echo ", and these off:")"
+	for t in "${stepsOff[@]}"; do fEcho_Clean "    - ${t%%|*} (${t#*|})"; done
+	if ((listing)); then for t in "${!stepsOn[@]}"; do fEcho_Clean "  Step $((t + 1)) of ${#stepsOn[@]}  ${stepsOn[t]}"; done; fi
+}
+
+## --backlog-run-quick: the fast checks to run before a commit,
+## every area or the ones named, fail-fast, nothing mutated, no artifacts,
+## log tee, or publish. Each step reads the tree as it is. Its only cleanup is
+## its own folder and stale run folders.
+declare -A gateTitles=([fmt]="Format check" [clippy]="Lints" [tests]="Tests" [scripts]="Script lints" [docs]="Docs checks")
+## Its steps are the areas named, and the rest are off.
 if ((gate)); then
-	fSection "Gate 1/3  Format check"
-	if declare -p FMT_CHECK_CMD &>/dev/null && ((${#FMT_CHECK_CMD[@]})); then
-		"${FMT_CHECK_CMD[@]}" || fDie "format check failed (run: ${FMT_CMD[*]:-cargo fmt})"
-		fEcho "OK: formatting clean"
-	else
-		fEcho_Clean "format check skipped (no FMT_CHECK_CMD)"
+	for area in ${gateAreasAll}; do
+		if [[ " ${gateAreas[*]} " == *" ${area} "* ]]; then continue; fi
+		stepsOff+=("${gateTitles[${area}]}|not named")
+	done
+	for area in "${gateAreas[@]}"; do stepsOn+=("${gateTitles[${area}]}"); done
+	fStepNumbers
+fi
+if ((gate && listing)); then
+	fEcho_Clean "${APP_NAME} backlog quick run (${gateAreas[*]})$( ((container)) && echo ", in ${containerImage}"):"
+	fPlanSteps_Show
+	for area in "${gateAreas[@]}"; do case "${area}" in
+		tests) fListRustTests ;;
+		docs)  fEcho_Clean "Docs checks:"; fCheckDocs ;;
+	esac; done
+	exit 0
+fi
+if ((gate)); then
+	fRunDir_Make || fDie "couldn't make the run's folder"
+	trap 'rc=$?; fRunEnd "${rc}"' EXIT
+	fStaleRuns
+	if ((container)); then
+		fSection "Backlog quick run in ${containerImage}"
+		fContainerBuild "${containerImage}"
+		fContainerRun "${containerImage}" "${root}/cicd/cicd.bash" --backlog-run-quick "${gateAreas[@]}" || fDie "the backlog quick run in the container failed (above)"
+		exit 0
 	fi
-	fSection "Gate 2/3  Lints"
-	if [[ -n "${LINT_CMD+x}" ]] && ((${#LINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
-		"${LINT_CMD[@]}"
-		fEcho "OK: lints clean"
-	else
-		fEcho_Clean "lints skipped (clippy unavailable)"
-	fi
-	fSection "Gate 3/3  Tests"
-	"${TEST_CMD[@]}"
-	fEcho "OK: tests passed"
-	fSection "${APP_NAME} gate: PASSED."
+	fEcho_Clean
+	fEcho_Clean "${APP_NAME} backlog quick run"
+	fPlanSteps_Show
+	for area in "${gateAreas[@]}"; do
+		fStepOpen "${gateTitles[${area}]}"
+		fJobs
+		case "${area}" in
+			fmt)
+				if ((${#FMT_CHECK_CMD[@]})); then
+					"${FMT_CHECK_CMD[@]}" || fDie "format check failed (run: ${FMT_CMD[*]:-cargo fmt})"
+					fEcho "OK: formatting clean"
+				else
+					fEcho_Clean "format check skipped (no FMT_CHECK_CMD)"
+				fi ;;
+			clippy)
+				if [[ -n "${LINT_CMD+x}" ]] && ((${#LINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
+					"${LINT_CMD[@]}"
+					fEcho "OK: lints clean"
+				else
+					fEcho "WARNING: lints skipped (clippy unavailable)"
+				fi ;;
+			tests)
+				fTestLines "${TEST_CMD[@]}"
+				fEcho "OK: tests passed" ;;
+			scripts)
+				fLintScripts ;;
+			docs)
+				fCheckDocs ;;
+		esac
+		fStepClose
+	done
+	fSection "${APP_NAME} backlog quick run (${gateAreas[*]}): PASSED."
 	fEcho_Clean
 	exit 0
 fi
@@ -231,97 +1555,253 @@ fi
 ## box update can't silently change pipeline results.
 if declare -p TOOL_PINS &>/dev/null; then
 	for pin in "${TOOL_PINS[@]}"; do
-		pin_name="${pin%%|*}"; pin_rest="${pin#*|}"; pin_ver="${pin_rest%%|*}"; pin_cmd="${pin_rest#*|}"
-		have="$(${pin_cmd} 2>/dev/null | head -1 | sed 's/[^0-9.]*\([0-9][0-9.]*\).*/\1/')" || have=""
-		if [[ -z "$have" ]]; then
-			fEcho "WARNING: ${pin_name} not found (pinned ${pin_ver})"
-		elif [[ "$have" != "$pin_ver" ]]; then
-			fEcho "WARNING: ${pin_name} is ${have}, pinned ${pin_ver} (cargo install ${pin_name} --version ${pin_ver} --locked, or update the pin)"
+		pinName="${pin%%|*}"; pinRest="${pin#*|}"; pinVer="${pinRest%%|*}"; pinCmd="${pinRest#*|}"
+		have="$(${pinCmd} 2>/dev/null || true)"
+		if [[ "${have}" =~ [0-9]+\.[0-9]+(\.[0-9]+)* ]]; then have="${BASH_REMATCH[0]}"; else have=""; fi
+		if [[ -z "${have}" ]]; then
+			fEcho "WARNING: ${pinName} not found (pinned ${pinVer})"
+		elif [[ "${have}" != "${pinVer}" ]]; then
+			fEcho "WARNING: ${pinName} is ${have}, pinned ${pinVer} (cargo install ${pinName} --version ${pinVer} --locked, or update the pin)"
 		fi
 	done
 fi
 
 ## Preflight: show the plan with resolved paths, then confirm.
-abs_script="${root}/${PROFILE_WORKLOAD_SCRIPT}"
-profile_dir="$(cd "${root}" && mkdir -p "${PROFILE_OUT_DIR}" 2>/dev/null; cd "${PROFILE_OUT_DIR}" 2>/dev/null && pwd || echo "${root}/${PROFILE_OUT_DIR}")"
-fixed_dest=""; for d in "${DOGFOOD_FIXED_DESTS[@]:-}"; do [[ -d "$d" && -w "$d" ]] && { fixed_dest="$d"; break; }; done
-rot_dest="";   for d in "${DOGFOOD_ROTATING_DESTS[@]:-}"; do [[ -d "$d" && -w "$d" ]] && { rot_dest="$d"; break; }; done
-rot_target="${rot_dest:-${DOGFOOD_ROTATING_DESTS[0]:-}}"  # created in stage 6 if it doesn't exist yet
-: "${DOGFOOD_TAG:=$(build_tag)}"                          # config.bash may pin it; empty = untagged
-df_name="${DOGFOOD_PREFIX:-}_${stamp}${DOGFOOD_TAG:+_${DOGFOOD_TAG}}"
+absScript="${root}/${PROFILE_WORKLOAD_SCRIPT}"
+profileDir="$(cd "${root}" && mkdir -p "${PROFILE_OUT_DIR}" 2>/dev/null; cd "${PROFILE_OUT_DIR}" 2>/dev/null && pwd || echo "${root}/${PROFILE_OUT_DIR}")"
 
 fEcho_Clean
 fEcho_Clean "${APP_NAME} local CI/CD"
 fEcho_Clean
+fEcho_Clean "Host ................: $(fHostLine)"
+if ((container)); then fEcho_Clean "Container ...........: stages 1-6 in ${containerImage}, target dir ${containerTarget}; the rest here"; fi
 fEcho_Clean "Repo root ...........: ${root}"
+if ((fullRun)); then fEcho_Clean "Run .................: ${fullRunName}, every check of the default run$( ((long)) && echo ' and --long'); no sync, dogfood, demo, publish, or prompt"; fi
 fEcho_Clean "Remote sync .........: $( ((sync)) && echo 'fetch + fast-forward check' || echo '(skipped)')"
 fEcho_Clean "Format ..............: ${FMT_CMD[*]:-(skipped)}"
 fEcho_Clean "Debug build .........: ${DEBUG_BUILD_CMD[*]}"
-fEcho_Clean "Tests ...............: ${TEST_CMD[*]}"
-if ((PROFILE_ENABLE)); then
-	fEcho_Clean "Profiler ............: ${PROFILE_SECS}s run -> flamegraph SVG (on headless ${RPD_HEADLESS_DISPLAY:-:98})"
-	fEcho_Clean "  output dir ........: ${profile_dir}"
+fEcho_Clean "Tests ...............: $( ((noRustTests)) && echo '(skipped --no-rust-tests)' || echo "${TEST_CMD[*]}")"
+## The parts of stage 3 that have an off option and nothing else to say.
+leftOut=()
+((! noClippy))      || leftOut+=("clippy (--no-clippy)")
+((! noScriptLint))  || leftOut+=("script lints (--no-script-lint)")
+((! noScrub))       || leftOut+=("content scrub (--no-scrub)")
+((! noDeny))        || leftOut+=("cargo-deny (--no-deny)")
+((! noScriptTests)) || leftOut+=("test scripts (--no-script-tests)")
+((! noDocs))        || leftOut+=("docs checks (--no-docs)")
+((! noScroll))      || leftOut+=("scroll harness (--no-scroll)")
+if ((${#leftOut[@]})); then
+	leftLine="${leftOut[0]}"; for x in "${leftOut[@]:1}"; do leftLine+=", ${x}"; done
+	fEcho_Clean "Left out ............: ${leftLine}"
+fi
+if ((${FUZZ_SECS:-0} > 0)) && ((${#FUZZ_CMD[@]})); then
+	fEcho_Clean "Fuzz ................: ${FUZZ_CMD[*]} at ${FUZZ_SECS}s per target"
+else
+	fEcho_Clean "Fuzz ................: (skipped)"
+fi
+if ((${#ASAN_CMD[@]} == 0)); then
+	fEcho_Clean "ASan + LSan .........: (skipped)"
+elif ((quick)); then
+	fEcho_Clean "ASan + LSan .........: (skipped --quick)"
+elif [[ -n "${asanSkipped}" ]]; then
+	fEcho_Clean "ASan + LSan .........: (skipped, ${asanSkipped})"
+else
+	fEcho_Clean "ASan + LSan .........: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
+fi
+if ((leakcheck)); then
+	if ((! codeql)); then codeqlLine="CodeQL (off; --leakcheck or --long adds it)"
+	elif [[ -n "${codeqlSkipped}" ]]; then codeqlLine="CodeQL (skipped, ${codeqlSkipped})"
+	else codeqlLine="CodeQL"; fi
+	if [[ -z "${LEAKCHECK_SOAK:-}" ]]; then soakLine="soak test (skipped)"
+	elif ((! soak)); then soakLine="soak test (off under --quick; --leakcheck adds it)"
+	elif [[ -n "${soakSkipped}" ]]; then soakLine="soak test (skipped, ${soakSkipped})"
+	else soakLine="soak test under heaptrack"; fi
+	fEcho_Clean "Leak checks .........: heap growth under dhat, ${soakLine}, ${codeqlLine}, reports to ${LEAKCHECK_OUT_DIR}"
+else
+	fEcho_Clean "Leak checks .........: (skipped --no-leakcheck)"
+fi
+if ((${#TSAN_CMD[@]} == 0)); then
+	fEcho_Clean "TSan ................: (skipped)"
+elif ((quick)); then
+	fEcho_Clean "TSan ................: (skipped --quick)"
+elif ((! long)); then
+	fEcho_Clean "TSan ................: (off; --long adds it)"
+elif [[ -n "${tsanSkipped}" ]]; then
+	fEcho_Clean "TSan ................: (skipped, ${tsanSkipped})"
+else
+	fEcho_Clean "TSan ................: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
+fi
+if ((${#MIRI_CMD[@]} == 0)); then
+	fEcho_Clean "Miri ................: (skipped)"
+elif ((! leakcheck)); then
+	fEcho_Clean "Miri ................: (skipped --no-leakcheck)"
+elif ((! miri)); then
+	fEcho_Clean "Miri ................: (off; --leakcheck or --long adds it)"
+elif [[ -n "${miriSkipped}" ]]; then
+	fEcho_Clean "Miri ................: (skipped, ${miriSkipped})"
+else
+	fEcho_Clean "Miri ................: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}; very slow, hours"
+fi
+if [[ -z "${WINGUI_HARNESS+x}" ]] || ((${#WINGUI_HARNESS[@]} == 0)); then
+	fEcho_Clean "Windows scenarios ...: (disabled)"
+elif ((quick)); then
+	fEcho_Clean "Windows scenarios ...: (skipped --quick)"
+elif ((noRemote)); then
+	fEcho_Clean "Windows scenarios ...: (skipped --no-remote)"
+elif ((${noWingui:-0})); then
+	fEcho_Clean "Windows scenarios ...: (skipped --no-wingui)"
+elif [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	fEcho_Clean "Windows scenarios ...: (run outside the container)"
+else
+	fEcho_Clean "Windows scenarios ...: $(( ${#WINGUI_HARNESS[@]} > 1 ? ${#WINGUI_HARNESS[@]} - 1 : 1 )) on the Windows boxes, each on the first one free$( ((container)) && echo ', here after the container')"
+fi
+if ((PROFILE_ENABLE)) && [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	fEcho_Clean "Profiler ............: (runs outside the container, on the card)"
+elif ((PROFILE_ENABLE)); then
+	fEcho_Clean "Profiler ............: ${PROFILE_SECS}s run -> flamegraph SVG (on the card through a headless sway, or software GL on headless ${RPD_HEADLESS_DISPLAY:-:98})$( ((container)) && echo ', here after the container')"
+	fEcho_Clean "  output dir ........: ${profileDir}"
 	fEcho_Clean "  workload ..........: python3 ${PROFILE_WORKLOAD_SCRIPT} ${PROFILE_WORKLOAD_ARGS}"
 else
 	fEcho_Clean "Profiler ............: (disabled)"
 fi
-fEcho_Clean "Release (native) ....: ${RELEASE_NATIVE_CMD[*]} -> ${RELEASE_NATIVE_BIN}"
-if ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
-	fEcho_Clean "Release (cross) .....:$( ((no_arm)) && echo ' (x86_64 only, --no-arm)')"
+if ((noRelease)); then
+	fEcho_Clean "Release (native) ....: (skipped --no-release)"
+else
+	fEcho_Clean "Release (native) ....: ${RELEASE_NATIVE_CMD[*]} -> ${RELEASE_NATIVE_BIN}"
+fi
+if ((noRelease)); then
+	fEcho_Clean "Release (cross) .....: (skipped --no-release)"
+elif ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
+	fEcho_Clean "Release (cross) .....:$( ((noArm)) && echo ' (x86_64 only)')$( ((noWindows)) && echo ' (Linux only, --no-windows)')"
 	for t in "${CROSS_TARGETS[@]}"; do fEcho_Clean "    - ${t%%|*}"; done
 else
 	fEcho_Clean "Release (cross) .....: (skipped)"
 fi
-if ((PACKAGE_ENABLE)) && ((! quick)); then
-	fEcho_Clean "Packages ............: .deb/.rpm (Linux) + NSIS installer .exe (Windows), per built arch"
-	fEcho_Clean "  deferred ..........: macOS (.dmg), BSD - no cross toolchain on this box"
+## --quick has no ARM64 build either.
+if ((${noRelease:-0})) || ! ((BUILD_CROSS)) || [[ " ${CROSS_TARGETS[*]:-} " != *"|linux-arm64|"* ]]; then
+	fEcho_Clean "ARM64 smoke run .....: (no Linux ARM64 build)"
+elif ((noRemote)); then
+	fEcho_Clean "ARM64 smoke run .....: (skipped --no-remote)"
+elif [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	fEcho_Clean "ARM64 smoke run .....: (run outside the container)"
+else
+	fEcho_Clean "ARM64 smoke run .....: --version on the arm64 box, woken and put back if it's a VM$( ((container)) && echo ', here after the container')"
+fi
+if ((noRelease)); then
+	fEcho_Clean "Packages ............: (skipped --no-release)"
+elif ((PACKAGE_ENABLE)) && ((! quick)); then
+	## Name only what stage 5 will leave behind. The installer wraps a
+	## Windows binary, so under --no-windows (or --no-cross) there is none to wrap.
+	pkgKinds=".deb/.rpm (Linux)"
+	if ((BUILD_CROSS)) && [[ " ${CROSS_TARGETS[*]:-} " == *windows* ]]; then
+		pkgKinds="${pkgKinds} + NSIS installer .exe (Windows)"
+	fi
+	fEcho_Clean "Packages ............: ${pkgKinds}, per built arch"
+	fEcho_Clean "  deferred ..........: BSD - no cross toolchain on this box"
 else
 	fEcho_Clean "Packages ............: $( ((quick)) && echo '(skipped --quick)' || echo '(disabled)')"
 fi
-if ((${#DOGFOOD_FIXED_DESTS[@]})); then
-	if [[ -n "$fixed_dest" ]]; then fEcho_Clean "Dogfood, fixed name .: overwrite ${fixed_dest}/${EXE_NAME}"
-	else fEcho_Clean "Dogfood, fixed name .: <none of: ${DOGFOOD_FIXED_DESTS[*]} exists - will skip>"; fi
+if ((quick)); then
+	fEcho_Clean "Private runner ......: (skipped --quick)"
+elif ((noRemote)); then
+	fEcho_Clean "Private runner ......: (skipped --no-remote)"
+elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then
+	fEcho_Clean "Private runner ......: ${PRIVATE_RUNNER} (macOS, Microsoft Store)"
+elif ((! withPrivate)); then
+	fEcho_Clean "Private runner ......: (off; --with-private or --long turns it on)"
 else
-	fEcho_Clean "Dogfood, fixed name .: (disabled)"
+	fEcho_Clean "Private runner ......: (not checked out)"
 fi
-if ((${#DOGFOOD_ROTATING_DESTS[@]})) && [[ -n "${DOGFOOD_PREFIX:-}" ]]; then
-	fEcho_Clean "Dogfood, rotating ...: ${rot_target}/${df_name}  (dated copy; prunes idle ones)"
+if ((${#DOGFOOD_DESTS[@]})) && ((noRelease)); then
+	fEcho_Clean "Dogfood .............: (skipped --no-release)"
+elif ((${#DOGFOOD_DESTS[@]})); then
+	fEcho_Clean "Dogfood .............: install to the synced app dir per target"
+	for xd in "${DOGFOOD_DESTS[@]}"; do
+		xosarch="${xd%%|*}"; xrest="${xd#*|}"; xname="${xrest%%|*}"
+		xdirs="${xrest#*|}"; xdest="$(fDogfoodDest "${xdirs}")"
+		if [[ -n "${xdest}" ]]; then fEcho_Clean "    - ${xosarch} -> ${xdest}/${xname}"
+		elif fDogfoodMakeable "${xdirs%%|*}"; then fEcho_Clean "    - ${xosarch} -> ${xdirs%%|*}/${xname} (made at the copy)"
+		else fEcho_Clean "    - ${xosarch} -> <none of: ${xdirs} writable - fails if built>"; fi
+	done
 else
-	fEcho_Clean "Dogfood, rotating ...: (disabled)"
+	fEcho_Clean "Dogfood .............: (disabled)"
+fi
+if ((! ${DEMO_ENABLE:-0})); then
+	fEcho_Clean "Demo video ..........: (disabled)"
+elif ((noRelease)); then
+	fEcho_Clean "Demo video ..........: (skipped --no-release)"
+elif ((quick && ! demoAsked)); then
+	fEcho_Clean "Demo video ..........: (skipped --quick)"
+else
+	fEcho_Clean "Demo video ..........: re-record, README gif to assets/demo.gif"
+fi
+if declare -p CLEANUP_BUILD_DIRS &>/dev/null && ((noCleanup)); then
+	fEcho_Clean "Cleanup .............: (skipped --no-cleanup)"
+elif declare -p CLEANUP_BUILD_DIRS &>/dev/null; then
+	fEcho_Clean "Cleanup .............: run folders over ${CLEANUP_STALE_DAYS:-2} days old, stale build dirs$( [[ -n "${containerTmpLedger}" ]] && echo ', stopped containers, and old images')"
 fi
 if ((${#GIT_PUBLISH[@]} == 0)); then
 	fEcho_Clean "Publish (last) ......: (disabled)"
-elif [[ -n "$publish_msg" ]]; then
-	fEcho_Clean "Publish (last) ......: ${GIT_PUBLISH[*]} (hands-off: \"${publish_msg}\")"
+elif [[ -n "${publishMsg}" ]]; then
+	fEcho_Clean "Publish (last) ......: ${GIT_PUBLISH[*]} (hands-off: \"${publishMsg}\")"
 else
-	fEcho_Clean "Publish (last) ......: ${GIT_PUBLISH[*]} (will prompt for message; blank = editor)"
+	fEcho_Clean "Publish (last) ......: ${GIT_PUBLISH[*]} (will prompt for message; blank = \"${autoMsg}\")"
 fi
+fPlanSteps
+fPlanSteps_Show
 fEcho_Clean
-fEcho_Clean "Fail-fast: any error aborts before the next stage."
+if ((miri && ${#MIRI_CMD[@]})) && [[ -z "${miriSkipped}" ]]; then fEcho_Clean "Miri is on: very slow, it adds hours. Ctrl+C now stops the run, and --no-miri leaves it out."; fi
+fEcho_Clean "Fail-fast: any error aborts before the next step."
 fEcho_Clean
+if ((listing)); then
+	((! ${#TEST_CMD[@]} || noRustTests)) || fListRustTests
+	if ((${FUZZ_SECS:-0} > 0)) && ((${#FUZZ_CMD[@]})); then fEcho_Clean "Fuzz soak: the ${FUZZ_CMD[*]} tests above again, ${FUZZ_SECS}s each"; fi
+	fEcho_Clean "Test scripts and harnesses:"
+	if ((! noDeny)) && [[ -n "${ADVISORY_CMD+x}" ]] && ((${#ADVISORY_CMD[@]})); then fAdvisoryTests; fi
+	fScriptTests
+	if ((soak)); then fListTest "${LEAKCHECK_SOAK}" "soak test under heaptrack"; fi
+	if ((miri && ${#MIRI_CMD[@]})); then fEcho_Clean "Miri: the canary (debjk, de5f0), then the Rust tests above again, but those ignored under Miri"; fi
+	exit 0
+fi
+if ((${#DOGFOOD_DESTS[@]} && ! noRelease)); then fDogfoodPreflight; fi
 
-if ((! assume_yes)); then
-	## Capture the commit message up front so the run can finish unattended. This
-	## is the natural place to bail on the common (publish) path - Ctrl+C here
-	## aborts; there is no separate "Proceed? [y/N]" (removed to cut friction).
-	if ((${#GIT_PUBLISH[@]})) && [[ -z "$publish_msg" ]]; then
-		read -r -p "Publish commit message (blank = editor; Ctrl+C aborts): " m
+if ((! assumeYes)); then
+	## Ask for the commit message up front so the run can finish unattended.
+	## Ctrl+C here stops the run, and there's no separate "Proceed? [y/N]" prompt.
+	if ((${#GIT_PUBLISH[@]})) && [[ -z "${publishMsg}" ]]; then
+		read -r -p "Publish commit message (blank = \"${autoMsg}\"; Ctrl+C aborts): " m
 		fEcho_ResetBlankCounter
-		[[ -n "$m" ]] && publish_msg="$m"
+		publishMsg="$(fPublishMessage "" "" "${m}")"
 	fi
 fi
 
-## Tee the rest of the run (all stages) to a gitignored log so warnings from any
-## stage can be reviewed after the fact. Rotate the prior (closed) logs first.
-## The awk pass normalizes section spacing on the way through: exactly one blank
-## line before every letterbox rule. The blank-collapse counter can't do this -
-## raw tool output (cargo, git, rar) never touches it, so a section's leading
-## blank gets swallowed or doubled depending on what a tool printed last. Skip
-## the insert on the stream's first line: the preflight already ends with a
-## blank on the tty, which this pipe never sees.
-if [[ -n "${LINT_LOG_DIR:-}" ]] && mkdir -p "${root}/${LINT_LOG_DIR}" 2>/dev/null; then
+fRunDir_Make || fDie "couldn't make the run's folder"
+trap 'rc=$?; fRunEnd "${rc}"' EXIT
+skipLog="${runDir}/skips.txt"; : >"${skipLog}"
+
+## Tee the rest of the run to a gitignored log, after rotating the old ones, so
+## warnings from any stage can be read later. The awk pass puts exactly one blank
+## line before every letterbox rule. Raw tool output such as cargo's never goes
+## through the blank-collapse counter, so a section's leading blank came out
+## swallowed or doubled. The stream's first line gets no blank, since the
+## preflight already ended with one on the tty.
+##
+## The log is written under a .part name and renamed once tee has finished, on a
+## failed run too, so the startup gate never marks a half-written log as seen.
+## The wait is bounded, since a background process a stage left behind can hold
+## the pipe open.
+##
+## Inside the container the run outside already has all of it in its own log.
+fFinishLog(){
+	exec 1>&3 2>&4
+	local i; for i in {1..50}; do kill -0 "${lintTee}" 2>/dev/null || break; sleep 0.1; done
+	mv -f "${lintLog}.part" "${lintLog}" 2>/dev/null || true
+}
+if [[ -n "${LINT_LOG_DIR:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]] && mkdir -p "${root}/${LINT_LOG_DIR}" 2>/dev/null; then
 	gfs_rotate "${root}/${LINT_LOG_DIR}" run log >/dev/null 2>&1 || true
-	exec > >(awk -v rule="${_letterbox}" '
+	lintLog="${root}/${LINT_LOG_DIR}/run_${stamp}.log"
+	exec 3>&1 4>&2
+	exec > >(awk -v rule="${_letterbox:?}" '
 		$0 == "" { blanks++; next }
 		{
 			if (index($0, rule) == 1) { if (NR > 1) print "" }
@@ -329,20 +1809,47 @@ if [[ -n "${LINT_LOG_DIR:-}" ]] && mkdir -p "${root}/${LINT_LOG_DIR}" 2>/dev/nul
 			blanks = 0; print; fflush()
 		}
 		END { for (; blanks > 0; blanks--) print "" }
-	' | tee "${root}/${LINT_LOG_DIR}/run_${stamp}.log") 2>&1
+	' | tee "${lintLog}.part") 2>&1
+	lintTee=$!
+	## fRunEnd before fFinishLog, so their lines go in the log.
+	trap 'rc=$?; fRunEnd "${rc}"; fFinishLog; exit $rc' EXIT
 fi
 
-## Stage 0: remote sync. Make sure the local branch can be safely refreshed from
-## its upstream BEFORE spending the build: what stage 8 pushes should be what got
-## built and tested here, not an untested post-build merge. Behind-only is safe
-## (fast-forward, stash-wrapped for a dirty tree); diverged aborts now rather
-## than at publish. Offline just warns - a local build shouldn't need the net.
-fSection "0/8  Remote sync"
-if ((! sync)); then
-	fEcho_Clean "remote sync skipped"
+## What earlier runs left: run folders a killed run left, a few days old, and
+## what the ledgers of the old test run folders and container /tmp folders still
+## name. Inside the container /tmp is new each run, and the run outside sees to
+## it. The build dirs are swept where the builds run, at the start of
+## fBuildTestRelease.
+fOldLedger(){  ## fOldLedger <ledger> <what> [own]: empties it, then it goes.
+	fSweep_Ledger "${1}" 0 "${2}" "${3:-}"
+	[[ ! -f "${1}" || -s "${1}" ]] || rm -f -- "${1}"
+}
+if [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] && ((! noCleanup)); then
+	fStaleRuns
+	fOldLedger "${TARGET_DIR}/.cicd-test-folders" "old test run folders" own
+	if [[ -n "${containerTmpLedger}" ]]; then
+		fOldLedger "${containerTmpLedger}" "old container /tmp folders"
+		rmdir -- "${containerTarget}/tmp" 2>/dev/null || true
+		fContainerStopped
+	fi
+fi
+
+## Stage 0: remote sync. Check that the local branch can be refreshed from its
+## upstream before the build, so what stage 8 pushes is what was built and tested
+## here, rather than an untested merge. Behind only is safe, as a fast-forward
+## with a stash around it for a dirty tree. Diverged aborts now rather than at
+## publish. Offline only warns, since a local build shouldn't need the net.
+## A run that stopped between its stash and its pop leaves an 'auto-stash' with
+## uncommitted work in it. A build would leave that work out, and the next
+## stash would bury it deeper, so the run stops here first.
+fJobs
+if ! fStepOpen "Remote sync"; then
+	:
+elif grep -qE ': auto-stash$' <<<"$(git stash list)"; then
+	fDie "an 'auto-stash' from an earlier run is still in 'git stash list'. Pop or drop it, then re-run."
 elif ! git rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
 	fEcho_Clean "no upstream for $(git rev-parse --abbrev-ref HEAD); nothing to sync"
-elif ! git fetch --quiet 2>/dev/null; then
+elif ! fRemoteGit fetch --quiet 2>/dev/null; then
 	fEcho "WARNING: git fetch failed (offline?); continuing with the local tree"
 else
 	ahead="$(git rev-list --count '@{u}..HEAD')"
@@ -365,183 +1872,242 @@ else
 			stashesAfter="$(git stash list | wc -l)"
 			((stashesAfter > stashesBefore)) && didStash=1
 		fi
+		## A failed pull puts the stash back before stopping, or the tree would be
+		## left at HEAD with every edit only in the stash.
 		fEcho_Clean "git pull --ff-only ..."
-		git pull --ff-only
+		if ! fRemoteGit pull --ff-only; then
+			if ((didStash)) && ! git stash pop; then
+				fDie "git pull --ff-only failed, and putting the stashed work back failed too. It's still in 'stash@{0}' (auto-stash), which may be the only copy of some of it, so keep it. Settle any conflicts, bring back what's missing, then 'git stash drop' and re-run."
+			fi
+			fDie "git pull --ff-only failed. The working tree is as it was."
+		fi
 		if ((didStash)); then
 			fEcho_Clean "git stash pop ..."
-			git stash pop
+			git stash pop || fDie "git stash pop failed after the fast-forward. The stashed work is still in 'stash@{0}' (auto-stash), which may be the only copy of some of it, so keep it. Settle any conflicts, bring back what's missing, then 'git stash drop' and re-run."
 		fi
 		fEcho "OK: fast-forwarded ${behind} commit(s) from upstream"
 	else
 		fDie "diverged from upstream (${ahead} ahead, ${behind} behind) - reconcile first, or rerun with --no-sync"
 	fi
 fi
+fStepClose
 
-## Stage 1: format.
-fSection "1/8  Format"
-if ((${#FMT_CMD[@]} == 0)); then
-	fEcho_Clean "format skipped"
-else
-	"${FMT_CMD[@]}"
-	fEcho "OK: formatted (${FMT_CMD[*]})"
-fi
+## The source everything from here on reads, taken before the first build so the
+## note names what the binaries were built from. A commit made in this tree during
+## a build once left the note naming the new commit, with the native binary built
+## from the source before it and the cross binaries from the source after. Stage 0
+## is past, so its fast-forward isn't mistaken for that.
+builtFromState="$(fSourceState)"
 
-## Stage 2: debug build.
-fSection "2/8  Debug build"
-"${DEBUG_BUILD_CMD[@]}"
-fEcho "OK: debug build"
+## Pin the build number for the whole run. build.rs would otherwise read the clock
+## per target, so the 4 cross builds of one release would report 4 different
+## builds, minutes apart, and the release notes couldn't name one of them. It is
+## the commit's time, dirty tree or not, so a rebuild of a commit gets the same
+## number, per the CICD rules. The clock only stands in where there is no commit.
+## After stage 0, since a fast-forward moves the commit. A value cicd-win hands
+## down is kept.
+fPinBuildMinutes(){
+	[[ -z "${SILK_BUILD_MINUTES:-}" ]] || return 0
+	local buildSecs
+	buildSecs="$(git log -1 --format=%ct 2>/dev/null || true)"
+	[[ "${buildSecs}" =~ ^[0-9]+$ ]] || buildSecs="$(date +%s)"
+	export SILK_BUILD_MINUTES=$(( (buildSecs - 946684800) / 60 ))
+}
+fPinBuildMinutes
 
-## Stage 3: regression tests.
-fSection "3/8  Regression tests"
-"${TEST_CMD[@]}"
-if [[ -n "${LINT_CMD+x}" ]] && ((${#LINT_CMD[@]})); then
-	if "${LINT_PROBE[@]}" >/dev/null 2>&1; then
-		"${LINT_CMD[@]}"
-		fEcho "OK: lints clean"
+## Only a run on a clean main can be tagged (release.bash refuses anything else), so
+## only its binaries drop the date that a non-release build shows after its number.
+## A value handed down is kept.
+fMarkRelease(){
+	[[ -z "${SILK_RELEASE:-}" ]] || return 0
+	if [[ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" == "main" && -z "$(git status --porcelain --untracked-files=no 2>/dev/null || echo dirty)" ]]; then
+		export SILK_RELEASE=1
 	else
-		fEcho "WARNING: lints skipped: ${LINT_PROBE[*]} failed (component not installed?)"
+		export SILK_RELEASE=0
 	fi
-fi
-if [[ -n "${DENY_CMD+x}" ]] && ((${#DENY_CMD[@]})); then
-	if "${DENY_PROBE[@]}" >/dev/null 2>&1; then
-		## Advisory-only for now: report license/advisory/duplicate findings
-		## without failing the pipeline (tighten to gating once tuned).
-		"${DENY_CMD[@]}" || fEcho "WARNING: cargo-deny reported findings (non-gating)"
-	else
-		fEcho "WARNING: deps check skipped: ${DENY_PROBE[*]} failed (cargo install cargo-deny)"
-	fi
-fi
-## Headless scroll regression harness (slow; skipped under --quick). It skips itself
-## on an environment miss (no Xvfb/binary) and exits non-zero only on a measured
-## regression - which aborts here.
-if ((! quick)) && [[ -n "${SCROLL_HARNESS+x}" ]] && ((${#SCROLL_HARNESS[@]})); then
-	fEcho_Clean "scroll regression harness (headless, X11) ..."
-	if "${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}"; then
-		fEcho "OK: scroll harness (X11)"
-	else
-		fDie "scroll regression harness reported a regression (X11)"
-	fi
-	if [[ "${SCROLL_HARNESS_WAYLAND:-0}" == 1 ]]; then
-		fEcho_Clean "scroll regression harness (headless, Wayland) ..."
-		if "${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" --wayland; then
-			fEcho "OK: scroll harness (Wayland)"
-		else
-			fDie "scroll regression harness reported a regression (Wayland)"
-		fi
-	fi
-elif ((quick)); then
-	fEcho_Clean "scroll harness skipped (--quick)"
-fi
-fEcho "OK: tests passed"
+}
+fMarkRelease
 
-## Stage 4: profiler (non-gating artifact; failures classified below).
-run_profiler(){
+## The fuzz corpus is read-only data. Every file in it is replayed on each run
+## and fed to the mutator, so a run that writes one changes what later runs
+## replay, and nothing else would report it. It's hashed before and after, so a
+## fixture edited by hand before the run isn't mistaken for one the run made.
+fCorpusHashes(){ find "${root}/cicd/tests/fuzz-corpus" -type f -exec sha256sum {} + 2>/dev/null | sort; }
+
+## A headless sway drawing on the card's render node, with its own Xwayland, so an
+## app on it renders on the card and nothing shows on the desktop. On a private Xvfb
+## the app draws with software GL, here as in the image, so a profile there sampled
+## llvmpipe's drawing as well as the app.
+## fCardDisplay_Start <folder>: sets cardDisplay and cardSway, or sets cardWhy to
+## why it couldn't and returns 1. The folder gets sway's config and log. Its
+## sockets go in a folder of their own under XDG_RUNTIME_DIR, since a test folder
+## under a long temp path is past the socket length limit.
+cardDisplay=""; cardSway=""; cardWhy=""; cardRuntime=""
+fCardDisplay_Start(){
+	local -r dir="${1}"
+	local tool node="" sockets
+	for tool in sway Xwayland ss xdpyinfo; do
+		command -v "${tool}" >/dev/null 2>&1 || { cardWhy="no ${tool}"; return 1; }
+	done
+	for node in /dev/dri/renderD*; do
+		if [[ -r "${node}" && -w "${node}" ]]; then break; fi
+		node=""
+	done
+	[[ -n "${node}" ]] || { cardWhy="no render node"; return 1; }
+	cardRuntime=""
+	if [[ -d "${XDG_RUNTIME_DIR:-}" && -w "${XDG_RUNTIME_DIR:-}" ]]; then
+		cardRuntime="$(mktemp -d "${XDG_RUNTIME_DIR}/silk-sway.XXXXXX")" || cardRuntime=""
+	fi
+	[[ -n "${cardRuntime}" ]] || { cardWhy="no XDG_RUNTIME_DIR for its sockets"; return 1; }
+	## A Unix socket path is at most 107 bytes.
+	((${#cardRuntime} + 16 <= 107)) || { fCardDisplay_Stop; cardWhy="XDG_RUNTIME_DIR is too long for a socket"; return 1; }
+	printf 'output HEADLESS-1 resolution 1920x1080 position 0 0\nxwayland force\ndefault_border none\n' >"${dir}/sway.conf"
+	env -u DISPLAY -u WAYLAND_DISPLAY -u WAYLAND_SOCKET XDG_RUNTIME_DIR="${cardRuntime}" WLR_BACKENDS=headless WLR_HEADLESS_OUTPUTS=1 \
+		WLR_RENDERER=gles2 WLR_RENDER_DRM_DEVICE="${node}" WLR_LIBINPUT_NO_DEVICES=1 \
+		sway -c "${dir}/sway.conf" >"${dir}/sway.log" 2>&1 &
+	cardSway=$!
+	## sway's Xwayland takes whichever X display number is free, so it is read from
+	## the socket sway itself listens on.
+	cardDisplay=""
+	for _ in {1..100}; do
+		sockets="$(ss -xlpH 2>/dev/null || true)"
+		cardDisplay="$(awk -v p="pid=${cardSway}," 'index($0, p) && $5 ~ /^\/tmp\/\.X11-unix\/X[0-9]+$/ {sub(/.*X/, ":", $5); print $5; exit}' <<<"${sockets}")"
+		if [[ -n "${cardDisplay}" ]] && DISPLAY="${cardDisplay}" xdpyinfo >/dev/null 2>&1; then return 0; fi
+		cardDisplay=""
+		kill -0 "${cardSway}" 2>/dev/null || break
+		sleep 0.1
+	done
+	fCardDisplay_Stop
+	cardWhy="sway's Xwayland didn't come up (${dir}/sway.log)"
+	return 1
+}
+## Only the sway started above, which takes its Xwayland with it, then the sockets
+## it left, by name, and their folder if that leaves it empty.
+fCardDisplay_Stop(){
+	if [[ -n "${cardSway}" ]]; then
+		kill "${cardSway}" 2>/dev/null || true
+		wait "${cardSway}" 2>/dev/null || true
+	fi
+	if [[ -n "${cardRuntime}" && -d "${cardRuntime}" ]]; then
+		rm -f -- "${cardRuntime}"/wayland-* "${cardRuntime}"/sway-ipc.* 2>/dev/null || true
+		rmdir -- "${cardRuntime}" 2>/dev/null || true
+	fi
+	cardSway=""; cardDisplay=""; cardRuntime=""
+}
+
+## Stage 4's profiler (non-gating artifact; failures classified below). It runs on
+## this box, since the card is what it is for, so a container run calls it here
+## once the container is done.
+fRunProfiler(){
 	((PROFILE_ENABLE)) || { fEcho_Clean "profiler disabled"; return 0; }
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then fEcho_Clean "the profiler runs outside the container, on the card"; return 0; fi
 
 	## Mundane/environmental reasons -> skip with a warning (not the app's fault),
 	## unless PROFILE_STRICT. Genuine run failures below still abort. The app runs
-	## on a private Xvfb (gui-headless.bash), so no visible DISPLAY is needed - only
-	## Xvfb + python3 + the workload.
+	## on a headless display, never the visible one: the card's through sway, or a
+	## private Xvfb (gui-headless.bash) where that can't start.
 	local skip=""
 	command -v python3 >/dev/null 2>&1 || skip="python3 not found"
-	[[ -z "$skip" ]] && [[ ! -f "$abs_script" ]] && skip="workload missing: ${abs_script}"
-	[[ -z "$skip" ]] && ! command -v Xvfb >/dev/null 2>&1 && skip="Xvfb not found (headless display unavailable)"
-	if [[ -n "$skip" ]]; then
+	[[ -z "${skip}" ]] && [[ ! -f "${absScript}" ]] && skip="workload missing: ${absScript}"
+	if [[ -n "${skip}" ]]; then
 		((PROFILE_STRICT)) && fDie "profiler: ${skip}"
 		fEcho "WARNING: profiler skipped: ${skip}"; return 0
 	fi
 
-	## From here a failure is the app's fault and aborts, bar the retry retry_build owns.
+	## From here a failure is the app's fault and aborts, bar the retry fRetryBuild owns.
 	fEcho_Clean "building ${PROFILE_BIN} (cargo --profile ${PROFILE_PROFILE} --features ${PROFILE_FEATURE})"
-	retry_build profiler cargo build --profile "${PROFILE_PROFILE}" --features "${PROFILE_FEATURE}"
-	mkdir -p "${profile_dir}"
+	fRetryBuild profiler cargo build --profile "${PROFILE_PROFILE}" --features "${PROFILE_FEATURE}"
+	mkdir -p "${profileDir}"
 
-	## Bring up a private in-memory display so the profiler window never touches the
-	## user's visible session (renders via software GL / llvmpipe on Xvfb).
-	local headless="${here}/utility/gui-headless.bash"
-	## Not :99 - rapid-photo-downloader-pro uses that display for its own testing.
-	export CICD_HEADLESS_DISPLAY="${CICD_HEADLESS_DISPLAY:-${RPD_HEADLESS_DISPLAY:-:98}}"
-	local hdisp="${CICD_HEADLESS_DISPLAY}"
-	if ! "${headless}" start >/dev/null 2>&1; then
-		((PROFILE_STRICT)) && fDie "profiler: headless display failed to start"
-		fEcho "WARNING: profiler skipped: headless display failed to start"; return 0
+	## The app runs on a settings tree of its own in the run folder, so one graph
+	## compares with the last whoever runs it. The live file's tmux, minimap and
+	## wallpaper settings and its rating each change what is drawn. Choose
+	## automatically is off at Max, so there is no startup test and no step down
+	## part way, and the workload never runs in tmux. The Format line keeps the
+	## launch from converting the file and saying so.
+	local settingsDir=""
+	if ! settingsDir="$(mktemp -d "${SILKTERM_TEST_DIR:-${TMPDIR:-/tmp}}/profiler-settings.XXXXXX")" \
+		|| ! mkdir -p "${settingsDir}/config/silkterm" "${settingsDir}/data" "${settingsDir}/state" "${settingsDir}/cache" \
+		|| ! printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: max' '' 'shell:' $'\ttmux:' $'\t\talways_new_session: false' '' '##    Format   3' \
+			>"${settingsDir}/config/silkterm/config.shcl"; then
+		((PROFILE_STRICT)) && fDie "profiler: couldn't make its settings folder"
+		fEcho "WARNING: profiler skipped: couldn't make its settings folder"; return 0
+	fi
+
+	local headless="${here}/utility/gui-headless.bash" hdisp="" why="" swayDir=""
+	if [[ -n "${SILKTERM_TEST_DIR:-}" ]] && swayDir="$(mktemp -d "${SILKTERM_TEST_DIR}/profiler.XXXXXX")"; then
+		if fCardDisplay_Start "${swayDir}"; then hdisp="${cardDisplay}"; else why="${cardWhy}"; fi
+	else
+		why="no test run folder for sway"
+	fi
+	if [[ -n "${hdisp}" ]]; then
+		fEcho_Clean "on the card, through a headless sway's Xwayland at ${hdisp}"
+	else
+		((PROFILE_STRICT)) && fDie "profiler: not on the card: ${why}"
+		fEcho "WARNING: profiler on software GL, not the card: ${why}"
+		if ! command -v Xvfb >/dev/null 2>&1; then
+			fEcho "WARNING: profiler skipped: Xvfb not found (headless display unavailable)"; return 0
+		fi
+		## Not :99 - rapid-photo-downloader-pro uses that display for its own testing.
+		export CICD_HEADLESS_DISPLAY="${CICD_HEADLESS_DISPLAY:-${RPD_HEADLESS_DISPLAY:-:98}}"
+		hdisp="${CICD_HEADLESS_DISPLAY}"
+		if ! "${headless}" start >/dev/null 2>&1; then
+			((PROFILE_STRICT)) && fDie "profiler: headless display failed to start"
+			fEcho "WARNING: profiler skipped: headless display failed to start"; return 0
+		fi
 	fi
 
 	## Born canonical (role "frequent"); the rotation retags the newest as "latest".
-	local out="${profile_dir}/flame_${stamp}_frequent.svg"
+	## The app writes the graph as it exits, so it goes under a .part name the
+	## startup gate skips, and is renamed once whole.
+	local out="${profileDir}/flame_${stamp}_frequent.svg"
+	local part="${out}.part"
 	fEcho_Clean "running app ${PROFILE_SECS}s under sampler on headless ${hdisp} ..."
 	local prc=0
-	SILK_PROFILE_OUT="${out}" SILK_PROFILE_SECS="${PROFILE_SECS}" DISPLAY="${hdisp}" \
-		"${root}/${PROFILE_BIN}" --shell "python3 ${abs_script} ${PROFILE_WORKLOAD_ARGS}" || prc=$?
-	"${headless}" stop >/dev/null 2>&1 || true
-	((prc == 0)) || fDie "profiler run failed (non-zero exit - app problem)"
-	[[ -s "$out" ]] || fDie "profiler produced no SVG (app problem): ${out}"
-	gfs_rotate "${profile_dir}" flame svg
+	## -u WAYLAND_DISPLAY: winit prefers Wayland wherever it sees one, so on a
+	## Wayland session (WSLg included) DISPLAY alone leaves the window on the
+	## real desktop and the profiler samples nothing.
+	env -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE -u TMUX -u TMUX_PANE \
+	XDG_CONFIG_HOME="${settingsDir}/config" XDG_DATA_HOME="${settingsDir}/data" \
+	XDG_STATE_HOME="${settingsDir}/state" XDG_CACHE_HOME="${settingsDir}/cache" \
+	SILK_PROFILE_OUT="${part}" SILK_PROFILE_SECS="${PROFILE_SECS}" DISPLAY="${hdisp}" \
+		"${PROFILE_BIN}" --shell "python3 ${absScript} ${PROFILE_WORKLOAD_ARGS}" || prc=$?
+	if [[ -n "${cardSway}" ]]; then fCardDisplay_Stop; else "${headless}" stop >/dev/null 2>&1 || true; fi
+	((prc == 0)) || { rm -f "${part}"; fDie "profiler run failed (non-zero exit - app problem)"; }
+	[[ -s "${part}" ]] || { rm -f "${part}"; fDie "profiler produced no SVG (app problem): ${out}"; }
+	mv -f "${part}" "${out}"
+	gfs_rotate "${profileDir}" flame svg
 	## Rotation renamed this run's file (newest) to the "latest" role.
-	local latest="${profile_dir}/flame_${stamp}_latest.svg"
-	[[ -e "$latest" ]] || latest="$out"
+	local latest="${profileDir}/flame_${stamp}_latest.svg"
+	[[ -e "${latest}" ]] || latest="${out}"
 	fEcho "OK: flamegraph: ${latest}"
 	fEcho_Clean "open: ${latest}  (in a browser)"
 
 	## Hot-spot summary into the log (non-fatal, no marker - the marker is for the
 	## per-session --check gate, not the pipeline).
 	local report="${here}/utility/flame-report.py"
-	if [[ -f "$report" ]]; then
+	if [[ -f "${report}" ]]; then
 		fEcho_Clean ""
-		python3 "$report" --dir "${profile_dir}" 2>/dev/null || fEcho_Clean "hot spots: (report unavailable)"
+		python3 "${report}" --dir "${profileDir}" 2>/dev/null || fEcho_Clean "hot spots: (report unavailable)"
 	fi
 }
-fSection "4/8  Profiler"
-run_profiler
 
-## Stage 5: release builds.
-fSection "5/8  Release build (native)"
-retry_build "native release" "${RELEASE_NATIVE_CMD[@]}"
-[[ -f "${RELEASE_NATIVE_BIN}" ]] || fDie "native release binary missing: ${RELEASE_NATIVE_BIN}"
-fEcho "OK: native release: ${RELEASE_NATIVE_BIN} ($(du -h "${RELEASE_NATIVE_BIN}" | cut -f1))"
-built_arts=("${RELEASE_NATIVE_OSARCH:-native}|${RELEASE_NATIVE_BIN}")
-if ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
-	for t in "${CROSS_TARGETS[@]}"; do
-		local_label="${t%%|*}"; rest="${t#*|}"; osarch="${rest%%|*}"; rest="${rest#*|}"; art="${rest%%|*}"; cmd="${rest#*|}"
-		fSection "5/8  Release build: ${local_label}"
-		retry_build "${local_label}" eval "${cmd}"
-		[[ -f "${art}" ]] || fDie "missing artifact for ${local_label}: ${art}"
-		fEcho "OK: ${local_label}: ${art} ($(du -h "${art}" | cut -f1))"
-		built_arts+=("${osarch}|${art}")
-	done
-fi
+## True when a built file still names this box's home or checkout.
+fHasLocalPaths(){ grep -a -q -F -e "${HOME}/" -e "${root}/" "${1}"; }
 
-## Collect the built binaries under versioned names + a sha256 checksums file,
-## ready to attach to a release as plain uploads. Version = Cargo.toml alone.
-if [[ -n "${RELEASE_ARTIFACT_DIR:-}" ]]; then
-	ver="$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "${root}/${VERSION_MANIFEST}" | head -1)"
-	[[ -n "$ver" ]] || fDie "no version found in ${VERSION_MANIFEST}"
-	art_dir="${root}/${RELEASE_ARTIFACT_DIR}"
-	rm -rf "${art_dir}"; mkdir -p "${art_dir}"
-	sums="${EXE_NAME}-${ver}-sha256sums.txt"
-	for pair in "${built_arts[@]}"; do
-		osarch="${pair%%|*}"; src="${pair#*|}"
-		ext=""; [[ "$src" == *.exe ]] && ext=".exe"
-		cp -f "${src}" "${art_dir}/${EXE_NAME}-${ver}-${osarch}${ext}"
-	done
-	write_sums
-	fEcho "OK: ${#built_arts[@]} release artifact(s) + ${sums} -> ${RELEASE_ARTIFACT_DIR}/"
-	((BUILD_CROSS)) || fEcho_Clean "note: cross targets skipped - artifact set is partial (native only)"
-fi
-
-## Stage 6: packages. Build distributables from the stage-5 binaries (never rebuilt).
+## Stage 6's packages. Build distributables from the stage-5 binaries (never rebuilt).
 ## Linux -> .deb + .rpm per built arch (cargo-deb / cargo-generate-rpm, metadata in
 ## source/Cargo.toml); Windows -> one self-contained NSIS installer .exe per arch
-## (upgrades in place). macOS (.dmg) + BSD are deferred - no cross toolchain here.
+## (upgrades in place). macOS comes from the private runner; BSD is deferred.
 ## Skipped under --quick; a missing tool warns (non-gating) rather than aborting.
-build_packages(){
+fBuildPackages(){
 	((PACKAGE_ENABLE)) || { fEcho_Clean "packages disabled"; return 0; }
-	[[ -n "${art_dir:-}" ]] || { fEcho "WARNING: packages skipped (no RELEASE_ARTIFACT_DIR)"; return 0; }
-	local pair osarch bin triple out nsi rc made=0
+	[[ -n "${artDir:-}" ]] || { fEcho "WARNING: packages skipped (no RELEASE_ARTIFACT_DIR)"; return 0; }
+	local pair osarch bin srcexe triple out nsi rc vernum made=0
 	local rpmver="${ver//-/\~}"   ## RPM versions forbid '-' (it splits version-release); 1.0.0-beta1 -> 1.0.0~beta1
-	for pair in "${built_arts[@]}"; do
+	for pair in "${builtArts[@]}"; do
 		osarch="${pair%%|*}"; bin="${pair#*|}"
-		case "$osarch" in
+		case "${osarch}" in
 			linux-x86_64) triple="" ;;
 			linux-arm64)  triple="aarch64-unknown-linux-gnu" ;;
 			windows-*)    triple="" ;;   ## handled below
@@ -549,11 +2115,11 @@ build_packages(){
 		esac
 
 		## Linux: .deb then .rpm. Both package the existing binary (no rebuild).
-		if [[ "$osarch" == linux-* ]]; then
+		if [[ "${osarch}" == linux-* ]]; then
 			if command -v cargo-deb >/dev/null 2>&1; then
 				local -a da=(deb --no-build --no-strip --manifest-path source/Cargo.toml
-					--output "${art_dir}/${EXE_NAME}-${ver}-${osarch}.deb")
-				[[ -n "$triple" ]] && da+=(--target "$triple")
+					--output "${artDir}/${EXE_NAME}-${ver}-${osarch}.deb")
+				[[ -n "${triple}" ]] && da+=(--target "${triple}")
 				if cargo "${da[@]}" >/dev/null; then fEcho "OK: .deb (${osarch})"; made=$((made+1))
 				else fEcho "WARNING: .deb build failed (${osarch})"; fi
 			else fEcho "WARNING: cargo-deb missing; .deb skipped (${osarch})"; fi
@@ -562,120 +2128,571 @@ build_packages(){
 				## -p is the crate DIR (source/), assets resolve from CWD (repo root),
 				## so target/release/silkterm is found; -s overrides the RPM-illegal version.
 				local -a ra=(generate-rpm -p source -s "version = \"${rpmver}\""
-					--output "${art_dir}/${EXE_NAME}-${ver}-${osarch}.rpm")
-				[[ -n "$triple" ]] && ra+=(--target "$triple" --arch aarch64)
+					--output "${artDir}/${EXE_NAME}-${ver}-${osarch}.rpm")
+				[[ -n "${triple}" ]] && ra+=(--target "${triple}" --arch aarch64)
 				if cargo "${ra[@]}" >/dev/null; then fEcho "OK: .rpm (${osarch})"; made=$((made+1))
 				else fEcho "WARNING: .rpm build failed (${osarch})"; fi
 			else fEcho "WARNING: cargo-generate-rpm missing; .rpm skipped (${osarch})"; fi
 		fi
 
 		## Windows: one self-contained NSIS installer .exe per arch.
-		if [[ "$osarch" == windows-* ]]; then
+		if [[ "${osarch}" == windows-* ]]; then
 			if command -v makensis >/dev/null 2>&1 && [[ -f "${root}/${NSIS_TEMPLATE}" ]]; then
-				out="${art_dir}/${EXE_NAME}-${ver}-${osarch}-setup.exe"
+				out="${artDir}/${EXE_NAME}-${ver}-${osarch}-setup.exe"
 				nsi="$(mktemp --suffix=.nsi)"
+				## An absolute CARGO_TARGET_DIR already gives an absolute path, and
+				## prefixing the repo root then names a file that was never there.
+				srcexe="${bin}"
+				[[ "${srcexe}" = /* ]] || srcexe="${root}/${srcexe}"
+				## The version block takes 4 numbers: the release, less any pre-release tag.
+				vernum="${ver%%[-+]*}.0"
 				sed -e "s|@VERSION@|${ver}|g" -e "s|@ARCH@|${osarch}|g" \
-					-e "s|@SRCEXE@|${root}/${bin}|g" -e "s|@OUTFILE@|${out}|g" \
+					-e "s|@SRCEXE@|${srcexe}|g" -e "s|@OUTFILE@|${out}|g" \
+					-e "s|@ICON@|${root}/source/assets/icon.ico|g" -e "s|@VERNUM@|${vernum}|g" \
 					"${root}/${NSIS_TEMPLATE}" > "${nsi}"
-				rc=0; makensis -V2 "${nsi}" >/dev/null || rc=$?
+				rc=0; makensis -INPUTCHARSET UTF8 -V2 "${nsi}" >/dev/null || rc=$?
 				rm -f "${nsi}"
-				if ((rc == 0)) && [[ -f "$out" ]]; then fEcho "OK: installer (${osarch})"; made=$((made+1))
+				if ((rc == 0)) && [[ -f "${out}" ]]; then fEcho "OK: installer (${osarch})"; made=$((made+1))
 				else fEcho "WARNING: NSIS installer failed (${osarch})"; fi
 			else fEcho "WARNING: makensis/template missing; installer skipped (${osarch})"; fi
 		fi
 	done
-	write_sums
+	fWriteSums
 	fEcho "OK: ${made} package(s) -> ${RELEASE_ARTIFACT_DIR}/ (macOS/BSD deferred)"
 }
-fSection "6/8  Packages"
-if ((quick)); then
-	fEcho_Clean "packages skipped (--quick)"
-else
-	build_packages
-fi
 
-## Stage 7: dogfood. Two independent installs (fixed overwrite + rotating dated copy).
-fSection "7/8  Dogfood (install native release locally)"
-df_did=0
+## Private content scrub, when this machine has the private tree. A clone without
+## it builds as before, and so does the container, which never sees that tree.
+fContentScrub(){
+	[[ -x "${root}/../private/hooks/scrub.bash" ]] || return 0
+	if ((${noScrub:-0})); then fEcho_Clean "content scrub skipped (--no-scrub)"; return 0; fi
+	"${root}/../private/hooks/scrub.bash" "${root}" || fDie "content scrub failed"
+	fEcho "OK: content scrub"
+}
+## fStepDone <name> <skips before>: the step's own line, SKIP when it left something out.
+fStepDone(){
+	local -r name="${1}" before="${2}"
+	local -ri skipped=$(( $(fSkipCount) - before ))
+	if ((skipped)); then fEcho "SKIP: ${name}, ${skipped} not run (SKIP lines above)"
+	else fEcho "OK: ${name}"; fi
+}
+## The run's last section, so a skip doesn't scroll away with the stage it was in.
+fSkipSummary(){
+	[[ -s "${skipLog}" ]] || return 0
+	fEcho_Clean "Not run, since a box wasn't there:"
+	grep '^SKIP ' "${skipLog}" || true
+	fEcho_Clean
+}
 
-## 7a. Fixed name: overwrite EXE_NAME (the stable path you launch by hand).
-if ((${#DOGFOOD_FIXED_DESTS[@]})); then
-	if [[ -n "$fixed_dest" ]]; then
-		cp -f "${RELEASE_NATIVE_BIN}" "${fixed_dest}/${EXE_NAME}"
-		fEcho "OK: installed (fixed) -> ${fixed_dest}/${EXE_NAME}"
-		df_did=1
-	else
-		fEcho "WARNING: no fixed dogfood dest exists (${DOGFOOD_FIXED_DESTS[*]}); skipping"
+## Stage 3's test suite under ASan and LSan (cicd/utility/asan.bash). In the
+## container it runs as is. On this box it runs in the image, which has the
+## nightly, against this tree and target dir.
+fRunAsan(){
+	if ((${#ASAN_CMD[@]} == 0)); then fEcho_Clean "ASan run skipped"; return 0; fi
+	if ((quick)); then fEcho_Clean "ASan run skipped (--quick)"; return 0; fi
+	if [[ -n "${asanSkipped}" ]]; then fEcho "WARNING: ASan run skipped: ${asanSkipped}"; return 0; fi
+	fJobs hard
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+		"${here}/utility/asan.bash" || fDie "the test suite under ASan and LSan failed (above)"
+		return 0
 	fi
-fi
+	fContainerBuild "${containerImage}"
+	fContainerRun "${containerImage}" "${root}/cicd/utility/asan.bash" || fDie "the test suite under ASan and LSan failed (above)"
+}
 
-## 7b. Rotating name: dated copy so builds coexist; prune older ones not running.
-if ((${#DOGFOOD_ROTATING_DESTS[@]})) && [[ -n "${DOGFOOD_PREFIX:-}" ]]; then
-	[[ -z "$rot_dest" && -n "$rot_target" ]] && mkdir -p "$rot_target" 2>/dev/null && rot_dest="$rot_target"
-	if [[ -n "$rot_dest" && -w "$rot_dest" ]]; then
-		cp -f "${RELEASE_NATIVE_BIN}" "${rot_dest}/${df_name}"
-		chmod +x "${rot_dest}/${df_name}"
-		fEcho "OK: installed (rotating) -> ${rot_dest}/${df_name}"
-		pruned=0
-		for old in "${rot_dest}/${DOGFOOD_PREFIX}_"*; do
-			[[ -e "$old" ]] || continue                  # no-match glob (nullglob is off)
-			[[ "$(basename "$old")" == "$df_name" ]] && continue
-			if in_use "$old"; then
-				fEcho_Clean "kept (running): $(basename "$old")"
-			else
-				rm -f "$old" && pruned=$((pruned + 1))
-			fi
+## Stage 3's test suite under TSan (cicd/utility/tsan.bash), after the leak
+## checks, in the image like the ASan run. About 28 minutes, so only under --long.
+fRunTsan(){
+	if ((${#TSAN_CMD[@]} == 0)); then fEcho_Clean "TSan run skipped"; return 0; fi
+	if ((quick)); then fEcho_Clean "TSan run skipped (--quick)"; return 0; fi
+	if ((! long)); then fEcho_Clean "TSan run off (--long adds it)"; return 0; fi
+	if [[ -n "${tsanSkipped}" ]]; then fEcho "WARNING: TSan run skipped: ${tsanSkipped}"; return 0; fi
+	fJobs hard
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+		"${here}/utility/tsan.bash" || fDie "the test suite under TSan failed (above)"
+		return 0
+	fi
+	fContainerBuild "${containerImage}"
+	fContainerRun "${containerImage}" "${root}/cicd/utility/tsan.bash" || fDie "the test suite under TSan failed (above)"
+}
+
+## Stage 3's test suite under Miri (cicd/utility/miri.bash), after the TSan run,
+## in the image like it. Hours, so only under --leakcheck or --long.
+fRunMiri(){
+	if ((${#MIRI_CMD[@]} == 0)); then fEcho_Clean "Miri run skipped"; return 0; fi
+	if ((! leakcheck)); then fEcho_Clean "Miri run skipped (--no-leakcheck)"; return 0; fi
+	if ((! miri)); then fEcho_Clean "Miri run off (--leakcheck or --long adds it)"; return 0; fi
+	if [[ -n "${miriSkipped}" ]]; then fEcho "WARNING: Miri run skipped: ${miriSkipped}"; return 0; fi
+	fEcho_Clean "Miri is very slow, so this step takes hours. Ctrl+C stops the run."
+	fJobs hard
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+		"${here}/utility/miri.bash" || fDie "the test suite under Miri failed (above)"
+		return 0
+	fi
+	fContainerBuild "${containerImage}"
+	fContainerRun "${containerImage}" "${root}/cicd/utility/miri.bash" || fDie "the test suite under Miri failed (above)"
+}
+
+## The leak checks, after the ASan run. On by default, --quick too; --no-leakcheck
+## drops them. Each report goes to LEAKCHECK_OUT_DIR,
+## rotated like the flamegraphs. A test filter that matched nothing would pass, so
+## a run that wrote no report fails too.
+fRunLeakcheck(){
+	local outDir report
+	local -i rc=0
+	if ((! leakcheck)); then fEcho_Clean "leak checks skipped (--no-leakcheck)"; return 0; fi
+	outDir="${root}/${LEAKCHECK_OUT_DIR}"
+	mkdir -p "${outDir}" || fDie "couldn't make ${outDir}"
+	report="${outDir}/heap_${stamp}.txt"
+	fJobs hard
+	fEcho_Clean "heap growth under dhat ..."
+	SILK_HEAP_REPORT="${report}" fTestLines "${LEAKCHECK_DHAT_CMD[@]}" || rc=$?
+	if [[ -s "${report}" ]]; then sed 's/^/    /' "${report}"; fi
+	((rc == 0)) || fDie "the heap grew past its warm-up, or the test failed (report and dhat profile in ${outDir})"
+	[[ -s "${report}" ]] || fDie "the heap-growth test wrote no report, so it didn't run"
+	gfs_rotate "${outDir}" heap txt >/dev/null 2>&1 || true
+	gfs_rotate "${outDir}" heap dhat.json >/dev/null 2>&1 || true
+	fEcho "OK: no heap growth past the warm-up"
+	fRunSoak "${outDir}"
+	fRunCodeql "${outDir}"
+}
+## fRunSoak <out dir>: the soak test (LEAKCHECK_SOAK) on the debug build, in the
+## image like the ASan run. Its data and summary are kept as soak_<stamp> with
+## this run's stamp. Its exit 3, couldn't run, fails here too, since the image
+## pins every tool it needs.
+fRunSoak(){
+	local -r outDir="${1}" why="the soak test failed: the heap grew, or an action didn't happen (summary and heaptrack data in ${1})"
+	local -i rc=0
+	if [[ -z "${LEAKCHECK_SOAK:-}" ]]; then fEcho_Clean "soak test skipped"; return 0; fi
+	if ((! soak)); then fEcho_Clean "soak test off under --quick (--leakcheck adds it)"; return 0; fi
+	if [[ -n "${soakSkipped}" ]]; then fEcho "WARNING: soak test skipped: ${soakSkipped}"; return 0; fi
+	fJobs hard
+	fEcho_Clean "soak test under heaptrack ..."
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+		"${root}/${LEAKCHECK_SOAK}" --out "${outDir}" --stamp "${stamp}" || rc=$?
+	else
+		fContainerBuild "${containerImage}"
+		fContainerRun "${containerImage}" "${root}/${LEAKCHECK_SOAK}" --out "${outDir}" --stamp "${stamp}" || rc=$?
+	fi
+	case "${rc}" in
+		0) ;;
+		3) fDie "the soak test could not run, though the image should have all it needs (above)" ;;
+		*) fDie "${why}" ;;
+	esac
+	gfs_rotate "${outDir}" soak txt >/dev/null 2>&1 || true
+	gfs_rotate "${outDir}" soak zst >/dev/null 2>&1 || true
+	fEcho "OK: no heap growth over the soak test's rounds"
+}
+## fRunCodeql <out dir>: CodeQL over our crates and the vendored ones a release
+## binary links (cicd/utility/codeql.bash), in the image like the ASan run.
+fRunCodeql(){
+	local -r outDir="${1}" why="CodeQL found something new, or couldn't run (above)"
+	if ((! codeql)); then fEcho_Clean "CodeQL off (--leakcheck or --long adds it)"; return 0; fi
+	if [[ -z "${CODEQL_SUITE:-}" ]]; then fEcho_Clean "CodeQL skipped"; return 0; fi
+	if [[ -n "${codeqlSkipped}" ]]; then fEcho "WARNING: CodeQL skipped: ${codeqlSkipped}"; return 0; fi
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+		"${here}/utility/codeql.bash" "${outDir}" "${stamp}" || fDie "${why}"
+	else
+		fContainerBuild "${containerImage}"
+		fContainerRun "${containerImage}" "${root}/cicd/utility/codeql.bash" "${outDir}" "${stamp}" || fDie "${why}"
+	fi
+	gfs_rotate "${outDir}" codeql sarif >/dev/null 2>&1 || true
+}
+
+## The build dirs this config builds into: CLEANUP_BUILD_DIRS under the target
+## dir, and each cross target's release dir.
+fBuildDirs(){
+	local dir t art
+	for dir in "${CLEANUP_BUILD_DIRS[@]}"; do printf '%s/%s\n' "${TARGET_DIR}" "${dir}"; done
+	for t in "${allCrossTargets[@]}"; do
+		art="${t#*|}"; art="${art#*|}"; art="${art%%|*}"
+		printf '%s\n' "${art%/*}"
+	done
+}
+## Stale build output in the target dir, swept where the builds run, so a container
+## run sweeps its own target dir with its own toolchain.
+fSweepBuilds(){
+	local key="" ver="" dir
+	local -a dirs=()
+	declare -p CLEANUP_BUILD_DIRS &>/dev/null || return 0
+	((! ${noCleanup:-0})) || return 0
+	local -a nightlyDirs=()
+	mapfile -t dirs < <(fBuildDirs)
+	## The nightly's build dirs are named for it, so a bump leaves the old one
+	## unnamed, and a change of the stable toolchain has nothing to do with them.
+	for dir in "${CLEANUP_NIGHTLY_DIRS[@]}"; do nightlyDirs+=("${TARGET_DIR}/${dir}"); done
+	if ver="$(rustc -vV 2>/dev/null)"; then key="$(sha256sum <<<"${ver}" | cut -c1-16)"; fi
+	fSweep_Toolchain "${TARGET_DIR}" "${key}" "${dirs[@]}"
+	fSweep_OldBuildDirs "${TARGET_DIR}" "${dirs[@]}" "${nightlyDirs[@]}"
+	fSweep_Incremental "${CLEANUP_INCREMENTAL_DAYS:-7}" "${dirs[@]}" "${nightlyDirs[@]}"
+}
+
+## Stages 1 to 6: format, debug build, tests and lints, profiler, release builds, and
+## packages. One function, so --container can run them in the image instead, with this
+## box taking up the steps that need the card, then the private runner.
+fBuildTestRelease(){
+	fSweepBuilds
+	if fStepOpen "Format"; then
+		fJobs
+		fRunChanged "${FMT_PATHS[@]}" -- "${FMT_CMD[@]}" || fDie "format $( ((fmtCheck)) && echo 'check ')failed (${FMT_CMD[*]})"
+		fEcho "OK: $( ((fmtCheck)) && echo 'formatting clean' || echo 'formatted') (${FMT_CMD[*]})"
+		fStepClose
+	fi
+
+	fStepOpen "Debug build"
+	fJobs
+	"${DEBUG_BUILD_CMD[@]}"
+	fEcho "OK: debug build"
+	fStepClose
+
+	fStepOpen "Regression tests"
+	fJobs
+	corpusBefore=""
+	if [[ -d "${root}/cicd/tests/fuzz-corpus" ]]; then corpusBefore="$(fCorpusHashes)"; fi
+	if ((noRustTests)); then fEcho_Clean "cargo test skipped (--no-rust-tests)"; else fTestLines "${TEST_CMD[@]}"; fi
+	if ((noClippy)); then
+		fEcho_Clean "clippy skipped (--no-clippy)"
+	elif [[ -n "${LINT_CMD+x}" ]] && ((${#LINT_CMD[@]})); then
+		if "${LINT_PROBE[@]}" >/dev/null 2>&1; then
+			"${LINT_CMD[@]}"
+			fEcho "OK: lints clean"
+		else
+			fEcho "WARNING: lints skipped: ${LINT_PROBE[*]} failed (component not installed?)"
+		fi
+	fi
+	if ((! noClippy)) && [[ -n "${XLINT_CMD+x}" ]] && ((${#XLINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
+		"${XLINT_CMD[@]}" || fDie "windows lints failed"
+		fEcho "OK: windows lints clean"
+	fi
+	if ((! noClippy)) && [[ -n "${MACLINT_CMD+x}" ]] && ((${#MACLINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
+		"${MACLINT_CMD[@]}" || fDie "macOS lints failed"
+		fEcho "OK: macOS lints clean"
+	fi
+	if ((noScriptLint)); then fEcho_Clean "script lints skipped (--no-script-lint)"; else fLintScripts; fi
+	fContentScrub
+	## The fuzz soak. Same targets the test run went through, given a real
+	## budget each. Gating: a case that breaks an invariant reports the seed that
+	## reproduces it.
+	if [[ -n "${FUZZ_CMD+x}" ]] && ((${#FUZZ_CMD[@]})) && ((${FUZZ_SECS:-0} > 0)); then
+		fEcho "Fuzzing, ${FUZZ_SECS}s per target ..."
+		fJobs hard
+		fTestLines env "SILK_FUZZ_SECS=${FUZZ_SECS}" "${FUZZ_CMD[@]}" || fDie "fuzz found something"
+		fEcho "OK: fuzz clean"
+		fJobs
+	fi
+	if ((noDeny)); then
+		fEcho_Clean "cargo-deny skipped (--no-deny)"
+	elif [[ -n "${ADVISORY_CMD+x}" ]] && ((${#ADVISORY_CMD[@]})); then
+		"${DENY_PROBE[@]}" >/dev/null 2>&1 || fDie "advisory scan can't run: ${DENY_PROBE[*]} failed (see cicd/tool-pins.txt)"
+		if [[ -n "${INDEX_REFRESH_CMD+x}" ]] && ((${#INDEX_REFRESH_CMD[@]})); then
+			"${INDEX_REFRESH_CMD[@]}" || fDie "can't refresh the crates.io index, so the advisory scan can't see a yanked crate (above)"
+		fi
+		"${ADVISORY_CMD[@]}" || fDie "known advisories against the dependencies (above)"
+		fEcho "OK: no known advisories"
+		fAdvisoryTests
+	fi
+	if ((! noDeny)) && [[ -n "${DENY_CMD+x}" ]] && ((${#DENY_CMD[@]})); then
+		if "${DENY_PROBE[@]}" >/dev/null 2>&1; then
+			## Advisory-only for now: report license/advisory/duplicate findings
+			## without failing the pipeline (tighten to gating once tuned).
+			"${DENY_CMD[@]}" || fEcho "WARNING: cargo-deny reported findings (non-gating)"
+		else
+			fEcho "WARNING: deps check skipped: ${DENY_PROBE[*]} failed (cargo install cargo-deny)"
+		fi
+	fi
+	fRunAsan
+	fRunLeakcheck
+	fRunTsan
+	fRunMiri
+	fJobs
+	fScriptTests
+	if [[ -n "${corpusBefore}" ]] && [[ "$(fCorpusHashes)" != "${corpusBefore}" ]]; then
+		fDie "a test run wrote through the fuzz corpus - see 'git status cicd/tests/fuzz-corpus'"
+	fi
+	fEcho "OK: tests passed"
+	fStepClose
+
+	if fStepOpen "Profiler"; then fJobs; fRunProfiler; fStepClose; fi
+
+	## --no-release: none of stage 5. The steps after it are off too, or find no
+	## binaries, and that keeps them off an earlier run's.
+	if ((! noRelease)); then fBuildRelease; fi
+
+	if fStepOpen "Packages"; then fJobs; fBuildPackages; fStepClose; fi
+}
+## Stage 5: the release builds and their checks.
+fBuildRelease(){
+	fStepOpen "Release build: native"
+	fJobs
+	## Panic locations and generated bindings contain the build box's absolute paths, which
+	## put the home folder and account name into every published binary and made builds
+	## differ between boxes. A cfg(all()) entry is joined with the per-target flags in
+	## .cargo/config.toml, where RUSTFLAGS would replace them. Later entries win, so the
+	## target dir comes after the root it's usually in.
+	mkdir -p "${TARGET_DIR}"
+	remapCfg="$(cd "${TARGET_DIR}" && pwd)/remap-paths.toml"
+	remapTarget="$(cd "${TARGET_DIR}" && pwd)"
+	printf "[target.'cfg(all())']\nrustflags = ['--remap-path-prefix=%s=/cargo', '--remap-path-prefix=%s=/silkterm', '--remap-path-prefix=%s=/target']\n" \
+		"${CARGO_HOME:-${HOME}/.cargo}" "${root}" "${remapTarget}" > "${remapCfg}"
+	fRetryBuild "native release" "${RELEASE_NATIVE_CMD[@]}" --config "${remapCfg}"
+	[[ -f "${RELEASE_NATIVE_BIN}" ]] || fDie "native release binary missing: ${RELEASE_NATIVE_BIN}"
+	fEcho "OK: native release: ${RELEASE_NATIVE_BIN} ($(du -h --apparent-size "${RELEASE_NATIVE_BIN}" | cut -f1))"
+	builtArts=("${RELEASE_NATIVE_OSARCH:-native}|${RELEASE_NATIVE_BIN}")
+	fStepClose
+	if ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
+		for t in "${CROSS_TARGETS[@]}"; do
+			localLabel="${t%%|*}"; rest="${t#*|}"; osarch="${rest%%|*}"; rest="${rest#*|}"; art="${rest%%|*}"; cmd="${rest#*|}"
+			fStepOpen "Release build: ${localLabel}"
+			fJobs
+			fRetryBuild "${localLabel}" eval "${cmd} --config $(printf '%q' "${remapCfg}")"
+			[[ -f "${art}" ]] || fDie "missing artifact for ${localLabel}: ${art}"
+			fEcho "OK: ${localLabel}: ${art} ($(du -h --apparent-size "${art}" | cut -f1))"
+			builtArts+=("${osarch}|${art}")
+			fStepClose
 		done
-		if ((pruned)); then fEcho_Clean "pruned ${pruned} old copy(ies) not in use"; fi
-		df_did=1
-	else
-		fEcho "WARNING: no rotating dogfood dest writable (${DOGFOOD_ROTATING_DESTS[*]}); skipping"
 	fi
+
+	fStepOpen "Release artifacts"
+	for pair in "${builtArts[@]}"; do
+		if fHasLocalPaths "${pair#*|}"; then fDie "${pair#*|} still has a local path (${HOME} or ${root})"; fi
+	done
+	fEcho "OK: no local paths in ${#builtArts[@]} binary(s)"
+
+	## A Windows binary with no icon and no version block links fine and reports
+	## nothing, so it has to be looked for. The aarch64 exe was released that way
+	## for a while: embed-resource found no compiler for the arch and returned
+	## "not attempted", which reads as success.
+	resCheck="${here}/utility/pe-resources.py"
+	if [[ -f "${resCheck}" ]]; then
+		winArts=()
+		for pair in "${builtArts[@]}"; do
+			[[ "${pair#*|}" == *.exe ]] && winArts+=("${pair#*|}")
+		done
+		if ((${#winArts[@]})); then
+			python3 "${resCheck}" "${winArts[@]}" || fDie "a windows binary is missing its icon or version info"
+			fEcho "OK: windows resources present in ${#winArts[@]} binary(s)"
+		fi
+	fi
+
+	## Collect the built binaries under versioned names + a sha256 checksums file,
+	## ready to attach to a release as plain uploads. Version = Cargo.toml alone.
+	if [[ -n "${RELEASE_ARTIFACT_DIR:-}" ]]; then
+		ver="$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "${root}/${VERSION_MANIFEST}" | head -1)"
+		[[ -n "${ver}" ]] || fDie "no version found in ${VERSION_MANIFEST}"
+		artDir="${root}/${RELEASE_ARTIFACT_DIR}"
+		## Only ever under the repo's own artifacts folder, whatever the config says.
+		if [[ -e "${artDir}" || -L "${artDir}" ]]; then
+			fSafeRm_Under "$(realpath -e -- "${root}")/cicd/artifacts" "$(realpath -m -- "${root}")/${RELEASE_ARTIFACT_DIR%/}" || fDie "couldn't clear ${artDir}"
+		fi
+		mkdir -p "${artDir}"
+		sums="${EXE_NAME}-${ver}-sha256sums.txt"
+		for pair in "${builtArts[@]}"; do
+			osarch="${pair%%|*}"; src="${pair#*|}"
+			ext=""; [[ "${src}" == *.exe ]] && ext=".exe"
+			cp -f "${src}" "${artDir}/${EXE_NAME}-${ver}-${osarch}${ext}"
+		done
+		fWriteSums
+		fEcho "OK: ${#builtArts[@]} release artifact(s) + ${sums} -> ${RELEASE_ARTIFACT_DIR}/"
+		((BUILD_CROSS)) || fEcho_Clean "note: cross targets skipped - artifact set is partial (native only)"
+	fi
+	fArmSmoke
+	fStepClose
+}
+
+## Stages 1 to 6 on this box, or in the container with this box taking over after.
+builtArts=()
+if ((container)); then
+	fStepOpen "Container image"
+	fJobs
+	fContainerBuild "${containerImage}"
+	fEcho "OK: ${containerImage}"
+	fEcho_Clean "runs cicd.bash ${innerArgs[*]}"
+	fStepClose
+	## The steps inside count on from here, toward this run's total.
+	SILK_CICD_STEP_AT="$(fStepAt "Container image")" SILK_CICD_STEP_TOTAL="${_stepTotal}" \
+		fContainerRun "${containerImage}" "${root}/cicd/cicd.bash" "${innerArgs[@]}" || fDie "the run in the container failed (above)"
+	fEcho "OK: stages 1-6 in the container"
+	## What needs this box's own trees and keys, or the card.
+	fStepOpen "Checks on this box"
+	((noRelease)) || fContainerArtifacts
+	fContentScrub
+	fWinGuiScenarios
+	fArmSmoke
+	fRenderNodeTest
+	fStepClose
+	if fStepOpen "Profiler"; then fJobs; fRunProfiler; fStepClose; fi
+else
+	fBuildTestRelease
 fi
 
-if ((! df_did)); then fEcho_Clean "dogfood disabled"; fi
+## The private runner builds on boxes that are often off or busy, so it skips
+## those itself and says so. Only a job that ran and failed stops the run.
+if fStepOpen "Private runner"; then
+	fEcho_Clean "private runner (macOS, Microsoft Store) ..."
+	privStart="$(mktemp)"
+	privSkips="$(fSkipCount)"
+	SILK_CICD_SKIPS="${skipLog}" "${PRIVATE_RUNNER}" --public "${root}" || fDie "a private runner job failed"
+	fStepDone "private runner" "${privSkips}"
+	## The Mac build joins this run's set only if the runner made it in this run. One
+	## left from an earlier run of the same version must not be dogfooded again.
+	macBin="${PRIVATE_RUNNER%/cicd/*}/dist/${ver:-}/macos/${EXE_NAME}-${ver:-}-macos-universal"
+	if [[ -f "${macBin}" && "${macBin}" -nt "${privStart}" ]]; then builtArts+=("macos-universal|${macBin}"); fi
+	rm -f "${privStart}"
+	fStepClose
+fi
 
-## Re-record the demo video (off by default, skipped under --quick, never
-## aborts). The video GFS-rotates into
-## ../private/demo-video/; the README highlight gif lands in assets/demo.gif.
-demo_hook="${root}/cicd/utility/demo-video/demo-video.py"
-if ((! ${DEMO_ENABLE:-0})); then
-	fEcho_Clean "demo video disabled"
-elif ((quick)); then
-	fEcho_Clean "demo video skipped (--quick)"
-elif [[ -f "$demo_hook" ]]; then
+## Stage 7: dogfood. Install each build under a fixed name in the synced app dir
+## for the platform it targets; the 'runterm' launcher on each box takes it from
+## there and keeps its own rotated versions folder.
+if fStepOpen "Dogfood"; then
+	fJobs
+	fDogfoodInstall
+	fStepClose
+fi
+
+## Re-record the demo video (on by default, skipped under --quick unless --demo
+## asks for it, never aborts). The video GFS-rotates into
+## ../private/demo-video/; the README highlight gif goes in assets/demo.gif.
+demoHook="${root}/cicd/utility/demo-video/demo-video.py"
+if fStepOpen "Demo video"; then
 	fEcho_Clean "recording demo video ..."
-	if SILK_BIN="${root}/target/release/silkterm" python3 "$demo_hook"; then
+	## Absolute: the recorder runs the app from a scratch home of its own, so a
+	## relative path would resolve against the wrong directory.
+	silkBin="${RELEASE_NATIVE_BIN}"
+	[[ "${silkBin}" = /* ]] || silkBin="${root}/${silkBin}"
+	if SILK_BIN="${silkBin}" fRunChanged "${DEMO_PATHS[@]}" -- python3 "${demoHook}"; then
 		fEcho "OK: demo video"
 	else
 		fEcho "WARNING: demo video hook failed (non-fatal)"
 	fi
+	fStepClose
 fi
 
-## Stage 8: backup + publish.
-fSection "8/8  Backup + publish"
 ## Always run the publisher quiet: cicd already gave the initial prompt, so skip
-## its redundant continue-prompt. With no message it still lets git open the editor.
-pub_flags=(--quiet)
-if ((${#GIT_PUBLISH[@]} == 0)); then
-	fEcho_Clean "publish disabled"
-elif [[ -n "$publish_msg" ]]; then
-	## Hands-off: quiet env skips the script's continue-prompt; the GIT_EDITOR
-	## helper fills the empty commit message so `git commit` won't open an editor.
-	fEcho_Clean "hands-off publish (commit message: \"${publish_msg}\")"
-	GIT_BACKUP_AND_PUBLISH_QUIET=1 GIT_AUTO_MESSAGE="${publish_msg}" \
-		GIT_EDITOR="${here}/utility/git-auto-msg.bash" "${GIT_PUBLISH[@]}" "${pub_flags[@]}"
+## its redundant continue-prompt. The message was settled before stage 0.
+pubFlags=(--quiet)
+if fStepOpen "Backup + publish"; then
+	## The publisher commits with -m, so no editor opens. GIT_EDITOR is there in
+	## case some other git step ever wants one, so it can't stall the run.
+	fEcho_Clean "hands-off publish (commit message: \"${publishMsg}\")"
+	## Only the tracked files the run itself changed. The rest of the tree can
+	## hold another session's edits.
+	pubPaths=""; [[ ! -s "${SILK_PUBLISH_LEDGER:-}" ]] || pubPaths="$(sort -u -- "${SILK_PUBLISH_LEDGER}")"
+	fEcho_Clean "the run changed $(grep -c . <<<"${pubPaths}") tracked file(s)${pubPaths:+: ${pubPaths//$'\n'/, }}"
+	GIT_BACKUP_AND_PUBLISH_PATHS="${pubPaths}" GIT_BACKUP_AND_PUBLISH_QUIET=1 GIT_AUTO_MESSAGE="${publishMsg}" \
+		GIT_EDITOR="${here}/utility/git-auto-msg.bash" "${GIT_PUBLISH[@]}" "${pubFlags[@]}"
 	fEcho "OK: published"
-else
-	"${GIT_PUBLISH[@]}" "${pub_flags[@]}"
-	fEcho "OK: published"
+	fStepClose
 fi
+
+## Zig's caches in the tree, where the builds ran. zig cc uses its global
+## cache, which the container has on a volume and this box shares, so most runs
+## find none.
+if ((! container && ! noCleanup)) && command -v zig >/dev/null 2>&1; then
+	zigNow="$(zig version 2>/dev/null || true)"
+	while IFS= read -r -d '' zigDir; do fSweep_ZigCache "${zigDir}" "${zigNow}" "${CLEANUP_CACHE_CAP_MB:-2048}" || true
+	done < <(find "${root}" -xdev \( -name .git -o -name target -o -path "${root}/forks" -o -path "${root}/cicd/artifacts" \) -prune -o -type d \( -name .zig-cache -o -name zig-cache \) -print0 -prune 2>/dev/null)
+fi
+## The skip list is in the run's folder, so it's read before fRunEnd removes
+## that folder, then printed last.
+fEcho_Clean
+skipsSaid="$(fSkipSummary)"
+fRunEnd 0
+[[ -z "${skipsSaid}" ]] || { fEcho_Clean; printf '%s\n' "${skipsSaid}"; }
 
 fSection "${APP_NAME} CI/CD: done."
 fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-24: --long takes --with-private too, when the private repo is here.
+##		- 2026-11-19: The private repo is opt-in, by --with-private, and --no-private
+##		              is gone. A plain run never looks for it.
+##		- 2026-11-17: Stage 0 puts the stash back when the pull fails, names it when
+##		              a pop fails, and stops when an earlier run's 'auto-stash' is left.
+##		- 2026-11-10: The profiler's app runs on a settings tree of its own in the run
+##		              folder, at Max with Choose automatically off, and outside tmux.
+##		- 2026-11-09: A memory cap with no swap, CICD_MEM_CAP: this side in a systemd
+##		              scope, and each container with --memory and --oom-score-adj.
+##		- 2026-11-06: The backlog quick run removes stale run folders too.
+##		- 2026-11-05: A build that can't be dogfooded fails the run, where it used to
+##		              warn and pass. A dest that can't be written stops it at the
+##		              start.
+##		- 2026-11-03: An off option for each part of a full run that had none:
+##		              --no-rust-tests, --no-clippy, --no-script-lint, --no-scrub,
+##		              --no-deny, --no-script-tests, --no-docs, --no-scroll,
+##		              --no-wingui, --no-release, and --no-cleanup.
+##		- 2026-11-02: The test suite again under Miri, after the TSan run, in the
+##		              image, under --leakcheck or --long. The canary goes first, and
+##		              --no-miri skips it.
+##		- 2026-11-01: The soak test joins the leak checks, in the image, with its
+##		              heaptrack data kept beside the heap reports.
+##		- 2026-11-01: One cleanup line at the end: what went, the run's own folder and
+##		              docker's included, and about what it freed.
+##		- 2026-11-01: The heap-growth test runs under --quick too, and --leakcheck
+##		              is every leak check, so it adds CodeQL.
+##		- 2026-10-31: A failed test's line names its output file only when the file
+##		              outlives the run, and says --keep-temp keeps it otherwise.
+##		- 2026-10-31: The run's folder is HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with
+##		              TMPDIR, TEMP, and TMP pointed at it, and goes at the end, failed
+##		              or not. A stale one goes after 2 days, once its run.pid is gone.
+##		- 2026-10-31: The container gets the private repo's test scripts, read only,
+##		              for the test ID check.
+##		- 2026-10-28: --list takes the scroll harness's scenes, each with its own ID.
+##		- 2026-10-28: One PASS, FAIL, or SKIP line per test, with its ID and name. A
+##		              test script that can't run says why on its SKIP line.
+##		- 2026-10-28: --list takes test IDs in the new 5-character form.
+##		- 2026-10-28: Steps: a 79-wide rule, then a stamped Starting line numbered of
+##		              the steps the run takes, and a PASS, SKIP, or FAIL line. A step
+##		              turned off isn't counted, and the plan says what turned it off.
+##		- 2026-10-28: --long, or --slow, for the steps that take hours. TSan moved
+##		              there from the default run, and CodeQL comes on with it.
+##		- 2026-10-28: The Linux ARM64 build's --version runs on the arm64 VM.
+##		- 2026-10-28: Recursive removals go through the guard in saferm.bash, and the
+##		              release artifacts folder only under cicd/artifacts.
+##		- 2026-10-26: --list prints the steps and test IDs a run would take. --keep-temp
+##		              keeps the temp folders too, the container's /tmp included.
+##		- 2026-10-26: --backlog-run-quick with its areas, --backlog-run-full,
+##		              --merge-gate, and --fmt-check. --gate and --ci are other
+##		              names for the first and the merge gate.
+##		- 2026-10-25: --no-remote skips the Windows scenarios and the private
+##		              runner. What a box that wasn't there left out is a SKIP in
+##		              its step's line, and listed again at the end of the run.
+##		- 2026-10-25: The profiler and the render node test run on this box, after
+##		              the container, and the profiler draws on the card through a
+##		              headless sway, with a private Xvfb as the fallback.
+##		- 2026-10-23: The test suite again under TSan, after the leak checks, in
+##		              the image like the ASan run. --no-tsan skips it.
+##		- 2026-10-23: The run in the container gets --no-demo, so the demo is
+##		              recorded only here, and only when this run asks for it.
+##		- 2026-10-22: The leak checks run by default. --no-leakcheck drops them,
+##		              and --leakcheck adds them back under --quick.
+##		- 2026-10-26: Jobs per step, a quarter when busy or for the hard steps, and
+##		  the whole run at low priority, the container capped too. The build
+##		  number is the commit's time on a dirty tree as well.
+##		- 2026-10-22: CodeQL joins the leak checks, in the image, when --codeql asks.
+##		- 2026-10-19: Every full run has the test suite again under ASan and LSan,
+##		              in the container image, which has the nightly it needs.
+##		- 2026-10-19: A full run removes what earlier runs left once it is stale:
+##		              kept test folders and container /tmp past the newest few,
+##		              build dirs from an older toolchain or no longer built,
+##		              unused incremental caches, and its stopped containers and
+##		              old images. The test folder is made after the prompt.
+##		- 2026-10-18: --quick keeps the x86_64 cross build and skips the slow window
+##		              tests. The demo is on by default, and macOS is linted too.
+##		- 2026-10-13: The run in the container takes this box's time zone.
+##		- 2026-10-10: --container runs stages 1-6 in a pinned image.
+##		- 2026-10-08: A failed test script's output goes to the log, and stays in
+##		              the test run folder.
+##		- 2026-09-17: The run log and the flamegraph are written under a .part name
+##		              and renamed once whole, so the startup gates can't mark one as
+##		              seen part way through.
+##		- 2026-09-17: A blank answer at the publish prompt commits the automatic
+##		              message, and the plan and the prompt name it. They promised an
+##		              editor that the quiet publisher never opens.
+##		- 2026-08-24: Name and date the rotating dogfood copy from the build, not
+##		              from when the run started. They were ~8 min apart, which
+##		              the launchers read as a newer build.
 ##		- 2026-06-05 JC: Created.
 ##		- 2026-07-22 JC: Stage 0 remote sync - fetch, fast-forward if safely behind, abort if diverged.
 ##		- 2026-07-22 JC: Normalize section spacing (exactly one blank before each rule).

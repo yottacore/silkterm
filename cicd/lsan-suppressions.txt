@@ -1,0 +1,4 @@
+# Leaks LeakSanitizer lets through in cicd/utility/asan.bash. One per line, as
+# leak:<function, file or library>, with the backlog item that fixes it on the
+# line above. A suppression matches any frame in the leak's stack, so name the
+# narrowest thing that holds: a wide one hides our own leaks too.

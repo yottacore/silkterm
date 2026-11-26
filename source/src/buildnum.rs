@@ -1,0 +1,454 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
+// The build number: whole minutes since 2000 began, in Crockford base 32. It
+// stays 5 characters until 2063, sorts in build order, and decodes back to the
+// minute it was built. A copy's file date can't be trusted for that, since every
+// tool stamps it differently.
+//
+// build.rs include!s this file, so the binary's number and the tests below use
+// the same code. That's why there's no `use` line here, and why the module is in
+// the crate only under cfg(test). At run time the number is config::BUILD_ID.
+
+// Crockford's alphabet, lowercase. No i, l, o, or u, so nothing in a build number
+// copied out of a bug report can be read back as a digit or as another letter.
+const CROCKFORD_LOWER: &[u8; 32] = b"0123456789abcdefghjkmnpqrstvwxyz";
+
+// What a binary is built from besides the compiler, relative to this crate. A
+// change to any of them makes a new binary, so it has to make a new number. Only
+// `src` was watched at first, so a dependency update or a new logo kept the old
+// number on a different binary.
+const BUILD_INPUTS: &[&str] = &[
+	"src",
+	"assets",
+	"Cargo.toml",
+	"../Cargo.toml", // the workspace, which owns the profiles and the patches
+	"../Cargo.lock",
+	"../shell-integration.md",
+	"../usage.md",
+];
+
+// 2000-01-01T00:00:00Z, as unix time.
+const EPOCH_2000_UNIX: u64 = 946_684_800;
+
+fn crockford32(value: u64) -> String {
+	if value == 0 {
+		return "0".to_string();
+	}
+	let mut digits = Vec::new();
+	let mut left = value;
+	while left > 0 {
+		digits.push(CROCKFORD_LOWER[(left % 32) as usize] as char);
+		left /= 32;
+	}
+	digits.iter().rev().collect()
+}
+
+// Whole elapsed minutes, so the number only ever goes up. A clock set before 2000
+// gives 0 instead of wrapping.
+fn minutes_since_2000(unix_secs: u64) -> u64 {
+	unix_secs.saturating_sub(EPOCH_2000_UNIX) / 60
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn build_number_at(unix_secs: u64) -> String {
+		crockford32(minutes_since_2000(unix_secs))
+	}
+
+	// Test ID: dbsdc
+	#[test]
+	fn the_alphabet_is_crockfords_with_the_ambiguous_letters_left_out() {
+		let alphabet = std::str::from_utf8(CROCKFORD_LOWER).unwrap();
+		assert_eq!(alphabet, "0123456789abcdefghjkmnpqrstvwxyz");
+		for skipped in ['i', 'l', 'o', 'u'] {
+			assert!(!alphabet.contains(skipped), "{skipped} is ambiguous");
+		}
+		assert_eq!(alphabet.len(), 32);
+	}
+
+	// Test ID: dbsdd
+	#[test]
+	fn small_values_encode_digit_by_digit() {
+		assert_eq!(crockford32(0), "0");
+		assert_eq!(crockford32(9), "9");
+		// 10 is where the letters start, and h is 17 - one past the skipped i.
+		assert_eq!(crockford32(10), "a");
+		assert_eq!(crockford32(17), "h");
+		assert_eq!(crockford32(18), "j");
+		assert_eq!(crockford32(31), "z");
+		assert_eq!(crockford32(32), "10");
+		assert_eq!(crockford32(33), "11");
+		assert_eq!(crockford32(1024), "100");
+	}
+
+	// Test ID: dbsde
+	#[test]
+	fn a_build_number_decodes_back_to_the_minute_it_was_built() {
+		// Round-trip every digit position through a hand-rolled decode, so an
+		// encoder that quietly reversed itself wouldn't pass.
+		let decode = |text: &str| -> u64 {
+			text.bytes().fold(0u64, |sum, byte| {
+				let digit = CROCKFORD_LOWER.iter().position(|c| *c == byte).unwrap();
+				sum * 32 + digit as u64
+			})
+		};
+		for minutes in [0, 1, 31, 32, 1_000, 14_000_000, u32::MAX as u64] {
+			assert_eq!(decode(&crockford32(minutes)), minutes);
+		}
+	}
+
+	// Test ID: dbsdf
+	#[test]
+	fn the_epoch_is_the_start_of_2000_and_the_count_is_whole_minutes() {
+		assert_eq!(minutes_since_2000(EPOCH_2000_UNIX), 0);
+		assert_eq!(minutes_since_2000(EPOCH_2000_UNIX + 59), 0); // part of a minute doesn't count
+		assert_eq!(minutes_since_2000(EPOCH_2000_UNIX + 60), 1);
+		assert_eq!(minutes_since_2000(EPOCH_2000_UNIX + 61), 1);
+		// A day, and a non-leap year.
+		assert_eq!(minutes_since_2000(EPOCH_2000_UNIX + 86_400), 1_440);
+		assert_eq!(minutes_since_2000(EPOCH_2000_UNIX + 365 * 86_400), 525_600);
+	}
+
+	// Test ID: dbsdg
+	#[test]
+	fn a_clock_behind_the_epoch_gives_zero_rather_than_wrapping() {
+		assert_eq!(minutes_since_2000(0), 0);
+		assert_eq!(minutes_since_2000(EPOCH_2000_UNIX - 1), 0);
+		assert_eq!(build_number_at(0), "0");
+	}
+
+	// Test ID: dbsdh
+	#[test]
+	fn a_later_build_always_sorts_after_an_earlier_one() {
+		// Same length means plain string order works; the length only grows, so
+		// it holds across a rollover too.
+		let earlier = build_number_at(EPOCH_2000_UNIX + 14_000_000 * 60);
+		let later = build_number_at(EPOCH_2000_UNIX + 14_000_001 * 60);
+		assert!(earlier < later, "{earlier} should sort before {later}");
+		assert_eq!(earlier.len(), later.len());
+		assert!(build_number_at(EPOCH_2000_UNIX) < build_number_at(EPOCH_2000_UNIX + 60));
+	}
+
+	// Test ID: dbsdj
+	#[test]
+	fn the_number_stays_five_characters_for_the_life_of_this_program() {
+		// 32^5 minutes past 2000 is partway through 2063; anything sooner is 5
+		// characters, which is what the About panel and the release notes assume.
+		let year_2026 = EPOCH_2000_UNIX + 26 * 365 * 86_400;
+		let year_2060 = EPOCH_2000_UNIX + 60 * 365 * 86_400;
+		assert_eq!(build_number_at(year_2026).len(), 5);
+		assert_eq!(build_number_at(year_2060).len(), 5);
+	}
+
+	// Every file the code pulls in with include_bytes! or include_str! sits under
+	// one of the inputs, and so do the lock file and both manifests.
+	// Test ID: dcq7f
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_build_inputs_cover_every_included_file_and_the_lock() {
+		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+		let real = |path: &std::path::Path| path.canonicalize().unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+		let inputs: Vec<std::path::PathBuf> = BUILD_INPUTS.iter().map(|input| real(&crate_dir.join(input))).collect();
+		let covered = |file: &std::path::Path| inputs.iter().any(|input| file.starts_with(input));
+		for needed in ["Cargo.toml", "../Cargo.toml", "../Cargo.lock"] {
+			assert!(covered(&real(&crate_dir.join(needed))), "{needed} is not watched");
+		}
+		let mut dirs = vec![crate_dir.join("src")];
+		let mut seen = 0;
+		while let Some(dir) = dirs.pop() {
+			for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+				let path = entry.path();
+				if path.is_dir() {
+					dirs.push(path);
+					continue;
+				}
+				if path.extension().is_none_or(|ext| ext != "rs") {
+					continue;
+				}
+				let text = std::fs::read_to_string(&path).unwrap();
+				for macro_name in ["include_bytes!(\"", "include_str!(\""] {
+					for (at, _) in text.match_indices(macro_name) {
+						let rest = &text[at + macro_name.len()..];
+						let Some(end) = rest.find('"') else { continue };
+						let included = real(&path.parent().unwrap().join(&rest[..end]));
+						assert!(covered(&included), "{} includes {}, which no build input covers", path.display(), included.display());
+						seen += 1;
+					}
+				}
+			}
+		}
+		assert!(seen > 0, "found no includes at all, so the scan is broken");
+	}
+
+	// Every .rs under src, a module's own folder included.
+	fn rust_sources() -> Vec<std::path::PathBuf> {
+		let mut dirs = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+		let mut found = Vec::new();
+		while let Some(dir) = dirs.pop() {
+			for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+				let path = entry.path();
+				if path.is_dir() {
+					dirs.push(path);
+				} else if path.extension().is_some_and(|ext| ext == "rs") {
+					found.push(path);
+				}
+			}
+		}
+		found
+	}
+
+	// Every source file names the license the crate is published under, as the
+	// manifest does.
+	// Test ID: dd5mx
+	#[test]
+	fn every_source_file_has_the_license_header() {
+		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+		let manifest = std::fs::read_to_string(crate_dir.join("Cargo.toml")).unwrap();
+		assert!(manifest.lines().any(|line| line.trim() == "license = \"GPL-2.0-or-later\""), "Cargo.toml names another license");
+		let mut seen = 0;
+		for path in rust_sources() {
+			let text = std::fs::read_to_string(&path).unwrap();
+			let mut lines = text.lines();
+			assert_eq!(lines.next(), Some("// SPDX-License-Identifier: GPL-2.0-or-later"), "{}", path.display());
+			assert!(lines.next().is_some_and(|line| line.starts_with("// Copyright © ")), "{} has no copyright line under the license", path.display());
+			seen += 1;
+		}
+		assert!(seen > 0, "found no source files, so the scan is broken");
+	}
+
+	// Every pub struct and enum derives Debug or has its own impl. Read from the
+	// source because rustc's missing_debug_implementations only looks at types
+	// reachable from outside the crate, and a binary exports none.
+	// Test ID: ddghv
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_public_type_has_debug() {
+		let mut texts = Vec::new();
+		for path in rust_sources() {
+			let text = std::fs::read_to_string(&path).unwrap();
+			texts.push((path, text));
+		}
+		let mut by_hand = std::collections::HashSet::new();
+		for (_, text) in &texts {
+			for (at, _) in text.match_indices("Debug for ") {
+				let name: String = text[at + "Debug for ".len()..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+				by_hand.insert(name);
+			}
+		}
+		let mut missing = Vec::new();
+		let mut seen = 0;
+		for (path, text) in &texts {
+			let lines: Vec<&str> = text.lines().collect();
+			for (number, line) in lines.iter().enumerate() {
+				let Some(rest) = line.trim_start().strip_prefix("pub") else {
+					continue;
+				};
+				let rest = match rest.strip_prefix('(') {
+					Some(scoped) => scoped.split_once(')').map_or("", |(_, after)| after),
+					None => rest,
+				};
+				let Some(rest) = rest.strip_prefix(" struct ").or_else(|| rest.strip_prefix(" enum ")) else {
+					continue;
+				};
+				let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+				seen += 1;
+				let derived = lines[..number].iter().rev().map(|line| line.trim_start()).take_while(|line| line.starts_with("#[") || line.starts_with("//")).any(|line| line.strip_prefix("#[derive(").is_some_and(|list| list.split([',', ')']).any(|item| item.trim() == "Debug")));
+				if !derived && !by_hand.contains(&name) {
+					let file = path.file_name().unwrap().to_string_lossy();
+					missing.push(format!("{file}:{} {name}", number + 1));
+				}
+			}
+		}
+		assert!(seen > 100, "found only {seen} public types, so the scan is broken");
+		assert!(missing.is_empty(), "no Debug on:\n{}", missing.join("\n"));
+	}
+
+	// The text after a line's comment marker, or None for a line of code.
+	fn comment_text(line: &str) -> Option<&str> {
+		let line = line.trim_start();
+		if let Some(rest) = line.strip_prefix("//").or_else(|| line.strip_prefix("::")) {
+			return Some(rest.trim_start());
+		}
+		line.starts_with('#').then(|| line.trim_start_matches('#').trim_start())
+	}
+
+	fn is_history_heading(text: &str) -> bool {
+		let text = text.strip_prefix("- ").unwrap_or(text);
+		text.starts_with("History") || text.starts_with("Script history")
+	}
+
+	// A copyright line's text after "Copyright ": the sign, the year or span,
+	// then the holder. Returns whether it's the Bubbles form, or why it's
+	// neither form. PowerShell files are ASCII, so theirs is "(C)" with no ID.
+	fn copyright_form(text: &str, marker: &str, ascii: bool) -> Result<bool, String> {
+		let plain = ascii && text.starts_with("(C) ");
+		let (bubbles, rest) = if let Some(rest) = text.strip_prefix("© ") {
+			(false, rest)
+		} else if let Some(rest) = text.strip_prefix("(c) ") {
+			(true, rest)
+		} else if plain {
+			(false, &text["(C) ".len()..])
+		} else {
+			return Err(format!("copyright sign in neither form: {text}"));
+		};
+		let (years, holder) = rest.split_once(' ').unwrap_or_default();
+		let year_ok = |year: &str| year.len() == 4 && year.bytes().all(|byte| byte.is_ascii_digit());
+		if !years.split('-').all(year_ok) {
+			return Err(format!("copyright year {years:?}"));
+		}
+		let expected = if bubbles {
+			"Bubbles".to_string()
+		} else if plain {
+			"Jim Collier".to_string()
+		} else {
+			format!("Jim Collier {marker}")
+		};
+		if holder != expected {
+			return Err(format!("copyright holder {holder:?}"));
+		}
+		Ok(bubbles)
+	}
+
+	// Not a heading such as "Copyright and license:".
+	fn is_copyright_line(text: &str) -> bool {
+		text.starts_with("Copyright ©") || text.starts_with("Copyright (")
+	}
+
+	// What's wrong with one script's header and History, if anything.
+	fn script_header_faults(lines: &[&str], cmd: bool, ps1: bool, marker: &str) -> Vec<String> {
+		let at = lines.iter().position(|line| comment_text(line).is_some_and(is_copyright_line));
+		let Some(at) = at else {
+			return vec!["no copyright line".into()];
+		};
+		let mut faults = Vec::new();
+		for (number, line) in lines[..at].iter().enumerate() {
+			let preamble = cmd && (line.starts_with('@') || line.eq_ignore_ascii_case("setlocal"));
+			match comment_text(line) {
+				None if !line.trim().is_empty() && !preamble => {
+					faults.push(format!("line {} is code above the copyright line", number + 1));
+				}
+				Some(text) if is_history_heading(text) && !text.contains("bottom") => {
+					faults.push(format!("line {} starts a History in the header", number + 1));
+				}
+				_ => {}
+			}
+		}
+		let copyright = &comment_text(lines[at]).unwrap()["Copyright ".len()..];
+		let bubbles = match copyright_form(copyright, marker, ps1) {
+			Ok(bubbles) => bubbles,
+			Err(fault) => {
+				faults.push(fault);
+				false
+			}
+		};
+		let license = lines[at + 1..lines.len().min(at + 5)].iter().filter_map(|line| comment_text(line)).find_map(|text| text.strip_prefix("SPDX-License-Identifier: "));
+		match license {
+			Some("MIT") => {}
+			Some("GPL-2.0-or-later") if !bubbles => {}
+			other => faults.push(format!("license under the copyright line is {other:?}")),
+		}
+		let history = lines.iter().rposition(|line| comment_text(line).is_some_and(is_history_heading)).filter(|&history| history > at);
+		match history {
+			None => faults.push("no History at the bottom".into()),
+			Some(history) => {
+				let code_after = lines[history..].iter().any(|line| !line.trim().is_empty() && comment_text(line).is_none());
+				if code_after {
+					faults.push("code after the History".into());
+				}
+			}
+		}
+		faults
+	}
+
+	// The `license` of the nearest Cargo.toml above a .rs file. A crate that
+	// names none is under the project's GPL.
+	fn crate_license(repo: &std::path::Path, file: &std::path::Path) -> String {
+		let gpl = "GPL-2.0-or-later".to_string();
+		for dir in file.ancestors().skip(1) {
+			if !dir.starts_with(repo) {
+				break;
+			}
+			let Ok(manifest) = std::fs::read_to_string(dir.join("Cargo.toml")) else {
+				continue;
+			};
+			return manifest
+				.lines()
+				.find_map(|line| {
+					let value = line.strip_prefix("license")?.trim_start().strip_prefix('=')?;
+					Some(value.trim().trim_matches('"').to_string())
+				})
+				.unwrap_or(gpl);
+		}
+		gpl
+	}
+
+	// The rest of the tree: build.rs, the Rust outside src/, and every script git
+	// tracks. Each needs a copyright line in the Jim Collier or the Bubbles form, or
+	// a .ps1's ASCII one, the license a few lines under it, only comments above it,
+	// and History at the bottom of the file rather than in the header. A .rs file
+	// takes its crate's license, and only an MIT one may be in the Bubbles form.
+	// Untracked files are skipped, so a scratch file in a working tree isn't judged.
+	// Test ID: ddghe
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
+	fn every_script_has_the_license_header_with_history_at_the_bottom() {
+		// shell_integration.ps1 is written whole into a user's PowerShell
+		// profile, so it names no license there. It's built into the binary,
+		// which does.
+		const EXEMPT: &[&str] = &["source/src/shell_integration.ps1"];
+		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+		let repo = crate_dir.parent().unwrap();
+		let own = std::fs::read_to_string(crate_dir.join("src/buildnum.rs")).unwrap();
+		let marker = own.lines().nth(1).and_then(|line| line.split_once(" Jim Collier ")).map(|(_, marker)| marker.to_string()).unwrap();
+		if !repo.join(".git").exists() {
+			eprintln!("not a git checkout, so there is no list of tracked scripts");
+			return;
+		}
+		let listing = std::process::Command::new("git").args(["ls-files", "-z"]).current_dir(repo).output().unwrap();
+		assert!(listing.status.success(), "git ls-files failed");
+		let mut faults = Vec::new();
+		let mut seen = 0;
+		for name in String::from_utf8(listing.stdout).unwrap().split('\0') {
+			let path = repo.join(name);
+			let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+			if name.is_empty() || EXEMPT.contains(&name) || !path.is_file() {
+				continue;
+			}
+			let Ok(text) = std::fs::read_to_string(&path) else {
+				continue;
+			};
+			let lines: Vec<&str> = text.lines().map(|line| line.trim_end_matches('\r')).collect();
+			if ext == "rs" {
+				let license = crate_license(repo, &path);
+				if lines.first().and_then(|line| line.strip_prefix("// SPDX-License-Identifier: ")) != Some(license.as_str()) {
+					faults.push(format!("{name}: line 1 is not the {license} license"));
+				}
+				let mit = license == "MIT";
+				let copyright = lines.get(1).and_then(|line| line.strip_prefix("// Copyright "));
+				match copyright.map(|text| copyright_form(text, &marker, false)) {
+					Some(Ok(false)) => {}
+					Some(Ok(true)) if mit => {}
+					Some(Ok(true)) => {
+						faults.push(format!("{name}: a GPL file in the Bubbles form"));
+					}
+					Some(Err(fault)) => faults.push(format!("{name}: {fault}")),
+					None => faults.push(format!("{name}: no copyright line under the license")),
+				}
+				seen += 1;
+				continue;
+			}
+			if !matches!(ext, "bash" | "sh" | "py" | "ps1" | "cmd") && !text.starts_with("#!") {
+				continue;
+			}
+			for fault in script_header_faults(&lines, ext == "cmd", ext == "ps1", &marker) {
+				faults.push(format!("{name}: {fault}"));
+			}
+			seen += 1;
+		}
+		assert!(seen > 100, "found only {seen} scripts, so the scan is broken");
+		assert!(faults.is_empty(), "{} header faults:\n{}", faults.len(), faults.join("\n"));
+	}
+}

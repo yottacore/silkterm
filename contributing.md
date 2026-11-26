@@ -1,4 +1,8 @@
-<!-- omit in toc -->
+<!-- markdownlint-disable MD007 -- Unordered list indentation -->
+<!-- markdownlint-disable MD010 -- No hard tabs -->
+<!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
+
+<!-- TOC ignore:true -->
 # Contributing
 
 First off, thanks for taking the time to contribute!
@@ -11,20 +15,31 @@ All types of contributions are encouraged and valued. See the [Table of Contents
 > - Refer to it in your own project's readme
 > - Mention it to friends and colleagues
 
-<!-- omit in toc -->
+<!-- TOC ignore:true -->
 ## Table of contents
 
+<!-- TOC -->
+
 - [Code of conduct](#code-of-conduct)
+- [Contributor license agreement](#contributor-license-agreement)
 - [I have a question](#i-have-a-question)
 - [I want to contribute](#i-want-to-contribute)
 	- [Reporting bugs](#reporting-bugs)
 	- [Suggesting enhancements](#suggesting-enhancements)
 	- [Your first code contribution](#your-first-code-contribution)
-- [Styleguides](#styleguides)
+- [Style guides](#style-guides)
+
+<!-- /TOC -->
 
 ## Code of conduct
 
-This project and everyone in it is governed by the [Code of Conduct](code_of_conduct.md). By participating, you are expected to uphold it. Report unacceptable behavior to <silkterm@ubx9.com>.
+This project and everyone in it is governed by the [Code of Conduct](code_of_conduct.md). By participating, you are expected to uphold it. Report unacceptable behavior to silktermⒶyottacore.com.
+
+## Contributor license agreement
+
+SilkTerm is open source under the GPLv2+. Every contribution also needs a signed [Contributor License Agreement](CLA.md), so the project can be offered under other licenses too, such as a commercial one. You keep all rights to your own work, and only grant the licenses described in the CLA.
+
+Signing is automated. On your first pull request a bot posts the CLA and asks you to sign with a one-line comment. It's recorded once and covers all your later contributions. A pull request can't be merged until its author has signed.
 
 ## I have a question
 
@@ -33,25 +48,31 @@ Before asking, search the existing [issues](https://github.com/yottacore/silkter
 If you still need clarification:
 
 - Open an [issue](https://github.com/yottacore/silkterm/issues/new).
+
 - Provide as much context as you can about what you are running into.
+
 - Provide project and platform versions where they seem relevant.
 
 ## I want to contribute
 
-> ### Legal notice <!-- omit in toc -->
-> When contributing to this project, you must agree that you have authored 100% of the content, that you have the necessary rights to it, and that it may be provided under the project license.
+> ### Legal notice
+> When contributing to this project, you must agree that you have the necessary rights to the content, and that it may be provided under the project license and under the terms of the [CLA](CLA.md). Work done with AI tools is covered by the [AI policy](ai_policy.md).
 
 ### Reporting bugs
 
-<!-- omit in toc -->
+<!-- TOC ignore:true -->
 #### Before submitting a bug report
 
 A good bug report should not leave others chasing you for more information. Please investigate, gather what you can, and describe the issue in detail.
 
 - Make sure you are on the latest version.
+
 - Confirm it is really a bug and not a local misconfiguration or an incompatible environment. Re-read the [documentation](README.md); for support questions see [I have a question](#i-have-a-question).
+
 - Check the [bug tracker](https://github.com/yottacore/silkterm/issues?q=label%3Abug) to see if it has already been reported.
+
 - Search the web to see if others outside this repo have discussed it.
+
 - Collect the relevant details:
 	- OS, platform, and version (Windows, Linux, macOS; x86, ARM).
 	- Environment versions.
@@ -59,16 +80,19 @@ A good bug report should not leave others chasing you for more information. Plea
 	- Whether you can reliably reproduce it, and whether older versions also reproduce it.
 	- Clean, from-scratch reproduction steps.
 
-<!-- omit in toc -->
+<!-- TOC ignore:true -->
 #### How do I submit a good bug report?
 
-> Never report security issues, vulnerabilities, or bugs that include sensitive information in the public tracker. Send those by email to <silkterm@ubx9.com> instead.
+> Never report security issues, vulnerabilities, or bugs that include sensitive information in the public tracker. Send those by email to silktermⒶyottacore.com instead.
 
 Bugs and errors are tracked as GitHub issues. When you hit one:
 
 - Open an [issue](https://github.com/yottacore/silkterm/issues/new).
+
 - Explain the behavior you expected and the behavior you actually saw.
+
 - Give as much context as you can, and describe the reproduction steps someone else can follow. Isolate the problem into a reduced test case where possible.
+
 - Include the details you collected above.
 
 Once filed, the issue will be triaged, someone will try to reproduce it from your steps, and it will be labeled and worked from there. Issues without reproduction steps may be paused until they can be reproduced.
@@ -77,40 +101,43 @@ Once filed, the issue will be triaged, someone will try to reproduce it from you
 
 This section covers submitting an enhancement suggestion for SilkTerm, from brand-new features to small improvements. Following it helps the maintainer and the community understand your idea and find related ones.
 
-<!-- omit in toc -->
+<!-- TOC ignore:true -->
 #### Before submitting an enhancement
 
 - Make sure you are on the latest version.
+
 - Read the [documentation](README.md) to see whether the functionality already exists, perhaps via configuration.
+
 - Search the [issues](https://github.com/yottacore/silkterm/issues) to see whether it has already been suggested. If so, comment on the existing issue instead of opening a new one.
+
 - Consider whether it fits the scope and aims of the project. Make the case for why it would be useful to most users, not just a small subset.
 
-<!-- omit in toc -->
+<!-- TOC ignore:true -->
 #### How do I submit a good enhancement suggestion?
 
 Enhancement suggestions are tracked as [GitHub issues](https://github.com/yottacore/silkterm/issues).
 
 - Use a clear and descriptive title.
+
 - Give a step-by-step description of the suggested enhancement.
+
 - Describe the current behavior and explain the behavior you would like instead, and why. Note any alternatives you considered.
+
 - Explain why the enhancement would be useful to most SilkTerm users. Point to other projects that solved it well, if any.
 
 ### Your first code contribution
 
 - Install the per-platform prerequisites: [prerequisites.md](prerequisites.md).
+
 - Build and run per [build.md](build.md). On Linux, `cargo run --release` is enough to get going.
+
 - Read the [style guide](style-guide.md) before writing code - it is the canonical reference for naming, comments, Rust conventions, and formatting.
 
-## Styleguides
+## Style guides
 
-The canonical style reference is [style-guide.md](style-guide.md). It covers prose, comments, naming, Rust conventions, formatting, and commit messages.
+The style reference is [style-guide.md](style-guide.md), for code, scripts and commit messages.
 
-<!-- omit in toc -->
+<!-- TOC ignore:true -->
 ### Commit messages
 
-Keep them brief and high-level - a short summary of what changed. Put real detail in the issue, the pull request, or the code. See the [commit messages](style-guide.md#commit-messages) section of the style guide.
-
-<!-- omit in toc -->
-## Attribution
-
-This guide is based on the [contributing.md generator](https://contributing.md/generator).
+Keep them short. Put the details in the issue or pull request. See [commit messages](style-guide.md#commit-messages) in the style guide.

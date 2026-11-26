@@ -1,98 +1,205 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Copyright © 2026 Jim Collier
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
+use anyhow::Context as _;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 
-// Display name (window title, default tab title). The Cargo package / binary
-// name lives in Cargo.toml; see README "Renaming the project".
+/// Display name (window title, default tab title). The Cargo package / binary
+/// name lives in Cargo.toml.
 pub const APP_NAME: &str = "SilkTerm";
 
-// Where Help -> Support SilkTerm sends the browser. Points at DONATE.md (the
-// canonical list of sponsor options and addresses) rather than
-// a single link baked into the binary. HEAD resolves to the repo default branch.
-pub const DONATE_URL: &str = "https://github.com/jim-collier/silkterm/blob/HEAD/DONATE.md";
+/// Where Help -> Support SilkTerm sends the browser: DONATE.md, the list of
+/// sponsor options and addresses, rather than one link built into the binary.
+/// HEAD resolves to the repo's default branch.
+pub const DONATE_URL: &str = "https://github.com/yottacore/silkterm/blob/HEAD/DONATE.md";
 
-// The one address worth handing straight to someone who has already decided.
-// DONATE.md carries the rest; --donate prints both.
+// The addresses worth handing straight to someone who has already decided.
+// DONATE.md lists the rest, and --donate prints all 3.
 pub const SPONSOR_URL: &str = "https://github.com/sponsors/jim-collier";
+pub const KOFI_URL: &str = "https://ko-fi.com/jimcollier";
 
-// Which of the cross builds this binary is - otherwise indistinguishable at a
-// glance. Shared by the About dialog and `--about` so the two can't drift.
-pub fn build_target() -> String {
-	let profile = if cfg!(debug_assertions) {
-		"debug"
-	} else {
-		"release"
-	};
-	format!(
-		"{} / {} ({profile})",
-		std::env::consts::ARCH,
-		std::env::consts::OS
-	)
+/// Which exact build this is. The version can't say, since every dogfood build of
+/// a release has the same one, so build.rs bakes in whole minutes since 2000 in
+/// Crockford base 32 (source/src/buildnum.rs). It's 5 characters, sorts in build
+/// order, and decodes back to the minute it was built.
+pub const BUILD_ID: &str = env!("SILK_BUILD");
+
+/// The build number as shown to people. A non-release build gets the local date
+/// of the viewer after it, ` (YYYY-mm-DD)`, since the number alone doesn't say
+/// how old a dogfood copy is. A release build is the number alone.
+pub fn build_label() -> String {
+	let built = env!("SILK_BUILD_UNIX").parse::<u64>().unwrap_or_default();
+	build_label_for(BUILD_ID, env!("SILK_RELEASE_BUILD") == "1", built, local_date)
 }
 
-// The display scale factor to lay out at, given what the window reports.
-// SILK_SCALE overrides it, which is the only way to see a high-DPI layout on a
-// 1x display: chrome written in raw pixels is INVISIBLE at 1x and only thins out
-// as the factor rises, so the defect it guards against cannot be looked at
-// without one. Read once (var_os takes the env lock and scans environ), same
-// pattern as SILK_MAX_FPS. Off X11 there is no winit knob for this at all.
-pub fn display_scale(reported: f64) -> f32 {
-	use std::sync::OnceLock;
-	static OVERRIDE: OnceLock<Option<f32>> = OnceLock::new();
-	let over = OVERRIDE.get_or_init(|| {
-		std::env::var("SILK_SCALE")
-			.ok()
-			.and_then(|raw| raw.trim().parse::<f32>().ok())
-			.filter(|s| *s > 0.0 && s.is_finite())
-	});
-	over.unwrap_or(reported as f32)
+fn build_label_for(id: &str, release: bool, built_unix: u64, date: impl Fn(u64) -> String) -> String {
+	if release { id.to_string() } else { format!("{id} ({})", date(built_unix)) }
 }
 
-// Chrome measurements are written in DIP (a CSS pixel, 1/96 inch) and converted
-// to physical pixels where they are used. The main window's chrome shares a
-// coordinate space with the terminal grid, so there is no single boundary to
-// divide at the way settings_ui.rs has - each measurement scales at its own use
-// site, through here or `TextCtx::dip`.
-//
-// Rounded to whole pixels so a rule, a ring or a hairline gap stays crisp, and a
-// measurement the author asked to be visible never rounds away to nothing (a 1
-// DIP gap under a scale factor below 1 would otherwise vanish).
-pub fn dip(v: f32, scale: f32) -> f32 {
-	let px = v * scale;
-	if v > 0.0 {
-		px.round().max(1.0)
-	} else {
-		px.round()
+/// A dogfood copy is installed as `slktrmdf_<stamp>_<tag>`, and the pool has
+/// several at once, so the window title has to say which one is running. Anything
+/// else (a release install, a cargo build) returns None.
+pub fn dogfood_detail() -> Option<&'static str> {
+	static DETAIL: OnceLock<Option<String>> = OnceLock::new();
+	DETAIL
+		.get_or_init(|| {
+			let exe = std::env::current_exe().ok()?;
+			let stem = exe.file_stem()?.to_str()?;
+			Some(stem.strip_prefix("slktrmdf_")?.to_string())
+		})
+		.as_deref()
+}
+
+/// What every window title starts with: the app name, plus the dogfood build when
+/// this is one. Fixed for the process, so worked out once.
+pub fn title_prefix() -> &'static str {
+	static PREFIX: OnceLock<String> = OnceLock::new();
+	PREFIX.get_or_init(|| match dogfood_detail() {
+		Some(detail) => format!("{APP_NAME} [dogfood {detail}]"),
+		None => APP_NAME.to_string(),
+	})
+}
+
+/// A terminal running with administrator or root rights says so in its window
+/// title. Windows already writes this "Administrator: " on the title bar of its
+/// own consoles, so that word is kept there, and a console sending a title while
+/// elevated writes it in front of that too, which is the half to take back off.
+/// SilkTerm never changes its own credentials, so both are read once.
+pub fn rights() -> crate::tabtitle::Rights {
+	crate::tabtitle::Rights { say: privilege_label(), decorated: cfg!(windows) }
+}
+
+fn privilege_label() -> Option<&'static str> {
+	static LABEL: OnceLock<Option<&'static str>> = OnceLock::new();
+	*LABEL.get_or_init(privilege_word)
+}
+
+#[cfg(unix)]
+fn privilege_word() -> Option<&'static str> {
+	// SAFETY: geteuid takes no arguments, reads the calling process and can't fail.
+	(unsafe { libc::geteuid() } == 0).then_some("Root")
+}
+
+// Elevation is a property of the token, not of the account: an administrator
+// running unelevated has the group but not the rights, and gets false here.
+#[cfg(windows)]
+fn privilege_word() -> Option<&'static str> {
+	use windows_sys::Win32::Foundation::CloseHandle;
+	use windows_sys::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
+	use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+	// SAFETY: the token handle is only used between a successful open and its
+	// close, and GetTokenInformation is given the size of the buffer it fills.
+	unsafe {
+		let mut token = std::ptr::null_mut();
+		if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw mut token) == 0 {
+			return None;
+		}
+		let mut elevation = TOKEN_ELEVATION { TokenIsElevated: 0 };
+		let mut wrote = 0u32;
+		let read = GetTokenInformation(token, TokenElevation, (&raw mut elevation).cast(), size_of::<TOKEN_ELEVATION>() as u32, &raw mut wrote);
+		CloseHandle(token);
+		(read != 0 && elevation.TokenIsElevated != 0).then_some("Administrator")
 	}
 }
 
-// internal, not user-tunable (yet); DIP, see `dip`
+#[cfg(not(any(unix, windows)))]
+fn privilege_word() -> Option<&'static str> {
+	None
+}
+
+/// Which of the cross builds this binary is, since they look the same at a
+/// glance. Shared by the About dialog and `--about` so the 2 can't drift.
+pub fn build_target() -> String {
+	let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+	format!("{} / {} ({profile})", std::env::consts::ARCH, std::env::consts::OS)
+}
+
+// How long this run has been going, for the About box. Marked from main before
+// anything else, so the number is the session's rather than the first reader's.
+static LAUNCHED: OnceLock<std::time::Instant> = OnceLock::new();
+
+pub fn mark_launch() {
+	let _ = LAUNCHED.set(std::time::Instant::now());
+}
+
+/// Zero until the mark is set, which only something that skips main can see.
+/// A second mark doesn't restart the clock.
+pub fn uptime() -> std::time::Duration {
+	LAUNCHED.get().map_or(std::time::Duration::ZERO, std::time::Instant::elapsed)
+}
+
+/// The display scale factor to lay out at, given what the window reports.
+/// `SILK_SCALE` overrides it, which is the only way to see a high-DPI layout on a
+/// 1x display. Chrome written in raw pixels looks fine at 1x and only thins out as
+/// the factor rises, so the defect can't be seen without it. Read once, like
+/// `SILK_MAX_FPS`, since `var_os` takes the env lock and scans environ. Off X11
+/// winit has no setting for this at all.
+pub fn display_scale(reported: f64) -> f32 {
+	static OVERRIDE: OnceLock<Option<f32>> = OnceLock::new();
+	let over = OVERRIDE.get_or_init(|| std::env::var("SILK_SCALE").ok().and_then(|raw| raw.trim().parse::<f32>().ok()).filter(|s| *s > 0.0 && s.is_finite()));
+	over.unwrap_or(reported as f32)
+}
+
+/// Chrome measurements are written in DIP (a CSS pixel, 1/96 inch) and converted
+/// to physical pixels where they are used. The main window's chrome shares a
+/// coordinate space with the terminal grid, so there's no single boundary to
+/// divide at the way `settings_ui.rs` has, and each measurement scales where it's
+/// used, through here or `TextCtx::dip`.
+///
+/// Rounded to whole pixels so a rule, a ring, or a hairline gap stays crisp, and a
+/// measurement meant to be visible never rounds away to nothing, as a 1 DIP gap
+/// under a scale factor below 1 would.
+pub fn dip(v: f32, scale: f32) -> f32 {
+	let px = v * scale;
+	if v > 0.0 { px.round().max(1.0) } else { px.round() }
+}
+
+// internal, not user-tunable; DIP, see `dip`
 pub const PANE_GAP_PX: f32 = 1.0;
 pub const DIVIDER_GRAB_PX: f32 = 5.0; // mouse tolerance for grabbing a pane divider
 pub const FOCUS_RING_PX: f32 = 2.0;
-pub const SETTLE_EPS: f32 = 0.002; // a settle threshold, not a measurement - never scaled
+pub const SETTLE_EPS: f32 = 0.002; // a settle threshold rather than a measurement, so never scaled
+/// Ceiling on `text.dark_on_light`. 1.0 is the whole correction, an sRGB blend
+/// plus `DARK_ON_LIGHT_CONTRAST`; the headroom above it is for taste, and past
+/// this the counters of small letters fill in.
+pub const MAX_DARK_ON_LIGHT: f32 = 2.0;
+/// How far dark-on-light text's partly covered pixels are lifted ahead of that
+/// correction, so light mode's letters look as heavy as dark mode's. Set by
+/// measuring both modes over the same text in every built-in theme.
+pub const DARK_ON_LIGHT_CONTRAST: f32 = 2.2;
+
+/// A light theme's contrast floor over the one the setting names. Dark strokes on
+/// paper read thinner than light ones on black, so they get a little more room.
+pub const LIGHT_MIN_CONTRAST_STRETCH: f32 = 1.1;
+
+/// The contrast floor for text in `fg` over `bg` at the setting `floor`. Light
+/// themes, where the theme's text is darker than its background, are held to a
+/// little more. The side is read off linear luma, cheap enough to ask per cell.
+pub fn min_contrast_for(fg: [u8; 3], bg: [u8; 3], floor: f32) -> f32 {
+	if luma(fg) < luma(bg) { (floor * LIGHT_MIN_CONTRAST_STRETCH).min(1.0) } else { floor }
+}
 
 pub const DIVIDER: [u8; 3] = [0x2c, 0x2c, 0x36];
 
-// text-selection highlight
+/// text-selection highlight
 pub const SELECTION_BG: [u8; 3] = [0x33, 0x44, 0x66];
 
-// drag-and-drop pane reorder: drop-target tint
+/// drag-and-drop pane reorder: drop-target tint
 pub const DROP_TARGET: [u8; 3] = [0x55, 0x80, 0xc8];
 
-// Scrollbar. Neutral mid-gray in every theme rather than a palette color: desktop
-// scrollbars read as chrome, not as part of the terminal's own color scheme. There
-// is no portable way to ask the OS for its actual value (GTK only names a theme),
-// so this is the shade those themes converge on. colors.scrollbar_* overrides.
+// Scrollbar. A neutral mid-gray in every theme rather than a palette color, since
+// desktop scrollbars read as chrome. There's no portable way to ask the OS for
+// its value (GTK only names a theme), so this is the shade those themes converge
+// on. colors.scrollbar_* overrides it.
 pub const SCROLLBAR_THUMB_DEF: [u8; 3] = [0x8a, 0x8a, 0x92];
 pub const SCROLLBAR_TROUGH_DEF: [u8; 3] = [0x2e, 0x2e, 0x36];
+
 // Opacity the bar settles at, and what it rises to while hovered or dragged.
 pub const SCROLLBAR_IDLE_A: f32 = 0.55;
 pub const SCROLLBAR_ACTIVE_A: f32 = 0.95;
-// The trough is a faint backing strip, well under the thumb.
+/// The trough is a faint backing strip, well under the thumb.
 pub const SCROLLBAR_TROUGH_A: f32 = 0.34;
 
 // tab bar
@@ -100,60 +207,86 @@ pub const TAB_BAR_BG: [u8; 3] = [0x2c, 0x2c, 0x31];
 pub const TAB_ACTIVE: [u8; 3] = [0x47, 0x47, 0x4f];
 pub const TAB_INACTIVE: [u8; 3] = [0x36, 0x36, 0x3b];
 
-// Used only when the system monospace size can't be read (see default_font_size).
+// The size when the desktop names none and nothing is set (`fields.rs`).
 const FALLBACK_FONT_SIZE: f32 = 17.0;
 
-// Cross-platform monospace fallback stack (first installed wins): the
-// font_family default, and the resolver's last resort on every platform when
-// neither the configured family nor the OS monospace resolves. Windows always
-// goes through it (no OS monospace setting exists there), so every entry must
-// carry a real bold face - the bare Family::Monospace db query this replaces
-// could land on a family without one, silently ejecting bold runs to an
-// arbitrary (often proportional) fallback.
+/// Cross-platform monospace fallback stack, where the first installed wins. It's
+/// the `font_family` default, and the resolver's last resort when neither the
+/// configured family nor the OS monospace resolves. Windows always goes through
+/// it, since it has no OS monospace setting, so every entry must have a real bold
+/// face. The bare `Family::Monospace` query this replaced could pick a family
+/// without one, and bold runs then fell back to some other font, often a
+/// proportional one.
 pub const DEFAULT_FONT_STACK: &str = "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New";
 
-// Stacks that shipped as the font_family default in an earlier version. Backfill
-// only ever adds a missing key, so a config written back then still carries its
-// stack forever; migration rewrites one to the current default. Matched whole
-// and exactly, so anything the user has actually edited is left alone. Append
-// the outgoing value here whenever DEFAULT_FONT_STACK changes.
-const SUPERSEDED_FONT_STACKS: &[&str] = &[
-	"JetBrains Mono, Fira Code, Cascadia Code, DejaVu Sans Mono, Menlo, Consolas, Liberation Mono, monospace",
-];
+/// The family list while it follows the desktop: the desktop's font, then the
+/// built-in stack, each name once. The desktop's name alone was what turning
+/// the switch off kept (2026100913394946).
+pub fn desktop_font_stack(desktop: &str) -> String {
+	let mut seen = std::collections::HashSet::new();
+	std::iter::once(desktop).chain(DEFAULT_FONT_STACK.split(',')).map(str::trim).filter(|name| !name.is_empty() && seen.insert(name.to_lowercase())).collect::<Vec<_>>().join(", ")
+}
 
-// right-click context menu
+// Stacks that were the font_family default in an earlier version. Backfill
+// only ever adds a missing key, so a config written back then still has its
+// stack forever; migration rewrites one to the current default. Matched whole
+// and exactly, so anything the user has edited is left alone. Append
+// the outgoing value here whenever DEFAULT_FONT_STACK changes.
+const SUPERSEDED_FONT_STACKS: &[&str] = &["JetBrains Mono, Fira Code, Cascadia Code, DejaVu Sans Mono, Menlo, Consolas, Liberation Mono, monospace"];
+
+/// right-click context menu
 pub const MENU_LINK: [u8; 3] = [0x6c, 0x9c, 0xff]; // clickable URL
 
-// Menu bar / dropdown colors: bg + text come from the active theme (overridable
-// via colors.menu_background/menu_foreground); hover, border, and the group
-// separator are derived shades of the bg, so a custom menu color stays coherent
-// in either a dark or a light direction.
-pub fn menu_bg() -> [u8; 3] {
-	settings().menu_bg
-}
+/// Menu bar and dropdown colors. The bg and text come from the active theme, and
+/// `colors.menu_background` and `menu_foreground` override them. Hover, border,
+/// and the group separator are shades of the bg, so a custom menu color stays
+/// coherent whether it's dark or light.
 pub fn menu_fg() -> [u8; 3] {
 	settings().menu_fg
 }
-pub fn menu_hover() -> [u8; 3] {
-	shade(menu_bg(), 22)
+pub(crate) fn menu_hover_of(menu_bg: [u8; 3]) -> [u8; 3] {
+	shade(menu_bg, 22)
 }
-pub fn menu_border() -> [u8; 3] {
-	shade(menu_bg(), 34)
+pub(crate) fn menu_border_of(menu_bg: [u8; 3]) -> [u8; 3] {
+	shade(menu_bg, 34)
 }
-pub fn menu_sep() -> [u8; 3] {
-	shade(menu_bg(), 20)
+pub(crate) fn menu_sep_of(menu_bg: [u8; 3]) -> [u8; 3] {
+	shade(menu_bg, 20)
+}
+// Flyover help in the main window: the tab strip's tip and a menu row's. Both
+// hang off chrome painted in the menu color, since the default menu bg is the
+// inactive tab's own bytes, so a tip filled with it reads as the thing it
+// explains. It lifts by the same step the strip puts between an inactive and an
+// active tab, and warms, since every tab color leans faintly blue. The dialogs'
+// tips stand off their panel the same way, with dialog_btn(). Each derivation is
+// a pure function of the menu color, so a test can check one without the live
+// user config getting in the way.
+const TIP_LIFT: i16 = 34;
+const TIP_WARMTH: i16 = 8;
+const TIP_TEXT_WARMTH: i16 = 5;
+pub(crate) fn tip_bg_of(menu_bg: [u8; 3]) -> [u8; 3] {
+	warm(shade(menu_bg, TIP_LIFT), TIP_WARMTH)
+}
+pub(crate) fn tip_border_of(menu_bg: [u8; 3]) -> [u8; 3] {
+	shade(tip_bg_of(menu_bg), 34)
+}
+pub(crate) fn tip_fg_of(menu_fg: [u8; 3]) -> [u8; 3] {
+	warm(menu_fg, TIP_TEXT_WARMTH)
+}
+// Tilt a color toward the warm end: red up, blue down, green where it was. The
+// lightness barely moves, so a contrast check reads about the same either side.
+fn warm(color: [u8; 3], magnitude: i16) -> [u8; 3] {
+	let step = |channel: u8, delta: i16| (channel as i16 + delta).clamp(0, 255) as u8;
+	[step(color[0], magnitude), color[1], step(color[2], -magnitude)]
 }
 // Nudge a color toward more contrast: lighten a dark base, darken a light one.
 fn shade(color: [u8; 3], magnitude: i16) -> [u8; 3] {
 	let luminance = (color[0] as i16 * 30 + color[1] as i16 * 59 + color[2] as i16 * 11) / 100;
-	let delta = if luminance < 128 {
-		magnitude
-	} else {
-		-magnitude
-	};
+	let delta = if luminance < 128 { magnitude } else { -magnitude };
 	let adjust = |channel: u8| (channel as i16 + delta).clamp(0, 255) as u8;
 	[adjust(color[0]), adjust(color[1]), adjust(color[2])]
 }
+
 // Dropdown/context-menu geometry, DIP (see `dip`). The pop-out dialogs lay out
 // in DIP throughout and use these raw; the main window's menus convert at each
 // use site.
@@ -163,138 +296,586 @@ pub const MENU_SEP_H: f32 = 9.0; // height of a separator row (line + spacing)
 pub const MENU_GUTTER: f32 = 20.0; // left checkmark gutter; item text starts after it
 pub const MENU_SUB_ARROW: f32 = 14.0; // right column a submenu row draws its arrow in
 
-// How a background image fills the window.
+/// A setting that takes one word from a fixed list. `key` is the word the file
+/// uses and the one match per type; `ALL` is the dialog's order, so a dropdown
+/// row's index is a position in it.
+pub trait Choice: Copy + PartialEq + std::fmt::Debug + 'static {
+	const ALL: &'static [Self];
+
+	fn key(self) -> &'static str;
+
+	/// None for a word the type doesn't know. The loader reads that as the
+	/// default, as it always has. Case doesn't count, since these are
+	/// our own words.
+	fn parse(text: &str) -> Option<Self> {
+		Self::ALL.iter().copied().find(|choice| choice.key().eq_ignore_ascii_case(text.trim()))
+	}
+
+	fn index(self) -> usize {
+		Self::ALL.iter().position(|choice| *choice == self).unwrap_or(0)
+	}
+
+	fn from_index(index: usize) -> Option<Self> {
+		Self::ALL.get(index).copied()
+	}
+}
+
+/// How a background image fills the window.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Fit {
 	Zoom,    // cover: fill, preserve aspect, crop overflow
 	Stretch, // fill exactly, ignore aspect
 }
 
-// Resolved, validated settings used throughout the app.
-#[derive(Clone)]
+/// How a wallpaper stored at window size goes to the GPU, for a GPU that takes
+/// block compression (`wallpaper::packing`). Config file only.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Compression {
+	/// BC7 on the High, Max silk and Custom profiles, BC1 on the others.
+	Auto,
+	Bc1,
+	Bc7,
+}
+
+impl Choice for Compression {
+	const ALL: &'static [Self] = &[Self::Auto, Self::Bc1, Self::Bc7];
+
+	fn key(self) -> &'static str {
+		match self {
+			Self::Auto => "auto",
+			Self::Bc1 => "bc1",
+			Self::Bc7 => "bc7",
+		}
+	}
+}
+
+/// The window size and font zoom kept for one monitor, named by
+/// `monitor::MonitorId::key`. The zoom is px on the font size, as
+/// `font_zoom_px` has it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MonitorSize {
+	pub key: String,
+	pub columns: usize,
+	pub rows: usize,
+	pub font_zoom: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KeptWindow {
+	pub columns: usize,
+	pub rows: usize,
+	pub font_zoom: i32,
+}
+
+/// What to open at, or to take on arriving at another monitor, while the size
+/// is automatic: the monitor's own when it has one, else the last the window
+/// was given anywhere. The rule behind `window.columns` and `window.rows`.
+pub fn remembered_window(settings: &Settings, monitor: Option<&str>) -> KeptWindow {
+	remembered_window_at(settings, monitor, settings.remember_per_monitor)
+}
+
+/// The same with "Per monitor" given, for the rule, which may run before the
+/// field is filled.
+pub fn remembered_window_at(settings: &Settings, monitor: Option<&str>, per_monitor: bool) -> KeptWindow {
+	remembered_in(last_window(settings), &settings.monitor_sizes, monitor, per_monitor)
+}
+
+/// The last size the window was given anywhere.
+pub fn last_window(settings: &Settings) -> KeptWindow {
+	KeptWindow { columns: settings.remembered_columns, rows: settings.remembered_rows, font_zoom: settings.remembered_font_zoom }
+}
+
+/// The same from the fields it reads, for a caller that borrows the model
+/// beside them mutably.
+pub fn remembered_in(last: KeptWindow, sizes: &[MonitorSize], monitor: Option<&str>, per_monitor: bool) -> KeptWindow {
+	monitor.filter(|_| per_monitor).and_then(|key| monitor_entry(sizes, key)).map(|at| &sizes[at]).map_or(last, |m| KeptWindow { columns: m.columns, rows: m.rows, font_zoom: m.font_zoom })
+}
+
+/// Note a size or a font zoom the user gave the window. It is the last one
+/// anywhere, and the monitor's own when they are kept per monitor. A monitor
+/// seen for the first time starts from what it would have opened at.
+pub fn remember_window(settings: &mut Settings, monitor: Option<&str>, grid: Option<(usize, usize)>, font_zoom: Option<i32>) {
+	keep_window(settings, monitor, grid, font_zoom);
+	// the size the settings show is read off the remembered one
+	crate::fields::fill(settings, monitor);
+}
+
+fn keep_window(settings: &mut Settings, monitor: Option<&str>, grid: Option<(usize, usize)>, font_zoom: Option<i32>) {
+	if let Some((columns, rows)) = grid {
+		settings.remembered_columns = columns;
+		settings.remembered_rows = rows;
+	}
+	if let Some(zoom) = font_zoom {
+		settings.remembered_font_zoom = zoom;
+	}
+	let Some(key) = monitor.filter(|_| settings.remember_size && settings.remember_per_monitor) else {
+		return;
+	};
+	if grid.is_none() && font_zoom.is_none() {
+		return;
+	}
+	let at = monitor_entry(&settings.monitor_sizes, key).unwrap_or_else(|| {
+		settings.monitor_sizes.push(MonitorSize { key: key.to_string(), columns: settings.remembered_columns, rows: settings.remembered_rows, font_zoom: settings.remembered_font_zoom });
+		settings.monitor_sizes.len() - 1
+	});
+	let entry = &mut settings.monitor_sizes[at];
+	if let Some((columns, rows)) = grid {
+		entry.columns = columns;
+		entry.rows = rows;
+	}
+	if let Some(zoom) = font_zoom {
+		entry.font_zoom = zoom;
+	}
+}
+
+// The entry kept for this monitor: the first in the file that names it,
+// which isn't always under the same key (`monitor::same_monitor`).
+fn monitor_entry(sizes: &[MonitorSize], key: &str) -> Option<usize> {
+	sizes.iter().position(|m| crate::monitor::same_monitor(&m.key, key))
+}
+
+/// The window sizes in the file now, put into the live settings. Every
+/// window is its own process, so another may have kept a size since this one
+/// loaded. Nothing is written.
+pub fn refresh_window_memory() {
+	let Some(path) = state_path() else {
+		return;
+	};
+	let Some(text) = read_settings_text(&path) else {
+		return;
+	};
+	let mut live = (*settings()).clone();
+	window_memory_from(&text, &path, &mut live);
+	crate::fields::fill(&mut live, None);
+	update(live);
+}
+
+/// The state file's values put into `settings`. A missing file leaves the
+/// defaults.
+fn read_state(settings: &mut Settings) {
+	let Some(path) = state_path() else {
+		return;
+	};
+	let Some(text) = read_settings_text(&path) else {
+		return;
+	};
+	window_memory_from(&text, &path, settings);
+	let doc = shcl::Document::parse(&text);
+	settings.rated_hardware = doc.get_string("performance.rated_hardware").unwrap_or_default();
+	settings.tested_profile = doc.get_string("performance.tested_profile").ok().map(|word| crate::profile::Profile::parse(&word)).filter(|p| !matches!(p, crate::profile::Profile::Custom | crate::profile::Profile::Remote));
+}
+
+// What a state value changed to, written to the state file. Another window's
+// changes since this one loaded stay, since only what differs is written. A
+// file that is gone gets every value again, since nothing else stores them.
+fn persist_state(orig: &Settings, edited: &Settings) {
+	let same = edited.remembered_columns == orig.remembered_columns && edited.remembered_rows == orig.remembered_rows && edited.remembered_maximized == orig.remembered_maximized && edited.remembered_font_zoom == orig.remembered_font_zoom && edited.monitor_sizes == orig.monitor_sizes && edited.rated_hardware == orig.rated_hardware && edited.tested_profile == orig.tested_profile;
+	if same {
+		return;
+	}
+	let Some(path) = state_path().filter(|p| may_write(p)) else {
+		return;
+	};
+	let text = read_settings_text(&path);
+	let gone = text.is_none();
+	let mut doc = text.map_or_else(shcl::Document::new, |text| shcl::Document::parse(&text));
+	if gone || edited.remembered_columns != orig.remembered_columns {
+		doc.put_int("window.remembered_columns", edited.remembered_columns as i64);
+	}
+	if gone || edited.remembered_rows != orig.remembered_rows {
+		doc.put_int("window.remembered_rows", edited.remembered_rows as i64);
+	}
+	if gone || edited.remembered_maximized != orig.remembered_maximized {
+		doc.put_bool("window.remembered_maximized", edited.remembered_maximized);
+	}
+	if gone || edited.remembered_font_zoom != orig.remembered_font_zoom {
+		doc.put_int("window.remembered_font_zoom", i64::from(edited.remembered_font_zoom));
+	}
+	let had: &[MonitorSize] = if gone { &[] } else { &orig.monitor_sizes };
+	write_monitor_sizes(&mut doc, had, &edited.monitor_sizes);
+	if (gone && !edited.rated_hardware.is_empty()) || edited.rated_hardware != orig.rated_hardware {
+		doc.put_string("performance.rated_hardware", &edited.rated_hardware);
+	}
+	if (gone && edited.tested_profile.is_some()) || edited.tested_profile != orig.tested_profile {
+		match edited.tested_profile {
+			Some(p) => doc.put_string("performance.tested_profile", p.key()),
+			None => {
+				doc.remove("performance.tested_profile");
+			}
+		}
+	}
+	if let Some(dir) = path.parent() {
+		let _ = std::fs::create_dir_all(dir);
+	}
+	if let Err(e) = write_config_atomic(&path, &doc.to_canonical()) {
+		eprintln!("{APP_NAME}: couldn't save {}: {e:#}", path.display());
+	}
+}
+
+/// Write the machine test's pick, and the hardware it ran on, to the state file.
+#[must_use]
+pub fn keep_tested(profile: crate::profile::Profile, hardware: Option<&str>) -> Kept {
+	let _lock = crate::peers::save_lock();
+	let Some(path) = state_path() else {
+		return Kept::Unwritable("no state file location".to_string());
+	};
+	if !may_write(&path) {
+		return Kept::Written;
+	}
+	let mut doc = read_settings_text(&path).map_or_else(shcl::Document::new, |text| shcl::Document::parse(&text));
+	doc.put_string("performance.tested_profile", profile.key());
+	if let Some(id) = hardware {
+		doc.put_string("performance.rated_hardware", id);
+	}
+	if let Some(dir) = path.parent() {
+		let _ = std::fs::create_dir_all(dir);
+	}
+	match write_config_atomic(&path, &doc.to_canonical()) {
+		Ok(()) => Kept::Written,
+		Err(e) => Kept::Unwritable(format!("couldn't write {e:#}")),
+	}
+}
+
+// The old config kept the machine's state with the settings. A file that still
+// does, with no state file yet, has those lines moved there before the launch
+// migration drops them. A theme's colors set in the same file move to the theme's
+// "*" changes, since that's what they were. A file from before 10-09 is known by
+// a state line, even the old template's commented one, or by having no Format
+// line (`unstamped`, read before the launch stamps it), since shcl 3.0 came
+// first. A file written by hand looks like that too.
+fn move_state_out(file: &mut LaunchFile, unstamped: bool) {
+	let Some(text) = file.body.as_deref().map(settings_text) else {
+		return;
+	};
+	// the launch's migration drops these lines, so they are read before it
+	let respelled = rewritten_by(&text, &[from_shcl2_text]);
+	let raw = shcl::Document::parse(&respelled);
+	let ints = ["window.remembered_columns", "window.remembered_rows", "window.remembered_font_zoom"];
+	let (maximized, monitors, hardware) = ("window.remembered_maximized", "window.monitors", "performance.rated_hardware");
+	let state_paths = || MOVED_TO_STATE.iter();
+	let has_state = state_paths().any(|p| raw.exists(p));
+	let named = |path: &str| state_paths().any(|p| path.strip_prefix(p).is_some_and(|rest| rest.is_empty() || rest.starts_with('.')));
+	let old_file = unstamped || has_state || walk_settings(&respelled).iter().any(|w| matches!(w, WalkLine::Setting { path, .. } if named(path)));
+	if !old_file {
+		return;
+	}
+	// what `loaded_text` gives, from the respelling already done
+	let old = shcl::Document::parse(&rewritten_by(&respelled, &[migrate_config_text]));
+	if let Some(state) = state_path().filter(|p| has_state && !p.exists() && may_write(p)) {
+		let mut doc = shcl::Document::new();
+		for p in ints {
+			if let Ok(v) = raw.get_int(p) {
+				doc.put_int(p, v);
+			}
+		}
+		if let Ok(v) = raw.get_bool(maximized) {
+			doc.put_bool(maximized, v);
+		}
+		// an id that is all digits is still an id
+		if let Ok(v) = raw.get_string(hardware) {
+			doc.put_string(hardware, &v);
+		}
+		for key in raw.children(monitors) {
+			for leaf in ["columns", "rows", "font_zoom"] {
+				let at = format!("{monitors}.{key}.{leaf}");
+				if let Ok(v) = raw.get_int(&at) {
+					doc.put_int(&at, v);
+				}
+			}
+		}
+		// with Choose automatically on, the profile line was the machine's pick
+		let automatic = old.get_bool("performance.automatic").unwrap_or(true);
+		if let (true, Ok(word)) = (automatic, old.get_string("performance.profile")) {
+			let p = crate::profile::Profile::parse(&word);
+			if !matches!(p, crate::profile::Profile::Custom | crate::profile::Profile::Remote) {
+				doc.put_string("performance.tested_profile", p.key());
+			}
+		}
+		if let Some(dir) = state.parent() {
+			let _ = std::fs::create_dir_all(dir);
+		}
+		if let Err(e) = write_config_atomic(&state, &doc.to_canonical()) {
+			eprintln!("{APP_NAME}: couldn't save {}: {e:#}", state.display());
+		}
+	}
+	move_theme_colors(file, &text, &old);
+}
+
+// Colors set over a built-in or saved theme become that theme's "*" changes,
+// so nothing on screen changes. Their lines stay, as Custom's colors.
+fn move_theme_colors(file: &mut LaunchFile, text: &str, old: &shcl::Document) {
+	let path = file.path;
+	let theme = old.get_string("theme").unwrap_or_else(|_| "SilkTerm".into());
+	if theme.eq_ignore_ascii_case(knobs::CUSTOM) || old.exists("kept.changes.theme") {
+		return;
+	}
+	let user = read_user_themes(old);
+	let mode = old.get_string("theme_mode").ok().and_then(|w| crate::theme::Mode::parse(&w)).unwrap_or(crate::theme::Mode::Dark);
+	let pal = crate::theme::resolve_in(&user, &theme, mode, os_dark());
+	let mut changes = Vec::new();
+	for (i, key) in crate::theme::PALETTE_KEYS.iter().enumerate() {
+		let at = format!("colors.{key}");
+		if let Some(rgb) = old.get_string(&at).ok().as_deref().and_then(parse_hex)
+			&& rgb != pal.get(i)
+		{
+			changes.push((at, rgb));
+		}
+	}
+	if changes.is_empty() {
+		return;
+	}
+	let mut doc = shcl::Document::parse(text);
+	let base = format!("kept.changes.{}", crate::fields::THEME);
+	doc.put_string(&format!("{base}.preset"), &theme);
+	for (at, rgb) in &changes {
+		doc.put_string(&format!("{base}.values.{at}"), &format_hex(*rgb));
+	}
+	let _ = doc.set_comment("kept", KEPT_NOTE);
+	if save_refused(&doc) || config_open_elsewhere(path) {
+		return;
+	}
+	if let Err(e) = file.write(saved_text(&doc)) {
+		eprintln!("{APP_NAME}: couldn't update config {}: {e:#}", path.display());
+	}
+}
+
+fn window_memory_from(text: &str, path: &std::path::Path, settings: &mut Settings) {
+	let reader = Reader { doc: &shcl::Document::parse(text), path, said: std::cell::RefCell::new(Vec::new()) };
+	// the plain defaults, since none of these comes from the model
+	let d = Settings::bare();
+	settings.remembered_columns = numi(reader.read_usize("window.remembered_columns"), d.remembered_columns, limits::GRID);
+	settings.remembered_rows = numi(reader.read_usize("window.remembered_rows"), d.remembered_rows, limits::GRID);
+	settings.remembered_font_zoom = zoom(reader.read_i64("window.remembered_font_zoom"), d.remembered_font_zoom);
+	settings.remembered_maximized = reader.read_bool("window.remembered_maximized").unwrap_or(d.remembered_maximized);
+	settings.monitor_sizes = read_monitor_sizes(&reader);
+}
+
+/// Resolved, validated settings used throughout the app. `PartialEq` is for the
+/// template test, which loads the default config twice and compares the whole
+/// result; anything less would miss whichever field a bad `## Default` moved.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
-	pub use_system_font: bool, // true = OS monospace FAMILY, overriding font_family
-	pub use_system_font_size: bool, // true = OS monospace SIZE, overriding font_size
-	pub font_family: Option<String>, // comma-separated fallback stack (first installed wins)
+	pub use_system_font: bool,      // follow the desktop's monospace family (font_family then leads with it)
+	pub use_system_font_size: bool, // and its size
+	pub font_family: String,        // comma-separated fallback stack (first installed wins)
 	pub font_size: f32,
 	pub line_height_scale: f32,
+	pub font_ignores_themes: bool, // a theme pick leaves the 3 above alone
 	pub scrollback: usize,
-	pub scroll_smooth: bool, // master switch: false = every scroll (wheel, output, app slide) lands instantly
-	// The five knobs below are the named segments of the output-scroll speed
-	// curve, in the order one burst traverses them: leave rest, accelerate,
-	// top out, wind down, land. Each hands its end point to the next and has
-	// no other influence on it (scroll.rs holds the model).
+	pub scroll_smooth: bool, // master switch: false = every scroll (wheel, output, app slide) happens instantly
+	/// The next 5 are the named segments of the output-scroll speed curve, in the
+	/// order one burst goes through them: leave rest, accelerate, top out, wind down,
+	/// stop. Each hands its end point to the next and has no other effect on it (the
+	/// model is in scroll.rs).
 	pub scroll_ease_in_ms: f32, // how long the lift from rest to the ramp handoff takes
 	pub scroll_ramp_up_ms: f32, // catch-up speed doubles this often while output stays ahead
 	pub scroll_single_screen_tau_ms: f32, // burst speed ceiling while the burst is still wholly on screen
-	pub scroll_ramp_down_ms: f32, // catch-up speed halves this often winding down to the landing
-	pub scroll_ease_out_ms: f32,  // how long the last STOP_BAND of a line takes to land
+	pub scroll_ramp_down_ms: f32, // catch-up speed halves this often winding down to the stop
+	pub scroll_ease_out_ms: f32, // how long the last STOP_BAND of a line takes to stop
 	pub wheel_lines: f32,
 	pub alt_scroll_lines: f32,
 	pub output_ease_lines: f32,
-	pub smooth_scroll_apps: bool, // ease the line-jumps of full-screen / repaint apps (less/vim/nano; ConPTY TUIs that scroll above a fixed input line)
-	pub scrollbar: bool,          // draw a scrollbar over each pane's right edge
-	pub scrollbar_thickness: f32, // scrollbar width in logical px
-	pub scrollbar_auto_hide: bool, // fade the scrollbar out while idle at the bottom
-	pub margin: f32,              // logical px between content and pane edge
-	pub opacity: f32,             // background opacity 0..1 (1 = fully opaque)
-	pub transparent_background: bool, // X11: per-pixel bg transparency (text stays opaque) via a GL surface
-	pub transparent_background_blur: bool, // X11: ask a KWin/picom compositor to blur the desktop behind the window
-	pub wallpaper_enabled: bool,           // master switch: false = no wallpaper at all
-	pub wallpaper: Option<PathBuf>,        // resolved path, or None
-	pub wallpaper_raw: String, // the value as configured ("" = auto-detect); what the dialog shows
-	pub wallpaper_fallback_builtin: bool, // no image/folder configured: show the built-in one
-	pub wallpaper_rotate_enabled: bool, // master switch for folder rotation
-	pub wallpaper_folder: Option<PathBuf>, // rotate the wallpaper through this folder's images (overrides wallpaper)
-	pub wallpaper_folder_auto: bool,       // the folder above was found by convention, not configured
-	pub wallpaper_rotate_random: bool,     // rotate randomly instead of in filename order
-	pub wallpaper_rotate_interval_s: f32,  // seconds between rotations (0 = pick one at startup only)
-	pub wallpaper_opacity: f32,            // image visibility 0..1
-	pub wallpaper_default_fit: Fit,        // used unless the image's own tags say otherwise
-	pub wallpaper_honor_xmp: bool,         // let a wallpaper's own Fit/Anchor tags win
-	pub wallpaper_blur: f32,               // Gaussian blur sigma applied to the image (0 = none)
-	pub wallpaper_contrast_mask: bool, // flatten the image's contrast so it stops competing with text
-	pub wallpaper_contrast_mask_size: f32, // flatten scale 0..1 (1 = half the longest pixel dim)
-	pub wallpaper_contrast_mask_strength: f32, // how far toward the local mean 0..1
-	pub wallpaper_contrast_mask_auto: f32, // blend manual knobs with image-derived auto 0..1 (1 = full auto)
-	pub text_scrim: bool, // bg-colored blurry halo behind glyphs (readability over busy/transparent bg)
-	pub text_scrim_radius: f32, // scrim blur sigma in px
-	pub text_scrim_softness: f32, // 0 = hard/solid scrim, 1 = soft/faint (maps to the intensity boost)
-	pub text_scrim_strength: f32, // 0..100% -> 0..5 doublings of the halo alpha (0 = as built)
-	pub text_outline: f32, // antialiased outline around glyphs, px (0 = none; scrim color rules)
-	pub text_scrim_ramp: String, // halo falloff curve: "sigmoid" | "half_normal" | "linear" | "log" | "exp"
-	pub text_scrim_function: String, // halo build: "dilate" | "sdf" | "dt" | "gaussian" (legacy blur)
-	pub text_scrim_regular_weight: bool, // blur bold text at regular weight (uniform halo; crisp text keeps its weight)
-	pub color_emoji: bool, // paint COLRv1 color glyphs (emoji) instead of falling back to a monochrome face
-	pub embolden_inverse: bool, // render reverse-video (dark-on-light) text bold so it reads as strongly as normal text (the scrim only boosts light-on-dark)
-	pub cursor_scrim: bool,     // cursor joins the text scrim halo (default off)
-	pub cursor_outline: bool,   // cursor joins the text outline (default on)
-	pub cursor_size_height: f32, // cursor height, 1..100% of the cell (from the bottom)
-	pub cursor_size_width: f32, // cursor width, 1..100% of the cell (from the left)
-	pub cursor_animation: String, // "none" | "phase" | "pulse_vertical" | "pulse_horizontal" | "pulse_both"
-	pub cursor_animation_resume_s: f32, // idle seconds after typing before the animation resumes (output does not wait this out)
+	pub smooth_scroll_apps: bool,                    // ease the line-jumps of full-screen / repaint apps (less/vim/nano; ConPTY TUIs that scroll above a fixed input line)
+	pub scrollbar: bool,                             // draw a scrollbar over each pane's right edge
+	pub scrollbar_thickness: f32,                    // scrollbar width in logical px
+	pub scrollbar_auto_hide: bool,                   // fade the scrollbar out while idle at the bottom
+	pub minimap: bool,                               // miniature of the whole buffer in its own column
+	pub minimap_width: f32,                          // the column's width in logical px
+	pub minimap_tui_whitelist: String,               // programs that keep the column on their own screen
+	pub margin: f32,                                 // logical px between content and pane edge
+	pub opacity: f32,                                // background opacity 0..1 (1 = fully opaque)
+	pub transparent_background: bool,                // per-pixel bg transparency (text stays opaque): GL surface on X11, composited DX12 on Windows
+	pub transparent_background_blur: bool,           // X11: ask a KWin/picom compositor to blur the desktop behind the window
+	pub wallpaper_enabled: bool,                     // master switch: false = no wallpaper at all
+	pub wallpaper: Option<PathBuf>,                  // resolved path, or None
+	pub wallpaper_raw: String,                       // the image as shown in Settings; its default is the one found by convention, else the built-in
+	pub wallpaper_fallback_builtin: bool,            // no image/folder configured: show the built-in one
+	pub wallpaper_rotate_enabled: bool,              // master switch for folder rotation
+	pub wallpaper_folder: Option<PathBuf>,           // rotate the wallpaper through this folder's images (overrides wallpaper)
+	pub wallpaper_folder_raw: String,                // the folder as shown in Settings; its default is the usual place
+	pub wallpaper_folder_auto: bool,                 // the folder above was found by convention, not configured
+	pub wallpaper_rotate_random: bool,               // rotate randomly instead of in filename order
+	pub wallpaper_rotate_interval_s: f32,            // seconds between rotations (0 = pick one at startup only)
+	pub wallpaper_opacity: f32,                      // image visibility 0..1
+	pub wallpaper_even: f32,                         // hold every picture to the same visibility whatever its own brightness, 0..1
+	pub wallpaper_default_fit: Fit,                  // used unless the image's own tags say otherwise
+	pub wallpaper_honor_xmp: bool,                   // let a wallpaper's own Fit/Anchor tags win
+	pub wallpaper_honor_xmp_look: bool,              // and its Opacity/Blur tags, which replace the 2 settings below
+	pub wallpaper_blur: f32,                         // Gaussian blur sigma applied to the image (0 = none)
+	pub wallpaper_contrast_mask: bool,               // flatten the image's contrast so it stops competing with text
+	pub wallpaper_contrast_mask_size: f32,           // flatten scale 0..1 (1 = half the longest pixel dim)
+	pub wallpaper_contrast_mask_strength: f32,       // how far toward the local mean 0..1
+	pub wallpaper_contrast_mask_auto: f32,           // blend manual knobs with image-derived auto 0..1 (1 = full auto)
+	pub wallpaper_compression: Compression,          // BC1 or BC7 in graphics memory; file only
+	pub text_scrim: bool,                            // bg-colored blurry halo behind glyphs (readability over busy/transparent bg)
+	pub text_scrim_radius: f32,                      // scrim blur sigma in px
+	pub text_scrim_softness: f32,                    // 0 = hard/solid scrim, 1 = soft/faint (maps to the intensity boost)
+	pub text_scrim_strength: f32,                    // 0..100% -> 0..5 doublings of the halo alpha (0 = as built)
+	pub text_outline: f32,                           // antialiased outline around glyphs, px (0 = none; scrim color rules)
+	pub text_dark_on_light: f32,                     // how much of the correction dark-on-light text gets, 0..2 (0 = off, 1 = as heavy as dark mode)
+	pub text_scrim_ramp: crate::scrim::Ramp,         // halo falloff curve
+	pub text_scrim_function: crate::scrim::Function, // how the halo is built from the glyphs
+	pub text_scrim_regular_weight: bool,             // blur bold text at regular weight (uniform halo; crisp text keeps its weight)
+	pub text_min_contrast: f32,                      // smallest Oklab lightness gap text may have from its own background, 0..1 (0 = leave every color alone)
+	pub color_emoji: bool,                           // paint COLRv1 color glyphs (emoji) instead of falling back to a monochrome face
+	pub embolden_inverse: bool,                      // render reverse-video (dark-on-light) text bold so it reads as strongly as normal text (the scrim only boosts light-on-dark)
+	pub cursor_scrim: bool,                          // cursor joins the text scrim halo (default off)
+	pub cursor_outline: bool,                        // cursor joins the text outline (default on)
+	pub cursor_size_height: f32,                     // cursor height, 1..100% of the cell (from the bottom)
+	pub cursor_size_width: f32,                      // cursor width, 1..100% of the cell (from the left)
+	pub cursor_blink: bool,                          // the cursor animates at all; off stops it
+	pub cursor_animation: crate::pane::CursorAnimation,
+	pub cursor_animation_resume_s: f32,    // idle seconds after typing before the animation resumes (output doesn't wait this out)
 	pub cursor_animation_idle_stop_s: f32, // idle seconds until the animation stops (parked at full); 0 = never
-	pub cursor_blink_rate_ms: f32,         // one animation cycle (ms)
-	pub columns: usize,                    // initial window grid size (used when !remember_size)
+	pub cursor_blink_rate_s: f32,          // one whole animation cycle, peak to peak (s)
+	pub remember_size: bool,               // open at the last size; columns and rows are then that size
+	pub columns: usize,                    // initial window grid size
 	pub rows: usize,
-	pub remember_size: bool, // launch at the last window size instead of columns/rows
-	pub hide_single_tab: bool, // hide the tab bar while only one tab is open
-	pub tab_min_pct: f32,    // narrowest a tab may be, as a % of the window's width
-	pub tab_max_pct: f32,    // widest a tab may be, as a % of the window's width
-	pub remembered_columns: usize, // last actual window size (not shown in the dialog)
+	pub remember_per_monitor: bool,     // keep a last size for each monitor (monitor_sizes)
+	pub remember_maximized: bool,       // launch maximized if the last window closed that way
+	pub resize_on_zoom: bool,           // a font zoom resizes the window to keep its grid
+	pub hide_single_tab: bool,          // hide the tab bar while only one tab is open
+	pub menu_bar: bool,                 // a new window shows the menu bar (never on macOS)
+	pub new_tab_beside: bool,           // a new tab opens right of the active one, else at the end
+	pub tab_text: String,               // what a tab says, as a template (tabtitle, template)
+	pub title_shows_tab: bool,          // let the window title fall back to what the tab says
+	pub idle_release: bool,             // let the GPU device go after a long idle (app/idle.rs, release_gpu)
+	pub idle_release_hidden_min: usize, // ...after this long minimized or covered
+	pub idle_release_min: usize,        // ...or this long merely unfocused and quiet
+	pub software_rendering: bool,       // draw on the CPU even with a graphics card (gfx::wanted)
+	pub tab_regular_pct: f32,           // a tab's ordinary width, as a % of the window's width
+	pub tab_max_pct: f32,               // widest a tab may be, as a % of the window's width
+	pub tab_tip_max_s: f32,             // longest a tab's tip stays up; 0 = until the pointer leaves
+	pub remembered_columns: usize,      // last actual window size (not shown in the dialog)
 	pub remembered_rows: usize,
-	pub word_separators: String, // delimiters for double-click word selection
-	pub selection_pairs: String, // matched pairs a double-click selects inside of
-	pub command_line: String,    // default CLI layout/options when launched with no args
-	pub startup_directory: String, // where a shell starts when nothing else said (see startup_dir)
-	pub copy_on_select: bool,    // panes start with copy-on-select enabled
-	pub shell_integration: bool, // put the directory-reporting block in PowerShell profiles
-	pub hyperlinks: bool,        // underline URLs in output on hover; Ctrl+click opens them
-	pub hyperlink_open_command: String, // opener for a clicked link (empty = the desktop's own)
+	pub remembered_maximized: bool,             // was the window last left maximized
+	pub remembered_font_zoom: i32,              // last font zoom, px on the font size
+	pub monitor_sizes: Vec<MonitorSize>,        // window.monitors, in file order; file only
+	pub word_separators: String,                // delimiters for double-click word selection
+	pub selection_pairs: String,                // matched pairs a double-click selects inside of
+	pub command_line: String,                   // default CLI layout/options when launched with no args
+	pub startup_directory: String,              // where a shell starts when nothing else said (see startup_dir)
+	pub copy_on_select: bool,                   // panes start with copy-on-select enabled
+	pub shell_integration: bool,                // put the directory-reporting block in PowerShell profiles
+	pub bash_prompt: bool,                      // give bash panes the x9ps1-git prompt (see integration.rs)
+	pub term: String,                           // TERM for new panes; empty is xterm-256color
+	pub tmux_new_session: bool,                 // a new tab, split or plain launch starts in a tmux session of its own (tmux.rs)
+	pub tmux_session_name: String,              // that session's name, as a template
+	pub tmux_on_close: crate::tmux::OnClose,    // what closing such a pane does to its session
+	pub hyperlinks: bool,                       // underline URLs in output on hover; Ctrl+click opens them
+	pub hyperlink_open_command: String,         // opener for a clicked link; its default is the desktop's own
+	pub option_as_alt: crate::input::OptionAlt, // which Mac Option key sends ESC and the plain key
 	pub bg: [u8; 3],
 	pub fg: [u8; 3],
 	pub cursor: [u8; 3],
-	// Two attention colors (see theme.rs): `highlight` marks several things at
-	// once, `focus` marks only what the keyboard is on.
+	/// Take `fg` and `cursor` from the wallpaper instead (autotheme.rs).
+	pub colors_from_wallpaper: bool,
+
+	// There are 2 attention colors (see theme.rs): `highlight` marks several
+	// things at once, `focus` marks only what the keyboard is on.
 	pub highlight: [u8; 3],
 	pub focus: [u8; 3],
-	// chrome colors (menu bar / dropdowns, and pop-out dialogs), from the theme
-	// palette; colors.menu_*/colors.dialog_* keys override
+
+	// chrome colors (menu bar / dropdowns, and pop-out dialogs)
 	pub menu_bg: [u8; 3],
 	pub menu_fg: [u8; 3],
 	pub dialog_bg: [u8; 3],
 	pub dialog_fg: [u8; 3],
-	pub gutter: [u8; 3], // chrome areas holding no control (the dialog's tab strip)
-	// scrollbar, neutral in every theme (see SCROLLBAR_THUMB_DEF); the
-	// colors.scrollbar_* keys override
+	pub gutter: [u8; 3], // chrome areas without a control (the dialog's tab strip)
+
+	// scrollbar; the same neutral in every theme (`SCROLLBAR_THUMB_DEF`)
 	pub scrollbar_thumb: [u8; 3],
 	pub scrollbar_trough: [u8; 3],
+	/// The palette of the theme picked, in the mode in force, for the 16 ANSI
+	/// colors and what reads the palette whole. Never in the file; `retheme`
+	/// is its one writer.
+	pub theme_palette: crate::theme::Palette,
 	pub ansi: [[u8; 3]; 16], // 16-color ANSI palette, resolved from the active theme
 	pub theme: String,       // active theme name (see theme.rs)
-	pub theme_mode: String,  // "dark" | "light" | "system"
-	// Themes saved from the Settings dialog, whole, in file order. They resolve
-	// ahead of the built-ins, so one may carry a built-in's name.
+	pub theme_mode: crate::theme::Mode,
+	/// The performance profile (profile.rs): what the look may cost. The model
+	/// below decides which one is in force; `profile::current` returns it.
+	pub performance_automatic: bool, // pick the profile for this machine, and step it down when the display can't keep up
+	pub performance_profile: crate::profile::Profile,    // the pick, the machine's while automatic
+	pub performance_check_hardware: bool,                // re-rate when the machine underneath changes
+	pub performance_check_next_run: bool,                // re-rate once at the next launch, then clear
+	pub performance_detect_remote: bool,                 // a remote screen at launch puts the Remote profile on
+	pub rated_hardware: String,                          // hardware id the profile was last picked for ("" = never)
+	pub tested_profile: Option<crate::profile::Profile>, // the machine test's pick
+	/// Where the display watch stepped the profile down to, for this session only.
+	/// Never written: one stall used to become every later launch's profile, with
+	/// no way back while automatic was on. Cleared by a hand pick or a measured one.
+	pub stepped_profile: Option<crate::profile::Profile>,
+
+	/// What the wallpaper on screen is worth to the derivation. Never written:
+	/// the summary comes from whatever picture arrived, and a rotation replaces it.
+	pub wallpaper_summary: Option<crate::autotheme::Summary>,
+	/// The text and cursor colors worked out from it, by `fields::fill`.
+	pub wallpaper_derived: Option<crate::autotheme::Derived>,
+	/// What File or folder gives with nothing set: the picture found by
+	/// convention, else the built-in one. Looked up at load, since it stats paths.
+	pub found_picture: String,
+	/// Every value the Settings dialog edits as stored, with what a change does
+	/// to the rest (fields.rs). The setting fields above are filled from it.
+	pub model: knobs::Model,
+	/// Themes saved from the Settings dialog, whole, in file order. They resolve
+	/// ahead of the built-ins, so one may have a built-in's name.
 	pub user_themes: Vec<crate::theme::UserTheme>,
-	// The shells the Tabs menu offers, in file order. Written by the background
-	// scan (shells.rs) and by hand; see `write_shells` for what a scan may touch.
+	/// The shells the Tabs menu offers, in file order. Written by the background
+	/// scan (shells.rs) and by hand; see `write_shells` for what a scan may touch.
 	pub shells: Vec<crate::shells::ShellEntry>,
+	/// The hotkeys in force: the defaults with the file's `keys.*` values put in.
+	/// The key handler and every menu read these, so a rebinding shows up in all.
+	pub keys: crate::keys::Bindings,
+	#[cfg(test)]
+	pub clone_probe: CloneProbe,
+}
+
+// Counts whole copies of `Settings` made on this thread, so a test can hold a
+// hot path to a number. Test builds only.
+#[cfg(test)]
+thread_local! {
+	static SETTINGS_CLONES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+#[derive(Debug, Default)]
+pub struct CloneProbe;
+#[cfg(test)]
+impl Clone for CloneProbe {
+	fn clone(&self) -> Self {
+		SETTINGS_CLONES.with(|n| n.set(n.get() + 1));
+		CloneProbe
+	}
+}
+#[cfg(test)]
+impl PartialEq for CloneProbe {
+	fn eq(&self, _: &Self) -> bool {
+		true
+	}
+}
+#[cfg(test)]
+pub fn settings_clones() -> usize {
+	SETTINGS_CLONES.with(std::cell::Cell::get)
 }
 
 impl Settings {
-	// The rotation folder, or None when either master switch is off. Both callers
-	// (arming rotation, and the built-in fallback's "nothing is configured" test)
-	// go through this so they cannot disagree - and it is derived rather than
-	// folded into `wallpaper_folder` at load, because the Settings dialog edits a
-	// Settings struct directly and never re-runs `resolve`.
-	pub fn rotation_folder(&self) -> Option<&PathBuf> {
-		(self.wallpaper_enabled && self.wallpaper_rotate_enabled)
-			.then_some(self.wallpaper_folder.as_ref())
-			.flatten()
+	/// The contrast floor text is held to, `text_min_contrast` in a dark theme and
+	/// a little more in a light one (`min_contrast_for`).
+	pub fn min_contrast(&self) -> f32 {
+		min_contrast_for(self.fg, self.bg, self.text_min_contrast)
 	}
 
-	// The app-slide gate, derived for the same reason: the smooth-scroll master
-	// covers every scroll animation, so every smooth_scroll_apps consumer reads
-	// this instead of the raw flag and cannot miss the master.
+	/// The rotation folder, or None when either master switch is off. Arming rotation
+	/// and the built-in fallback both go through this so they can't disagree. It's
+	/// derived rather than folded into `wallpaper_folder` at load, since the Settings
+	/// dialog edits a Settings struct directly and never runs `resolve` again.
+	pub fn rotation_folder(&self) -> Option<&PathBuf> {
+		(self.wallpaper_enabled && self.wallpaper_rotate_enabled).then_some(self.wallpaper_folder.as_ref()).flatten()
+	}
+
+	/// The app-slide gate, derived for the same reason: the smooth-scroll master
+	/// controls every scroll animation, so every `smooth_scroll_apps` consumer reads
+	/// this instead of the raw flag and can't miss the master.
 	pub fn smooth_apps(&self) -> bool {
 		self.scroll_smooth && self.smooth_scroll_apps
 	}
@@ -302,19 +883,31 @@ impl Settings {
 
 impl Default for Settings {
 	fn default() -> Self {
+		let mut s = Self { model: crate::fields::model(), ..Self::bare() };
+		crate::fields::fill(&mut s, None);
+		s
+	}
+}
+
+impl Settings {
+	/// The default values with no model behind them, which the model's spec
+	/// takes its defaults from.
+	pub(crate) fn bare() -> Self {
+		let pal = crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true);
 		Self {
 			use_system_font: true,
 			use_system_font_size: true,
-			font_family: Some(DEFAULT_FONT_STACK.to_string()),
+			font_family: DEFAULT_FONT_STACK.to_string(),
 			font_size: FALLBACK_FONT_SIZE,
 			line_height_scale: 1.22,
+			font_ignores_themes: true,
 			scrollback: 10_000,
 			scroll_smooth: true,
-			scroll_ease_in_ms: 82.0, // ~ "Ease-in" 50 (motion builds over the first ~tenth of a second)
-			scroll_ramp_up_ms: 96.0, // ~ "Ramp-up" 75 (catch-up speed doubles ~10x a second)
+			scroll_ease_in_ms: 82.0,           // ~ "Ease-in" 50 (motion builds over the first ~tenth of a second)
+			scroll_ramp_up_ms: 96.0,           // ~ "Ramp-up" 75 (catch-up speed doubles ~10x a second)
 			scroll_single_screen_tau_ms: 32.0, // ~ "Single-screen speed" 75 (on-screen burst ceiling: ~31 lines/s)
-			scroll_ramp_down_ms: 144.0, // ~ "Ramp-down" 75 (catch-up winds down by halving ~7x a second)
-			scroll_ease_out_ms: 212.0,  // ~ "Ease-out" 40 (the tail lands in ~a fifth of a second)
+			scroll_ramp_down_ms: 144.0,        // ~ "Ramp-down" 75 (catch-up winds down by halving ~7x a second)
+			scroll_ease_out_ms: 212.0,         // ~ "Ease-out" 40 (the tail finishes in ~a fifth of a second)
 			wheel_lines: 3.0,
 			alt_scroll_lines: 3.0,
 			output_ease_lines: 1.0,
@@ -322,6 +915,9 @@ impl Default for Settings {
 			scrollbar: true,
 			scrollbar_thickness: 16.0,
 			scrollbar_auto_hide: true,
+			minimap: true,
+			minimap_width: 100.0,
+			minimap_tui_whitelist: String::new(),
 			margin: 8.0,
 			opacity: 0.95,
 			transparent_background: false,
@@ -332,207 +928,353 @@ impl Default for Settings {
 			wallpaper_fallback_builtin: true,
 			wallpaper_rotate_enabled: true,
 			wallpaper_folder: None,
+			// the model's own default, so a default never looks on disk for a folder
+			wallpaper_folder_raw: WALLPAPER_DIR_TOKEN.to_string(),
 			wallpaper_folder_auto: false,
 			wallpaper_rotate_random: true,
 			wallpaper_rotate_interval_s: 0.0,
 			wallpaper_opacity: 0.10, // image visibility relative to bg color
+			wallpaper_even: 1.0,
 			wallpaper_default_fit: Fit::Stretch,
 			wallpaper_honor_xmp: true,
+			wallpaper_honor_xmp_look: true,
 			wallpaper_blur: 10.0,
 			wallpaper_contrast_mask: true,
 			wallpaper_contrast_mask_size: 0.5,
 			wallpaper_contrast_mask_strength: 0.5,
 			wallpaper_contrast_mask_auto: 0.5,
+			wallpaper_compression: Compression::Auto,
 			text_scrim: true,
-			text_scrim_radius: 5.0,
+			text_scrim_radius: 8.0,
 			text_scrim_softness: 0.5,
-			text_scrim_strength: 15.0,
+			text_scrim_strength: 20.0,
 			text_outline: 1.0,
-			text_scrim_ramp: "exp".to_string(),
-			text_scrim_function: "sdf".to_string(),
+			text_dark_on_light: 1.0,
+			text_scrim_ramp: crate::scrim::Ramp::Exp,
+			text_scrim_function: crate::scrim::Function::Sdf,
 			text_scrim_regular_weight: true,
+			text_min_contrast: 0.45,
 			color_emoji: true,
 			embolden_inverse: true,
 			cursor_scrim: false,
 			cursor_outline: true,
 			cursor_size_height: 100.0, // full height
 			cursor_size_width: 100.0,  // full width - a block
-			cursor_animation: "pulse_vertical".to_string(),
+			cursor_blink: true,
+			cursor_animation: crate::pane::CursorAnimation::PulseVertical,
 			cursor_animation_resume_s: 1.0,
 			cursor_animation_idle_stop_s: 60.0,
-			cursor_blink_rate_ms: 500.0,
+			cursor_blink_rate_s: 1.0,
+			remember_size: true,
 			columns: 160,
 			rows: 48,
-			remember_size: true,
+			remember_per_monitor: true,
+			remember_maximized: false,
+			resize_on_zoom: false,
 			hide_single_tab: false,
-			tab_min_pct: 8.0,
-			tab_max_pct: 26.0,
+			menu_bar: true,
+			new_tab_beside: true,
+			tab_text: crate::tabtitle::DEFAULT_TAB_TEXT.to_string(),
+			title_shows_tab: true,
+			idle_release: true,
+			idle_release_hidden_min: 1,
+			idle_release_min: 240,
+			software_rendering: false,
+			tab_regular_pct: 10.0,
+			tab_max_pct: 100.0,
+			tab_tip_max_s: 30.0,
 			remembered_columns: 160,
 			remembered_rows: 48,
+			remembered_maximized: false,
+			remembered_font_zoom: 0,
+			monitor_sizes: Vec::new(),
 			// alacritty's default delimiters minus ':', so a Windows drive path
-			// (C:\...) stays whole on a double-click - and namespaced idents
-			// (std::vec) and URLs (http://) with it. /.-_~ are already word chars.
-			word_separators: alacritty_terminal::term::SEMANTIC_ESCAPE_CHARS
-				.chars()
-				.filter(|&c| c != ':')
-				.collect(),
+			// (C:\...) stays whole on a double-click, and namespaced idents (std::vec) and
+			// URLs (http://) with it. /.-_~ are already word chars.
+			word_separators: alacritty_terminal::term::SEMANTIC_ESCAPE_CHARS.chars().filter(|&c| c != ':').collect(),
 			selection_pairs: DEFAULT_SELECTION_PAIRS.to_owned(),
 			command_line: String::new(),
 			startup_directory: HOME_TOKEN.to_string(),
-			copy_on_select: false,
+			copy_on_select: true,
 			shell_integration: true,
+			bash_prompt: false,
+			term: String::new(),
+			tmux_new_session: false,
+			tmux_session_name: crate::tmux::DEFAULT_SESSION_NAME.to_string(),
+			tmux_on_close: crate::tmux::OnClose::Prompt,
 			hyperlinks: true,
 			hyperlink_open_command: String::new(),
-			bg: [0x00, 0x00, 0x00],
-			fg: [0x88, 0xee, 0xcc],
-			cursor: [0x96, 0x49, 0xaf],
-			highlight: [0xc8, 0xa0, 0x5a],
-			focus: [0x40, 0x86, 0xff],
-			menu_bg: crate::theme::MENU_BG_DEF,
-			menu_fg: crate::theme::MENU_FG_DEF,
-			dialog_bg: [0x20, 0x20, 0x2a],
-			dialog_fg: [0xe2, 0xe2, 0xea],
-			gutter: [0x16, 0x16, 0x1e],
+			option_as_alt: crate::input::OptionAlt::Off,
+			bg: pal.bg,
+			fg: pal.fg,
+			cursor: pal.cursor,
+			colors_from_wallpaper: true,
+			highlight: pal.highlight,
+			focus: pal.focus,
+			menu_bg: pal.menu_bg,
+			menu_fg: pal.menu_fg,
+			dialog_bg: pal.dialog_bg,
+			dialog_fg: pal.dialog_fg,
+			gutter: pal.gutter,
 			scrollbar_thumb: SCROLLBAR_THUMB_DEF,
 			scrollbar_trough: SCROLLBAR_TROUGH_DEF,
-			ansi: crate::theme::resolve("SilkTerm", "dark", true).ansi,
+			theme_palette: pal,
+			ansi: pal.ansi,
 			theme: "SilkTerm".to_string(),
-			theme_mode: "dark".to_string(),
+			theme_mode: crate::theme::Mode::Dark,
+			performance_automatic: true,
+			performance_profile: crate::profile::Profile::Max,
+			performance_check_hardware: true,
+			performance_check_next_run: false,
+			performance_detect_remote: true,
+			rated_hardware: String::new(),
+			tested_profile: None,
+			stepped_profile: None,
+			wallpaper_summary: None,
+			wallpaper_derived: None,
+			found_picture: String::new(),
+			model: knobs::Model::new(knobs::Spec::default()),
 			user_themes: Vec::new(),
 			shells: Vec::new(),
+			keys: crate::keys::Bindings::defaults(cfg!(target_os = "macos")),
+			#[cfg(test)]
+			clone_probe: CloneProbe,
 		}
 	}
 }
+
+/// What File or folder shows when there is no picture to find.
+pub const BUILT_IN_PICTURE: &str = "(built-in picture)";
 
 fn store() -> &'static RwLock<Arc<Settings>> {
 	static S: OnceLock<RwLock<Arc<Settings>>> = OnceLock::new();
 	S.get_or_init(|| RwLock::new(Arc::new(load())))
 }
 
-// Current settings snapshot. Cheap to call (an Arc clone); the settings dialog
-// can swap the whole thing at runtime via `update`. Callers in hot paths should
-// snapshot once per frame rather than per cell.
 // Live OS dark/light bit (winit `Window::theme()`), used only when theme_mode = "system".
 static OS_DARK: AtomicBool = AtomicBool::new(true);
 
-// The effective dark/light for the active mode (chrome + dialogs follow this).
+/// The effective dark/light for the active mode (chrome + dialogs follow this).
 pub fn is_dark() -> bool {
-	match settings().theme_mode.as_str() {
-		"light" => false,
-		"system" => OS_DARK.load(Ordering::Relaxed),
-		_ => true,
+	settings().theme_mode.is_dark(OS_DARK.load(Ordering::Relaxed))
+}
+
+/// The OS bit on its own, for the callers that work from a settings copy rather
+/// than from the live store.
+pub fn os_dark() -> bool {
+	OS_DARK.load(Ordering::Relaxed)
+}
+
+/// The theme's own colors for `settings`' theme and mode, where System reads
+/// the desktop's dark bit.
+pub fn theme_palette(settings: &Settings) -> crate::theme::Palette {
+	crate::theme::resolve_in(&settings.user_themes, &settings.theme, settings.theme_mode, os_dark())
+}
+
+/// Bring `theme_palette` and the ANSI colors in line with the theme, the mode
+/// and the desktop. Custom has no palette of its own, so it takes the first
+/// built-in's ANSI colors.
+pub fn retheme(settings: &mut Settings) {
+	settings.theme_palette = theme_palette(settings);
+	settings.ansi = settings.theme_palette.ansi;
+}
+
+/// The picture and the rotation folder that the image and folder settings come
+/// to, found the way the loader finds them. Only when either setting changed,
+/// since a rotation sets the picture on screen and a fill must not undo it.
+pub fn rewallpaper(settings: &mut Settings, was: (&str, &str)) {
+	if was != (settings.wallpaper_raw.as_str(), settings.wallpaper_folder_raw.as_str()) {
+		find_wallpaper(settings);
 	}
 }
 
-// On an OS dark/light change (System mode only): recompute the theme palette and
-// swap it in (no file write). Returns true if anything changed (caller redraws).
-// NOTE: re-derives from the theme, so a one-off colors override is dropped on an
-// OS flip; overrides re-apply on the next full config load.
+// The same with nothing to compare against, as a load needs.
+fn find_wallpaper(settings: &mut Settings) {
+	// A pinned wallpaper is a deliberate choice, so it suppresses the
+	// auto-detected rotation folder; without one, a stocked wallpapers/ dir
+	// rotates by itself.
+	let pinned = picture_pinned(settings);
+	(settings.wallpaper_folder, settings.wallpaper_folder_auto) = rotation_folder_for(&settings.wallpaper_folder_raw, pinned);
+	let rotating = settings.wallpaper_enabled && settings.wallpaper_rotate_enabled && settings.wallpaper_folder.is_some();
+	settings.wallpaper = if pinned {
+		resolve_wallpaper(Some(&settings.wallpaper_raw))
+	} else if rotating {
+		// the first rotation pick goes on screen
+		None
+	} else {
+		Some(PathBuf::from(&settings.found_picture)).filter(|_| !settings.found_picture.is_empty() && settings.found_picture != BUILT_IN_PICTURE)
+	};
+}
+
+/// File or folder names a picture, by hand or on the command line.
+pub fn picture_pinned(settings: &Settings) -> bool {
+	let id = crate::ui_spec::Key::BgImage.name();
+	settings.model.values.own.contains_key(id) || settings.model.values.held.contains_key(id)
+}
+
+/// On an OS dark/light change (System mode only): recompute the theme palette and
+/// swap it in (no file write). Returns true if anything changed (caller redraws).
 pub fn reapply_for_os(dark: bool) -> bool {
 	let prev = OS_DARK.swap(dark, Ordering::Relaxed);
 	let current = settings();
-	if prev == dark || current.theme_mode != "system" {
+	if prev == dark || current.theme_mode != crate::theme::Mode::System {
 		return false;
 	}
-	let pal = crate::theme::resolve_in(
-		&current.user_themes,
-		&current.theme,
-		&current.theme_mode,
-		dark,
-	);
+	// a theme's colors follow the mode through its preset, and a color changed
+	// by hand stays put
 	let mut new = (*current).clone();
-	new.bg = pal.bg;
-	new.fg = pal.fg;
-	new.cursor = pal.cursor;
-	new.highlight = pal.highlight;
-	new.focus = pal.focus;
-	new.menu_bg = pal.menu_bg;
-	new.menu_fg = pal.menu_fg;
-	new.dialog_bg = pal.dialog_bg;
-	new.dialog_fg = pal.dialog_fg;
-	new.gutter = pal.gutter;
-	new.ansi = pal.ansi;
+	crate::fields::fill(&mut new, None);
 	update(new);
 	true
 }
 
+/// Current settings snapshot. Cheap to call (an Arc clone); the settings dialog
+/// can swap the whole thing at runtime via `update`. Callers in hot paths should
+/// snapshot once per frame rather than per cell.
 pub fn settings() -> Arc<Settings> {
-	store().read().unwrap().clone()
+	crate::locks::read(store()).clone()
 }
 
-// Default double-click inclusion pairs, in precedence order (highest first):
-// backticks, double quotes, single quotes, then {} () [] <>.
+/// Default double-click inclusion pairs, in precedence order (highest first):
+/// backticks, double quotes, single quotes, then {} () [] <>.
 pub const DEFAULT_SELECTION_PAIRS: &str = "`` \"\" '' {} () [] <>";
 
-// argv for the default shell - the first ACTIVE entry in the stored list, which
-// is what "the one at the top" means. None hands the choice to the system: an
-// empty list, or one whose every entry is switched off.
-//
-// The order is the user's (the Settings dialog's Shells tab moves entries; a
-// scan only ever appends), and an initial population is led by the shell the
-// user actually logs in with - see `shells::detect`.
+/// argv for the default shell: the first active entry in the stored list, which is
+/// what "the one at the top" means. None hands the choice to the system, for an
+/// empty list or one with every entry switched off.
+///
+/// The order is the user's, since the Shells tab moves entries and a scan only
+/// appends. A first population is led by the shell the user logs in with
+/// (`shells::detect`).
 pub fn default_shell_argv() -> Option<Vec<String>> {
-	let shell = settings()
-		.shells
-		.iter()
-		.find(|entry| entry.active)
-		.map(|entry| entry.command.clone())?;
-	crate::cli::shell_split(&shell).ok()
+	let shell = settings().shells.iter().find(|entry| entry.active).map(|entry| entry.command.clone())?;
+	command_argv(&shell)
 }
 
-// Where the FIRST pane of a freshly launched window starts, or None to leave it
-// where SilkTerm itself was started. Four things can decide a shell's directory
-// and this is the last of them: `--directory` on the command line (cli_dir, the
-// caller's first choice), a new tab, pane or window inheriting from the pane it
-// came from (handled by the caller, which passes an inherited path instead of
-// asking here), a SilkTerm launched from a shell keeping that shell's directory,
-// and only what is left over reads the setting.
-//
-// So the setting is what a launch from the desktop, a menu or a shortcut gets -
-// which is the case where the inherited directory is an accident of whoever
-// started us rather than anything the user chose.
+/// Where the first pane of a newly launched window starts, or None to leave it
+/// where SilkTerm was started. Of the 4 things that can decide a shell's directory,
+/// this comes last: `--directory` on the command line (`cli_dir`), a new tab, pane,
+/// or window inheriting from its pane (the caller passes that path instead of
+/// asking here), and an inherited directory somebody picked on purpose. Only what's
+/// left reads the setting.
+///
+/// So the setting is what a launch from the desktop, a menu, or a shortcut gets,
+/// where the inherited directory is an accident of the launcher rather than a
+/// choice.
 pub fn startup_dir() -> Option<std::path::PathBuf> {
-	if launched_from_shell() {
+	if inherited_dir_is_a_choice() {
 		return None;
 	}
 	resolve_dir(&settings().startup_directory, "shell.startup_directory")
 }
 
-// Where a shell named on the command line starts (`--directory`). Sits ABOVE
-// every one of startup_dir's three cases: asking for a directory on the command
-// line is the most deliberate statement of the lot, so it beats an inherited
-// one, the shell we were launched from, and the setting alike.
+// Is the directory SilkTerm was started in a choice or an accident? A shell that
+// launched it was sitting somewhere on purpose, and so is a file manager's "Open
+// in terminal". A desktop icon, a Start-menu entry, or a shortcut starts in the
+// home directory, a filesystem root, beside the executable, or in the Windows
+// system folder, and none of those say where the user wants to be.
+fn inherited_dir_is_a_choice() -> bool {
+	if DIR_HANDED_DOWN.load(Ordering::Relaxed) || launched_from_shell() {
+		return true;
+	}
+	let exe_dir = std::env::current_exe().ok().and_then(|exe| exe.parent().map(std::path::Path::to_path_buf));
+	dir_is_a_choice(std::env::current_dir().ok().as_deref(), home_dir().as_deref(), exe_dir.as_deref(), &system_dirs())
+}
+
+// A packaged app's Start-menu entry can't name a working directory, so every
+// launch from one starts in System32, or SysWOW64 for a 32-bit build.
+fn system_dirs() -> Vec<std::path::PathBuf> {
+	if !cfg!(windows) {
+		return Vec::new();
+	}
+	let Some(root) = std::env::var_os("SystemRoot").or_else(|| std::env::var_os("windir")) else {
+		return Vec::new();
+	};
+	let root = std::path::PathBuf::from(root);
+	vec![root.join("System32"), root.join("SysWOW64")]
+}
+
+// The decision on its own, so both platforms' answers are testable from either
+// box. Compared through `canonicalize` where it works, since $HOME is routinely
+// written differently from what getcwd hands back.
+fn dir_is_a_choice(cwd: Option<&std::path::Path>, home: Option<&std::path::Path>, exe_dir: Option<&std::path::Path>, system: &[std::path::PathBuf]) -> bool {
+	let Some(cwd) = cwd else {
+		return false;
+	};
+	if cwd.parent().is_none() {
+		return false; // a filesystem root is where a launcher leaves us, not a choice
+	}
+	let real = |dir: &std::path::Path| dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+	let cwd = real(cwd);
+	![home, exe_dir].into_iter().flatten().chain(system.iter().map(std::path::PathBuf::as_path)).any(|dir| real(dir) == cwd)
+}
+
+/// A window opened from another one's pane starts in that pane's directory, which
+/// can be home or a root as easily as anywhere. Nothing in the directory says so,
+/// and a launcher leaves SilkTerm in the same places, so the parent says it in this
+/// variable. Main reads and drops it first, so no shell started here passes it on
+/// to another SilkTerm.
+pub const ENV_DIR_HANDED_DOWN: &str = "SILKTERM_DIR_HANDED_DOWN";
+static DIR_HANDED_DOWN: AtomicBool = AtomicBool::new(false);
+
+/// Notes the variable and drops it from the environment. Main calls it first, before any thread exists.
+pub fn take_handed_down_dir() {
+	if std::env::var_os(ENV_DIR_HANDED_DOWN).is_some() {
+		// SAFETY: called from main before any thread exists, like
+		// term::sanitize_shell_env.
+		unsafe { std::env::remove_var(ENV_DIR_HANDED_DOWN) };
+		DIR_HANDED_DOWN.store(true, Ordering::Relaxed);
+	}
+}
+
+/// The file `--config` named, if one did. A new window is given the same one.
+pub fn config_override() -> Option<PathBuf> {
+	CONFIG_OVERRIDE.get().cloned()
+}
+
+/// Where a shell named on the command line starts (`--directory`). It beats all 3
+/// of `startup_dir`'s cases, since asking on the command line is the most
+/// deliberate choice of all.
 pub fn cli_dir(raw: &str) -> Option<std::path::PathBuf> {
 	resolve_dir(raw, "--directory")
 }
 
 // Expand and check one directory, naming what asked for it when it isn't there.
-// `label` is how the user spelled it, so the line points at the setting or the
+// `label` is how the user wrote it, so the line points at the setting or the
 // flag rather than at a path they may never have typed.
 fn resolve_dir(raw: &str, label: &str) -> Option<std::path::PathBuf> {
 	let wanted = raw.trim();
 	if wanted.is_empty() {
 		return None;
 	}
-	let dir = std::path::PathBuf::from(expand_path(wanted));
+	// Absolute before the check, so a drive-less spelling on Windows resolves
+	let dir = std::path::PathBuf::from(expand_vars(wanted));
+	let dir = std::path::absolute(&dir).unwrap_or(dir);
 	if dir.is_dir() {
 		return Some(dir);
 	}
-	// Worth one line: a directory that has been renamed or unmounted would
-	// otherwise look like the setting being ignored.
+	// A directory that was renamed or unmounted would otherwise look like the
+	// setting being ignored.
 	eprintln!("{APP_NAME}: {label}: no such directory: {wanted}");
 	None
 }
 
-// Substitute environment variables written in either platform's spelling, plus a
-// leading `~`. Both spellings everywhere on purpose: a config file gets carried
-// between machines, and a `$HOME` that silently stayed a literal directory name
-// on Windows would be a very quiet way to fail. An unset name expands to
-// nothing, the way a shell does it.
-pub fn expand_path(text: &str) -> String {
+/// Substitute environment variables in any of the 3 forms a person is likely to
+/// use: `$NAME` and `${NAME}` from bash, `%NAME%` from cmd, and `$env:NAME` and
+/// `${env:NAME}` from PowerShell, plus a leading `~`. All of them work on every
+/// platform, since this is text SilkTerm reads and no shell sees, so a person's
+/// favorite shell shouldn't decide whether their config works. An unset name
+/// expands to nothing, as in a shell.
+///
+/// What a shell does see never comes through here. `command_argv` expands the
+/// program name and leaves the arguments alone.
+pub fn expand_vars(text: &str) -> String {
 	let text = match text.strip_prefix('~') {
+		// With no home to put there, leave the `~` standing rather than turning
+		// `~/pics` into an absolute `/pics` that means something else entirely.
 		Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
-			format!("{}{rest}", home_string())
+			let home = home_string();
+			if home.is_empty() { text.to_string() } else { format!("{home}{rest}") }
 		}
 		_ => text.to_string(),
 	};
@@ -548,7 +1290,7 @@ pub fn expand_path(text: &str) -> String {
 			}
 		} else if let Some(percent) = tail.strip_prefix('%') {
 			match percent.split_once('%') {
-				// `%%` is an empty name, not a variable - leave it alone.
+				// `%%` is an empty name rather than a variable, so it's left alone.
 				Some((name, after)) if !name.is_empty() => (name, after),
 				_ => {
 					out.push_str(&tail[..1]);
@@ -557,10 +1299,11 @@ pub fn expand_path(text: &str) -> String {
 				}
 			}
 		} else {
-			let bare = &tail[1..];
-			let end = bare
-				.find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-				.unwrap_or(bare.len());
+			// PowerShell writes `$env:NAME`, where the colon belongs to the
+			// spelling and not to the name. Stripped before the scan below,
+			// which stops at the colon and would expand `$env` instead.
+			let bare = strip_env_prefix(&tail[1..]);
+			let end = bare.find(|c: char| !c.is_ascii_alphanumeric() && c != '_').unwrap_or(bare.len());
 			if end == 0 {
 				out.push_str(&tail[..1]);
 				rest = &tail[1..];
@@ -568,18 +1311,58 @@ pub fn expand_path(text: &str) -> String {
 			}
 			(&bare[..end], &bare[end..])
 		};
-		if let Some(value) = std::env::var_os(name).filter(|v| !v.is_empty()) {
-			out.push_str(&value.to_string_lossy());
-		} else if name.eq_ignore_ascii_case("HOME") || name.eq_ignore_ascii_case("USERPROFILE") {
-			// The one pair worth answering ourselves: native Windows sets no
-			// HOME, and $HOME is what the shipped default says on unix - so a
-			// config carried either way still names a real directory.
-			out.push_str(&home_string());
-		}
+		out.push_str(&lookup(strip_env_prefix(name)).unwrap_or_default());
 		rest = after;
 	}
 	out.push_str(rest);
 	out
+}
+
+// `env:` off the front of a name, in whatever case it was written.
+fn strip_env_prefix(name: &str) -> &str {
+	// get_ rather than a slice: a name whose fourth byte falls inside a character
+	// used to abort here
+	match name.get(..4) {
+		Some(head) if head.eq_ignore_ascii_case("env:") => &name[4..],
+		_ => name,
+	}
+}
+
+// One variable's value, mapping the few names that mean the same thing under
+// a different spelling on the other platform. Native Windows sets no HOME and
+// unix sets no USERPROFILE, so a config written on either box would otherwise
+// go quiet on the other. Only names with a real one-to-one counterpart are
+// listed, since guessing at the rest would be worse than an empty expansion the
+// user can see.
+fn lookup(name: &str) -> Option<String> {
+	const ALIASES: &[&[&str]] = &[&["HOME", "USERPROFILE"], &["USER", "USERNAME"], &["TMPDIR", "TEMP", "TMP"]];
+	let read = |n: &str| std::env::var_os(n).filter(|v| !v.is_empty()).map(|v| v.to_string_lossy().into_owned());
+	if let Some(value) = read(name) {
+		return Some(value);
+	}
+	let group = ALIASES.iter().find(|group| group.iter().any(|alt| alt.eq_ignore_ascii_case(name)))?;
+	group.iter().find_map(|alt| read(alt)).or_else(|| {
+		// Home is the one that can still be worked out with nothing in the environment.
+		group[0].eq_ignore_ascii_case("HOME").then(home_string).filter(|home| !home.is_empty())
+	})
+}
+
+/// Split a command from the config into argv, expanding the program name and
+/// nothing after it. Splitting first is what keeps
+/// `%ProgramFiles%\PowerShell\7\pwsh.exe` one argument once the space in
+/// "Program Files" turns up.
+///
+/// The arguments go through exactly as written, because the program being
+/// started is what reads them and it has its own rules: `cmd /k prompt $P$G`
+/// sets a cmd prompt, `bash -c 'echo $FOO'` wants bash's own `$FOO`, and
+/// substituting either here hands the program a word nobody typed. The program
+/// name is different only because nothing else would ever expand it.
+pub fn command_argv(command: &str) -> Option<Vec<String>> {
+	let mut argv = crate::cli::shell_split(command).ok()?;
+	if let Some(program) = argv.first_mut() {
+		*program = expand_vars(program);
+	}
+	Some(argv)
 }
 
 // The home directory as text, empty when the environment names none. Same
@@ -589,18 +1372,18 @@ fn home_string() -> String {
 	home_dir().map_or_else(String::new, |dir| dir.to_string_lossy().into_owned())
 }
 
-// Did a shell start us? If so its directory is a deliberate choice and outranks
-// the setting; if not, the directory we inherited is whatever the launcher felt
-// like and says nothing about where the user wants to be.
+// Did a shell start SilkTerm? If so its directory is a deliberate choice and
+// outranks the setting. If not, the inherited directory is whatever the launcher
+// picked.
 //
-// The test is the same on both platforms - "is standard input a terminal" - and
-// it is what separates the two cases without asking about parent processes,
-// which costs a process-table walk on Windows and would sit on the path to the
-// first frame. Measured on Windows: launched from a console the std handles are
-// the console's (FILE_TYPE_CHAR), launched through ShellExecute the way Explorer
-// and the Start menu do it they are NULL. A release build is a GUI-subsystem
-// binary and owns no console either way, so GetConsoleWindow cannot answer this
-// and AttachConsole answers it wrong (it succeeds via the grandparent).
+// The test on both platforms is whether standard input is a terminal. It
+// separates the 2 cases without asking about parent processes, which costs a
+// process-table walk on Windows on the way to the first frame. On Windows a
+// console launch gets the console's std handles (FILE_TYPE_CHAR), and a
+// ShellExecute launch from Explorer or the Start menu gets NULL ones. A release
+// build is a GUI-subsystem binary without a console either way, so
+// GetConsoleWindow can't tell, and AttachConsole gets it wrong, since it succeeds
+// through the grandparent.
 #[cfg(unix)]
 fn launched_from_shell() -> bool {
 	// SAFETY: isatty only inspects the descriptor; 0 is always a valid argument.
@@ -624,11 +1407,13 @@ fn launched_from_shell() -> bool {
 	true
 }
 
-// Parse `selection_pairs` into (open, close) char pairs, in precedence order.
+/// Parse `selection_pairs` into (open, close) char pairs, in precedence order.
 pub fn selection_pairs() -> Vec<(char, char)> {
-	settings()
-		.selection_pairs
-		.split_whitespace()
+	parse_pairs(&settings().selection_pairs)
+}
+
+fn parse_pairs(text: &str) -> Vec<(char, char)> {
+	text.split_whitespace()
 		.filter_map(|pair| {
 			let mut chars = pair.chars();
 			Some((chars.next()?, chars.next()?))
@@ -636,52 +1421,359 @@ pub fn selection_pairs() -> Vec<(char, char)> {
 		.collect()
 }
 
-// Replace the live settings (used by the settings dialog's Apply/OK).
+/// Replace the live settings (used by the settings dialog's Apply/OK). A change
+/// to the model, or to what a rule reads such as a display step or a new
+/// wallpaper, is filled in by whoever made it (`fields::fill`).
 pub fn update(new: Settings) {
-	*store().write().unwrap() = Arc::new(new);
+	*crate::locks::write(store()) = Arc::new(new);
 }
 
-// Re-read config.shcl from disk (e.g. after the user edited it by hand). Returns
-// the freshly parsed settings; the caller applies them. Does not mutate the live
-// store - pair with `update` plus whatever rebuild the change needs.
+/// Re-read config.shcl from disk (e.g. after the user edited it by hand). Returns
+/// the freshly parsed settings; the caller applies them. Doesn't mutate the live
+/// store - pair with `update` plus whatever rebuild the change needs.
 pub fn reload_from_disk() -> Settings {
 	load()
 }
 
-// Read the config as an editable document. The parser is forgiving (a bad line
-// becomes a diagnostic, not a failed load), so unlike the old strict TOML path
-// this cannot bail on a file the loader reads fine and silently save nothing.
-fn read_doc(path: &std::path::Path) -> Option<shcl::Document> {
-	let text = std::fs::read_to_string(path).ok()?;
-	Some(shcl::Document::parse(&text))
+/// The live state a reload has to preserve: what is never in the file and
+/// lasts the session. A reload re-reads the file, and the file never had these,
+/// so taking the fresh copy as-is would lift a remote screen's profile or the
+/// display watch's step on a menu command. The command line's own values are
+/// put back by the caller, and a wallpaper named since launch only while the
+/// session has it.
+pub fn keep_session(live: &Settings, reloaded: &mut Settings, wallpaper_locked: bool) {
+	reloaded.model.values.session = live.model.values.session.clone();
+	reloaded.stepped_profile = live.stepped_profile;
+	// The picture on screen didn't change, so what it is worth to a derived
+	// text color didn't either.
+	reloaded.wallpaper_summary = live.wallpaper_summary;
+	if wallpaper_locked {
+		take_wallpaper(live, reloaded);
+	}
+	crate::fields::fill(reloaded, None);
+}
+
+/// What a reload after another window's save keeps of this window's own: what
+/// the state file has, which follows this window's size and this machine,
+/// and the picture rotation chose, unless the save moved the image or the
+/// folder.
+pub fn keep_window_state(live: &Settings, reloaded: &mut Settings) {
+	reloaded.remembered_columns = live.remembered_columns;
+	reloaded.remembered_rows = live.remembered_rows;
+	reloaded.remembered_maximized = live.remembered_maximized;
+	reloaded.remembered_font_zoom = live.remembered_font_zoom;
+	reloaded.monitor_sizes.clone_from(&live.monitor_sizes);
+	reloaded.rated_hardware.clone_from(&live.rated_hardware);
+	reloaded.tested_profile = live.tested_profile;
+	crate::fields::fill(reloaded, None);
+	// the pick is a field only, as rotation leaves it (`set_live`)
+	let picked = reloaded.wallpaper.is_none() && reloaded.wallpaper_raw == live.wallpaper_raw && reloaded.rotation_folder().is_some() && reloaded.rotation_folder() == live.rotation_folder();
+	if picked {
+		reloaded.wallpaper.clone_from(&live.wallpaper);
+	}
+}
+
+/// The switches a window shows itself by, which another window's save leaves
+/// as they are: copy on select, the minimap, the tab strip and the menu bar.
+/// The save is what windows opened after it start with. Settings opens on
+/// these too, so its rows match the window it was opened from.
+pub fn keep_window_view(live: &Settings, reloaded: &mut Settings) {
+	use crate::ui_spec::Key;
+	for key in [Key::CopyOnSelect, Key::Minimap] {
+		let own = &mut reloaded.model.values.own;
+		match live.model.values.own.get(key.name()) {
+			Some(v) => {
+				own.insert(key.name().to_string(), v.clone());
+			}
+			None => {
+				own.remove(key.name());
+			}
+		}
+	}
+	reloaded.hide_single_tab = live.hide_single_tab;
+	reloaded.menu_bar = live.menu_bar;
+	crate::fields::fill(reloaded, None);
+}
+
+/// A wallpaper named for the session, at launch (`--wallpaper-file`) or while
+/// running (`--wallpaper`). Naming one is a deliberate choice for the run, so a
+/// file with the wallpaper switched off doesn't swallow it. Both go through
+/// `update` afterwards, so a performance profile that turns the wallpaper off
+/// still wins for either one.
+pub fn name_wallpaper(settings: &mut Settings, image: Option<PathBuf>) {
+	use crate::ui_spec::Key;
+	// a profile's own wallpaper switch still wins, so only Custom's is held
+	let custom = crate::profile::current(settings) == crate::profile::Profile::Custom;
+	let model = &mut settings.model;
+	match &image {
+		Some(path) => {
+			let text = path.to_string_lossy().into_owned();
+			model.hold(Key::BgImage.name(), &knobs::Value::Text(text));
+			if custom && !settings.wallpaper_enabled {
+				model.hold(Key::BgEnabled.name(), &knobs::Value::Bool(true));
+			}
+		}
+		None => model.release(Key::BgImage.name()),
+	}
+	crate::fields::fill(settings, None);
+	settings.wallpaper = image;
+}
+
+/// A wallpaper given on the command line lasts the session (`wp_locked` in
+/// app.rs). An Apply keeps it unless the dialog picked another, and both copies
+/// take it, so the save writes nothing about it.
+pub fn keep_wallpaper_on_apply(live: &Settings, wallpaper_locked: bool, opened: &mut Settings, edited: &mut Settings) {
+	if wallpaper_locked && edited.wallpaper_raw == opened.wallpaper_raw && edited.wallpaper == opened.wallpaper && edited.wallpaper_enabled == opened.wallpaper_enabled {
+		take_wallpaper(live, opened);
+		take_wallpaper(live, edited);
+	}
+}
+
+// The picture the session named, and the switch the way `name_wallpaper`
+// sets it: on where Custom decides it, so a file with it off doesn't hide it.
+fn take_wallpaper(live: &Settings, settings: &mut Settings) {
+	use crate::ui_spec::Key;
+	let (image, on) = (Key::BgImage.name(), Key::BgEnabled.name());
+	match live.model.values.held.get(image) {
+		Some(v) => settings.model.hold(image, v),
+		None => settings.model.release(image),
+	}
+	settings.model.release(on);
+	crate::fields::fill(settings, None);
+	let custom = crate::profile::current(settings) == crate::profile::Profile::Custom;
+	if live.model.values.held.contains_key(image) && custom && !settings.wallpaper_enabled {
+		settings.model.hold(on, &knobs::Value::Bool(true));
+		crate::fields::fill(settings, None);
+	}
+	settings.wallpaper.clone_from(&live.wallpaper);
+}
+
+/// The same for an Apply from the Settings dialog, whose copy is as old as the
+/// dialog: a remote switch or a watch step taken since it opened stays, unless
+/// the dialog made the choice itself. A pick or the automatic switch can leave
+/// the session field exactly as the dialog opened with it, so the choice is read
+/// from what those write too.
+pub fn keep_session_on_apply(live: &Settings, opened: &Settings, edited: &mut Settings) {
+	let picked = edited.performance_profile != opened.performance_profile || edited.model.values.session != opened.model.values.session;
+	if !picked {
+		edited.model.values.session = live.model.values.session.clone();
+	}
+	if !picked && edited.performance_automatic == opened.performance_automatic && edited.stepped_profile == opened.stepped_profile {
+		edited.stepped_profile = live.stepped_profile;
+	}
+	// The dialog's copy dates from when it opened, and a rotation since then has
+	// changed the picture. The summary is never something the dialog edits.
+	edited.wallpaper_summary = live.wallpaper_summary;
+	crate::fields::fill(edited, None);
+}
+
+// Read the config as an editable document. The parser is forgiving, so a bad line
+// becomes a diagnostic rather than a failed load, and this can't give up on a file
+// the loader reads fine and quietly save nothing.
+fn read_doc(path: &std::path::Path) -> Result<shcl::Document, Unread> {
+	let text = read_settings(path).map_err(|e| match e.kind() {
+		std::io::ErrorKind::NotFound => Unread::Missing,
+		_ => Unread::Failed(e),
+	})?;
+	Ok(editable_doc(text))
+}
+
+fn editable_doc(text: String) -> shcl::Document {
+	// a launch that found the file busy left it as 2.x wrote it
+	parse_kept(&from_shcl2_text(&text).unwrap_or(text))
+}
+
+// Why a save found no document to edit.
+#[derive(Debug)]
+enum Unread {
+	Missing,
+	Failed(std::io::Error),
+}
+
+// Writes to the settings file, by this process, since it started. The window
+// tells the others when this moves (`saves`).
+static SAVES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many times this process has written the settings file. The state file
+/// and the shell profiles aren't counted.
+pub fn saves() -> u64 {
+	SAVES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The settings file this process runs on: `--config`, else the box's own.
+pub fn settings_file() -> Option<PathBuf> {
+	config_path()
+}
+
+// The settings file as this process last read or wrote it.
+static LAST_SEEN: std::sync::Mutex<Option<(PathBuf, String)>> = std::sync::Mutex::new(None);
+
+// Shell profiles go through the same writer. The one written at launch was
+// the last file seen, so a save after the settings file was deleted started
+// from the bare template.
+fn note_seen(path: &std::path::Path, text: &str) {
+	if config_path().as_deref() != Some(path) {
+		return;
+	}
+	*crate::locks::lock(&LAST_SEEN) = Some((path.to_path_buf(), text.to_string()));
+}
+
+// What a save edits when the file was deleted while the program ran: a new
+// file from the template, as a first launch writes, with every setting the
+// file had when this process last saw it. The save's own change goes on top,
+// so the session's settings are still there at the next launch. The shell list
+// is diffed against the file (`shells_to_save`), so a file never seen here
+// gets the list the window loaded, or every entry would read as removed.
+fn regrown_doc(path: &std::path::Path, loaded_shells: &[crate::shells::ShellEntry]) -> shcl::Document {
+	let seen = crate::locks::lock(&LAST_SEEN).as_ref().filter(|(at, _)| at == path).map(|(_, text)| text.clone());
+	let Some(text) = seen else {
+		let mut doc = parse_kept(default_config());
+		write_shells(&mut doc, &[], loaded_shells);
+		return doc;
+	};
+	parse_kept(&rebuilt_config_text(&loaded_text(&text), &[]).0)
+}
+
+// A parse whose save writes back every line no edit touched, as it was typed.
+// Only Strict can refuse a file, so the Err arm never runs.
+fn parse_kept(text: &str) -> shcl::Document {
+	shcl::Document::parse_keep_lines(text, shcl::Strictness::Standard).unwrap_or_else(|e| e.document)
+}
+
+// What a save writes. shcl falls back to the canonical form where it can't keep
+// the lines. Where it keeps them, a value it added takes the place of the
+// commented default line for it.
+fn saved_text(doc: &shcl::Document) -> String {
+	let (text, kept) = doc.to_text_keep_lines();
+	if !kept {
+		return text;
+	}
+	filled_defaults(&text, doc).unwrap_or(text)
+}
+
+// shcl's save that keeps the lines writes a value the file didn't have as a new
+// line, and leaves the commented default where it was, so every line below it
+// moves down. A launch message names lines, and a later save then makes it
+// wrong. So each new line goes where its commented default was, in place of
+// it, when the text still reads the same. Only a commented line the program
+// wrote is taken, since one commented out by hand may hold the person's note.
+// shcl has it as 2026102910482345, deferred to its v4.
+fn filled_defaults(text: &str, doc: &shcl::Document) -> Option<String> {
+	// a node the setters built has no source line
+	let added: Vec<String> = walk_settings(text)
+		.into_iter()
+		.filter_map(|w| match w {
+			WalkLine::Setting { path, active: true, header: false, .. } => {
+				let at = doc.read_line(&path);
+				(at.status == shcl::Status::Good && at.value == 0).then_some(path)
+			}
+			_ => None,
+		})
+		.collect();
+	if added.is_empty() {
+		return None;
+	}
+	let want = setting_reads(&shcl::Document::parse(text));
+	let mut out: Vec<String> = text.split_inclusive('\n').map(str::to_string).collect();
+	let mut moved = false;
+	for path in &added {
+		let mut own = Vec::new();
+		let mut spot = None;
+		for w in walk_settings(&out.concat()) {
+			let WalkLine::Setting { index, path: p, active, header } = w else {
+				continue;
+			};
+			if !p.eq_ignore_ascii_case(path) {
+				continue;
+			}
+			if active && !header {
+				own.push(index);
+			} else if !active && is_default_line(&out[index], path) {
+				spot = Some(index);
+			}
+		}
+		let (&[from], Some(to)) = (own.as_slice(), spot) else {
+			continue;
+		};
+		let mut trial = out.clone();
+		let body = out[from].trim_end_matches(['\r', '\n']);
+		let ending = &out[to][out[to].trim_end_matches(['\r', '\n']).len()..];
+		trial[to] = format!("{body}{ending}");
+		trial.remove(from);
+		// the last line keeps the file's own ending, newline or not
+		if from == out.len() - 1
+			&& !out[from].ends_with('\n')
+			&& let Some(last) = trial.last_mut()
+		{
+			let cut = last.trim_end_matches(['\r', '\n']).len();
+			last.truncate(cut);
+		}
+		if setting_reads(&shcl::Document::parse(&trial.concat())) == want {
+			out = trial;
+			moved = true;
+		}
+	}
+	moved.then(|| out.concat())
+}
+
+// A commented line the program wrote for a setting: the template's own line for
+// it, or an older template's, which ends in the default marker.
+fn is_default_line(line: &str, path: &str) -> bool {
+	let line = line.trim();
+	line.ends_with("## Default") || setting_lines(default_config()).iter().any(|(p, shipped)| p.eq_ignore_ascii_case(path) && shipped.trim() == line)
+}
+
+// How every setting reads, sorted by path, so a line moved within its block
+// compares the same and one moved out of it doesn't.
+fn setting_reads(doc: &shcl::Document) -> (usize, Vec<(String, Vec<String>, shcl::ValueKind)>) {
+	let mut reads: Vec<_> = doc
+		.paths()
+		.into_iter()
+		.map(|path| {
+			let instances = doc.instances(&path);
+			let kind = doc.kind(&path);
+			(path, instances, kind)
+		})
+		.collect();
+	reads.sort_by(|a, b| a.0.cmp(&b.0));
+	(doc.lost_count(), reads)
+}
+
+// shcl's save_file_keep_lines gate. A line the parse dropped is written back as
+// it was while the lines are kept, so only a save that falls back to the
+// canonical form would delete it, and only that one is refused.
+fn save_refused(doc: &shcl::Document) -> bool {
+	doc.lost_count() > 0 && !doc.to_text_keep_lines().1
 }
 
 // One classified line of a config text, with its full nested path resolved from
-// the indentation context (an `enabled:` two levels deep under `wallpaper:` /
-// `rotate:` is "wallpaper.rotate.enabled"). Comment lines that spell a setting
-// (`# enabled: true`) get a path too - the machinery treats them as that
-// setting's disabled default. Lines inside a raw fence are passed through as
-// `Fence`; blank lines as `Blank`; anything else as `Other`.
+// the indentation context (an `enabled:` 2 levels deep under `wallpaper:` /
+// `rotate:` is "wallpaper.rotate.enabled"). Comment lines that contain a setting
+// (`# enabled: true`) get a path too, since they're that setting's disabled
+// default. Lines inside a raw fence are passed through as `Fence`, blank lines as
+// `Blank`, and anything else as `Other`.
 enum WalkLine {
-	Setting {
-		index: usize,
-		path: String,
-		active: bool,
-		header: bool,
-	},
+	Setting { index: usize, path: String, active: bool, header: bool },
 	Fence,
 	Blank,
 	Other(usize),
 }
 
 // Walk a config text line by line, resolving each setting line's full path from
-// the enclosing active (or commented) block headers. Indentation is compared by
+// the enclosing block headers: active ones for an active line, active or
+// commented for a commented one. Indentation is compared by
 // leading-whitespace length, matching how the template is written (tabs); a
-// line's own key may itself be dotted, which simply extends the path.
+// line's own key may itself be dotted, which extends the path.
 fn walk_settings(text: &str) -> Vec<WalkLine> {
 	let mut out = Vec::new();
-	// (indent, name) of each enclosing block header
+	// (indent, name) of each enclosing block header, commented ones included
 	let mut stack: Vec<(usize, String)> = Vec::new();
+	// The same, active headers only. shcl gives a comment line no depth, and a
+	// save writes a comment at the depth of the setting below it, so an active
+	// path taken from a comment changed at the first save. Commented lines still
+	// take commented headers, which is how a commented-out block names its
+	// children.
+	let mut open: Vec<(usize, String)> = Vec::new();
 	let mut fence: Option<(char, usize)> = None;
 	for (index, line) in text.lines().enumerate() {
 		if let Some((ch, len)) = fence {
@@ -705,31 +1797,33 @@ fn walk_settings(text: &str) -> Vec<WalkLine> {
 			out.push(WalkLine::Other(index));
 			continue;
 		};
+		// shcl reads names without case, so `Window:` is `window:`
+		let key = key.to_ascii_lowercase();
+		let key = key.as_str();
 		let trimmed = line.trim_start();
 		let active = !trimmed.starts_with('#');
 		let indent = line.len() - trimmed.len();
 		while stack.last().is_some_and(|(col, _)| indent <= *col) {
 			stack.pop();
 		}
-		let path = stack
-			.iter()
-			.map(|(_, name)| name.as_str())
-			.chain(std::iter::once(key))
-			.collect::<Vec<_>>()
-			.join(".");
+		if active {
+			while open.last().is_some_and(|(col, _)| indent <= *col) {
+				open.pop();
+			}
+		}
+		let parents = if active { &open } else { &stack };
+		let path = parents.iter().map(|(_, name)| name.as_str()).chain(std::iter::once(key)).collect::<Vec<_>>().join(".");
 		let header = line_setting_value(line).is_some_and(|v| {
 			let v = v.trim();
 			v.is_empty() || v.starts_with('#')
 		});
 		if header {
 			stack.push((indent, key.to_string()));
+			if active {
+				open.push((indent, key.to_string()));
+			}
 		}
-		out.push(WalkLine::Setting {
-			index,
-			path,
-			active,
-			header,
-		});
+		out.push(WalkLine::Setting { index, path, active, header });
 	}
 	out
 }
@@ -740,9 +1834,7 @@ fn fence_run(line: &str) -> Option<(char, usize)> {
 	if line.trim_start().starts_with('#') {
 		return None;
 	}
-	let after = line
-		.split_once(':')
-		.map_or(line.trim(), |(_, rest)| rest.trim());
+	let after = line.split_once(':').map_or(line.trim(), |(_, rest)| rest.trim());
 	let ch = after.chars().next()?;
 	if ch != '`' && ch != '~' {
 		return None;
@@ -751,342 +1843,848 @@ fn fence_run(line: &str) -> Option<(char, usize)> {
 	(len >= 3).then_some((ch, len))
 }
 
-// Serialize a document back to disk text.
-//
-// `to_canonical` keeps comments, blank-line grouping, indentation and line
-// order, and never rewrites a scalar - so it IS the disk text. shcl 1.2 was
-// what made that true: before it, a comment run under a block whose children
-// are all commented-out defaults (most of this template) came back at the
-// header's depth, and a positional repair pass put the user's own indentation
-// back. Verified against the shipped template, a live config and a torture
-// fixture: canonical is byte-identical to each.
-fn write_doc(path: &std::path::Path, doc: &shcl::Document) {
-	if let Err(e) = std::fs::write(path, doc.to_canonical()) {
-		eprintln!("{APP_NAME}: could not save config {}: {e}", path.display());
+/// Serialize a document back to disk.
+///
+/// The canonical text keeps comments, blank-line grouping, indentation, and line
+/// order, and never rewrites a scalar, so it's the disk text (since shcl 1.2). A
+/// write is refused when the parse dropped lines the save would delete, since the
+/// user's own text is worth more than one changed setting. Every write of the
+/// settings file goes through here, launch-time rewrites and PowerShell profile
+/// writes too.
+///
+/// Returns whether it wrote. The dialog closes on a save, and 3 failures used to
+/// look like a clean one: shcl refusing a lossy round trip, an unreadable file,
+/// and an unwritable one.
+///
+/// It writes beside the file and renames over it, since `fs::write` truncates
+/// first and a crash or a full disk would leave nothing. A linked settings file is
+/// written through its link, the file keeps its mode, and the temp file is created
+/// exclusively, so a link left at its name is never written through. On Windows
+/// the publish is `ReplaceFile`, which keeps the file's ACLs. A path that isn't
+/// UTF-8 is refused rather than converted lossily, which could name a different
+/// file. A write that moves the file to a newer SHCL format, or replaces one that
+/// isn't UTF-8, keeps the old one first (`keep_old_format`).
+pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> anyhow::Result<()> {
+	write_config_keeping(path, text).map(|_| ())
+}
+
+// The same write, returning where the old file was kept when it converted one.
+// Settings the conversion couldn't keep are reported here, so a save that converts
+// a file a busy launch left alone says it as the launch would. A clean
+// conversion says nothing.
+fn write_config_keeping(path: &std::path::Path, text: &str) -> anyhow::Result<Option<PathBuf>> {
+	let kept = publish_keeping(path, text, |file, text| shcl::write_file_atomic(file, text).map_err(|e| e.to_string()))?;
+	note_seen(path, text);
+	if may_write(path) && config_path().as_deref() == Some(path) {
+		SAVES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+	}
+	for line in restated_launch_messages(path, text) {
+		eprintln!("{line}");
+	}
+	if let Some(loss) = kept.as_deref().and_then(|copy| lost_converting(path, copy)) {
+		say_lost(loss);
+	}
+	Ok(kept)
+}
+
+// Printed to the terminal now, and shown in the window once it's up.
+fn say_lost(loss: ConversionLoss) {
+	eprintln!("{}", loss.terminal_line());
+	// a footer put back to the default didn't lose anything anybody wrote
+	let owed = !matches!(loss.how, Converted::Dropped(_)) || !loss.lines.is_empty();
+	if owed {
+		*crate::locks::lock(&LOST_IN_CONVERSION) = Some(loss);
 	}
 }
 
-// Write the values that differ from `orig` back into the config in place. The
-// user's comments and blank-line grouping survive (see `to_text`); untouched
-// settings keep whatever they were (commented / following the system). Returns
-// false (writing nothing) if the file looks open in another program, so the
-// caller can hold off - e.g. the Settings dialog stays open instead of
-// clobbering an in-flight edit.
+// The copy is the file exactly as it was before the conversion.
+fn lost_converting(path: &std::path::Path, copy: &std::path::Path) -> Option<ConversionLoss> {
+	let old = std::fs::read(copy).ok()?;
+	conversion_losses(&old, path, Some(copy.to_path_buf()))
+}
+
+// Returns the message as the user would see it, which is what the tests read.
+#[cfg(test)]
+fn write_config_atomic_with(path: &std::path::Path, text: &str, publish: fn(&str, &str) -> Result<(), String>) -> Result<(), String> {
+	publish_keeping(path, text, publish).map(|_| ()).map_err(|e| format!("{e:#}"))
+}
+
+// Windows' replace can fail after the old file is gone (1176, 1177), and shcl
+// then deletes its temp copy too, so the text is written at the empty name
+// rather than lost. The publish is a parameter so a test can fail it that way,
+// and has shcl's error as its text.
+fn publish_keeping(path: &std::path::Path, text: &str, publish: fn(&str, &str) -> Result<(), String>) -> anyhow::Result<Option<PathBuf>> {
+	if !may_write(path) {
+		return Ok(None);
+	}
+	let Some(file) = path.to_str() else {
+		anyhow::bail!("{} isn't a UTF-8 path", path.display());
+	};
+	// Resolved before the write: once the replace has taken a linked file, the
+	// link dangles and no longer resolves.
+	let before = std::fs::canonicalize(path).ok().and_then(|real| {
+		let perms = std::fs::metadata(&real).ok()?.permissions();
+		Some((real, perms))
+	});
+	let kept = keep_old_format(path, text)?;
+	publish(file, text).map_err(anyhow::Error::msg).or_else(|e| restore_config(before, text, e))?;
+	let Some((backup, old)) = kept else {
+		return Ok(None);
+	};
+	// A file kept for its lines that aren't UTF-8 is reported by `write_config_keeping`.
+	// One a build before beta1 stamped keeps its format number.
+	let decoded = || std::fs::read_to_string(&backup).is_ok();
+	if let Some(new) = shcl::format_version(text).filter(|new| *new > old || decoded()) {
+		eprintln!("{APP_NAME}: {} converted to SHCL format {new}; the old file is kept at {}", path.display(), backup.display());
+	}
+	Ok(Some(backup))
+}
+
+// A file with no Format line is read as shcl 2.x, the last format without one.
+const UNSTAMPED_FORMAT: u32 = 2;
+
+fn format_of(text: &str) -> u32 {
+	shcl::format_version(text).unwrap_or(UNSTAMPED_FORMAT)
+}
+
+// The name a file in format `n` is kept under when it is converted, beside it
+// and still ending in .shcl: `config.shcl` ->
+// `config_backup_20261003-142233_format-v2.shcl`. A second one made in the same
+// second gets `_2` before the `.shcl`, and so on.
+fn backup_name(stem: &str, stamp: &str, n: u32, attempt: u32) -> String {
+	let again = if attempt > 1 { format!("_{attempt}") } else { String::new() };
+	format!("{stem}_backup_{stamp}_format-v{n}{again}.shcl")
+}
+
+// Before a write moves the file to a newer format, the file as it is now is
+// copied beside it under a `backup_name` stamped with the local time. That
+// includes every conversion, and a save that converts a file a launch left
+// alone. A current file with lines that aren't UTF-8 is written again without
+// them (`upgrade`), and is kept the same way, so no write ever loses its bytes.
+// Every older version is kept, and a backup already there is never replaced. The
+// write is refused when the copy can't be made. Returns where the copy is and the
+// format the file had.
+fn keep_old_format(path: &std::path::Path, text: &str) -> anyhow::Result<Option<(PathBuf, u32)>> {
+	let (stamp, _) = local_stamp();
+	keep_old_format_at(path, text, &stamp)
+}
+
+fn keep_old_format_at(path: &std::path::Path, text: &str, stamp: &str) -> anyhow::Result<Option<(PathBuf, u32)>> {
+	let Some(new) = shcl::format_version(text) else {
+		return Ok(None);
+	};
+	let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+		return Ok(None);
+	};
+	let body = match std::fs::read(path) {
+		Ok(body) => body,
+		Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+		Err(e) => {
+			return Err(e).with_context(|| format!("couldn't read {} to keep it", path.display()));
+		}
+	};
+	let old = format_of(&String::from_utf8_lossy(&body));
+	let decodes = std::str::from_utf8(&body).is_ok();
+	let beta = || std::str::from_utf8(&body).is_ok_and(|old| from_a_beta(old).is_some());
+	if (new <= old && decodes && !beta()) || body.iter().all(u8::is_ascii_whitespace) {
+		return Ok(None);
+	}
+	let stem = name.strip_suffix(".shcl").unwrap_or(&name);
+	#[cfg(unix)]
+	let perms = std::fs::metadata(path).ok().map(|meta| meta.permissions());
+	#[cfg(not(unix))]
+	let perms = None;
+	write_new_file(|attempt| path.with_file_name(backup_name(stem, stamp, old, attempt)), &body, perms.as_ref()).map(|copy| Some((settle_on_earliest(path, stem, old, copy, &body), old))).with_context(|| format!("couldn't keep the old file beside {}", path.display()))
+}
+
+// Whether `name` is one of `backup_name`'s copies of `stem` in format `n`, any
+// stamp and any attempt.
+fn is_copy_name(name: &str, stem: &str, n: u32) -> bool {
+	let Some(rest) = name.strip_prefix(&format!("{stem}_backup_")) else {
+		return false;
+	};
+	let Some(rest) = rest.strip_suffix(".shcl") else {
+		return false;
+	};
+	let (stamp, tail) = rest.split_at_checked(15).unwrap_or((rest, ""));
+	let stamped = stamp.len() == 15 && stamp.bytes().enumerate().all(|(at, c)| if at == 8 { c == b'-' } else { c.is_ascii_digit() });
+	let again = |rest: &str| rest.strip_prefix('_').is_some_and(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()));
+	stamped && tail.strip_prefix(&format!("_format-v{n}")).is_some_and(|rest| rest.is_empty() || again(rest))
+}
+
+// Launches converting the same file at once each keep a copy, and when the
+// clock ticks between them the copies have different names. A conversion
+// takes over a second under a sanitizer or a loaded box, so that isn't rare.
+// Each then settles on the earliest copy of that format with the same
+// bytes. It drops its own if that is another one, and drops the later twins
+// if it is its own, since a launch with a later stamp may have written and
+// looked first. Nobody drops the earliest, so one is always left. Returns the
+// copy settled on.
+fn settle_on_earliest(path: &std::path::Path, stem: &str, n: u32, ours: PathBuf, body: &[u8]) -> PathBuf {
+	let dir = path.parent().filter(|dir| !dir.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
+	let same = |at: &std::path::Path| std::fs::metadata(at).is_ok_and(|meta| meta.len() == body.len() as u64) && std::fs::read(at).is_ok_and(|seen| seen == body);
+	// every copy with the same bytes, earliest first
+	let twins = || {
+		let mut names: Vec<String> = std::fs::read_dir(dir).into_iter().flatten().filter_map(|entry| entry.ok()?.file_name().into_string().ok()).filter(|name| is_copy_name(name, stem, n)).collect();
+		names.sort();
+		names.into_iter().map(|name| dir.join(name)).filter(|at| same(at)).collect::<Vec<_>>()
+	};
+	// An earliest that is gone by the time it is read again was dropped for an
+	// earlier one still, so look again. Each look finds an earlier name.
+	for _ in 0..BACKUPS_MAX {
+		let found = twins();
+		let Some(first) = found.first() else {
+			break;
+		};
+		if first.file_name() == ours.file_name() {
+			for later in &found[1..] {
+				let _ = std::fs::remove_file(later);
+			}
+			break;
+		}
+		let _ = std::fs::remove_file(&ours);
+		if same(first) {
+			return first.clone();
+		}
+	}
+	ours
+}
+
+// Writes `body` at the first of `names(1)`, `names(2)` and on that nothing has,
+// and never leaves a part of it there. It is written under a name of its own
+// and then linked, which fails rather than replace anything. A name already
+// with the same bytes is the same copy, from another window converting at
+// the same moment, so 2 at once leave one whole copy. Where the filesystem
+// has no hard links, each name is written directly. Returns where it went.
+fn write_new_file(names: impl Fn(u32) -> PathBuf, body: &[u8], perms: Option<&std::fs::Permissions>) -> std::io::Result<PathBuf> {
+	use std::io::Write;
+	let first = names(1);
+	let name = first.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+	let mut opts = std::fs::OpenOptions::new();
+	opts.write(true).create_new(true);
+	#[cfg(unix)]
+	std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+	let fill = |file: &mut std::fs::File, at: &std::path::Path| {
+		// Private before anything is in it, as the config is. Elsewhere the mode is
+		// only a read-only flag, which would stop the temp name being removed.
+		if let Some(perms) = perms {
+			std::fs::set_permissions(at, perms.clone())?;
+		}
+		file.write_all(body)?;
+		file.sync_all()
+	};
+	let same = |at: &std::path::Path| std::fs::read(at).is_ok_and(|seen| seen == body);
+	let mut n = 0u32;
+	let (temp, mut file) = loop {
+		n += 1;
+		let temp = first.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
+		match opts.open(&temp) {
+			Ok(file) => break (temp, file),
+			Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && n < BACKUPS_MAX => {}
+			Err(e) => return Err(e),
+		}
+	};
+	let filled = fill(&mut file, &temp);
+	drop(file);
+	let linked = filled.map(|()| {
+		for attempt in 1..=BACKUPS_MAX {
+			let dest = names(attempt);
+			match std::fs::hard_link(&temp, &dest) {
+				Ok(()) => return Some(Ok(dest)),
+				Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+					if same(&dest) {
+						return Some(Ok(dest));
+					}
+				}
+				// vfat returns EPERM, not "unsupported", so any other failure tries a
+				// plain write
+				Err(_) => return None,
+			}
+		}
+		Some(Err(no_free_name()))
+	});
+	let _ = std::fs::remove_file(&temp);
+	if let Some(done) = linked? {
+		return done;
+	}
+	for attempt in 1..=BACKUPS_MAX {
+		let dest = names(attempt);
+		let mut file = match opts.open(&dest) {
+			Ok(file) => file,
+			Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+				if same(&dest) {
+					return Ok(dest);
+				}
+				continue;
+			}
+			Err(e) => return Err(e),
+		};
+		let filled = fill(&mut file, &dest);
+		drop(file);
+		if let Err(e) = filled {
+			let _ = std::fs::remove_file(&dest);
+			return Err(e);
+		}
+		return Ok(dest);
+	}
+	Err(no_free_name())
+}
+
+fn no_free_name() -> std::io::Error {
+	std::io::Error::new(std::io::ErrorKind::AlreadyExists, format!("{BACKUPS_MAX} copies already made this second"))
+}
+
+/// The local time to the second, `YYYYmmDD-HHMMSS`, and the hundredths past it.
+/// Local, as the test folders and the pipeline's log names are.
+#[cfg(unix)]
+pub(crate) fn local_stamp() -> (String, u32) {
+	let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+	let seconds = libc::time_t::try_from(now.as_secs()).unwrap_or(libc::time_t::MAX);
+	// SAFETY: tm is plain data, so all zeros is a valid value, and localtime_r
+	// only writes the tm it is handed.
+	let fields = unsafe {
+		let mut fields: libc::tm = std::mem::zeroed();
+		libc::localtime_r(&raw const seconds, &raw mut fields);
+		fields
+	};
+	(format!("{:04}{:02}{:02}-{:02}{:02}{:02}", fields.tm_year + 1900, fields.tm_mon + 1, fields.tm_mday, fields.tm_hour, fields.tm_min, fields.tm_sec), now.subsec_millis() / 10)
+}
+
+#[cfg(windows)]
+pub(crate) fn local_stamp() -> (String, u32) {
+	use windows_sys::Win32::Foundation::SYSTEMTIME;
+	use windows_sys::Win32::System::SystemInformation::GetLocalTime;
+	// SAFETY: SYSTEMTIME is plain data, so all zeros is a valid value, and
+	// GetLocalTime only fills the struct it is handed.
+	let now = unsafe {
+		let mut now: SYSTEMTIME = std::mem::zeroed();
+		GetLocalTime(&raw mut now);
+		now
+	};
+	(format!("{:04}{:02}{:02}-{:02}{:02}{:02}", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond), u32::from(now.wMilliseconds / 10))
+}
+
+/// `YYYY-mm-DD` of a unix time, in the local zone of whoever is running this.
+#[cfg(unix)]
+pub(crate) fn local_date(unix_secs: u64) -> String {
+	let seconds = libc::time_t::try_from(unix_secs).unwrap_or(libc::time_t::MAX);
+	// SAFETY: tm is plain data, so all zeros is a valid value, and localtime_r
+	// only writes the tm it is handed.
+	let fields = unsafe {
+		let mut fields: libc::tm = std::mem::zeroed();
+		libc::localtime_r(&raw const seconds, &raw mut fields);
+		fields
+	};
+	format!("{:04}-{:02}-{:02}", fields.tm_year + 1900, fields.tm_mon + 1, fields.tm_mday)
+}
+
+#[cfg(windows)]
+pub(crate) fn local_date(unix_secs: u64) -> String {
+	use windows_sys::Win32::Foundation::{FILETIME, SYSTEMTIME};
+	use windows_sys::Win32::System::Time::{FileTimeToSystemTime, SystemTimeToTzSpecificLocalTime};
+	// FILETIME counts 100 ns from 1601, which is 11_644_473_600 s before 1970.
+	let ticks = (unix_secs + 11_644_473_600) * 10_000_000;
+	let file = FILETIME { dwLowDateTime: ticks as u32, dwHighDateTime: (ticks >> 32) as u32 };
+	// SAFETY: SYSTEMTIME is plain data, so all zeros is a valid value, and both
+	// calls only fill the structs they are handed.
+	let (utc, local) = unsafe {
+		let mut utc: SYSTEMTIME = std::mem::zeroed();
+		let mut local: SYSTEMTIME = std::mem::zeroed();
+		FileTimeToSystemTime(&raw const file, &raw mut utc);
+		SystemTimeToTzSpecificLocalTime(std::ptr::null(), &raw const utc, &raw mut local);
+		(utc, local)
+	};
+	let shown = if local.wYear == 0 { utc } else { local };
+	format!("{:04}-{:02}-{:02}", shown.wYear, shown.wMonth, shown.wDay)
+}
+
+// Writes the text where the file was, only while nothing is at that name. The
+// ordinary failure leaves the old file there and returns at once, and a name
+// taken meanwhile, a link included, is never written through. A name only
+// waiting for its delete to finish counts as empty.
+fn restore_config(before: Option<(PathBuf, std::fs::Permissions)>, text: &str, err: anyhow::Error) -> anyhow::Result<()> {
+	use std::io::Write;
+	let Some((real, perms)) = before else {
+		return Err(err);
+	};
+	// elsewhere the mode is only a read-only flag, which adds no privacy
+	#[cfg(not(unix))]
+	let _ = perms;
+	let mut last = String::new();
+	for _ in 0..RESTORE_ATTEMPTS {
+		if name_taken(&real) {
+			return Err(err);
+		}
+		#[cfg(test)]
+		RESTORE_PAUSES.with(|n| n.set(n.get() + 1));
+		std::thread::sleep(RESTORE_PAUSE);
+		let mut opts = std::fs::OpenOptions::new();
+		opts.write(true).create_new(true);
+		#[cfg(unix)]
+		std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+		let mut file = match opts.open(&real) {
+			Ok(file) => file,
+			Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Err(err),
+			Err(e) => {
+				last = e.to_string();
+				continue;
+			}
+		};
+		// cloned because a later attempt sets it again
+		#[cfg(unix)]
+		let written = file.set_permissions(perms.clone()).and_then(|()| file.write_all(text.as_bytes()));
+		#[cfg(not(unix))]
+		let written = file.write_all(text.as_bytes());
+		match written.and_then(|()| file.sync_all()) {
+			Ok(()) => {
+				eprintln!("{APP_NAME}: {err:#}; the file was gone after that, so {} was written directly", real.display());
+				return Ok(());
+			}
+			Err(e) => {
+				drop(file);
+				// the file this attempt created, not one that was there before
+				let _ = std::fs::remove_file(&real);
+				last = e.to_string();
+			}
+		}
+	}
+	Err(anyhow::anyhow!("{err:#}; the file it replaced is gone, and writing {} directly failed: {last}", real.display()))
+}
+
+// Something is at the name, unless it is only waiting for its delete to finish.
+// Not exists(): it follows a link, and a dangling one returns false.
+fn name_taken(real: &std::path::Path) -> bool {
+	std::fs::symlink_metadata(real).is_ok() && !delete_pending(real)
+}
+
+#[cfg(not(windows))]
+fn delete_pending(_: &std::path::Path) -> bool {
+	false
+}
+
+// A name whose delete waits on another program's handle is still listed and
+// still passes symlink_metadata, but nothing can open it. Only the NT status
+// tells that apart from a file this process may not open. Takes the \\?\ form
+// canonicalize gives; anything else returns false, as does any status but
+// the pending one.
+#[cfg(windows)]
+fn delete_pending(real: &std::path::Path) -> bool {
+	use std::os::windows::ffi::OsStrExt;
+	use windows_sys::Wdk::Foundation::{NtClose, OBJECT_ATTRIBUTES};
+	use windows_sys::Wdk::Storage::FileSystem::{FILE_OPEN_FOR_BACKUP_INTENT, FILE_OPEN_REPARSE_POINT, FILE_SYNCHRONOUS_IO_NONALERT, NtOpenFile};
+	use windows_sys::Win32::Foundation::{HANDLE, STATUS_DELETE_PENDING, UNICODE_STRING};
+	use windows_sys::Win32::Storage::FileSystem::{FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, SYNCHRONIZE};
+	use windows_sys::Win32::System::IO::{IO_STATUS_BLOCK, IO_STATUS_BLOCK_0};
+
+	// Win32_System_Kernel, not enabled for one constant
+	const OBJ_CASE_INSENSITIVE: u32 = 0x40;
+	const WIN32_PREFIX: [u16; 4] = [b'\\' as u16, b'\\' as u16, b'?' as u16, b'\\' as u16];
+	const NT_PREFIX: [u16; 4] = [b'\\' as u16, b'?' as u16, b'?' as u16, b'\\' as u16];
+
+	let mut units: Vec<u16> = real.as_os_str().encode_wide().collect();
+	let Some(prefix) = units.get_mut(..4) else {
+		return false;
+	};
+	if *prefix != WIN32_PREFIX {
+		return false;
+	}
+	prefix.copy_from_slice(&NT_PREFIX);
+	// Length counts bytes and needs no terminator
+	let Ok(bytes) = u16::try_from(units.len() * 2) else {
+		return false;
+	};
+	let Ok(attributes_size) = u32::try_from(size_of::<OBJECT_ATTRIBUTES>()) else {
+		return false;
+	};
+	let name = UNICODE_STRING { Length: bytes, MaximumLength: bytes, Buffer: units.as_mut_ptr() };
+	let attributes = OBJECT_ATTRIBUTES { Length: attributes_size, RootDirectory: std::ptr::null_mut(), ObjectName: &raw const name, Attributes: OBJ_CASE_INSENSITIVE, SecurityDescriptor: std::ptr::null(), SecurityQualityOfService: std::ptr::null() };
+	let mut io_status = IO_STATUS_BLOCK { Anonymous: IO_STATUS_BLOCK_0 { Status: 0 }, Information: 0 };
+	let mut handle: HANDLE = std::ptr::null_mut();
+	// Attributes only and full sharing never conflict with another program's
+	// handle. The reparse flag judges a link at the name, never its target.
+	// SAFETY: plain FFI on locals that outlive the call. The name's buffer holds
+	// exactly `Length` bytes, and `attributes` points at `name`.
+	let status = unsafe { NtOpenFile(&raw mut handle, SYNCHRONIZE | FILE_READ_ATTRIBUTES, &raw const attributes, &raw mut io_status, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN_REPARSE_POINT | FILE_OPEN_FOR_BACKUP_INTENT | FILE_SYNCHRONOUS_IO_NONALERT) };
+	if status >= 0 {
+		// SAFETY: a successful open returned this handle, and nothing else holds it
+		unsafe { NtClose(handle) };
+	}
+	status == STATUS_DELETE_PENDING
+}
+
+/// A save refused because the file has a line that can't be read, and a write
+/// would drop it. The save happens wherever it was called from, and only the
+/// window can put a message in front of anybody, so it waits here to be asked.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Refusal {
+	pub path: std::path::PathBuf,
+	pub lines: Vec<usize>,
+	pub lost: usize,
+}
+
+static REFUSED: std::sync::Mutex<Option<Refusal>> = std::sync::Mutex::new(None);
+
+/// The refusal waiting to be shown, if any. Taking it clears it.
+pub fn take_refusal() -> Option<Refusal> {
+	crate::locks::lock(&REFUSED).take()
+}
+
+fn leave_refusal(refusal: Refusal) {
+	*crate::locks::lock(&REFUSED) = Some(refusal);
+}
+
+fn unreadable_lines(doc: &shcl::Document) -> Vec<usize> {
+	let mut lines: Vec<usize> = doc.diagnostics().iter().filter(|d| matches!(d.severity, shcl::Severity::Error)).map(|d| d.line).chain(misplaced_lists(doc)).filter(|line| *line > 0).collect();
+	lines.sort_unstable();
+	lines.dedup();
+	lines
+}
+
+// The lines that give a list to a setting that takes one value. shcl 3.0 reads
+// a 2.x `family:[One, Two]` as a list, where `migrate` counts it as nothing
+// bound, and `get_string` hands back the brackets as text. Only a theme's
+// `ansi` takes a list.
+fn misplaced_lists(doc: &shcl::Document) -> impl Iterator<Item = usize> + '_ {
+	doc.fields().into_iter().filter_map(|field| {
+		let mut names = field.path.split('.');
+		let ansi = names.next().is_some_and(|n| n.eq_ignore_ascii_case("themes")) && names.next_back().is_some_and(|n| n.eq_ignore_ascii_case("ansi"));
+		let list = !ansi && doc.kind(&field.path) == shcl::ValueKind::Array;
+		list.then_some(field.line)
+	})
+}
+
+// The same gate and text as shcl's save_file_keep_lines, through the writer above, which
+// can put the file back when a replace took it.
 #[must_use]
-pub fn persist(orig: &Settings, s: &Settings) -> bool {
+fn write_doc(path: &std::path::Path, doc: &shcl::Document) -> bool {
+	let lost = if save_refused(doc) { doc.lost_count() } else { 0 };
+	if lost > 0 {
+		leave_refusal(Refusal { path: path.to_path_buf(), lines: unreadable_lines(doc), lost });
+	}
+	let written = if lost > 0 { Err(anyhow::Error::new(shcl::SaveError::Refused { path: path.display().to_string(), lost })) } else { write_config_atomic(path, &saved_text(doc)) };
+	if let Err(e) = written {
+		eprintln!("{APP_NAME}: couldn't save config {}: {e:#}", path.display());
+		return false;
+	}
+	true
+}
+
+// A setter returns whether the write applied, and every path here is the
+// program's own, so a refusal is a bug worth hearing about rather than a no-op.
+trait Put {
+	fn put_string(&mut self, path: &str, v: &str);
+	fn put_bool(&mut self, path: &str, v: bool);
+	fn put_float(&mut self, path: &str, v: f64);
+	fn put_int(&mut self, path: &str, v: i64);
+	fn put_datetime(&mut self, path: &str, v: &shcl::ShclDateTime);
+	fn put_string_array(&mut self, path: &str, v: &[&str]);
+}
+impl Put for shcl::Document {
+	fn put_string(&mut self, path: &str, v: &str) {
+		put_once(self, path, |doc| doc.set_string(path, v));
+	}
+	fn put_bool(&mut self, path: &str, v: bool) {
+		put_once(self, path, |doc| doc.set_bool(path, v));
+	}
+	fn put_float(&mut self, path: &str, v: f64) {
+		put_once(self, path, |doc| doc.set_float(path, v));
+	}
+	fn put_int(&mut self, path: &str, v: i64) {
+		put_once(self, path, |doc| doc.set_int(path, v));
+	}
+	fn put_datetime(&mut self, path: &str, v: &shcl::ShclDateTime) {
+		put_once(self, path, |doc| doc.set_datetime(path, v));
+	}
+	fn put_string_array(&mut self, path: &str, v: &[&str]) {
+		put_once(self, path, |doc| doc.set_string_array(path, v));
+	}
+}
+
+// A setting written twice reads as neither copy, and shcl refuses to set it,
+// so the save used to leave the file as it was, with the setting at its
+// default. The value being written is the one wanted, so the later copies are
+// removed and the first gets the value, as the rating line does.
+fn put_once(doc: &mut shcl::Document, path: &str, set: impl Fn(&mut shcl::Document) -> shcl::SetStatus) {
+	let mut status = set(doc);
+	if status == shcl::SetStatus::Multiple {
+		let notes = keep_first(doc, path);
+		status = set(doc);
+		if doc.count(path) == 1 {
+			for note in notes {
+				let _ = doc.set_comment(path, &note);
+			}
+		}
+	}
+	unwritable(path, status);
+}
+
+// Removes every copy of a setting after the first, and returns the comments
+// above them, since a removal deletes those too. A path that's doubled further
+// up than its last name is left alone, since `(k)` only picks among the last
+// name's copies.
+fn keep_first(doc: &mut shcl::Document, path: &str) -> Vec<String> {
+	let copies = doc.count(path);
+	let notes = (1..copies).flat_map(|k| doc.comments(&format!("{path}({k})"))).collect();
+	for k in (1..copies).rev() {
+		doc.remove(&format!("{path}({k})"));
+	}
+	notes
+}
+fn unwritable(path: &str, status: shcl::SetStatus) {
+	if status != shcl::SetStatus::Ok {
+		eprintln!("{APP_NAME}: config: couldn't write {path} ({status:?})");
+	}
+}
+
+// NaN is never equal to itself, so a plain `!=` reads a NaN on both sides as a
+// change and writes it over the value in the file. Every float setting is
+// compared through this. A NaN only ever arrived from the command line, which
+// refuses one now, but the comparison is where the damage was done.
+fn same_f32(a: f32, b: f32) -> bool {
+	a == b || (a.is_nan() && b.is_nan())
+}
+
+/// `persist` for a Settings Apply. `unsaved` is the baseline the file still has
+/// when an earlier Apply couldn't write it. The save diffs against that, or the
+/// retry would find nothing changed and write nothing. Returns the baseline to
+/// keep when this write doesn't go through either.
+#[must_use]
+pub fn persist_apply(orig: &Settings, unsaved: Option<Settings>, edited: &Settings) -> Option<Settings> {
+	let base = unsaved.unwrap_or_else(|| orig.clone());
+	(!persist(&base, edited)).then_some(base)
+}
+
+/// Write the values that differ from `orig` back into the config in place. The
+/// user's comments and blank-line grouping survive (see `to_text`), and untouched
+/// settings stay as they were, commented out or following the system. Returns
+/// false, writing nothing, if something in the file changed and it looks open in
+/// another program, so the caller can hold off and the Settings dialog stays open
+/// instead of clobbering an edit in progress. The state file is the program's own,
+/// so it's written either way, and a save that changes nothing in the config, such
+/// as a window size, leaves the config alone.
+#[must_use]
+pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	let Some(path) = config_path() else {
 		return true;
 	};
+	// another window's save between this read and this write would be lost
+	let _lock = crate::peers::save_lock();
+	persist_state(orig, edited);
+	let (mut doc, missing) = match read_doc(&path) {
+		Ok(doc) => (doc, false),
+		Err(Unread::Missing) => {
+			if let Some(dir) = path.parent().filter(|_| may_write(&path)) {
+				let _ = std::fs::create_dir_all(dir);
+			}
+			(regrown_doc(&path, &orig.shells), true)
+		}
+		Err(Unread::Failed(e)) => {
+			eprintln!("{APP_NAME}: couldn't read config {}: {e}", path.display());
+			return false;
+		}
+	};
+	let as_read = saved_text(&doc);
+	// round f32 -> a clean decimal so persisted floats aren't 0.2000000029...
+	let rounded = |v: f32| (v as f64 * 1000.0).round() / 1000.0;
+
+	let theme_moved = write_user_themes(&mut doc, &orig.user_themes, &edited.user_themes);
+	write_shells(&mut doc, &orig.shells, &edited.shells);
+
+	let (revert, disable) = write_model(&mut doc, orig, edited);
+	if edited.scrollback != orig.scrollback {
+		doc.put_int("scroll.scrollback", edited.scrollback as i64);
+	}
+	if !same_f32(edited.alt_scroll_lines, orig.alt_scroll_lines) {
+		doc.put_float("scroll.alt_scroll_lines", rounded(edited.alt_scroll_lines));
+	}
+	if !same_f32(edited.output_ease_lines, orig.output_ease_lines) {
+		doc.put_float("scroll.output_ease_lines", rounded(edited.output_ease_lines));
+	}
+	if edited.minimap_tui_whitelist != orig.minimap_tui_whitelist {
+		doc.put_string("scroll.minimap.tui_process_whitelist", &edited.minimap_tui_whitelist);
+	}
+	if !same_f32(edited.wallpaper_even, orig.wallpaper_even) {
+		doc.put_float("wallpaper.even_visibility", rounded(edited.wallpaper_even));
+	}
+	if !same_f32(edited.text_dark_on_light, orig.text_dark_on_light) {
+		doc.put_float("text.dark_on_light", rounded(edited.text_dark_on_light));
+	}
+	if edited.text_scrim_regular_weight != orig.text_scrim_regular_weight {
+		doc.put_bool("text.scrim.regular_weight", edited.text_scrim_regular_weight);
+	}
+	if edited.color_emoji != orig.color_emoji {
+		doc.put_bool("text.color_emoji", edited.color_emoji);
+	}
+	if edited.embolden_inverse != orig.embolden_inverse {
+		doc.put_bool("text.embolden_inverse", edited.embolden_inverse);
+	}
+	// A file can still say "none" for no blink. Turning the blink on has to
+	// replace that word, or the next load reads it as off again.
+	if edited.cursor_blink && doc.get_string("cursor.animation").is_ok_and(|word| animation_is_none(&word)) {
+		doc.put_string("cursor.animation", edited.cursor_animation.key());
+	}
+	if edited.hide_single_tab != orig.hide_single_tab {
+		doc.put_bool("window.hide_single_tab", edited.hide_single_tab);
+	}
+	if edited.menu_bar != orig.menu_bar {
+		doc.put_bool("window.menu_bar", edited.menu_bar);
+	}
+	if edited.word_separators != orig.word_separators {
+		doc.put_string("selection.word_separators", &edited.word_separators);
+	}
+	if edited.selection_pairs != orig.selection_pairs {
+		doc.put_string("selection.pairs", &edited.selection_pairs);
+	}
+	if edited.command_line != orig.command_line {
+		doc.put_string("shell.command_line", &edited.command_line);
+	}
+	if edited.keys != orig.keys {
+		write_keys(&mut doc, &orig.keys, &edited.keys);
+	}
+	if edited.wallpaper_fallback_builtin != orig.wallpaper_fallback_builtin {
+		doc.put_bool("wallpaper.fallback_builtin", edited.wallpaper_fallback_builtin);
+	}
+
+	if !missing && revert.is_empty() && disable.is_empty() && saved_text(&doc) == as_read {
+		return true;
+	}
 	if config_open_elsewhere(&path) {
 		note_config_busy(&path);
 		return false;
 	}
-	let Some(mut doc) = read_doc(&path) else {
-		return true;
-	};
-	// round f32 -> a clean decimal so persisted floats aren't 0.2000000029...
-	let r = |v: f32| (v as f64 * 1000.0).round() / 1000.0;
-
-	if s.theme != orig.theme {
-		doc.set_string("theme", s.theme.as_str());
-	}
-	if s.theme_mode != orig.theme_mode {
-		doc.set_string("theme_mode", s.theme_mode.as_str());
-	}
-	write_user_themes(&mut doc, &orig.user_themes, &s.user_themes);
-	write_shells(&mut doc, &orig.shells, &s.shells);
-
-	if s.use_system_font != orig.use_system_font {
-		doc.set_bool("font.use_system_family", s.use_system_font);
-	}
-	if s.use_system_font_size != orig.use_system_font_size {
-		doc.set_bool("font.use_system_size", s.use_system_font_size);
-	}
-	if s.font_family != orig.font_family {
-		if let Some(f) = &s.font_family {
-			doc.set_string("font.family", f);
+	let wrote = write_doc(&path, &doc);
+	if wrote {
+		revert_keys(&revert.iter().map(String::as_str).collect::<Vec<_>>());
+		disable_keys(&disable.iter().map(String::as_str).collect::<Vec<_>>());
+		if theme_moved {
+			THEME_KEY_MOVED.store(true, std::sync::atomic::Ordering::Relaxed);
 		}
 	}
-	if s.font_size != orig.font_size {
-		doc.set_float("font.size", r(s.font_size));
+	wrote
+}
+
+// A save put a new theme under another key than the one it was given, so what
+// holds the old key has to read the file again before it saves that theme.
+static THEME_KEY_MOVED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether a save since the last call put a new theme under a key of its own,
+/// rather than the one the dialog gave it. Taking it clears it.
+pub fn take_theme_key_moved() -> bool {
+	THEME_KEY_MOVED.swap(false, std::sync::atomic::Ordering::Relaxed)
+}
+
+const KEPT_NOTE: &str = "Saved by SilkTerm, so these values can be used again later. See Settings.";
+
+// The settings knobs keeps, from the model's lines. A line whose value
+// changed is written, one whose value went is returned to put back the way the
+// template has it, and the `kept` block is written whole when it differs. A
+// value set aside under a switch is stored in `kept`, so its normal line is
+// returned to comment out, even one the file had before the switch went on.
+fn write_model(doc: &mut shcl::Document, orig: &Settings, edited: &Settings) -> (Vec<String>, Vec<String>) {
+	fn find<'a>(lines: &'a [(String, knobs::Value)], path: &str) -> Option<&'a knobs::Value> {
+		lines.iter().find(|(p, _)| p == path).map(|(_, v)| v)
 	}
-	if s.line_height_scale != orig.line_height_scale {
-		doc.set_float("font.line_height_scale", r(s.line_height_scale));
-	}
-	if s.scrollback != orig.scrollback {
-		doc.set_int("scroll.scrollback", s.scrollback as i64);
-	}
-	if s.scroll_smooth != orig.scroll_smooth {
-		doc.set_bool("scroll.smooth", s.scroll_smooth);
-	}
-	if s.scroll_ease_in_ms != orig.scroll_ease_in_ms {
-		doc.set_float("scroll.ease_in_ms", r(s.scroll_ease_in_ms));
-	}
-	if s.scroll_ramp_up_ms != orig.scroll_ramp_up_ms {
-		doc.set_float("scroll.ramp_up_ms", r(s.scroll_ramp_up_ms));
-	}
-	if s.scroll_single_screen_tau_ms != orig.scroll_single_screen_tau_ms {
-		doc.set_float(
-			"scroll.single_screen_tau_ms",
-			r(s.scroll_single_screen_tau_ms),
-		);
-	}
-	if s.scroll_ramp_down_ms != orig.scroll_ramp_down_ms {
-		doc.set_float("scroll.ramp_down_ms", r(s.scroll_ramp_down_ms));
-	}
-	if s.scroll_ease_out_ms != orig.scroll_ease_out_ms {
-		doc.set_float("scroll.ease_out_ms", r(s.scroll_ease_out_ms));
-	}
-	if s.wheel_lines != orig.wheel_lines {
-		doc.set_float("scroll.wheel_lines", r(s.wheel_lines));
-	}
-	if s.alt_scroll_lines != orig.alt_scroll_lines {
-		doc.set_float("scroll.alt_scroll_lines", r(s.alt_scroll_lines));
-	}
-	if s.output_ease_lines != orig.output_ease_lines {
-		doc.set_float("scroll.output_ease_lines", r(s.output_ease_lines));
-	}
-	if s.scrollbar != orig.scrollbar {
-		doc.set_bool("scroll.scrollbar.enabled", s.scrollbar);
-	}
-	if s.scrollbar_thickness != orig.scrollbar_thickness {
-		doc.set_float("scroll.scrollbar.thickness", r(s.scrollbar_thickness));
-	}
-	if s.scrollbar_auto_hide != orig.scrollbar_auto_hide {
-		doc.set_bool("scroll.scrollbar.auto_hide", s.scrollbar_auto_hide);
-	}
-	if s.margin != orig.margin {
-		doc.set_float("window.margin", r(s.margin));
-	}
-	if s.opacity != orig.opacity {
-		doc.set_float("transparency.opacity", r(s.opacity));
-	}
-	if s.transparent_background != orig.transparent_background {
-		doc.set_bool("transparency.enabled", s.transparent_background);
-	}
-	if s.transparent_background_blur != orig.transparent_background_blur {
-		doc.set_bool("transparency.blur_behind", s.transparent_background_blur);
-	}
-	if s.wallpaper_opacity != orig.wallpaper_opacity {
-		doc.set_float("wallpaper.opacity", r(s.wallpaper_opacity));
-	}
-	if s.wallpaper_enabled != orig.wallpaper_enabled {
-		doc.set_bool("wallpaper.enabled", s.wallpaper_enabled);
-	}
-	if s.wallpaper_rotate_enabled != orig.wallpaper_rotate_enabled {
-		doc.set_bool("wallpaper.rotate.enabled", s.wallpaper_rotate_enabled);
-	}
-	if s.wallpaper_default_fit != orig.wallpaper_default_fit {
-		doc.set_string(
-			"wallpaper.default_fit",
-			match s.wallpaper_default_fit {
-				Fit::Zoom => "zoom",
-				Fit::Stretch => "stretch",
-			},
-		);
-	}
-	if s.wallpaper_honor_xmp != orig.wallpaper_honor_xmp {
-		doc.set_bool("wallpaper.honor_xmp", s.wallpaper_honor_xmp);
-	}
-	if s.wallpaper_blur != orig.wallpaper_blur {
-		doc.set_float("wallpaper.blur", r(s.wallpaper_blur));
-	}
-	if s.wallpaper_contrast_mask != orig.wallpaper_contrast_mask {
-		doc.set_bool("wallpaper.contrast_mask.enabled", s.wallpaper_contrast_mask);
-	}
-	if s.wallpaper_contrast_mask_size != orig.wallpaper_contrast_mask_size {
-		doc.set_float(
-			"wallpaper.contrast_mask.size",
-			r(s.wallpaper_contrast_mask_size),
-		);
-	}
-	if s.wallpaper_contrast_mask_strength != orig.wallpaper_contrast_mask_strength {
-		doc.set_float(
-			"wallpaper.contrast_mask.strength",
-			r(s.wallpaper_contrast_mask_strength),
-		);
-	}
-	if s.wallpaper_contrast_mask_auto != orig.wallpaper_contrast_mask_auto {
-		doc.set_float(
-			"wallpaper.contrast_mask.auto",
-			r(s.wallpaper_contrast_mask_auto),
-		);
-	}
-	if s.text_scrim != orig.text_scrim {
-		doc.set_bool("text.scrim.enabled", s.text_scrim);
-	}
-	if s.text_scrim_radius != orig.text_scrim_radius {
-		doc.set_float("text.scrim.radius", r(s.text_scrim_radius));
-	}
-	if s.text_scrim_softness != orig.text_scrim_softness {
-		doc.set_float("text.scrim.softness", r(s.text_scrim_softness));
-	}
-	if s.text_scrim_strength != orig.text_scrim_strength {
-		doc.set_float("text.scrim.strength", r(s.text_scrim_strength));
-	}
-	if s.text_outline != orig.text_outline {
-		doc.set_float("text.outline", r(s.text_outline));
-	}
-	if s.text_scrim_ramp != orig.text_scrim_ramp {
-		doc.set_string("text.scrim.ramp", &s.text_scrim_ramp);
-	}
-	if s.text_scrim_function != orig.text_scrim_function {
-		doc.set_string("text.scrim.function", &s.text_scrim_function);
-	}
-	if s.text_scrim_regular_weight != orig.text_scrim_regular_weight {
-		doc.set_bool("text.scrim.regular_weight", s.text_scrim_regular_weight);
-	}
-	if s.color_emoji != orig.color_emoji {
-		doc.set_bool("text.color_emoji", s.color_emoji);
-	}
-	if s.embolden_inverse != orig.embolden_inverse {
-		doc.set_bool("text.embolden_inverse", s.embolden_inverse);
-	}
-	if s.cursor_scrim != orig.cursor_scrim {
-		doc.set_bool("cursor.scrim", s.cursor_scrim);
-	}
-	if s.cursor_outline != orig.cursor_outline {
-		doc.set_bool("cursor.outline", s.cursor_outline);
-	}
-	if s.cursor_size_height != orig.cursor_size_height {
-		doc.set_float("cursor.size.height", r(s.cursor_size_height));
-	}
-	if s.cursor_size_width != orig.cursor_size_width {
-		doc.set_float("cursor.size.width", r(s.cursor_size_width));
-	}
-	if s.cursor_animation != orig.cursor_animation {
-		doc.set_string("cursor.animation", &s.cursor_animation);
-	}
-	if s.cursor_animation_resume_s != orig.cursor_animation_resume_s {
-		doc.set_float("cursor.animation_resume_s", r(s.cursor_animation_resume_s));
-	}
-	if s.cursor_blink_rate_ms != orig.cursor_blink_rate_ms {
-		doc.set_float("cursor.blink_rate_ms", r(s.cursor_blink_rate_ms));
-	}
-	if s.columns != orig.columns {
-		doc.set_int("window.columns", s.columns as i64);
-	}
-	if s.rows != orig.rows {
-		doc.set_int("window.rows", s.rows as i64);
-	}
-	if s.remember_size != orig.remember_size {
-		doc.set_bool("window.remember_size", s.remember_size);
-	}
-	if s.hide_single_tab != orig.hide_single_tab {
-		doc.set_bool("window.hide_single_tab", s.hide_single_tab);
-	}
-	if s.tab_min_pct != orig.tab_min_pct {
-		doc.set_float("window.tab_min_width_pct", r(s.tab_min_pct));
-	}
-	if s.tab_max_pct != orig.tab_max_pct {
-		doc.set_float("window.tab_max_width_pct", r(s.tab_max_pct));
-	}
-	if s.remembered_columns != orig.remembered_columns {
-		doc.set_int("window.remembered_columns", s.remembered_columns as i64);
-	}
-	if s.remembered_rows != orig.remembered_rows {
-		doc.set_int("window.remembered_rows", s.remembered_rows as i64);
-	}
-	if s.word_separators != orig.word_separators {
-		doc.set_string("selection.word_separators", &s.word_separators);
-	}
-	if s.selection_pairs != orig.selection_pairs {
-		doc.set_string("selection.pairs", &s.selection_pairs);
-	}
-	if s.command_line != orig.command_line {
-		doc.set_string("shell.command_line", &s.command_line);
-	}
-	if s.startup_directory != orig.startup_directory {
-		doc.set_string("shell.startup_directory", &s.startup_directory);
-	}
-	if s.shell_integration != orig.shell_integration {
-		doc.set_bool("shell.integration", s.shell_integration);
-	}
-	if s.copy_on_select != orig.copy_on_select {
-		doc.set_bool("shell.copy_on_select", s.copy_on_select);
-	}
-	if s.hyperlinks != orig.hyperlinks {
-		doc.set_bool("hyperlinks.enabled", s.hyperlinks);
-	}
-	if s.hyperlink_open_command != orig.hyperlink_open_command {
-		doc.set_string("hyperlinks.open_command", &s.hyperlink_open_command);
-	}
-	if s.wallpaper != orig.wallpaper || s.wallpaper_raw != orig.wallpaper_raw {
-		// the file keeps whatever form the user wrote (bare/relative/absolute)
-		if s.wallpaper_raw.trim().is_empty() {
-			doc.remove("wallpaper.image");
-		} else {
-			doc.set_string("wallpaper.image", s.wallpaper_raw.trim());
+	let was = orig.model.lines(&crate::fields::Env::new(orig, None));
+	let now = edited.model.lines(&crate::fields::Env::new(edited, None));
+	let aside = |lines: &knobs::Lines, path: &str| lines.kept.iter().any(|(p, _)| p.strip_prefix("kept.set_aside.") == Some(path));
+	let (mut revert, mut disable) = (Vec::new(), Vec::new());
+	let rewrite_kept = was.kept != now.kept;
+	for s in &crate::fields::spec().settings {
+		let path = s.path.as_str();
+		match (find(&was.config, path), find(&now.config, path)) {
+			// a line that already says it is left as typed
+			(before, Some(v)) => {
+				if before != Some(v) && !holds_value(doc, path, v) {
+					put_value(doc, path, v);
+				}
+			}
+			(Some(_), None) if aside(&now, path) => disable.push(path.to_string()),
+			(Some(_), None) => revert.push(path.to_string()),
+			// A line loads ahead of its set-aside copy, so it goes once the kept
+			// block is written. Where that block stays as it is, the line is how
+			// the file stores the value, and it reads back the same.
+			(None, None) => {
+				if rewrite_kept && (aside(&now, path) || aside(&was, path)) && doc.exists(path) {
+					disable.push(path.to_string());
+				}
+			}
 		}
 	}
-	if s.wallpaper_fallback_builtin != orig.wallpaper_fallback_builtin {
-		doc.set_bool("wallpaper.fallback_builtin", s.wallpaper_fallback_builtin);
-	}
-
-	let mut set_color = |key: &str, color: [u8; 3], orig_color: [u8; 3]| {
-		if color != orig_color {
-			doc.set_string(&format!("colors.{key}"), &format_hex(color));
+	if rewrite_kept {
+		doc.remove("kept");
+		for (path, v) in &now.kept {
+			put_value(doc, path, v);
 		}
-	};
-	set_color("background", s.bg, orig.bg);
-	set_color("foreground", s.fg, orig.fg);
-	set_color("cursor", s.cursor, orig.cursor);
-	set_color("highlight", s.highlight, orig.highlight);
-	set_color("focus", s.focus, orig.focus);
-	set_color("gutter", s.gutter, orig.gutter);
-	set_color("menu_background", s.menu_bg, orig.menu_bg);
-	set_color("menu_foreground", s.menu_fg, orig.menu_fg);
-	set_color("dialog_background", s.dialog_bg, orig.dialog_bg);
-	set_color("dialog_foreground", s.dialog_fg, orig.dialog_fg);
-	// the two scrollbar colors have had dialog rows since the bar shipped but
-	// were never written back, so an edit lasted only as long as the session
-	set_color("scrollbar_thumb", s.scrollbar_thumb, orig.scrollbar_thumb);
-	set_color(
-		"scrollbar_trough",
-		s.scrollbar_trough,
-		orig.scrollbar_trough,
-	);
+		if !now.kept.is_empty() {
+			let _ = doc.set_comment("kept", KEPT_NOTE);
+		}
+	}
+	(revert, disable)
+}
 
-	write_doc(&path, &doc);
-	true
+fn holds_value(doc: &shcl::Document, path: &str, v: &knobs::Value) -> bool {
+	match v {
+		knobs::Value::Bool(b) => doc.get_bool(path) == Ok(*b),
+		knobs::Value::Int(i) => doc.get_int(path) == Ok(*i),
+		knobs::Value::Float(f) => doc.get_float(path).is_ok_and(|x| (x - f).abs() < 1e-9),
+		knobs::Value::Text(text) => doc.get_string(path).is_ok_and(|s| s == *text),
+	}
+}
+
+fn put_value(doc: &mut shcl::Document, path: &str, v: &knobs::Value) {
+	match v {
+		knobs::Value::Bool(b) => doc.put_bool(path, *b),
+		knobs::Value::Int(i) => doc.put_int(path, *i),
+		knobs::Value::Float(f) => doc.put_float(path, (f * 1000.0).round() / 1000.0),
+		knobs::Value::Text(text) => doc.put_string(path, text),
+	}
 }
 
 pub fn format_hex(c: [u8; 3]) -> String {
 	format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 
-// The surface is an sRGB format, so the GPU re-encodes linear->sRGB on write.
-// Feed it linear values derived from our sRGB byte colors.
+/// The surface is an sRGB format, so the GPU re-encodes linear->sRGB on write.
+/// Feed it linear values derived from our sRGB byte colors.
 pub fn srgb_f32(c: [u8; 3]) -> [f32; 4] {
 	[to_linear(c[0]), to_linear(c[1]), to_linear(c[2]), 1.0]
 }
 
-// LUT: this runs per background cell per rebuilt frame (thousands of powf
-// calls otherwise - see pane.rs build).
+/// LUT, since this runs per background cell per rebuilt frame, which would be
+/// thousands of powf calls (see pane.rs build).
 pub fn to_linear(b: u8) -> f32 {
-	static LUT: std::sync::OnceLock<[f32; 256]> = std::sync::OnceLock::new();
+	static LUT: OnceLock<[f32; 256]> = OnceLock::new();
 	LUT.get_or_init(|| std::array::from_fn(|i| linear_of(i as u8)))[b as usize]
 }
 
 fn linear_of(b: u8) -> f32 {
-	let c = f32::from(b) / 255.0;
-	if c <= 0.04045 {
-		c / 12.92
-	} else {
-		((c + 0.055) / 1.055).powf(2.4)
-	}
+	to_linear_f32(f32::from(b) / 255.0)
 }
 
-// Inverse of to_linear: encode a linear value back to an sRGB byte. The one
-// Rust-side copy - the WGSL lin2srgb in gfx.rs/scrim.rs is necessarily separate.
-pub fn from_linear_u8(c: f32) -> u8 {
+/// sRGB -> linear on a 0..1 value rather than a byte.
+pub fn to_linear_f32(c: f32) -> f32 {
 	let c = c.clamp(0.0, 1.0);
-	let s = if c <= 0.003_130_8 {
-		c * 12.92
-	} else {
-		1.055 * c.powf(1.0 / 2.4) - 0.055
-	};
-	(s * 255.0 + 0.5) as u8
+	if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+}
+
+/// Inverse of `to_linear_f32`. The one Rust-side copy, since the WGSL lin2srgb in
+/// gfx.rs and scrim.rs has to be separate.
+pub fn from_linear(c: f32) -> f32 {
+	let c = c.clamp(0.0, 1.0);
+	if c <= 0.003_130_8 { c * 12.92 } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 }
+}
+
+/// Encode a linear value back to an sRGB byte.
+pub fn from_linear_u8(c: f32) -> u8 {
+	(from_linear(c) * 255.0 + 0.5) as u8
+}
+
+/// Rec.709 luma weights, for linear light.
+pub const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
+
+/// Rec.709 luma of an sRGB color, in linear light.
+pub fn luma(c: [u8; 3]) -> f32 {
+	LUMA[0] * to_linear(c[0]) + LUMA[1] * to_linear(c[1]) + LUMA[2] * to_linear(c[2])
 }
 
 // config file loading
@@ -1098,6 +2696,7 @@ struct RawConfig {
 	font_family: Option<String>,
 	font_size: Option<f32>,
 	line_height_scale: Option<f32>,
+	font_ignores_themes: Option<bool>,
 	scrollback: Option<usize>,
 	scroll_smooth: Option<bool>,
 	scroll_ease_in_ms: Option<f32>,
@@ -1112,6 +2711,9 @@ struct RawConfig {
 	scrollbar: Option<bool>,
 	scrollbar_thickness: Option<f32>,
 	scrollbar_auto_hide: Option<bool>,
+	minimap: Option<bool>,
+	minimap_width: Option<f32>,
+	minimap_tui_whitelist: Option<String>,
 	margin: Option<f32>,
 	opacity: Option<f32>,
 	transparent_background: Option<bool>,
@@ -1124,13 +2726,16 @@ struct RawConfig {
 	wallpaper_rotate_random: Option<bool>,
 	wallpaper_rotate_interval_s: Option<f32>,
 	wallpaper_opacity: Option<f32>,
+	wallpaper_even: Option<f32>,
 	wallpaper_default_fit: Option<String>,
 	wallpaper_honor_xmp: Option<bool>,
+	wallpaper_honor_xmp_look: Option<bool>,
 	wallpaper_blur: Option<f32>,
 	wallpaper_contrast_mask: Option<bool>,
 	wallpaper_contrast_mask_size: Option<f32>,
 	wallpaper_contrast_mask_strength: Option<f32>,
 	wallpaper_contrast_mask_auto: Option<f32>,
+	wallpaper_compression: Option<String>,
 	theme: Option<String>,
 	theme_mode: Option<String>,
 	text_scrim: Option<bool>,
@@ -1138,42 +2743,74 @@ struct RawConfig {
 	text_scrim_softness: Option<f32>,
 	text_scrim_strength: Option<f32>,
 	text_outline: Option<f32>,
+	text_dark_on_light: Option<f32>,
 	text_scrim_ramp: Option<String>,
 	text_scrim_function: Option<String>,
 	text_scrim_regular_weight: Option<bool>,
+	text_min_contrast: Option<f32>,
 	color_emoji: Option<bool>,
 	embolden_inverse: Option<bool>,
 	cursor_scrim: Option<bool>,
 	cursor_outline: Option<bool>,
 	cursor_size_height: Option<f32>,
 	cursor_size_width: Option<f32>,
+	cursor_blink: Option<bool>,
 	cursor_animation: Option<String>,
 	cursor_animation_resume_s: Option<f32>,
 	cursor_animation_idle_stop_s: Option<f32>,
-	cursor_blink_rate_ms: Option<f32>,
+	cursor_blink_rate_s: Option<f32>,
+	remember_size: Option<bool>,
 	columns: Option<usize>,
 	rows: Option<usize>,
-	remember_size: Option<bool>,
+	remember_per_monitor: Option<bool>,
+	remember_maximized: Option<bool>,
+	resize_on_zoom: Option<bool>,
 	hide_single_tab: Option<bool>,
-	tab_min_pct: Option<f32>,
+	menu_bar: Option<bool>,
+	new_tab_beside: Option<bool>,
+	tab_text: Option<String>,
+	title_shows_tab: Option<bool>,
+	idle_release: Option<bool>,
+	idle_release_hidden_min: Option<usize>,
+	idle_release_min: Option<usize>,
+	software_rendering: Option<bool>,
+	tab_regular_pct: Option<f32>,
 	tab_max_pct: Option<f32>,
+	tab_tip_max_s: Option<f32>,
 	remembered_columns: Option<usize>,
 	remembered_rows: Option<usize>,
+	remembered_maximized: Option<bool>,
+	remembered_font_zoom: Option<i64>,
+	monitor_sizes: Vec<MonitorSize>,
 	word_separators: Option<String>,
 	selection_pairs: Option<String>,
 	command_line: Option<String>,
 	startup_directory: Option<String>,
 	copy_on_select: Option<bool>,
 	shell_integration: Option<bool>,
+	bash_prompt: Option<bool>,
+	term: Option<String>,
+	tmux_new_session: Option<bool>,
+	tmux_session_name: Option<String>,
+	tmux_on_close: Option<String>,
 	hyperlinks: Option<bool>,
 	hyperlink_open_command: Option<String>,
+	option_as_alt: Option<String>,
+	performance_automatic: Option<bool>,
+	performance_profile: Option<String>,
+	performance_check_hardware: Option<bool>,
+	performance_check_next_run: Option<bool>,
+	performance_detect_remote: Option<bool>,
+	rated_hardware: Option<String>,
 	colors: RawColors,
 	user_themes: Vec<crate::theme::UserTheme>,
 	shells: Vec<crate::shells::ShellEntry>,
+	keys: Vec<(crate::input::Hotkey, Vec<crate::keys::Chord>)>,
 }
 
 #[derive(Default)]
 struct RawColors {
+	from_wallpaper: Option<bool>,
 	background: Option<String>,
 	foreground: Option<String>,
 	cursor: Option<String>,
@@ -1189,59 +2826,266 @@ struct RawColors {
 }
 
 fn load() -> Settings {
+	// A launch's own writes come before it says anything about the file.
+	*crate::locks::lock(&LAUNCH_SAID) = None;
+	// a launch rewrites the file in steps, and neither a save in another window
+	// nor a second launch's adopt or import can run between them
+	let _lock = crate::peers::save_lock();
 	adopt_legacy_config();
 	let Some(path) = config_path() else {
 		return Settings::default();
 	};
-	if !path.exists() {
+	import_beta1_config(&path);
+	if !path.exists() && may_write(&path) {
 		if let Some(dir) = path.parent() {
 			let _ = std::fs::create_dir_all(dir);
 		}
-		if let Err(e) = std::fs::write(&path, default_config()) {
-			eprintln!(
-				"{APP_NAME}: could not create config {}: {e}",
-				path.display()
-			);
+		if let Err(e) = write_config_atomic(&path, default_config()) {
+			eprintln!("{APP_NAME}: couldn't create config {}: {e:#}", path.display());
 		}
 	}
-	// A pre-nesting config converts wholesale first (backed up to .bak, active
-	// values carried over). Then migrate an existing config in place
-	// (rename/remove changed keys) and backfill any keys it's missing, so an
-	// updated config stays current without clobbering the user's existing
-	// values. These are the only launch-time writes, and each runs only when
-	// the program's own option set changed. The in-place writes defer (with an
-	// FYI) if the file looks open in another program.
-	convert_legacy_config(&path);
-	adopt_default_shell(&path);
-	migrate_config(&path);
-	backfill_config(&path);
-	let raw = match std::fs::read_to_string(&path) {
+	// A pre-nesting config converts wholesale first, backed up to .bak with active
+	// values copied over. Then an existing config is migrated in place, with changed
+	// keys renamed or removed, and missing keys backfilled, so it stays current
+	// without clobbering the user's values. These are the only launch-time writes,
+	// and each runs only when the program's own option set changed. The in-place
+	// writes defer, with an FYI, if the file looks open in another program.
+	//
+	// Before that, a heading an earlier conversion left with the wallpaper image is
+	// put right, or the file reads as pre-nesting and converts again. Ahead of
+	// everything, a file shcl 2.x wrote is respelled for 3.0, and the 2.x file is kept
+	// as `config_backup_<time>_format-v2.shcl`. A current file with lines that aren't
+	// UTF-8 is written again without them, kept the same way, so the launch that
+	// finds it says so once and every later save works as usual.
+	let mut file = LaunchFile::read(&path);
+	launch_steps(&mut file);
+	let (raw, doc) = match file.body {
 		// The writes above defer when the file looks open elsewhere, so parse the
 		// migrated text rather than what is on disk: a renamed key must never be
 		// read under its old spelling, which matters most where a rename hands an
 		// old name to a new setting (colors.focus).
-		Ok(text) => read_raw(&migrate_config_text(&text).unwrap_or(text), &path),
-		Err(_) => RawConfig::default(),
+		Some(body) => {
+			let text = settings_text(&body);
+			note_seen(&path, &text);
+			let text = loaded_text(&text);
+			let doc = shcl::Document::parse(&text);
+			let (raw, said) = read_config_doc(&doc, &text, &path);
+			for line in &said {
+				eprintln!("{line}");
+			}
+			remember_launch_messages(&path, said);
+			(raw, doc)
+		}
+		None => (RawConfig::default(), shcl::Document::new()),
 	};
-	resolve(raw)
+	settled(resolve(raw), &doc)
+}
+
+fn launch_steps(file: &mut LaunchFile) {
+	let unstamped = file.body.as_deref().is_some_and(|body| shcl::format_version(&String::from_utf8_lossy(body)).is_none());
+	convert_shcl2_config(file);
+	repair_wallpaper_heading(file);
+	convert_legacy_config(file);
+	adopt_default_shell(file);
+	move_state_out(file, unstamped);
+	migrate_config(file);
+	backfill_config(file);
+	refresh_shcl_banner(file);
+}
+
+// The settings file as the launch's steps leave it, so each step reads what
+// the one before it wrote rather than the disk again.
+struct LaunchFile<'a> {
+	path: &'a std::path::Path,
+	body: Option<Vec<u8>>,
+}
+
+impl<'a> LaunchFile<'a> {
+	fn read(path: &'a std::path::Path) -> Self {
+		Self { path, body: std::fs::read(path).ok() }
+	}
+
+	// None for a file that isn't UTF-8, as `read_to_string` gives
+	fn text(&self) -> Option<&str> {
+		std::str::from_utf8(self.body.as_deref()?).ok()
+	}
+
+	fn write(&mut self, out: String) -> anyhow::Result<()> {
+		let written = write_config_atomic(self.path, &out);
+		self.wrote(written.is_ok(), out);
+		written
+	}
+
+	// A failed write can leave either file, and the test seam skips writes
+	// outside its folders, so both cases read the disk again.
+	fn wrote(&mut self, ok: bool, out: String) {
+		if ok && may_write(self.path) {
+			self.body = Some(out.into_bytes());
+		} else {
+			self.reread();
+		}
+	}
+
+	fn reread(&mut self) {
+		self.body = std::fs::read(self.path).ok();
+	}
+}
+
+// Settings read from a file, with the model read from the same document and
+// every setting field filled from it.
+fn settled(mut settings: Settings, doc: &shcl::Document) -> Settings {
+	read_state(&mut settings);
+	settings.model = crate::fields::load(doc);
+	settings.found_picture = resolve_wallpaper(None).map_or_else(
+		|| {
+			if settings.wallpaper_fallback_builtin { BUILT_IN_PICTURE.to_string() } else { String::new() }
+		},
+		|path| path.to_string_lossy().into_owned(),
+	);
+	crate::fields::fill(&mut settings, None);
+	find_wallpaper(&mut settings);
+	settings
+}
+
+// The values in a config text, and everything a launch prints about it.
+fn read_config_text(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
+	read_config_doc(&shcl::Document::parse(text), text, path)
+}
+
+// `doc` is `text` parsed
+fn read_config_doc(doc: &shcl::Document, text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
+	let mut said: Vec<String> = complaints_in(doc, text).into_iter().map(|line| format!("{APP_NAME}: {}: {line}", path.display())).collect();
+	let (raw, read) = read_raw_doc(doc, path);
+	said.extend(read);
+	(raw, said)
+}
+
+// What the last launch printed about the settings file. A write after it can
+// move the lines it named: the performance rating adds lines near the top once
+// the window is up. Such a write says again whatever now reads differently, so
+// the last word names the line the file has.
+static LAUNCH_SAID: std::sync::Mutex<Option<(std::path::PathBuf, Vec<String>)>> = std::sync::Mutex::new(None);
+
+fn remember_launch_messages(path: &std::path::Path, said: Vec<String>) {
+	*crate::locks::lock(&LAUNCH_SAID) = Some((path.to_path_buf(), said));
+}
+
+// The messages a write of `text` to `path` brings that weren't said already.
+// They are remembered as said.
+fn restated_launch_messages(path: &std::path::Path, text: &str) -> Vec<String> {
+	let mut held = crate::locks::lock(&LAUNCH_SAID);
+	let Some((at, said)) = held.as_mut() else {
+		return Vec::new();
+	};
+	if at != path {
+		return Vec::new();
+	}
+	let (_, now) = read_config_text(&loaded_text(text), path);
+	let new: Vec<String> = now.iter().filter(|line| !said.contains(line)).cloned().collect();
+	*said = now;
+	new
+}
+
+// What is wrong with a config file that nothing else says out loud. All 3
+// were silent, and the first of them permanently stops the program saving.
+//
+// Subtrees the user fills in themselves (their shells, their themes) aren't
+// checked for unknown keys, only the program's own settings.
+#[cfg(test)]
+fn config_complaints(text: &str) -> Vec<String> {
+	complaints_in(&shcl::Document::parse(text), text)
+}
+
+// `doc` is `text` parsed
+fn complaints_in(doc: &shcl::Document, text: &str) -> Vec<String> {
+	let walked = walk_settings(text);
+	let mut out = Vec::new();
+
+	// A hotkey that doesn't read keeps its default, and one set over another's
+	// default takes it from that one. Both are easy to miss from the keyboard.
+	out.extend(crate::keys::complaints(cfg!(target_os = "macos"), |path| doc.get_string(path).ok().map(|text| (text, doc.lines(path))), line_list));
+
+	let lines = unreadable_lines(doc);
+	if !lines.is_empty() || doc.lost_count() > 0 {
+		// shcl writes such a line back as it was, so a save goes through, but it
+		// still sets nothing. A save it can't keep the lines for is refused, and
+		// the window says so then.
+		out.push(format!("{} line(s) couldn't be read{} - they're kept in the file but don't set anything", lines.len().max(doc.lost_count()), line_list(&lines)));
+	}
+
+	// `background: #112233` sets nothing, since `#` starts a comment, and the
+	// theme's color is used instead. The walk takes such a line for a heading.
+	let source: Vec<&str> = text.lines().collect();
+	for w in &walked {
+		if let WalkLine::Setting { index, path, active: true, header: true } = w
+			&& let Some(color) = unquoted_color(source[*index])
+		{
+			out.push(format!("`{path}` is empty{} - `#` starts a comment, so write the color in quotes: \"{color}\"", line_list(&[*index + 1])));
+		}
+	}
+
+	// A key written twice resolves to neither spelling, so the setting is there
+	// in the file, plainly set, and doing nothing.
+	let mut seen: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+	let mut active: Vec<(String, usize)> = Vec::new();
+	for w in walked {
+		// a block header doesn't have a value of its own
+		if let WalkLine::Setting { index, path, active: true, header: false, .. } = w {
+			active.push((path, index + 1));
+		}
+	}
+	for (path, _) in &active {
+		*seen.entry(path.as_str()).or_insert(0) += 1;
+	}
+	let mut twice: Vec<&str> = seen.iter().filter(|(_, n)| **n > 1).map(|(p, _)| *p).collect();
+	twice.sort_unstable();
+	for path in twice {
+		let at: Vec<usize> = active.iter().filter(|(p, _)| p == path).map(|(_, line)| *line).collect();
+		out.push(format!("`{path}` is set more than once{} - neither value is used", line_list(&at)));
+	}
+
+	// A key nothing reads is almost always a typo, and it looks exactly like a
+	// setting that isn't working.
+	let known: std::collections::HashSet<String> = walk_settings(default_config())
+		.into_iter()
+		.filter_map(|w| match w {
+			WalkLine::Setting { path, .. } => Some(path),
+			_ => None,
+		})
+		.collect();
+	let mut unread: Vec<(String, usize)> = active.iter().filter(|(path, _)| !known.contains(path) && !path.starts_with("shells.") && !copied_as_is(path)).cloned().collect();
+	unread.sort_unstable();
+	unread.dedup_by(|a, b| a.0 == b.0);
+	for (path, line) in unread {
+		out.push(format!("nothing reads `{path}`{} - check the spelling", line_list(&[line])));
+	}
+	out
 }
 
 // Typed reads off a parsed document, warning about (and then ignoring) any single
 // setting whose value won't coerce. A key that is absent, empty, or unreadable
 // comes back None, so `resolve` falls through to that setting's default.
 struct Reader<'a> {
-	doc: shcl::Document,
+	doc: &'a shcl::Document,
 	path: &'a std::path::Path,
+	said: std::cell::RefCell<Vec<String>>,
+}
+
+// The color in `key: #rrggbb` with nothing but a comment after it, which is
+// what an unquoted color reads as. It takes 3, 6, or 8 hex digits.
+fn unquoted_color(line: &str) -> Option<&str> {
+	let (_, value) = line.split_once(':')?;
+	let value = value.trim_start();
+	let digits = value.strip_prefix('#')?;
+	let len = digits.find(|c: char| !c.is_ascii_hexdigit()).unwrap_or(digits.len());
+	let ends = digits[len..].chars().next().is_none_or(char::is_whitespace);
+	(matches!(len, 3 | 6 | 8) && ends).then(|| &value[..=len])
 }
 
 // " line 4" / " lines 2, 4" for a diagnostic, empty when there is nothing to
 // cite (a writer-built node reports 0, and a wildcard slot that missed does too).
 fn line_list(lines: &[usize]) -> String {
-	let cited: Vec<String> = lines
-		.iter()
-		.filter(|n| **n > 0)
-		.map(std::string::ToString::to_string)
-		.collect();
+	let cited: Vec<String> = lines.iter().filter(|n| **n > 0).map(std::string::ToString::to_string).collect();
 	match cited.len() {
 		0 => String::new(),
 		1 => format!(" line {}", cited[0]),
@@ -1251,572 +3095,591 @@ fn line_list(lines: &[usize]) -> String {
 
 impl Reader<'_> {
 	// Complain once about a value that is present but the wrong type. Anything
-	// else (absent, empty) is silent - a commented-out setting is the norm here.
+	// else, absent or empty, is silent, since a commented-out setting is the norm here.
+	// A list is said as a line that can't be read (`misplaced_lists`).
 	fn note<T>(&self, key: &str, got: Result<T, shcl::Status>) -> Option<T> {
+		if self.doc.kind(key) == shcl::ValueKind::Array {
+			return None;
+		}
 		match got {
 			Ok(v) => Some(v),
 			Err(shcl::Status::BadType) => {
-				eprintln!(
-					"{APP_NAME}: {}{}: ignoring invalid value for `{key}`",
-					self.path.display(),
-					line_list(&self.doc.lines(key))
-				);
+				self.said.borrow_mut().push(format!("{APP_NAME}: {}{}: ignoring invalid value for `{key}`", self.path.display(), line_list(&self.doc.lines(key))));
 				None
 			}
 			Err(shcl::Status::Multiple) => {
 				// Set more than once. shcl refuses to pick a winner, so the
-				// default is what actually takes effect - which used to happen
-				// in silence, and reads as the setting being ignored outright.
-				// Cite every line: the point is that there IS more than one.
-				eprintln!(
-					"{APP_NAME}: {}{}: `{key}` is set more than once, so its default is used",
-					self.path.display(),
-					line_list(&self.doc.lines(key))
-				);
+				// default takes effect. That used to happen quietly, and it
+				// read as the setting being ignored. Cite every line, since the
+				// point is that there's more than one.
+				self.said.borrow_mut().push(format!("{APP_NAME}: {}{}: `{key}` is set more than once, so its default is used", self.path.display(), line_list(&self.doc.lines(key))));
 				None
 			}
 			Err(_) => None,
 		}
 	}
-	fn b(&self, key: &str) -> Option<bool> {
+	fn read_bool(&self, key: &str) -> Option<bool> {
 		self.note(key, self.doc.get_bool(key))
 	}
-	fn f(&self, key: &str) -> Option<f32> {
+	fn read_f32(&self, key: &str) -> Option<f32> {
 		self.note(key, self.doc.get_float(key)).map(|v| v as f32)
 	}
-	fn u(&self, key: &str) -> Option<usize> {
+	fn read_i64(&self, key: &str) -> Option<i64> {
 		self.note(key, self.doc.get_int(key))
-			.map(|v| v.max(0) as usize)
 	}
-	fn s(&self, key: &str) -> Option<String> {
+	fn read_usize(&self, key: &str) -> Option<usize> {
+		self.note(key, self.doc.get_int(key)).map(|v| v.max(0) as usize)
+	}
+	fn read_string(&self, key: &str) -> Option<String> {
 		self.note(key, self.doc.get_string(key))
+	}
+	// A template that can't be read is kept, so the file still says what was
+	// typed, and tabs use the default one until it is fixed.
+	fn read_tab_text(&self) -> Option<String> {
+		const KEY: &str = "window.tab_text";
+		let text = self.read_string(KEY)?;
+		if let Err(e) = crate::tabtitle::tab_template(&text)
+			&& !text.trim().is_empty()
+		{
+			self.said.borrow_mut().push(format!("{APP_NAME}: {}{}: tabs use the default text, since `{KEY}` can't be used: {e}", self.path.display(), line_list(&self.doc.lines(KEY))));
+		}
+		Some(text)
 	}
 }
 
-// Parse the config and pull out every key we know. The parser is forgiving by
-// design - a malformed line becomes a diagnostic and is skipped rather than
-// sinking the whole document - so this needs no retry loop of its own, and no
-// leading-zero rewriting (`.25` is a valid float here).
-fn read_raw(text: &str, path: &std::path::Path) -> RawConfig {
-	let doc = shcl::Document::parse(text);
-	for d in doc.diagnostics() {
-		if matches!(d.severity, shcl::Severity::Error) {
-			eprintln!(
-				"{APP_NAME}: {} line {}: {} [{}]",
-				path.display(),
-				d.line,
-				d.message,
-				d.code
-			);
-		}
-	}
-	let r = Reader { doc, path };
-	RawConfig {
-		use_system_font: r.b("font.use_system_family"),
-		use_system_font_size: r.b("font.use_system_size"),
-		font_family: r.s("font.family"),
-		font_size: r.f("font.size"),
-		line_height_scale: r.f("font.line_height_scale"),
-		scrollback: r.u("scroll.scrollback"),
-		scroll_smooth: r.b("scroll.smooth"),
-		scroll_ease_in_ms: r.f("scroll.ease_in_ms"),
-		scroll_ramp_up_ms: r.f("scroll.ramp_up_ms"),
-		scroll_single_screen_tau_ms: r.f("scroll.single_screen_tau_ms"),
-		scroll_ramp_down_ms: r.f("scroll.ramp_down_ms"),
-		scroll_ease_out_ms: r.f("scroll.ease_out_ms"),
-		wheel_lines: r.f("scroll.wheel_lines"),
-		alt_scroll_lines: r.f("scroll.alt_scroll_lines"),
-		output_ease_lines: r.f("scroll.output_ease_lines"),
-		smooth_scroll_apps: r.b("scroll.smooth_apps"),
-		scrollbar: r.b("scroll.scrollbar.enabled"),
-		scrollbar_thickness: r.f("scroll.scrollbar.thickness"),
-		scrollbar_auto_hide: r.b("scroll.scrollbar.auto_hide"),
-		margin: r.f("window.margin"),
-		opacity: r.f("transparency.opacity"),
-		transparent_background: r.b("transparency.enabled"),
-		transparent_background_blur: r.b("transparency.blur_behind"),
-		wallpaper_enabled: r.b("wallpaper.enabled"),
-		wallpaper: r.s("wallpaper.image"),
-		wallpaper_fallback_builtin: r.b("wallpaper.fallback_builtin"),
-		wallpaper_rotate_enabled: r.b("wallpaper.rotate.enabled"),
-		wallpaper_folder: r.s("wallpaper.rotate.folder"),
-		wallpaper_rotate_random: r.b("wallpaper.rotate.random"),
-		wallpaper_rotate_interval_s: r.f("wallpaper.rotate.interval_s"),
-		wallpaper_opacity: r.f("wallpaper.opacity"),
-		wallpaper_default_fit: r.s("wallpaper.default_fit"),
-		wallpaper_honor_xmp: r.b("wallpaper.honor_xmp"),
-		wallpaper_blur: r.f("wallpaper.blur"),
-		wallpaper_contrast_mask: r.b("wallpaper.contrast_mask.enabled"),
-		wallpaper_contrast_mask_size: r.f("wallpaper.contrast_mask.size"),
-		wallpaper_contrast_mask_strength: r.f("wallpaper.contrast_mask.strength"),
-		wallpaper_contrast_mask_auto: r.f("wallpaper.contrast_mask.auto"),
-		theme: r.s("theme"),
-		theme_mode: r.s("theme_mode"),
-		text_scrim: r.b("text.scrim.enabled"),
-		text_scrim_radius: r.f("text.scrim.radius"),
-		text_scrim_softness: r.f("text.scrim.softness"),
-		text_scrim_strength: r.f("text.scrim.strength"),
-		text_outline: r.f("text.outline"),
-		text_scrim_ramp: r.s("text.scrim.ramp"),
-		text_scrim_function: r.s("text.scrim.function"),
-		text_scrim_regular_weight: r.b("text.scrim.regular_weight"),
-		color_emoji: r.b("text.color_emoji"),
-		embolden_inverse: r.b("text.embolden_inverse"),
-		cursor_scrim: r.b("cursor.scrim"),
-		cursor_outline: r.b("cursor.outline"),
-		cursor_size_height: r.f("cursor.size.height"),
-		cursor_size_width: r.f("cursor.size.width"),
-		cursor_animation: r.s("cursor.animation"),
-		cursor_animation_resume_s: r.f("cursor.animation_resume_s"),
-		cursor_animation_idle_stop_s: r.f("cursor.animation_idle_stop_s"),
-		cursor_blink_rate_ms: r.f("cursor.blink_rate_ms"),
-		columns: r.u("window.columns"),
-		rows: r.u("window.rows"),
-		remember_size: r.b("window.remember_size"),
-		hide_single_tab: r.b("window.hide_single_tab"),
-		tab_min_pct: r.f("window.tab_min_width_pct"),
-		tab_max_pct: r.f("window.tab_max_width_pct"),
-		remembered_columns: r.u("window.remembered_columns"),
-		remembered_rows: r.u("window.remembered_rows"),
-		word_separators: r.s("selection.word_separators"),
-		selection_pairs: r.s("selection.pairs"),
-		command_line: r.s("shell.command_line"),
-		startup_directory: r.s("shell.startup_directory"),
-		copy_on_select: r.b("shell.copy_on_select"),
-		shell_integration: r.b("shell.integration"),
-		hyperlinks: r.b("hyperlinks.enabled"),
-		hyperlink_open_command: r.s("hyperlinks.open_command"),
-		colors: RawColors {
-			background: r.s("colors.background"),
-			foreground: r.s("colors.foreground"),
-			cursor: r.s("colors.cursor"),
-			highlight: r.s("colors.highlight"),
-			focus: r.s("colors.focus"),
-			menu_background: r.s("colors.menu_background"),
-			menu_foreground: r.s("colors.menu_foreground"),
-			dialog_background: r.s("colors.dialog_background"),
-			dialog_foreground: r.s("colors.dialog_foreground"),
-			gutter: r.s("colors.gutter"),
-			scrollbar_thumb: r.s("colors.scrollbar_thumb"),
-			scrollbar_trough: r.s("colors.scrollbar_trough"),
-		},
-		user_themes: read_user_themes(&r.doc),
-		shells: read_shells(&r.doc),
-	}
+#[cfg(test)]
+fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
+	read_raw_doc(&shcl::Document::parse(text), path)
+}
+
+// Pull out every known key. The parser is forgiving, so a
+// malformed line becomes a diagnostic and is skipped rather than sinking the whole
+// document, and this needs no retry loop or leading-zero rewriting (`.25` is a
+// valid float here). Also returns what the read says about the file, for the
+// caller to print.
+fn read_raw_doc(doc: &shcl::Document, path: &std::path::Path) -> (RawConfig, Vec<String>) {
+	let said: Vec<String> = doc.diagnostics().iter().filter(|d| matches!(d.severity, shcl::Severity::Error)).map(|d| format!("{APP_NAME}: {} line {}: {} [{}]", path.display(), d.line, d.message, d.code)).collect();
+	let reader = Reader { doc, path, said: std::cell::RefCell::new(said) };
+	let raw = RawConfig { use_system_font: reader.read_bool("font.use_system_family"), use_system_font_size: reader.read_bool("font.use_system_size"), font_family: reader.read_string("font.family"), font_size: reader.read_f32("font.size"), line_height_scale: reader.read_f32("font.line_height_scale"), font_ignores_themes: reader.read_bool("font.ignore_themes"), scrollback: reader.read_usize("scroll.scrollback"), scroll_smooth: reader.read_bool("scroll.smooth"), scroll_ease_in_ms: reader.read_f32("scroll.ease_in_ms"), scroll_ramp_up_ms: reader.read_f32("scroll.ramp_up_ms"), scroll_single_screen_tau_ms: reader.read_f32("scroll.single_screen_tau_ms"), scroll_ramp_down_ms: reader.read_f32("scroll.ramp_down_ms"), scroll_ease_out_ms: reader.read_f32("scroll.ease_out_ms"), wheel_lines: reader.read_f32("scroll.wheel_lines"), alt_scroll_lines: reader.read_f32("scroll.alt_scroll_lines"), output_ease_lines: reader.read_f32("scroll.output_ease_lines"), smooth_scroll_apps: reader.read_bool("scroll.smooth_apps"), scrollbar: reader.read_bool("scroll.scrollbar.enabled"), scrollbar_thickness: reader.read_f32("scroll.scrollbar.thickness"), scrollbar_auto_hide: reader.read_bool("scroll.scrollbar.auto_hide"), minimap: reader.read_bool("scroll.minimap.enabled"), minimap_width: reader.read_f32("scroll.minimap.width"), minimap_tui_whitelist: reader.read_string("scroll.minimap.tui_process_whitelist"), margin: reader.read_f32("window.margin"), opacity: reader.read_f32("transparency.opacity"), transparent_background: reader.read_bool("transparency.enabled"), transparent_background_blur: reader.read_bool("transparency.blur_behind"), wallpaper_enabled: reader.read_bool("wallpaper.enabled"), wallpaper: reader.read_string("wallpaper.image"), wallpaper_fallback_builtin: reader.read_bool("wallpaper.fallback_builtin"), wallpaper_rotate_enabled: reader.read_bool("wallpaper.rotate.enabled"), wallpaper_folder: reader.read_string("wallpaper.rotate.folder"), wallpaper_rotate_random: reader.read_bool("wallpaper.rotate.random"), wallpaper_rotate_interval_s: reader.read_f32("wallpaper.rotate.interval_s"), wallpaper_opacity: reader.read_f32("wallpaper.opacity"), wallpaper_even: reader.read_f32("wallpaper.even_visibility"), wallpaper_default_fit: reader.read_string("wallpaper.default_fit"), wallpaper_honor_xmp: reader.read_bool("wallpaper.honor_xmp"), wallpaper_honor_xmp_look: reader.read_bool("wallpaper.honor_xmp_look"), wallpaper_blur: reader.read_f32("wallpaper.blur"), wallpaper_contrast_mask: reader.read_bool("wallpaper.contrast_mask.enabled"), wallpaper_contrast_mask_size: reader.read_f32("wallpaper.contrast_mask.size"), wallpaper_contrast_mask_strength: reader.read_f32("wallpaper.contrast_mask.strength"), wallpaper_contrast_mask_auto: reader.read_f32("wallpaper.contrast_mask.auto"), wallpaper_compression: reader.read_string("wallpaper.compression"), theme: reader.read_string("theme"), theme_mode: reader.read_string("theme_mode"), performance_automatic: reader.read_bool("performance.automatic"), performance_profile: reader.read_string("performance.profile"), performance_check_hardware: reader.read_bool("performance.check_hardware"), performance_check_next_run: reader.read_bool("performance.check_next_run"), performance_detect_remote: reader.read_bool("performance.detect_remote"), rated_hardware: reader.read_string("performance.rated_hardware"), text_scrim: reader.read_bool("text.scrim.enabled"), text_scrim_radius: reader.read_f32("text.scrim.radius"), text_scrim_softness: reader.read_f32("text.scrim.softness"), text_scrim_strength: reader.read_f32("text.scrim.strength"), text_outline: reader.read_f32("text.outline"), text_dark_on_light: reader.read_f32("text.dark_on_light"), text_scrim_ramp: reader.read_string("text.scrim.ramp"), text_scrim_function: reader.read_string("text.scrim.function"), text_scrim_regular_weight: reader.read_bool("text.scrim.regular_weight"), text_min_contrast: reader.read_f32("text.min_contrast"), color_emoji: reader.read_bool("text.color_emoji"), embolden_inverse: reader.read_bool("text.embolden_inverse"), cursor_scrim: reader.read_bool("cursor.scrim"), cursor_outline: reader.read_bool("cursor.outline"), cursor_size_height: reader.read_f32("cursor.size.height"), cursor_size_width: reader.read_f32("cursor.size.width"), cursor_blink: reader.read_bool("cursor.blink"), cursor_animation: reader.read_string("cursor.animation"), cursor_animation_resume_s: reader.read_f32("cursor.animation_resume_s"), cursor_animation_idle_stop_s: reader.read_f32("cursor.animation_idle_stop_s"), cursor_blink_rate_s: reader.read_f32("cursor.blink_rate_s"), remember_size: reader.read_bool("window.remember_size"), columns: reader.read_usize("window.columns"), rows: reader.read_usize("window.rows"), remember_per_monitor: reader.read_bool("window.remember_per_monitor"), remember_maximized: reader.read_bool("window.remember_maximized"), resize_on_zoom: reader.read_bool("window.resize_on_zoom"), hide_single_tab: reader.read_bool("window.hide_single_tab"), menu_bar: reader.read_bool("window.menu_bar"), new_tab_beside: reader.read_bool("window.new_tab_next_to_current"), tab_text: reader.read_tab_text(), title_shows_tab: reader.read_bool("window.title_shows_tab"), idle_release: reader.read_bool("window.idle_release"), idle_release_hidden_min: reader.read_usize("window.idle_release_hidden_min"), idle_release_min: reader.read_usize("window.idle_release_min"), software_rendering: reader.read_bool("window.software_rendering"), tab_regular_pct: reader.read_f32("window.tab_regular_width_pct"), tab_max_pct: reader.read_f32("window.tab_max_width_pct"), tab_tip_max_s: reader.read_f32("window.tab_tip_max_s"), remembered_columns: reader.read_usize("window.remembered_columns"), remembered_rows: reader.read_usize("window.remembered_rows"), remembered_maximized: reader.read_bool("window.remembered_maximized"), remembered_font_zoom: reader.read_i64("window.remembered_font_zoom"), monitor_sizes: read_monitor_sizes(&reader), word_separators: reader.read_string("selection.word_separators"), selection_pairs: reader.read_string("selection.pairs"), command_line: reader.read_string("shell.command_line"), startup_directory: reader.read_string("shell.startup_directory"), copy_on_select: reader.read_bool("shell.copy_on_select"), shell_integration: reader.read_bool("shell.integration"), bash_prompt: reader.read_bool("shell.bash_prompt"), term: reader.read_string("shell.term"), tmux_new_session: reader.read_bool("shell.tmux.always_new_session"), tmux_session_name: reader.read_string("shell.tmux.session_name"), tmux_on_close: reader.read_string("shell.tmux.on_close"), hyperlinks: reader.read_bool("hyperlinks.enabled"), hyperlink_open_command: reader.read_string("hyperlinks.open_command"), option_as_alt: reader.read_string("keys.option_as_alt"), colors: RawColors { background: reader.read_string("colors.background"), from_wallpaper: reader.read_bool("colors.from_wallpaper"), foreground: reader.read_string("colors.foreground"), cursor: reader.read_string("colors.cursor"), highlight: reader.read_string("colors.highlight"), focus: reader.read_string("colors.focus"), menu_background: reader.read_string("colors.menu_background"), menu_foreground: reader.read_string("colors.menu_foreground"), dialog_background: reader.read_string("colors.dialog_background"), dialog_foreground: reader.read_string("colors.dialog_foreground"), gutter: reader.read_string("colors.gutter"), scrollbar_thumb: reader.read_string("colors.scrollbar_thumb"), scrollbar_trough: reader.read_string("colors.scrollbar_trough") }, user_themes: read_user_themes(reader.doc), shells: read_shells(reader.doc), keys: read_keys(&reader) };
+	(raw, reader.said.into_inner())
 }
 
 // Saved themes, in file order. A slug with no readable colors at all is skipped;
 // anything else missing falls back to the first built-in, so a hand-edited or
 // half-written block still yields a usable theme rather than none.
 fn read_user_themes(doc: &shcl::Document) -> Vec<crate::theme::UserTheme> {
+	doc.children("themes").into_iter().filter_map(|slug| read_user_theme(doc, slug)).collect()
+}
+
+fn read_user_theme(doc: &shcl::Document, slug: String) -> Option<crate::theme::UserTheme> {
 	let base = crate::theme::THEMES[0].1;
-	let mut out = Vec::new();
-	for slug in doc.children("themes") {
-		let read = |mode: &str, fallback: crate::theme::Palette| {
-			let mut pal = fallback;
-			let mut any = false;
-			for (i, key) in crate::theme::PALETTE_KEYS.iter().enumerate() {
-				if let Some(c) = doc
-					.get_string(&format!("themes.{slug}.{mode}.{key}"))
-					.ok()
-					.as_deref()
-					.and_then(parse_hex)
-				{
-					pal.set(i, c);
+	let read = |mode: &str, fallback: crate::theme::Palette| {
+		let mut pal = fallback;
+		let mut any = false;
+		for (i, key) in crate::theme::PALETTE_KEYS.iter().enumerate() {
+			if let Some(c) = doc.get_string(&format!("themes.{slug}.{mode}.{key}")).ok().as_deref().and_then(parse_hex) {
+				pal.set(i, c);
+				any = true;
+			}
+		}
+		if let Ok(list) = doc.get_string_array(&format!("themes.{slug}.{mode}.ansi")) {
+			for (slot, text) in pal.ansi.iter_mut().zip(list.iter()) {
+				if let Some(c) = parse_hex(text) {
+					*slot = c;
 					any = true;
 				}
 			}
-			if let Ok(list) = doc.get_string_array(&format!("themes.{slug}.{mode}.ansi")) {
-				for (slot, text) in pal.ansi.iter_mut().zip(list.iter()) {
-					if let Some(c) = parse_hex(text) {
-						*slot = c;
-						any = true;
-					}
-				}
-			}
-			(pal, any)
-		};
-		let (dark, got_dark) = read("dark", base.dark);
-		let (light, got_light) = read("light", base.light);
-		if !got_dark && !got_light {
-			continue;
 		}
-		let name = doc
-			.get_string(&format!("themes.{slug}.name"))
-			.ok()
-			.filter(|n| !n.trim().is_empty())
-			.unwrap_or_else(|| slug.clone());
-		out.push(crate::theme::UserTheme {
-			slug,
-			name,
-			dark,
-			light,
-		});
+		(pal, any)
+	};
+	let (dark, got_dark) = read("dark", base.dark);
+	let (light, got_light) = read("light", base.light);
+	if !got_dark && !got_light {
+		return None;
 	}
-	out
+	let name = doc.get_string(&format!("themes.{slug}.name")).ok().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| slug.clone());
+	let font = read_theme_font(doc, &slug);
+	Some(crate::theme::UserTheme { slug, name, dark, light, font })
+}
+
+// A theme's font, each value as the font rows would take it. A theme saved
+// before themes had fonts has no lines here, and none is fine.
+fn read_theme_font(doc: &shcl::Document, slug: &str) -> crate::theme::ThemeFont {
+	let at = format!("themes.{slug}.font");
+	let number = |key: &str, (lo, hi): (f32, f32)| doc.get_float(&format!("{at}.{key}")).ok().map(|v| v as f32).filter(|v| v.is_finite()).map(|v| v.clamp(lo, hi));
+	crate::theme::ThemeFont { family: doc.get_string(&format!("{at}.family")).ok().map(|f| f.trim().to_string()).filter(|f| !f.is_empty()), size: number("size", limits::FONT_SIZE), line_height_scale: number("line_height_scale", limits::LINE_HEIGHT) }
 }
 
 // Bring the file's `themes.*` subtrees in line with the dialog's list. A theme
-// that changed at all is dropped and rewritten whole rather than edited field by
-// field: saving, renaming and deleting are then one operation with one shape, and
-// a stale color cannot survive under a name that no longer sets it.
-fn write_user_themes(
-	doc: &mut shcl::Document,
-	orig: &[crate::theme::UserTheme],
-	now: &[crate::theme::UserTheme],
-) {
+// that changed is edited where it is, so its block keeps its comments and its
+// place in the list, which is the dropdown's order. A new theme takes a key the
+// file doesn't have yet, since the dialog knows only the themes it loaded, and
+// a block it never read may be another window's save or one that didn't load.
+// Returns whether a new theme went under another key than the dialog gave it.
+fn write_user_themes(doc: &mut shcl::Document, orig: &[crate::theme::UserTheme], now: &[crate::theme::UserTheme]) -> bool {
 	for old in orig {
 		if !now.iter().any(|t| t.slug == old.slug) {
 			doc.remove(&format!("themes.{}", old.slug));
 		}
 	}
-	for theme in now {
+	let mut moved = false;
+	for (k, theme) in now.iter().enumerate() {
 		if orig.iter().any(|t| t == theme) {
 			continue;
 		}
-		let at = format!("themes.{}", theme.slug);
-		doc.remove(&at);
-		doc.set_string(&format!("{at}.name"), &theme.name);
-		for (mode, pal) in [("dark", &theme.dark), ("light", &theme.light)] {
-			for (i, key) in crate::theme::PALETTE_KEYS.iter().enumerate() {
-				doc.set_string(&format!("{at}.{mode}.{key}"), &format_hex(pal.get(i)));
+		let mut theme = theme.clone();
+		if !orig.iter().any(|t| t.slug == theme.slug) {
+			let in_file = doc.children("themes");
+			let slug = crate::theme::free_slug(&theme.slug, |s| in_file.iter().any(|f| f == s) || now.iter().enumerate().any(|(j, t)| j != k && t.slug == s));
+			moved |= slug != theme.slug;
+			theme.slug = slug;
+		}
+		// quoted as `paths()` gives it, for a slug such as `80s`
+		let at = format!("themes.{}", shcl::quote_segment(&theme.slug));
+		put_theme(doc, &at, &theme);
+		// a block shaped by hand in a way an edit can't follow, such as an
+		// array written as a block, is written again whole
+		let mut whole = shcl::Document::new();
+		put_theme(&mut whole, &at, &theme);
+		if read_user_theme(doc, theme.slug.clone()) != read_user_theme(&whole, theme.slug.clone()) {
+			doc.remove(&at);
+			put_theme(doc, &at, &theme);
+		}
+	}
+	moved
+}
+
+// Sets each of a theme's values that doesn't already read the same, then takes
+// out every other line under its block, so a stale color can't survive under a
+// name that no longer sets it (G30).
+fn put_theme(doc: &mut shcl::Document, at: &str, theme: &crate::theme::UserTheme) {
+	let mut values = Vec::new();
+	let mut blocks = Vec::new();
+	let path = format!("{at}.name");
+	if doc.get_string(&path).ok().as_deref() != Some(theme.name.as_str()) {
+		doc.put_string(&path, &theme.name);
+	}
+	values.push(path);
+	for (mode, pal) in [("dark", &theme.dark), ("light", &theme.light)] {
+		blocks.push(format!("{at}.{mode}"));
+		for (i, key) in crate::theme::PALETTE_KEYS.iter().enumerate() {
+			let path = format!("{at}.{mode}.{key}");
+			if doc.get_string(&path).ok().as_deref().and_then(parse_hex) != Some(pal.get(i)) {
+				doc.put_string(&path, &format_hex(pal.get(i)));
 			}
+			values.push(path);
+		}
+		let path = format!("{at}.{mode}.ansi");
+		let reads: Option<Vec<[u8; 3]>> = doc.get_string_array(&path).ok().and_then(|list| list.iter().map(|c| parse_hex(c)).collect());
+		if reads.as_deref() != Some(&pal.ansi[..]) {
 			let ansi: Vec<String> = pal.ansi.iter().map(|c| format_hex(*c)).collect();
 			let ansi: Vec<&str> = ansi.iter().map(String::as_str).collect();
-			doc.set_string_array(&format!("{at}.{mode}.ansi"), &ansi);
+			doc.put_string_array(&path, &ansi);
+		}
+		values.push(path);
+	}
+	let font = &theme.font;
+	if let Some(family) = &font.family {
+		let path = format!("{at}.font.family");
+		if doc.get_string(&path).ok().as_ref() != Some(family) {
+			doc.put_string(&path, family);
+		}
+		values.push(path);
+	}
+	let rounded = |v: f32| (f64::from(v) * 1000.0).round() / 1000.0;
+	for (key, v) in [("size", font.size), ("line_height_scale", font.line_height_scale)] {
+		if let Some(v) = v {
+			let path = format!("{at}.font.{key}");
+			if doc.get_float(&path).ok() != Some(rounded(v)) {
+				doc.put_float(&path, rounded(v));
+			}
+			values.push(path);
+		}
+	}
+	if values.iter().any(|p| p.starts_with(&format!("{at}.font."))) {
+		blocks.push(format!("{at}.font"));
+	}
+	// an array's items sit under its path, so a value keeps what's under it
+	let kept = |path: &str| blocks.iter().any(|b| b == path) || values.iter().any(|v| path == v || path.strip_prefix(v.as_str()).is_some_and(|rest| rest.starts_with('.')));
+	let inside = format!("{at}.");
+	for path in doc.paths() {
+		if path.starts_with(&inside) && !kept(&path) {
+			doc.remove(&path);
 		}
 	}
 }
 
-// Stored shells, in file order - which IS the menu's order. An entry with no
-// command is skipped: a title alone names nothing to run. Everything else falls
-// back rather than dropping the entry, so a hand-written or half-written block
-// still yields a usable shell.
+const MONITOR_SIZE_FIELDS: &[&str] = &["columns", "rows", "font_zoom"];
+
+// The subtrees a rebuild copies line for line, and the typo check leaves
+// alone: the user's themes, the sizes kept per monitor, and the program's own
+// `kept` block. The shell list is copied whole, apart from these.
+fn copied_as_is(path: &str) -> bool {
+	path.starts_with("themes.") || path.starts_with("kept.") || is_monitor_size_path(path)
+}
+
+// `window.monitors.<monitor>.<field>`, for a field an entry is read for.
+fn is_monitor_size_path(path: &str) -> bool {
+	path.strip_prefix("window.monitors.").and_then(|rest| rest.split_once('.')).is_some_and(|(key, field)| !key.is_empty() && MONITOR_SIZE_FIELDS.contains(&field))
+}
+
+// The sizes kept per monitor. An entry with nothing readable sets nothing,
+// and a number missing from one takes the default.
+fn read_monitor_sizes(reader: &Reader) -> Vec<MonitorSize> {
+	let mut out = Vec::new();
+	// the plain defaults, since none of these comes from the model
+	let d = Settings::bare();
+	for key in reader.doc.children("window.monitors") {
+		let at = format!("window.monitors.{key}");
+		let columns = reader.read_usize(&format!("{at}.columns"));
+		let rows = reader.read_usize(&format!("{at}.rows"));
+		let font_zoom = reader.read_i64(&format!("{at}.font_zoom"));
+		if columns.is_none() && rows.is_none() && font_zoom.is_none() {
+			continue;
+		}
+		out.push(MonitorSize { columns: numi(columns, d.remembered_columns, limits::GRID), rows: numi(rows, d.remembered_rows, limits::GRID), font_zoom: zoom(font_zoom, d.remembered_font_zoom), key });
+	}
+	out
+}
+
+// Only a number this window changed is written. Every window is its own
+// process, so an entry another window saved since this one loaded stays as
+// that window left it.
+fn write_monitor_sizes(doc: &mut shcl::Document, orig: &[MonitorSize], now: &[MonitorSize]) {
+	for entry in now {
+		let before = orig.iter().find(|m| m.key == entry.key);
+		let at = format!("window.monitors.{}", entry.key);
+		if before.is_none_or(|b| b.columns != entry.columns) {
+			doc.put_int(&format!("{at}.columns"), entry.columns as i64);
+		}
+		if before.is_none_or(|b| b.rows != entry.rows) {
+			doc.put_int(&format!("{at}.rows"), entry.rows as i64);
+		}
+		if before.is_none_or(|b| b.font_zoom != entry.font_zoom) {
+			doc.put_int(&format!("{at}.font_zoom"), i64::from(entry.font_zoom));
+		}
+	}
+}
+
+// Stored shells, in file order, which is the menu's order. An entry without a
+// command is skipped, since a title alone names nothing to run. Everything else
+// falls back rather than dropping the entry, so a hand-written or half-written
+// block still gives a usable shell.
 fn read_shells(doc: &shcl::Document) -> Vec<crate::shells::ShellEntry> {
 	let mut out = Vec::new();
 	for slug in doc.children("shells") {
-		let text = |key: &str| {
-			doc.get_string(&format!("shells.{slug}.{key}"))
-				.ok()
-				.map(|v| v.trim().to_string())
-				.filter(|v| !v.is_empty())
-		};
+		let text = |key: &str| doc.get_string(&format!("shells.{slug}.{key}")).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
 		let Some(command) = text("command") else {
 			continue;
 		};
 		out.push(crate::shells::ShellEntry {
 			title: text("title").unwrap_or_else(|| slug.clone()),
 			command,
-			active: doc
-				.get_bool(&format!("shells.{slug}.active"))
-				.unwrap_or(true),
+			active: doc.get_bool(&format!("shells.{slug}.active")).unwrap_or(true),
 			comment: text("comment").unwrap_or_default(),
-			// A date the file spells any other way is simply not a date we can
-			// show, so it reads as "never seen" rather than failing the entry.
-			last_seen: doc
-				.get_datetime(&format!("shells.{slug}.last_seen"))
-				.ok()
-				.and_then(|when| when.date)
-				.map_or_else(String::new, |(y, m, d)| format!("{y:04}-{m:02}-{d:02}")),
+			// A date written any other way can't be shown, so it
+			// reads as "never seen" rather than failing the entry.
+			last_seen: doc.get_datetime(&format!("shells.{slug}.last_seen")).ok().and_then(|when| when.date).map_or_else(String::new, |(y, m, d)| format!("{y:04}-{m:02}-{d:02}")),
 			slug,
 		});
 	}
 	out
 }
 
-// Bring the file's `shells.*` subtrees in line with the list in memory. Same
-// shape as the themes above - an entry that changed at all is dropped and
-// rewritten whole, so a field that no longer has a value cannot survive under a
-// key that stopped setting it - and, as there, an entry that did not change is
-// not touched, which is what keeps a scan that found nothing new from rewriting
-// the file at all.
-fn write_shells(
-	doc: &mut shcl::Document,
-	orig: &[crate::shells::ShellEntry],
-	now: &[crate::shells::ShellEntry],
-) {
-	// File ORDER is the list's order - it decides the menu and, at the top, the
-	// default shell - and a reorder changes no entry, so the per-entry path below
-	// would write nothing at all and lose it. A moved entry therefore rewrites
-	// the whole subtree in the new order, which is the only way to say it.
-	let order = |list: &[crate::shells::ShellEntry]| -> Vec<String> {
-		list.iter().map(|e| e.slug.clone()).collect()
-	};
-	if order(orig) != order(now) {
-		for old in orig {
+// Bring the file's `shells.*` subtrees in line with the list in memory. As with
+// the themes above, an entry that changed at all is dropped and rewritten whole,
+// so a field without a value can't survive under a key that stopped setting it.
+// An entry that didn't change is left alone, so a scan that found nothing new
+// doesn't rewrite the file at all.
+fn write_shells(doc: &mut shcl::Document, orig: &[crate::shells::ShellEntry], now: &[crate::shells::ShellEntry]) {
+	let disk = read_shells(doc);
+	let want = shells_to_save(&disk, orig, now);
+	// File order is the list's order, which decides the menu and, at the top, the
+	// default shell. A reorder changes no entry, so the per-entry path below would
+	// write nothing and lose it. So a moved entry rewrites the whole subtree in the
+	// new order.
+	if disk.iter().map(|e| &e.slug).ne(want.iter().map(|e| &e.slug)) {
+		for old in &disk {
 			doc.remove(&format!("shells.{}", old.slug));
 		}
-		for entry in now {
+		for entry in &want {
 			write_shell(doc, entry);
 		}
 		return;
 	}
-	for old in orig {
-		if !now.iter().any(|e| e.slug == old.slug) {
-			doc.remove(&format!("shells.{}", old.slug));
-		}
-	}
-	for entry in now {
-		if orig.iter().any(|e| e == entry) {
+	for entry in &want {
+		if disk.iter().any(|e| e == entry) {
 			continue;
 		}
 		write_shell(doc, entry);
 	}
 }
 
-// One entry's whole subtree, dropped and rewritten so a field that no longer has
-// a value cannot survive under a key that stopped setting it.
+// The list a save leaves in the file. `orig` is what this window loaded and
+// `now` its list since, but another window may have saved in between, and the
+// window has no file watcher. Diffing `now` against a stale `orig` put another
+// window's new find above the whole list, and so made it the default shell:
+// only the entries `orig` named were taken out before the rewrite.
+//
+// So the file is the third side. Another window's new entry stays, at the end,
+// and an entry it removed stays gone. An entry this window didn't change keeps
+// the file's copy. The order is this window's only when it moved something;
+// otherwise it is the file's, with this window's new entries after it.
+fn shells_to_save(disk: &[crate::shells::ShellEntry], orig: &[crate::shells::ShellEntry], now: &[crate::shells::ShellEntry]) -> Vec<crate::shells::ShellEntry> {
+	use crate::shells::ShellEntry;
+	fn find<'a>(list: &'a [ShellEntry], slug: &str) -> Option<&'a ShellEntry> {
+		list.iter().find(|e| e.slug == slug)
+	}
+	fn kept<'a>(list: &'a [ShellEntry], other: &'a [ShellEntry]) -> impl Iterator<Item = &'a str> {
+		list.iter().filter(|e| other.iter().any(|o| o.slug == e.slug)).map(|e| e.slug.as_str())
+	}
+	let resolve = |entry: &ShellEntry| match (find(orig, &entry.slug), find(disk, &entry.slug)) {
+		(Some(_), None) => None,
+		(Some(loaded), Some(stored)) if loaded == entry => Some(stored.clone()),
+		_ => Some(entry.clone()),
+	};
+	let is_new = |entry: &ShellEntry| find(orig, &entry.slug).is_none();
+	let added = now.iter().filter(|e| is_new(e)).count();
+	let moved = !kept(now, orig).eq(kept(orig, now)) || now[now.len() - added..].iter().any(|e| !is_new(e));
+	let mut out: Vec<ShellEntry> = Vec::new();
+	if moved {
+		out.extend(now.iter().filter_map(resolve));
+	} else {
+		for stored in disk {
+			match (find(orig, &stored.slug), find(now, &stored.slug)) {
+				(Some(_), None) => {}
+				(_, Some(entry)) => out.extend(resolve(entry)),
+				(None, None) => out.push(stored.clone()),
+			}
+		}
+	}
+	for entry in now.iter().filter(|e| is_new(e)).chain(disk) {
+		if !out.iter().any(|e| e.slug == entry.slug) && find(orig, &entry.slug).is_none() {
+			out.push(entry.clone());
+		}
+	}
+	out
+}
+
+// One entry's fields, set where they already are. Dropping the subtree first
+// would be simpler, but it takes the entry's comments with it and puts it back
+// at the end of the block. The scan stamps `last_seen` daily, so the first
+// launch of each day rewrote every entry it saw. The file's order names the
+// default shell, so a relocated entry can change which shell a new tab gets.
+// The 2 optional fields are removed rather than left behind when they empty.
 fn write_shell(doc: &mut shcl::Document, entry: &crate::shells::ShellEntry) {
 	let at = format!("shells.{}", entry.slug);
-	doc.remove(&at);
-	doc.set_string(&format!("{at}.title"), &entry.title);
-	doc.set_string(&format!("{at}.command"), &entry.command);
-	doc.set_bool(&format!("{at}.active"), entry.active);
-	if !entry.comment.is_empty() {
-		doc.set_string(&format!("{at}.comment"), &entry.comment);
+	doc.put_string(&format!("{at}.title"), &entry.title);
+	doc.put_string(&format!("{at}.command"), &entry.command);
+	doc.put_bool(&format!("{at}.active"), entry.active);
+	if entry.comment.is_empty() {
+		let _ = doc.remove(&format!("{at}.comment"));
+	} else {
+		doc.put_string(&format!("{at}.comment"), &entry.comment);
 	}
-	if let Some(when) = parse_iso_date(&entry.last_seen) {
-		doc.set_datetime(&format!("{at}.last_seen"), &when);
+	match parse_iso_date(&entry.last_seen) {
+		Some(when) => doc.put_datetime(&format!("{at}.last_seen"), &when),
+		None => {
+			doc.remove(&format!("{at}.last_seen"));
+		}
 	}
 }
 
 // "YYYY-MM-DD" as the document's own date type. Anything else is None, so a
-// hand-typed value that is not a date is dropped rather than written back.
+// hand-typed value that isn't a date is dropped rather than written back.
 fn parse_iso_date(text: &str) -> Option<shcl::ShclDateTime> {
 	let when = shcl::parse_datetime(text.trim())?;
 	when.date.is_some().then_some(when)
 }
 
+/// Every numeric setting's range, and the 2 readers that enforce it. A floor alone
+/// was the 20260707 `output_ease_lines` defect, and fixing that one in place left
+/// the rest of the table with the same hole. A window in the low thousands of
+/// columns asks for a texture past the GPU's limit and aborts at launch, and an
+/// unbounded scrollback grows until the process is killed.
+///
+/// Ceilings are well past anything anyone would set on purpose, and well short of
+/// what breaks. Both readers fall back to the default rather than an edge when the
+/// value isn't a number at all, since shcl reads `1e400` as infinity and reports it
+/// good, and infinity survives a clamp.
+#[rustfmt::skip]
+pub(crate) mod limits {
+	pub const FONT_SIZE:          (f32, f32) = (4.0, 400.0);
+	pub const LINE_HEIGHT:        (f32, f32) = (0.5, 10.0);
+	pub const EASE_MS:            (f32, f32) = (1.0, 60_000.0);
+	pub const BLINK_S:            (f32, f32) = (0.1, 120.0);
+	pub const WHEEL_LINES:        (f32, f32) = (0.0, 1_000.0);
+	pub const MARGIN:             (f32, f32) = (0.0, 1_000.0);
+	pub const ROTATE_S:           (f32, f32) = (0.0, 604_800.0);
+	pub const GRID:               (usize, usize) = (1, 1_000);
+	pub const FONT_ZOOM:          (i32, i32) = (-400, 400); // px; the size it gives is held to 4..128 again
+	pub const IDLE_MIN:           (usize, usize) = (1, 10_080); // a week
+	pub const SCROLLBACK:         (usize, usize) = (0, 1_000_000);
+}
+
+// A number from the file, clamped to its range.
+fn numf(raw: Option<f32>, default: f32, (lo, hi): (f32, f32)) -> f32 {
+	match raw {
+		Some(v) if v.is_finite() => v.clamp(lo, hi),
+		_ => default,
+	}
+}
+
+fn numi(raw: Option<usize>, default: usize, (lo, hi): (usize, usize)) -> usize {
+	raw.map_or(default, |v| v.clamp(lo, hi))
+}
+
+fn zoom(raw: Option<i64>, default: i32) -> i32 {
+	let (lo, hi) = limits::FONT_ZOOM;
+	raw.map_or(default, |v| v.clamp(i64::from(lo), i64::from(hi)) as i32)
+}
+
+// A missing or unknown word reads as the default.
+fn choice_or<T: Choice>(word: Option<&str>, default: T) -> T {
+	word.and_then(T::parse).unwrap_or(default)
+}
+
 fn resolve(raw: RawConfig) -> Settings {
 	let d = Settings::default();
 	let theme_name = raw.theme.unwrap_or_else(|| d.theme.clone());
-	let theme_mode = raw.theme_mode.unwrap_or_else(|| d.theme_mode.clone());
-	// system-mode OS dark/light detection is wired later; default to dark for now
-	let pal = crate::theme::resolve_in(
-		&raw.user_themes,
-		&theme_name,
-		&theme_mode,
-		OS_DARK.load(Ordering::Relaxed),
-	);
-	let color = |raw: Option<String>, fallback: [u8; 3]| {
-		raw.as_deref().and_then(parse_hex).unwrap_or(fallback)
-	};
-	// Default enabled, but a config that predates the key and set an explicit
-	// font_family keeps that font (infer off) instead of being overridden.
-	let use_system_font = raw.use_system_font.unwrap_or(raw.font_family.is_none());
-	// A pinned wallpaper is a deliberate choice, so it suppresses the auto-detected
-	// rotation folder; without one, a stocked wallpapers/ dir rotates by itself.
-	let pinned_wallpaper = raw
-		.wallpaper
-		.as_deref()
-		.is_some_and(|value| !value.trim().is_empty());
-	let configured_folder = resolve_wallpaper_folder(raw.wallpaper_folder);
-	let folder = configured_folder
-		.clone()
-		.or_else(|| (!pinned_wallpaper).then(default_wallpaper_folder).flatten());
+	let theme_mode = choice_or(raw.theme_mode.as_deref(), d.theme_mode);
+	// system-mode OS dark/light detection is set up later; default to dark for now
+	let pal = crate::theme::resolve_in(&raw.user_themes, &theme_name, theme_mode, OS_DARK.load(Ordering::Relaxed));
+	let color = |raw: Option<String>, fallback: [u8; 3]| raw.as_deref().and_then(parse_hex).unwrap_or(fallback);
 	let wallpaper_enabled = raw.wallpaper_enabled.unwrap_or(d.wallpaper_enabled);
-	let wallpaper_rotate_enabled = raw
-		.wallpaper_rotate_enabled
-		.unwrap_or(d.wallpaper_rotate_enabled);
-	// With rotation live, don't also hunt for a conventional wallpaper file: that
-	// is a run of stats on paths which may be a slow mount, and the first rotation
-	// pick replaces whatever it found anyway.
-	let rotating = wallpaper_enabled && wallpaper_rotate_enabled && folder.is_some();
-	let wallpaper = (pinned_wallpaper || !rotating)
-		.then(|| resolve_wallpaper(raw.wallpaper.clone()))
-		.flatten();
+	let wallpaper_rotate_enabled = raw.wallpaper_rotate_enabled.unwrap_or(d.wallpaper_rotate_enabled);
+	// The settings the dialog edits are read again by the model (`fields::load`)
+	// and filled from it, which also works out the picture and the folder. The
+	// reads here are the values the model has to agree with.
 	Settings {
-		// only the convention folder is "auto"; whether it holds anything is the
-		// scan's business, and the scan runs off this thread
-		wallpaper_folder_auto: configured_folder.is_none(),
-		use_system_font,
-		// absent = follow the face toggle, so configs predating the split (and an
-		// explicit font_size, which used to imply off) keep their exact behavior
-		use_system_font_size: raw
-			.use_system_font_size
-			.unwrap_or(use_system_font && raw.font_size.is_none()),
-		font_family: raw.font_family.filter(|s| !s.trim().is_empty()),
-		font_size: raw.font_size.unwrap_or_else(default_font_size).max(4.0),
-		line_height_scale: raw
-			.line_height_scale
-			.unwrap_or(d.line_height_scale)
-			.max(0.5),
-		scrollback: raw.scrollback.unwrap_or(d.scrollback),
+		wallpaper_folder_auto: false,
+		use_system_font: raw.use_system_font.unwrap_or(d.use_system_font),
+		use_system_font_size: raw.use_system_font_size.unwrap_or(d.use_system_font_size),
+		font_family: raw.font_family.map(|family| family.trim().to_string()).filter(|family| !family.is_empty()).unwrap_or(d.font_family),
+		font_size: raw.font_size.filter(|size| size.is_finite()).map_or(d.font_size, |size| size.clamp(limits::FONT_SIZE.0, limits::FONT_SIZE.1)),
+		line_height_scale: numf(raw.line_height_scale, d.line_height_scale, limits::LINE_HEIGHT),
+		font_ignores_themes: raw.font_ignores_themes.unwrap_or(d.font_ignores_themes),
+		scrollback: numi(raw.scrollback, d.scrollback, limits::SCROLLBACK),
 		scroll_smooth: raw.scroll_smooth.unwrap_or(d.scroll_smooth),
-		scroll_ease_in_ms: raw
-			.scroll_ease_in_ms
-			.unwrap_or(d.scroll_ease_in_ms)
-			.max(1.0),
-		scroll_ramp_up_ms: raw
-			.scroll_ramp_up_ms
-			.unwrap_or(d.scroll_ramp_up_ms)
-			.max(1.0),
-		scroll_single_screen_tau_ms: raw
-			.scroll_single_screen_tau_ms
-			.unwrap_or(d.scroll_single_screen_tau_ms)
-			.max(1.0),
-		scroll_ramp_down_ms: raw
-			.scroll_ramp_down_ms
-			.unwrap_or(d.scroll_ramp_down_ms)
-			.max(1.0),
-		scroll_ease_out_ms: raw
-			.scroll_ease_out_ms
-			.unwrap_or(d.scroll_ease_out_ms)
-			.max(1.0),
-		wheel_lines: raw.wheel_lines.unwrap_or(d.wheel_lines),
-		alt_scroll_lines: raw.alt_scroll_lines.unwrap_or(d.alt_scroll_lines),
-		// MUST clamp: scroll's backlog clamp uses this as its lower bound, and
-		// f32::clamp panics (aborts, in release) when min > max - an over-range
-		// value here killed the terminal on the first scrolling output.
-		output_ease_lines: raw
-			.output_ease_lines
-			.unwrap_or(d.output_ease_lines)
-			.clamp(0.0, crate::scroll::MAX_BACKLOG),
+		scroll_ease_in_ms: numf(raw.scroll_ease_in_ms, d.scroll_ease_in_ms, limits::EASE_MS),
+		scroll_ramp_up_ms: numf(raw.scroll_ramp_up_ms, d.scroll_ramp_up_ms, limits::EASE_MS),
+		scroll_single_screen_tau_ms: numf(raw.scroll_single_screen_tau_ms, d.scroll_single_screen_tau_ms, limits::EASE_MS),
+		scroll_ramp_down_ms: numf(raw.scroll_ramp_down_ms, d.scroll_ramp_down_ms, limits::EASE_MS),
+		scroll_ease_out_ms: numf(raw.scroll_ease_out_ms, d.scroll_ease_out_ms, limits::EASE_MS),
+		wheel_lines: numf(raw.wheel_lines, d.wheel_lines, limits::WHEEL_LINES),
+		alt_scroll_lines: numf(raw.alt_scroll_lines, d.alt_scroll_lines, limits::WHEEL_LINES),
+		// Must clamp, since scroll's backlog clamp uses this as its lower bound, and
+		// f32::clamp panics, aborting in release, when min > max. An over-range value
+		// here killed the terminal on the first scrolling output.
+		output_ease_lines: raw.output_ease_lines.unwrap_or(d.output_ease_lines).clamp(0.0, crate::scroll::MAX_BACKLOG),
 		smooth_scroll_apps: raw.smooth_scroll_apps.unwrap_or(d.smooth_scroll_apps),
 		scrollbar: raw.scrollbar.unwrap_or(d.scrollbar),
 		// floor keeps it grabbable; ceiling keeps it from swallowing a narrow pane
-		scrollbar_thickness: raw
-			.scrollbar_thickness
-			.unwrap_or(d.scrollbar_thickness)
-			.clamp(4.0, 64.0),
+		scrollbar_thickness: raw.scrollbar_thickness.unwrap_or(d.scrollbar_thickness).clamp(4.0, 64.0),
 		scrollbar_auto_hide: raw.scrollbar_auto_hide.unwrap_or(d.scrollbar_auto_hide),
-		margin: raw.margin.unwrap_or(d.margin).max(0.0),
+		minimap: raw.minimap.unwrap_or(d.minimap),
+		// the column has to be wide enough to read and narrow enough to spare
+		minimap_width: raw.minimap_width.unwrap_or(d.minimap_width).clamp(24.0, 400.0),
+		minimap_tui_whitelist: raw.minimap_tui_whitelist.unwrap_or(d.minimap_tui_whitelist),
+		margin: numf(raw.margin, d.margin, limits::MARGIN),
 		opacity: raw.opacity.unwrap_or(d.opacity).clamp(0.0, 1.0),
-		transparent_background: raw
-			.transparent_background
-			.unwrap_or(d.transparent_background),
-		transparent_background_blur: raw
-			.transparent_background_blur
-			.unwrap_or(d.transparent_background_blur),
+		transparent_background: raw.transparent_background.unwrap_or(d.transparent_background),
+		transparent_background_blur: raw.transparent_background_blur.unwrap_or(d.transparent_background_blur),
 		wallpaper_enabled,
-		wallpaper_raw: raw.wallpaper.clone().unwrap_or_default(),
-		wallpaper,
-		wallpaper_fallback_builtin: raw
-			.wallpaper_fallback_builtin
-			.unwrap_or(d.wallpaper_fallback_builtin),
+		wallpaper_raw: raw.wallpaper.unwrap_or_default(),
+		wallpaper: None,
+		wallpaper_fallback_builtin: raw.wallpaper_fallback_builtin.unwrap_or(d.wallpaper_fallback_builtin),
 		wallpaper_rotate_enabled,
-		wallpaper_folder: folder,
-		wallpaper_rotate_random: raw
-			.wallpaper_rotate_random
-			.unwrap_or(d.wallpaper_rotate_random),
-		wallpaper_rotate_interval_s: raw
-			.wallpaper_rotate_interval_s
-			.unwrap_or(d.wallpaper_rotate_interval_s)
-			.max(0.0),
-		wallpaper_opacity: raw
-			.wallpaper_opacity
-			.unwrap_or(d.wallpaper_opacity)
-			.clamp(0.0, 1.0),
-		wallpaper_blur: raw
-			.wallpaper_blur
-			.unwrap_or(d.wallpaper_blur)
-			.clamp(0.0, 100.0),
-		wallpaper_contrast_mask: raw
-			.wallpaper_contrast_mask
-			.unwrap_or(d.wallpaper_contrast_mask),
-		wallpaper_contrast_mask_size: raw
-			.wallpaper_contrast_mask_size
-			.unwrap_or(d.wallpaper_contrast_mask_size)
-			.clamp(0.0, 1.0),
-		wallpaper_contrast_mask_strength: raw
-			.wallpaper_contrast_mask_strength
-			.unwrap_or(d.wallpaper_contrast_mask_strength)
-			.clamp(0.0, 1.0),
-		wallpaper_contrast_mask_auto: raw
-			.wallpaper_contrast_mask_auto
-			.unwrap_or(d.wallpaper_contrast_mask_auto)
-			.clamp(0.0, 1.0),
+		wallpaper_folder: None,
+		wallpaper_folder_raw: raw.wallpaper_folder.unwrap_or_default(),
+		wallpaper_rotate_random: raw.wallpaper_rotate_random.unwrap_or(d.wallpaper_rotate_random),
+		wallpaper_rotate_interval_s: numf(raw.wallpaper_rotate_interval_s, d.wallpaper_rotate_interval_s, limits::ROTATE_S),
+		wallpaper_opacity: raw.wallpaper_opacity.unwrap_or(d.wallpaper_opacity).clamp(0.0, 1.0),
+		wallpaper_even: raw.wallpaper_even.unwrap_or(d.wallpaper_even).clamp(0.0, 1.0),
+		wallpaper_blur: raw.wallpaper_blur.unwrap_or(d.wallpaper_blur).clamp(0.0, 100.0),
+		wallpaper_contrast_mask: raw.wallpaper_contrast_mask.unwrap_or(d.wallpaper_contrast_mask),
+		wallpaper_contrast_mask_size: raw.wallpaper_contrast_mask_size.unwrap_or(d.wallpaper_contrast_mask_size).clamp(0.0, 1.0),
+		wallpaper_contrast_mask_strength: raw.wallpaper_contrast_mask_strength.unwrap_or(d.wallpaper_contrast_mask_strength).clamp(0.0, 1.0),
+		wallpaper_contrast_mask_auto: raw.wallpaper_contrast_mask_auto.unwrap_or(d.wallpaper_contrast_mask_auto).clamp(0.0, 1.0),
 		text_scrim: raw.text_scrim.unwrap_or(d.text_scrim),
-		text_scrim_radius: raw
-			.text_scrim_radius
-			.unwrap_or(d.text_scrim_radius)
-			.clamp(0.0, 50.0),
-		text_scrim_softness: raw
-			.text_scrim_softness
-			.unwrap_or(d.text_scrim_softness)
-			.clamp(0.0, 1.0),
-		text_scrim_strength: raw
-			.text_scrim_strength
-			.unwrap_or(d.text_scrim_strength)
-			.clamp(0.0, 100.0),
+		text_scrim_radius: raw.text_scrim_radius.unwrap_or(d.text_scrim_radius).clamp(0.0, 50.0),
+		text_scrim_softness: raw.text_scrim_softness.unwrap_or(d.text_scrim_softness).clamp(0.0, 1.0),
+		text_scrim_strength: raw.text_scrim_strength.unwrap_or(d.text_scrim_strength).clamp(0.0, 100.0),
 		text_outline: raw.text_outline.unwrap_or(d.text_outline).clamp(0.0, 8.0),
-		// the older spellings still parse: "s" was renamed to "sigmoid" (which is
-		// what a smoothstep is), and the falloff's "gaussian" to "half_normal" so
-		// it stops reading like the gaussian BLUR the function list also offers.
-		text_scrim_ramp: match raw.text_scrim_ramp.as_deref() {
-			Some("linear") => "linear".to_string(),
-			Some("half_normal" | "gaussian") => "half_normal".to_string(),
-			Some("sigmoid" | "s") => "sigmoid".to_string(),
-			Some("log") => "log".to_string(),
-			Some("exp") => "exp".to_string(),
-			_ => d.text_scrim_ramp.clone(), // missing/unknown -> default (exponential)
-		},
-		text_scrim_function: match raw.text_scrim_function.as_deref() {
-			Some("dilate") => "dilate".to_string(),
-			Some("sdf") => "sdf".to_string(),
-			Some("dt") => "dt".to_string(),
-			Some("gaussian") => "gaussian".to_string(),
-			_ => d.text_scrim_function.clone(), // missing/unknown -> default (SDF)
-		},
-		text_scrim_regular_weight: raw
-			.text_scrim_regular_weight
-			.unwrap_or(d.text_scrim_regular_weight),
+		text_dark_on_light: raw.text_dark_on_light.unwrap_or(d.text_dark_on_light).clamp(0.0, MAX_DARK_ON_LIGHT),
+		text_scrim_ramp: choice_or(raw.text_scrim_ramp.as_deref(), d.text_scrim_ramp),
+		text_scrim_function: choice_or(raw.text_scrim_function.as_deref(), d.text_scrim_function),
+		text_scrim_regular_weight: raw.text_scrim_regular_weight.unwrap_or(d.text_scrim_regular_weight),
+		text_min_contrast: raw.text_min_contrast.unwrap_or(d.text_min_contrast).clamp(0.0, 0.6),
 		color_emoji: raw.color_emoji.unwrap_or(d.color_emoji),
 		embolden_inverse: raw.embolden_inverse.unwrap_or(d.embolden_inverse),
 		cursor_scrim: raw.cursor_scrim.unwrap_or(d.cursor_scrim),
 		cursor_outline: raw.cursor_outline.unwrap_or(d.cursor_outline),
-		cursor_size_height: raw
-			.cursor_size_height
-			.unwrap_or(d.cursor_size_height)
-			.clamp(1.0, 100.0),
-		cursor_size_width: raw
-			.cursor_size_width
-			.unwrap_or(d.cursor_size_width)
-			.clamp(1.0, 100.0),
-		cursor_animation: raw.cursor_animation.unwrap_or(d.cursor_animation),
-		cursor_animation_resume_s: raw
-			.cursor_animation_resume_s
-			.unwrap_or(d.cursor_animation_resume_s)
-			.clamp(0.05, 3600.0),
-		cursor_animation_idle_stop_s: raw
-			.cursor_animation_idle_stop_s
-			.unwrap_or(d.cursor_animation_idle_stop_s)
-			.clamp(0.0, 86400.0),
-		cursor_blink_rate_ms: raw
-			.cursor_blink_rate_ms
-			.unwrap_or(d.cursor_blink_rate_ms)
-			.max(50.0),
+		cursor_size_height: raw.cursor_size_height.unwrap_or(d.cursor_size_height).clamp(1.0, 100.0),
+		cursor_size_width: raw.cursor_size_width.unwrap_or(d.cursor_size_width).clamp(1.0, 100.0),
+		// "none" was how a file said no blink before `cursor.blink`, and it still
+		// means that
+		cursor_blink: raw.cursor_blink.unwrap_or(d.cursor_blink) && !raw.cursor_animation.as_deref().is_some_and(animation_is_none),
+		cursor_animation: choice_or(raw.cursor_animation.as_deref(), d.cursor_animation),
+		cursor_animation_resume_s: raw.cursor_animation_resume_s.unwrap_or(d.cursor_animation_resume_s).clamp(0.05, 3600.0),
+		cursor_animation_idle_stop_s: raw.cursor_animation_idle_stop_s.unwrap_or(d.cursor_animation_idle_stop_s).clamp(0.0, 86400.0),
+		cursor_blink_rate_s: numf(raw.cursor_blink_rate_s, d.cursor_blink_rate_s, limits::BLINK_S),
 		wallpaper_default_fit: match raw.wallpaper_default_fit.as_deref() {
-			Some("zoom") => Fit::Zoom,
+			Some(word) if word.trim().eq_ignore_ascii_case("zoom") => Fit::Zoom,
 			_ => Fit::Stretch,
 		},
 		wallpaper_honor_xmp: raw.wallpaper_honor_xmp.unwrap_or(d.wallpaper_honor_xmp),
-		columns: raw.columns.unwrap_or(d.columns).max(1),
-		rows: raw.rows.unwrap_or(d.rows).max(1),
+		wallpaper_compression: choice_or(raw.wallpaper_compression.as_deref(), d.wallpaper_compression),
+		wallpaper_honor_xmp_look: raw.wallpaper_honor_xmp_look.unwrap_or(d.wallpaper_honor_xmp_look),
 		remember_size: raw.remember_size.unwrap_or(d.remember_size),
+		columns: raw.columns.map_or(d.columns, |n| n.clamp(limits::GRID.0, limits::GRID.1)),
+		rows: raw.rows.map_or(d.rows, |n| n.clamp(limits::GRID.0, limits::GRID.1)),
+		remember_per_monitor: raw.remember_per_monitor.unwrap_or(d.remember_per_monitor),
+		remember_maximized: raw.remember_maximized.unwrap_or(d.remember_maximized),
+		resize_on_zoom: raw.resize_on_zoom.unwrap_or(d.resize_on_zoom),
 		hide_single_tab: raw.hide_single_tab.unwrap_or(d.hide_single_tab),
-		tab_min_pct: raw.tab_min_pct.unwrap_or(d.tab_min_pct).clamp(2.0, 100.0),
-		tab_max_pct: raw
-			.tab_max_pct
-			.unwrap_or(d.tab_max_pct)
-			.clamp(2.0, 100.0)
-			.max(raw.tab_min_pct.unwrap_or(d.tab_min_pct).clamp(2.0, 100.0)),
-		remembered_columns: raw
-			.remembered_columns
-			.unwrap_or(d.remembered_columns)
-			.max(1),
-		remembered_rows: raw.remembered_rows.unwrap_or(d.remembered_rows).max(1),
+		menu_bar: raw.menu_bar.unwrap_or(d.menu_bar),
+		new_tab_beside: raw.new_tab_beside.unwrap_or(d.new_tab_beside),
+		tab_text: raw.tab_text.unwrap_or(d.tab_text),
+		title_shows_tab: raw.title_shows_tab.unwrap_or(d.title_shows_tab),
+		idle_release: raw.idle_release.unwrap_or(d.idle_release),
+		idle_release_hidden_min: numi(raw.idle_release_hidden_min, d.idle_release_hidden_min, limits::IDLE_MIN),
+		idle_release_min: numi(raw.idle_release_min, d.idle_release_min, limits::IDLE_MIN),
+		software_rendering: raw.software_rendering.unwrap_or(d.software_rendering),
+		tab_regular_pct: raw.tab_regular_pct.unwrap_or(d.tab_regular_pct).clamp(2.0, 100.0),
+		// The pair is read as a range wherever it is used (tabtitle::bounds), so a
+		// maximum dragged below the regular width is stored as it was set rather
+		// than quietly rewritten under the user.
+		tab_max_pct: raw.tab_max_pct.unwrap_or(d.tab_max_pct).clamp(2.0, 100.0),
+		tab_tip_max_s: raw.tab_tip_max_s.unwrap_or(d.tab_tip_max_s).max(0.0),
+		remembered_columns: numi(raw.remembered_columns, d.remembered_columns, limits::GRID),
+		remembered_rows: numi(raw.remembered_rows, d.remembered_rows, limits::GRID),
+		remembered_maximized: raw.remembered_maximized.unwrap_or(d.remembered_maximized),
+		remembered_font_zoom: zoom(raw.remembered_font_zoom, d.remembered_font_zoom),
+		monitor_sizes: raw.monitor_sizes,
 		word_separators: raw.word_separators.unwrap_or(d.word_separators),
 		selection_pairs: raw.selection_pairs.unwrap_or(d.selection_pairs),
 		command_line: raw.command_line.unwrap_or(d.command_line),
 		startup_directory: raw.startup_directory.unwrap_or(d.startup_directory),
 		copy_on_select: raw.copy_on_select.unwrap_or(d.copy_on_select),
 		shell_integration: raw.shell_integration.unwrap_or(d.shell_integration),
+		bash_prompt: raw.bash_prompt.unwrap_or(d.bash_prompt),
+		// one word or nothing; a space or control character can't be a TERM
+		term: raw.term.map(|term| term.trim().to_string()).filter(|term| term.chars().all(|c| c.is_ascii_graphic())).unwrap_or(d.term),
+		tmux_new_session: raw.tmux_new_session.unwrap_or(d.tmux_new_session),
+		// blank is the default, as the tab text's is
+		tmux_session_name: raw.tmux_session_name.filter(|name| !name.trim().is_empty()).unwrap_or(d.tmux_session_name),
+		tmux_on_close: choice_or(raw.tmux_on_close.as_deref(), d.tmux_on_close),
 		hyperlinks: raw.hyperlinks.unwrap_or(d.hyperlinks),
-		hyperlink_open_command: raw
-			.hyperlink_open_command
-			.unwrap_or(d.hyperlink_open_command),
+		hyperlink_open_command: raw.hyperlink_open_command.unwrap_or_default(),
+		option_as_alt: choice_or(raw.option_as_alt.as_deref(), d.option_as_alt),
 		bg: color(raw.colors.background, pal.bg),
+		colors_from_wallpaper: raw.colors.from_wallpaper.unwrap_or(d.colors_from_wallpaper),
+		// session only: the summary arrives with a picture
+		wallpaper_summary: None,
+		wallpaper_derived: None,
+		found_picture: String::new(),
+		model: knobs::Model::new(knobs::Spec::default()),
 		fg: color(raw.colors.foreground, pal.fg),
 		cursor: color(raw.colors.cursor, pal.cursor),
 		highlight: color(raw.colors.highlight, pal.highlight),
@@ -1828,152 +3691,192 @@ fn resolve(raw: RawConfig) -> Settings {
 		gutter: color(raw.colors.gutter, pal.gutter),
 		scrollbar_thumb: color(raw.colors.scrollbar_thumb, SCROLLBAR_THUMB_DEF),
 		scrollbar_trough: color(raw.colors.scrollbar_trough, SCROLLBAR_TROUGH_DEF),
+		theme_palette: pal,
 		ansi: pal.ansi,
 		theme: theme_name,
 		theme_mode,
+		performance_automatic: raw.performance_automatic.unwrap_or(d.performance_automatic),
+		performance_profile: raw.performance_profile.as_deref().map_or(d.performance_profile, crate::profile::Profile::parse),
+		performance_check_hardware: raw.performance_check_hardware.unwrap_or(d.performance_check_hardware),
+		performance_check_next_run: raw.performance_check_next_run.unwrap_or(d.performance_check_next_run),
+		performance_detect_remote: raw.performance_detect_remote.unwrap_or(d.performance_detect_remote),
+		rated_hardware: raw.rated_hardware.unwrap_or_default(),
+		tested_profile: None,
+		stepped_profile: None,
 		user_themes: raw.user_themes,
 		shells: raw.shells,
+		keys: crate::keys::Bindings::with(cfg!(target_os = "macos"), &raw.keys).0,
+		#[cfg(test)]
+		clone_probe: CloneProbe,
+	}
+}
+
+// The hotkeys the file sets. A value that doesn't read is left out, so its
+// default stays: the reader reports one that isn't text, and
+// `config_complaints` one that names no key.
+fn read_keys(reader: &Reader) -> Vec<(crate::input::Hotkey, Vec<crate::keys::Chord>)> {
+	crate::keys::config_paths()
+		.filter_map(|(hotkey, path)| {
+			let text = reader.read_string(&path)?;
+			if text.trim().is_empty() {
+				return None;
+			}
+			crate::keys::parse_value(&text).ok().map(|chords| (hotkey, chords))
+		})
+		.collect()
+}
+
+// Put a hotkey's changed value in the file, by the platform's own names. Only
+// the value set for that hotkey is written, never what it was left with after
+// another took a chord from it, so the file says what a hand edit would. One
+// put back to its default writes nothing here: the Settings revert puts the
+// template's line back (`revert_keys`).
+fn write_keys(doc: &mut shcl::Document, orig: &crate::keys::Bindings, now: &crate::keys::Bindings) {
+	for (hotkey, path) in crate::keys::config_paths() {
+		let own = now.own(hotkey);
+		if own == orig.own(hotkey) {
+			continue;
+		}
+		if let Some(chords) = own {
+			doc.put_string(&path, &crate::keys::value_text(chords, cfg!(target_os = "macos")));
+		}
 	}
 }
 
 pub fn parse_hex(s: &str) -> Option<[u8; 3]> {
 	let s = s.trim().trim_start_matches('#');
-	if s.len() != 6 {
+	// a length of 6 bytes isn't 6 digits: a value with a multi-byte character is the
+	// right length and splits mid-character, which used to abort at launch
+	if s.len() != 6 || !s.is_ascii() {
 		return None;
 	}
-	Some([
-		u8::from_str_radix(&s[0..2], 16).ok()?,
-		u8::from_str_radix(&s[2..4], 16).ok()?,
-		u8::from_str_radix(&s[4..6], 16).ok()?,
-	])
+	Some([u8::from_str_radix(&s[0..2], 16).ok()?, u8::from_str_radix(&s[2..4], 16).ok()?, u8::from_str_radix(&s[4..6], 16).ok()?])
 }
 
-// Default font size (logical px) when the user hasn't set one: follow the OS's
-// monospace size if we can detect it, else FALLBACK_FONT_SIZE.
-pub fn default_font_size() -> f32 {
-	crate::sysfont::monospace()
-		.size_pt
-		.map(|pt| pt * 96.0 / 72.0) // points -> logical px at the 96-DPI reference
-		.filter(|px| *px >= 4.0)
-		.unwrap_or(FALLBACK_FONT_SIZE)
-}
-
-// Whether "use system font" actually has an OS monospace setting to follow.
-// Face and size follow the OS independently (the Settings dual checkboxes), and
-// each is inert unless the OS really reports that half: Windows has a system
-// font SIZE (the message-box font) but no monospace FAMILY, and a Linux desktop
-// with no readable font setting reports neither. Keying on what was detected
-// rather than on the platform keeps one rule everywhere - a toggle with nothing
-// to follow resolves from font_family / font_size as if off, and grays out.
-pub fn system_font_face_active(s: &Settings) -> bool {
-	s.use_system_font && crate::sysfont::monospace().family.is_some()
-}
-pub fn system_font_size_active(s: &Settings) -> bool {
-	s.use_system_font_size && crate::sysfont::monospace().size_pt.is_some()
-}
-
-// Session-only font zoom (Ctrl+-/+/= hotkeys), in logical px added to the
-// effective size. Never persisted; process-wide is per-window since each
-// window is its own process. Per-pane scoping is deferred - it needs per-pane
-// text metrics the single-TextCtx architecture doesn't have.
+// Font zoom (Ctrl+-/+/= hotkeys), in logical px added to the effective size.
+// It's kept with the window size while the size is automatic
+// (remembered_window). Process-wide is per-window, since each window is its own
+// process. Per-pane zoom is deferred, since it needs per-pane text metrics and
+// there's one TextCtx.
 static FONT_ZOOM_PX: AtomicI32 = AtomicI32::new(0);
 pub fn font_zoom_px() -> i32 {
 	FONT_ZOOM_PX.load(Ordering::Relaxed)
 }
-// Step the zoom, clamped so the effective size stays renderable - stepping
-// past the floor must not bank offset the other direction has to pay back.
+/// Step the zoom, clamped so the effective size stays renderable. Stepping past
+/// the floor mustn't bank an offset the other direction has to pay back.
 pub fn nudge_font_zoom(dir: i32) {
-	let current = settings();
-	let base = if system_font_size_active(&current) {
-		default_font_size()
-	} else {
-		current.font_size
-	};
-	let z = font_zoom_px() + dir;
-	let z = z.clamp((4.0 - base).ceil() as i32, (128.0 - base).floor() as i32);
-	FONT_ZOOM_PX.store(z, Ordering::Relaxed);
+	let base = base_font_size(&settings());
+	FONT_ZOOM_PX.store(zoom_within(font_zoom_px() + dir, base), Ordering::Relaxed);
 }
-// Drop the session zoom, back to the configured (or system) size.
+/// Put the zoom at `px`, clamped the same way a step is.
+pub fn set_font_zoom(px: i32) {
+	let base = base_font_size(&settings());
+	FONT_ZOOM_PX.store(zoom_within(px, base), Ordering::Relaxed);
+}
+fn zoom_within(px: i32, base: f32) -> i32 {
+	px.clamp((4.0 - base).ceil() as i32, (128.0 - base).floor() as i32)
+}
+/// Drop the session zoom, back to the configured (or system) size.
 pub fn reset_font_zoom() {
 	FONT_ZOOM_PX.store(0, Ordering::Relaxed);
 }
 
-// The size the text is actually rendered at: the OS monospace size while
-// `use_system_font_size` is on (and the OS has one), else the configured
-// `font_size`; plus any session zoom, clamped to a renderable range.
+/// The size the text is rendered at: `font.size` (the desktop's
+/// monospace size while automatic), plus any session zoom, clamped to a
+/// renderable range.
 pub fn effective_font_size() -> f32 {
-	let current = settings();
-	let base = if system_font_size_active(&current) {
-		default_font_size()
-	} else {
-		current.font_size
-	};
-	(base + font_zoom_px() as f32).clamp(4.0, 128.0)
+	effective_font_size_in(&settings())
 }
 
-// Resolve the background image: an explicit path (absolute, or a filename
-// relative to the config dir), else auto-detect backgrounds/background.{png,jpg,jpeg}
-// under the config dir.
-// `~` and `~/...` expand to $HOME (USERPROFILE on Windows). A config is text a
-// person edits by hand, and that is how they write a home-relative path. `~user`
-// is left literal - there is nothing to resolve it against.
-fn expand_tilde(value: &str) -> PathBuf {
-	let rest = match value.strip_prefix('~') {
-		Some("") => "",
-		Some(rest) if rest.starts_with('/') || rest.starts_with('\\') => &rest[1..],
-		_ => return PathBuf::from(value),
-	};
-	std::env::var_os("HOME")
-		.or_else(|| std::env::var_os("USERPROFILE"))
-		.filter(|home| !home.is_empty())
-		.map_or_else(
-			|| PathBuf::from(value),
-			|home| PathBuf::from(home).join(rest),
-		)
+fn effective_font_size_in(settings: &Settings) -> f32 {
+	(base_font_size(settings) + font_zoom_px() as f32).clamp(4.0, 128.0)
 }
 
-pub fn resolve_wallpaper(explicit: Option<String>) -> Option<PathBuf> {
+// The size before any zoom.
+fn base_font_size(settings: &Settings) -> f32 {
+	settings.font_size
+}
+
+/// A font as the grid is measured in: its size and its family list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FontPick {
+	pub size: f32,
+	pub family: String,
+}
+
+impl FontPick {
+	pub fn same(&self, other: &Self) -> bool {
+		(self.size - other.size).abs() < 0.01 && self.family == other.family
+	}
+}
+
+/// The font the window has now.
+pub fn font_now() -> FontPick {
+	let live = settings();
+	FontPick { size: effective_font_size_in(&live), family: live.font_family.clone() }
+}
+
+/// The font a window opens at with this zoom and no `--font-size` or
+/// `--font-name`.
+pub fn unheld_font(zoom: i32) -> FontPick {
+	unheld_font_in(&settings(), zoom)
+}
+
+fn unheld_font_in(live: &Settings, zoom: i32) -> FontPick {
+	let held = [crate::ui_spec::Key::FontSize.name(), crate::ui_spec::Key::FontFamily.name()];
+	let pick = |s: &Settings| {
+		let base = base_font_size(s);
+		FontPick { size: (base + zoom_within(zoom, base) as f32).clamp(4.0, 128.0), family: s.font_family.clone() }
+	};
+	if !held.iter().any(|name| live.model.values.held.contains_key(*name)) {
+		return pick(live);
+	}
+	let mut own = live.clone();
+	for name in held {
+		own.model.release(name);
+	}
+	crate::fields::fill(&mut own, None);
+	pick(&own)
+}
+
+/// Resolve the background image: an explicit path (absolute, or a filename
+/// relative to the config dir), else auto-detect backgrounds/background.{png,jpg,jpeg}
+/// under the config dir. The value is text a person edits by hand, so it goes
+/// through the same expander the startup directory does, for `~` and the 3 forms
+/// of an environment variable.
+pub fn resolve_wallpaper(explicit: Option<&str>) -> Option<PathBuf> {
 	let dir = config_dir()?;
 	if let Some(given) = explicit.filter(|value| !value.trim().is_empty()) {
-		let path = expand_tilde(given.trim());
-		// Handed back unchecked: the loader opens it on its own thread and says so
-		// if it can't, which keeps a wallpaper the user explicitly named from
-		// costing a stat here - it may be the very mount that answers slowly.
-		return Some(if path.is_absolute() {
-			path
-		} else {
-			dir.join(path)
-		});
+		let path = PathBuf::from(expand_vars(given.trim()));
+		// Handed back unchecked. The loader opens it on its own thread and says so if it
+		// can't, so a wallpaper the user named doesn't cost a stat here, on what may be
+		// the slow mount.
+		return Some(if path.is_absolute() { path } else { dir.join(path) });
 	}
-	// Current convention first (wallpaper/wallpaper.*), then the older spellings
-	// so existing setups keep working - across every directory a pack may sit in,
+	// Current convention first (wallpaper/wallpaper.*), then the older names so
+	// existing setups keep working. That's across every directory a pack may be in,
 	// which on Windows means Local before the config dir it used to share.
 	wallpaper_search_dirs()
 		.into_iter()
 		.flat_map(|dir| {
-			[
-				("wallpaper", "wallpaper"),
-				("wallpapers", "wallpaper"),
-				("backgrounds", "background"),
-			]
-			.into_iter()
-			.flat_map(move |(sub, stem)| {
+			[("wallpaper", "wallpaper"), ("wallpapers", "wallpaper"), ("backgrounds", "background")].into_iter().flat_map(move |(sub, stem)| {
 				let sub_dir = dir.join(sub);
-				["png", "jpg", "jpeg"]
-					.into_iter()
-					.map(move |ext| sub_dir.join(format!("{stem}.{ext}")))
+				["png", "jpg", "jpeg"].into_iter().map(move |ext| sub_dir.join(format!("{stem}.{ext}")))
 			})
 		})
 		.find(|path| path.exists())
 }
 
-// The wallpaper-rotation folder: a relative value resolves against the config
-// dir (like the single wallpaper). Not checked for existence here - the scan
-// runs off the startup thread and reports an unreadable folder itself, so a typo
-// still just leaves rotation off.
-pub fn resolve_wallpaper_folder(explicit: Option<String>) -> Option<PathBuf> {
-	let given = explicit.filter(|value| !value.trim().is_empty())?;
-	let path = expand_tilde(given.trim());
+/// The wallpaper-rotation folder: a relative value resolves against the config
+/// dir, like the single wallpaper. It isn't checked for existence here, since the
+/// scan runs off the startup thread and reports an unreadable folder itself, so a
+/// typo still leaves rotation off.
+pub fn resolve_wallpaper_folder(explicit: Option<&str>) -> Option<PathBuf> {
+	let given = explicit.filter(|value| {
+		let value = value.trim();
+		!value.is_empty() && value != WALLPAPER_DIR_TOKEN
+	})?;
+	let path = PathBuf::from(expand_vars(given.trim()));
 	if path.is_absolute() {
 		return Some(path);
 	}
@@ -1984,9 +3887,24 @@ pub fn resolve_wallpaper_folder(explicit: Option<String>) -> Option<PathBuf> {
 // script looping on --reset-config stops piling up files instead of forever.
 const BACKUPS_MAX: u32 = 99;
 
-// Move a config aside to the first free `.bak` name - so doing it twice never
-// overwrites the copy from the first time. Returns where it went.
+// Chromium's retry for the same antivirus and indexer locks. A restore runs
+// only when a replace took the file, so the wait costs nothing otherwise.
+const RESTORE_ATTEMPTS: u32 = 5;
+const RESTORE_PAUSE: std::time::Duration = std::time::Duration::from_millis(100);
+
+// Pauses a restore took on this thread. A test counts them, since a wall clock
+// bound under a container's CPU quota can stall a whole 100 ms period.
+#[cfg(test)]
+thread_local! {
+	static RESTORE_PAUSES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+// Move a config aside to the first free `.bak` name, so doing it twice never
+// overwrites the first copy. Returns where it went.
 fn backup_aside(path: &std::path::Path) -> Option<PathBuf> {
+	if !may_write(path) {
+		return None;
+	}
 	let name = path.file_name()?.to_string_lossy().into_owned();
 	let backup = (1u32..=BACKUPS_MAX)
 		.map(|n| match n {
@@ -1995,24 +3913,64 @@ fn backup_aside(path: &std::path::Path) -> Option<PathBuf> {
 		})
 		.find(|candidate| !candidate.exists());
 	let Some(backup) = backup else {
-		eprintln!(
-			"{APP_NAME}: {BACKUPS_MAX} config backups already in {}; clear some out first",
-			path.display()
-		);
+		eprintln!("{APP_NAME}: {BACKUPS_MAX} config backups already in {}; clear some out first", path.display());
 		return None;
 	};
 	match std::fs::rename(path, &backup) {
 		Ok(()) => Some(backup),
 		Err(e) => {
-			eprintln!("{APP_NAME}: could not move {} aside: {e}", path.display());
+			eprintln!("{APP_NAME}: couldn't move {} aside: {e}", path.display());
 			None
 		}
 	}
 }
 
-// Move the config aside so the next load writes a fresh one from the template.
-// The old file is kept, not deleted. Returns where it went, or None if there
-// was nothing to move.
+// Copy a config to the first free `.bak` name, for a rewrite that leaves the
+// file where it is. `create_new` skips a name taken by anything, a dangling link
+// included, so nothing is written through a link left there. The body is the
+// text the caller read, so the backup is exactly what was rewritten.
+fn backup_copy(path: &std::path::Path, body: &[u8]) -> Option<PathBuf> {
+	use std::io::Write;
+	if !may_write(path) {
+		return None;
+	}
+	let name = path.file_name()?.to_string_lossy().into_owned();
+	#[cfg(unix)]
+	let perms = std::fs::metadata(path).ok()?.permissions();
+	for n in 1u32..=BACKUPS_MAX {
+		let backup = match n {
+			1 => path.with_file_name(format!("{name}.bak")),
+			_ => path.with_file_name(format!("{name}.bak{n}")),
+		};
+		let mut file = match std::fs::OpenOptions::new().write(true).create_new(true).open(&backup) {
+			Ok(file) => file,
+			Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+			Err(e) => {
+				eprintln!("{APP_NAME}: couldn't back up {}: {e}", path.display());
+				return None;
+			}
+		};
+		// Private before anything is in it. Elsewhere the mode is only a read-only
+		// flag: it adds no privacy (a new file takes its folder's ACLs), and it
+		// would stop a failed conversion removing the backup it just made.
+		#[cfg(unix)]
+		let written = std::fs::set_permissions(&backup, perms).and_then(|()| file.write_all(body));
+		#[cfg(not(unix))]
+		let written = file.write_all(body);
+		if let Err(e) = written.and_then(|()| file.sync_all()) {
+			eprintln!("{APP_NAME}: couldn't back up {}: {e}", path.display());
+			let _ = std::fs::remove_file(&backup);
+			return None;
+		}
+		return Some(backup);
+	}
+	eprintln!("{APP_NAME}: {BACKUPS_MAX} config backups already in {}; clear some out first", path.display());
+	None
+}
+
+/// Move the config aside so the next load writes a fresh one from the template.
+/// The old file is kept, not deleted. Returns where it went, or None if there
+/// was nothing to move.
 pub fn reset_config() -> Option<PathBuf> {
 	let path = config_path()?;
 	if !path.exists() {
@@ -2021,8 +3979,8 @@ pub fn reset_config() -> Option<PathBuf> {
 	backup_aside(&path)
 }
 
-// Where the wallpaper shuffle keeps its recently-shown list. Beside the config,
-// so a --config override gets its own history instead of sharing one.
+/// Where the wallpaper shuffle stores its recently-shown list. Beside the config,
+/// so a --config override gets its own history instead of sharing one.
 pub fn wallpaper_history_path() -> Option<PathBuf> {
 	let name = ".wallpaper-history";
 	let beside_config = config_dir().map(|dir| dir.join(name));
@@ -2032,39 +3990,40 @@ pub fn wallpaper_history_path() -> Option<PathBuf> {
 	Some(data_dir()?.join(name))
 }
 
-// Image files we're willing to load as a wallpaper. One list, so the folder
-// auto-detect below and the rotation scan can't disagree about what counts.
-// Must track the `image` crate's enabled features (png + jpeg) - it is built
-// with default-features off to keep the binary small, so listing anything else
-// here just picks a file that then fails to decode.
+/// Image files that load as a wallpaper. One list, so the folder auto-detect below
+/// and the rotation scan can't disagree. It must track the `image` crate's enabled
+/// features (png and jpeg), since the crate is built with default-features off to
+/// keep the binary small, and anything else listed here would pick a file that
+/// then fails to decode.
 pub fn is_image_file(path: &std::path::Path) -> bool {
-	path.extension()
-		.and_then(|ext| ext.to_str())
-		.is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg"))
+	path.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg"))
+}
+
+/// The rotation folder a configured value comes to, and whether it was found by
+/// convention. Empty and the default both mean the usual place, which is
+/// looked up rather than expanded: it includes the older names, and on Windows
+/// a pack left beside the config, and it follows `--config` and `XDG_CONFIG_HOME`.
+/// A named image outranks a folder found that way but not one configured. The
+/// loader and the Settings dialog both come here, so the 2 can't disagree.
+pub fn rotation_folder_for(raw: &str, pinned_wallpaper: bool) -> (Option<PathBuf>, bool) {
+	match resolve_wallpaper_folder(Some(raw)) {
+		Some(folder) => (Some(folder), false),
+		None => ((!pinned_wallpaper).then(default_wallpaper_folder).flatten(), true),
+	}
 }
 
 // The rotation folder to use when none is configured: the conventional
-// wallpaper/ dir (or the legacy spellings) under the config dir. Only its
-// existence is tested - reading it to see whether it holds an image is the
-// scan's job, off the startup thread, and an empty one still means no rotation
-// and no diagnostic, since the user never asked for one.
+// wallpaper/ dir (or the legacy names) under the config dir. Only its
+// existence is tested. Reading it for an image is the scan's job, off the startup
+// thread, and an empty one still means no rotation and no diagnostic, since the
+// user never asked for one.
 fn default_wallpaper_folder() -> Option<PathBuf> {
-	wallpaper_search_dirs()
-		.into_iter()
-		.flat_map(|dir| {
-			["wallpaper", "wallpapers", "backgrounds"]
-				.into_iter()
-				.map(move |sub| dir.join(sub))
-		})
-		.find(|sub| sub.is_dir())
+	wallpaper_search_dirs().into_iter().flat_map(|dir| ["wallpaper", "wallpapers", "backgrounds"].into_iter().map(move |sub| dir.join(sub))).find(|sub| sub.is_dir())
 }
 
-// A config file's settings as (key, original-line). Nested settings are written
-// in dotted form, so a key like "colors.focus" needs no table context.
-// Recognizes both active (`k: ...`) and commented (`# k: ...`) lines.
 // Every setting line of `text` as (full path, verbatim line), commented ones
-// included - the walker resolves nesting, so a `# height: 100` two levels down
-// comes back as "cursor.size.height".
+// included. The walker resolves nesting, so a `# height: 100` 2 levels down comes
+// back as "cursor.size.height".
 fn setting_lines(text: &str) -> Vec<(String, String)> {
 	let lines: Vec<&str> = text.lines().collect();
 	walk_settings(text)
@@ -2076,7 +4035,7 @@ fn setting_lines(text: &str) -> Vec<(String, String)> {
 		.collect()
 }
 
-// Like `setting_lines`, but each setting carries the contiguous comment lines
+// Like `setting_lines`, but each setting comes with the contiguous comment lines
 // directly above it (its block), plus `new_group` = whether a blank line
 // precedes it in the template. Backfill uses this to keep a template group's
 // settings together (no internal blank) while separating groups by a blank line.
@@ -2108,12 +4067,17 @@ fn setting_groups(text: &str) -> Vec<(String, Vec<String>, bool)> {
 
 // The key of a settings line, active or commented-out. Dots are part of the key
 // ("colors.foreground"), so a dotted setting stays one self-contained line; the
-// walker supplies the enclosing-block context for truly nested ones.
+// walker supplies the enclosing-block context for nested ones.
 fn line_setting_key(line: &str) -> Option<&str> {
 	let trimmed = line.trim_start();
 	let trimmed = trimmed.strip_prefix('#').map_or(trimmed, str::trim_start);
-	let end = trimmed
-		.find(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '.'))?;
+	// shcl 3.0 quotes a name that doesn't start with a letter, such as a
+	// monitor's `"1920x1080_100pct":`
+	if let Some(quoted) = trimmed.strip_prefix('"') {
+		let (key, rest) = quoted.split_once('"')?;
+		return (!key.is_empty() && rest.trim_start().starts_with(':')).then_some(key);
+	}
+	let end = trimmed.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '.'))?;
 	let key = &trimmed[..end];
 	if key.is_empty() {
 		return None;
@@ -2121,68 +4085,213 @@ fn line_setting_key(line: &str) -> Option<&str> {
 	trimmed[end..].trim_start().starts_with(':').then_some(key)
 }
 
-// Paths that were renamed across versions (old -> new). A rename rewrites the
-// key on its line, preserving the comment/active state; if the new path is
-// already present the old one is just dropped. Renames must stay within the
-// same parent block - the machinery rewrites the line in place, it does not
-// move lines between blocks. (The whole pre-nesting flat namespace is handled
-// separately by `convert_legacy_config`, not here.)
+// Paths that were renamed across versions (old -> new). A rename rewrites the key
+// on its line, keeping its comment or active state, and if the new path is
+// already there the old one is dropped. Renames must stay within the same parent
+// block, since the line is rewritten in place and never moved between blocks.
+// `convert_legacy_config` handles the whole pre-nesting flat namespace.
 const CONFIG_RENAMES: &[(&str, &str)] = &[
 	("scroll.inview_tau_ms", "scroll.single_screen_tau_ms"),
-	// The one attention color became two. The old key's value IS the calmer of
-	// the pair, so it carries to `highlight` and the freed-up `colors.focus`
+	// The one attention color became 2. The old key's value is the calmer of
+	// the pair, so it moves to `highlight` and the freed-up `colors.focus`
 	// starts from its own default. That reuse is the reason `load` migrates the
 	// text it parses as well as the file: a config open in an editor defers the
 	// write, and the old spelling must not read as its successor even once.
 	("colors.focus", "colors.highlight"),
+	// the narrowest a tab could be became the width it has by default; the
+	// old value moves over, since both are read the same way
+	("window.tab_min_width_pct", "window.tab_regular_width_pct"),
+	("scroll.minimap.keep_for", "scroll.minimap.tui_process_whitelist"),
 ];
-// Paths that no longer exist and should be removed from an existing config.
-// scroll.tau_ms ("Initial scroll speed") has no successor: the speed curve now
-// leaves rest through Ease-in and the one knob that fed four mechanisms is
-// gone. scroll.ease_in was a unitless fraction; its replacement is a duration
-// (scroll.ease_in_ms), so the old value cannot be carried by a rename.
-// `shell.default` is here because the list itself now names the default (its
-// top active entry). Adoption runs BEFORE this drops the line - see
-// `adopt_default_shell` - so the value is moved into the list, not discarded.
-const CONFIG_REMOVED: &[&str] = &["scroll.tau_ms", "scroll.ease_in", "shell.default"];
+// Renames that change the unit as well, so the value is converted on the way,
+// commented lines included. Otherwise the same as `CONFIG_RENAMES`. A value that
+// isn't a plain number keeps its text.
+type Convert = fn(f64) -> f64;
+const CONFIG_CONVERTS: &[(&str, &str, Convert)] = &[
+	// the old rate was half a cycle, one fade out or one fade in
+	("cursor.blink_rate_ms", "cursor.blink_rate_s", |ms| ms * 2.0 / 1000.0),
+];
+
+// A renamed key's new value text, converted, or None to keep the old text.
+// Rounded to 3 places, as a save writes them, with at least one so it
+// reads as a fraction.
+fn converted_value(value: &str, convert: Convert) -> Option<String> {
+	let number = convert(value.trim().parse::<f64>().ok()?);
+	if !number.is_finite() {
+		return None;
+	}
+	let text = format!("{:.3}", (number * 1000.0).round() / 1000.0);
+	let text = text.trim_end_matches('0');
+	Some(if text.ends_with('.') { format!("{text}0") } else { text.to_string() })
+}
+
+// The line with its value converted, the spacing and any note after it kept.
+fn convert_line_value(line: &str, convert: Convert) -> Option<String> {
+	let (head, rest) = line.split_once(':')?;
+	let value = rest.trim_start();
+	let lead = &rest[..rest.len() - value.len()];
+	let number = strip_trailing_comment(value);
+	let tail = &value[number.len()..];
+	let new = converted_value(number, convert)?;
+	Some(format!("{head}:{lead}{new}{tail}"))
+}
+
+// `cursor.animation: none` was how a file said "don't blink" before
+// `cursor.blink` existed. Either quote, any case.
+fn animation_is_none(word: &str) -> bool {
+	strip_trailing_comment(word.trim()).trim_matches(|c| c == '"' || c == '\'').eq_ignore_ascii_case("none")
+}
+
+// Paths that no longer exist and are removed from an existing config.
+// scroll.tau_ms has no successor, since the speed curve leaves rest through
+// Ease-in now. scroll.ease_in was a fraction and its replacement is a duration,
+// so a rename can't move the value. text.dark_on_light_gamma is the same, since
+// its replacement is a different quantity.
+// `shell.default` is here because the list itself names the default now.
+// `adopt_default_shell` runs before this drops the line, so the value moves into
+// the list.
+// window.idle_release_minimized_min lasted about a day. A minimized window takes
+// the hidden wait again, and a value set for one would be a surprise in the other.
+const CONFIG_REMOVED: &[&str] = &[
+	"scroll.tau_ms",
+	"scroll.ease_in",
+	"shell.default",
+	"text.dark_on_light_gamma",
+	"window.idle_release_minimized_min",
+	// the 4 check boxes the tab text template replaced; what they said moves
+	// into `window.tab_text` first (`tab_text_line`)
+	"window.tab_shows_title",
+	"window.tab_shows_shell",
+	"window.tab_shows_program",
+	"window.tab_shows_directory",
+	// in state.shcl since the automatic settings design
+	"window.remembered_columns",
+	"window.remembered_rows",
+	"window.remembered_maximized",
+	"window.remembered_font_zoom",
+	"window.monitors",
+	"performance.rated_hardware",
+];
+
+// The retired paths `move_state_out` moves to the state file.
+const MOVED_TO_STATE: [&str; 6] = ["window.remembered_columns", "window.remembered_rows", "window.remembered_maximized", "window.remembered_font_zoom", "window.monitors", "performance.rated_hardware"];
+
+// A retired path that a launch step after the conversions still reads: the
+// default shell goes to the shell list, the check boxes to the tab text, and
+// the window's state to the state file.
+fn moved_later(path: &str) -> bool {
+	path == "shell.default" || OLD_TAB_PARTS.contains(&path) || MOVED_TO_STATE.iter().any(|at| at_or_under(path, at))
+}
+
+// A path in `CONFIG_REMOVED`, or under one.
+fn retired(path: &str) -> bool {
+	CONFIG_REMOVED.iter().any(|at| at_or_under(path, at))
+}
+
+fn at_or_under(path: &str, at: &str) -> bool {
+	path.strip_prefix(at).is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
+}
 
 // Defaults that changed, as (path, the value that used to be the default). An
-// existing config carries the template's commented lines verbatim, so after a
+// existing config has the template's commented lines verbatim, so after a
 // default changes those lines quietly describe the old behavior. A commented
 // line matching the outgoing default is refreshed to the current template line.
-// An ACTIVE line is never touched: that value is the user's own choice, and it
-// keeps working exactly as they set it. NOTE: the stored value is the raw
-// post-colon text, trailing `## Default` marker included.
+// An active line is never touched, since that value is the user's own choice. The
+// stored value is the raw text after the colon, trailing `## Default` marker
+// included.
 const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	// the falloff's "gaussian" is spelled "half_normal" now (both still parse),
-	// and the shipped curve moved on again to the exponential
+	// and the default curve moved on again to the exponential
 	("text.scrim.ramp", "\"gaussian\"  ## Default"),
 	("text.scrim.ramp", "\"half_normal\"  ## Default"),
-	// the halo used to ship exactly as built, before the scale halved, and the
-	// first tuned value on the new scale was a shade heavier
+	// the halo's default used to be exactly as built, before the scale halved. The
+	// current value, 20, isn't listed, though it was the default once before.
 	("text.scrim.strength", "0  ## Default"),
 	("text.scrim.strength", "30  ## Default"),
-	("text.scrim.strength", "20  ## Default"),
-	// the outline shipped at two pixels before the halo carried more of the work
+	("text.scrim.strength", "15  ## Default"),
+	// the exponential falloff got twice as steep, so the halo extends further to
+	// finish in about the same place
+	("text.scrim.radius", "5.0  ## Default"),
+	// the outline defaulted to 2 pixels before the halo did more of the work
 	("text.outline", "2.0  ## Default"),
-	// these two never tracked the theme they document - they carried a gray and a
-	// steel blue from before themes existed, so every config in the wild has them
+	// these 2 never matched the theme they document. They had a gray and a steel
+	// blue from before themes existed, so every config in the wild has them
 	("colors.foreground", "\"#d2d2da\"  ## Default"),
 	("colors.cursor", "\"#7a9ad0\"  ## Default"),
-	// the cursor briefly shipped as the cool third of the same triad, then as the
-	// warm one - both at the text's own brightness, which is why neither could be
-	// read through
+	// the cursor briefly defaulted to the cool third of the same triad, then to the
+	// warm one, both at the text's own brightness, so neither could be read
+	// through
 	("colors.cursor", "\"#cc88ee\"  ## Default"),
 	("colors.cursor", "\"#eecc88\"  ## Default"),
+	// the first readable one was a shade under the contrast floor on the plate
+	("colors.cursor", "\"#9649af\"  ## Default"),
 	// the pane ring was a cold blue, picked for the palette before this one (the
-	// key was `colors.focus` then, so a config carrying it arrives here renamed)
+	// key was `colors.focus` then, so a config with it is already renamed here)
 	("colors.highlight", "\"#5580c8\"  ## Default"),
+	// tabs used to divide the bar evenly between 2 bounds, so the cap had to
+	// be low enough that a couple of them didn't swallow the window
+	("window.tab_max_width_pct", "26.0  ## Default"),
+	("window.tab_regular_width_pct", "8.0  ## Default"),
+	// `~` was the default for part of a day, between 2 runs at the variable.
+	// The other platform's spelling isn't listed: it is that platform's current
+	// default rather than an outgoing one, and listing it would rewrite the line
+	// every time a config crossed between machines.
+	("shell.startup_directory", "\"~\"  ## Default"),
+	// the minimap was off by default until the column stepped aside for
+	// full-screen programs on its own
+	("scroll.minimap.enabled", "false  ## Default"),
+	// wallpaper text colors were off by default while the measurements were being made
+	("colors.from_wallpaper", "false  ## Default"),
+	// the size is automatic now, so its commented line is an example, not the
+	// default (2026100907341818)
+	("font.size", "17.0  ## Default"),
+	// the theme colors are automatic too, and follow the theme until set
+	("colors.background", "\"#000000\"  ## Default"),
+	("colors.highlight", "\"#c8a05a\"  ## Default"),
+	("colors.focus", "\"#4086ff\"  ## Default"),
+	("colors.menu_background", "\"#36363b\"  ## Default"),
+	("colors.menu_foreground", "\"#f0f0f2\"  ## Default"),
+	("colors.dialog_background", "\"#20202a\"  ## Default"),
+	("colors.dialog_foreground", "\"#e2e2ea\"  ## Default"),
+	("colors.gutter", "\"#16161e\"  ## Default"),
+	("colors.scrollbar_thumb", "\"#8a8a92\"  ## Default"),
+	("colors.scrollbar_trough", "\"#2e2e36\"  ## Default"),
+	// copy on select was off by default
+	("shell.copy_on_select", "false  ## Default"),
+	// so did letting an idle window's GPU device go
+	("window.idle_release", "false  ## Default"),
+	// a minimized or covered window waited half an hour
+	("window.idle_release_hidden_min", "30  ## Default"),
+	// These 7 lines named an example rather than the default they were marked
+	// with, so uncommenting one changed what loaded. The values below are the
+	// examples they used to have.
+	("transparency.enabled", "true  ## Default"),
+	("transparency.blur_behind", "true  ## Default"),
+	("wallpaper.image", "\"wallpaper.png\"  ## Default"),
+	("wallpaper.rotate.folder", "\"wallpaper/\"  ## Default"),
+	// then empty, which meant the same place without naming it
+	("wallpaper.rotate.folder", "\"\"  ## Default"),
+	// then with doubled backslashes, for the shcl 3.0 betas that read one as an
+	// escape. 3.0.0-beta1 takes a backslash as plain text, so they read as 2.
+	#[cfg(windows)]
+	("wallpaper.rotate.folder", "\"%LOCALAPPDATA%\\\\silkterm\\\\wallpaper\"  ## Default"),
+	("selection.word_separators", "\",|\\\"' ()[]{}<>\"  ## Default"),
+	("hyperlinks.open_command", "\"firefox --new-tab\"  ## Default"),
+	("shell.command_line", "\"--new-pane --right --size 35%\"  ## Default"),
+	// on by default until it was clear that it replaces a PS1 set in .bashrc,
+	// which Debian's own files do
+	("shell.bash_prompt", "true  ## Default"),
+	// was on by default for its first day
+	("window.remember_maximized", "true  ## Default"),
+	// Close pane had no chord on a Mac for its first day
+	#[cfg(target_os = "macos")]
+	("keys.close_pane", "\"none\"  ## Default"),
 ];
 
 // The whole pre-nesting flat namespace, old key -> new nested path. Primary
 // (most recent flat) names first; still-older aliases after, so when a config
-// somehow carries both spellings the newer one wins. `colors.*` map to
-// themselves - the path didn't change, but active overrides still carry over.
+// somehow has both spellings the newer one wins. `colors.*` map to themselves,
+// since the path didn't change, but active overrides still copy over.
 #[rustfmt::skip]
 const LEGACY_KEYS: &[(&str, &str)] = &[
 	("use_system_font", "font.use_system_family"),
@@ -2210,6 +4319,7 @@ const LEGACY_KEYS: &[(&str, &str)] = &[
 	("wallpaper_opacity", "wallpaper.opacity"),
 	("wallpaper_default_fit", "wallpaper.default_fit"),
 	("wallpaper_honor_xmp", "wallpaper.honor_xmp"),
+	("wallpaper_honor_xmp_look", "wallpaper.honor_xmp_look"),
 	("wallpaper_blur", "wallpaper.blur"),
 	("wallpaper_contrast_mask", "wallpaper.contrast_mask.enabled"),
 	("wallpaper_contrast_mask_size", "wallpaper.contrast_mask.size"),
@@ -2222,6 +4332,7 @@ const LEGACY_KEYS: &[(&str, &str)] = &[
 	("text_scrim_ramp", "text.scrim.ramp"),
 	("text_scrim_regular_weight", "text.scrim.regular_weight"),
 	("text_outline", "text.outline"),
+	("text_dark_on_light", "text.dark_on_light"),
 	("color_emoji", "text.color_emoji"),
 	("embolden_inverse", "text.embolden_inverse"),
 	("cursor_scrim", "cursor.scrim"),
@@ -2269,29 +4380,20 @@ const LEGACY_KEYS: &[(&str, &str)] = &[
 	("background_contrast_mask_auto", "wallpaper.contrast_mask.auto"),
 ];
 
-// A carried value keeps its exact spelling but not an old trailing comment -
-// the new template's comments describe the setting already. `#` inside a
-// quoted value (every color) survives.
+// A copied value keeps its exact text but not an old trailing comment, since the
+// new template's comments describe the setting already. `#` inside a quoted value
+// (every color) survives.
 fn strip_trailing_comment(value: &str) -> &str {
-	let mut quote: Option<char> = None;
-	let mut escaped = false;
-	for (at, c) in value.char_indices() {
-		if escaped {
-			escaped = false;
-			continue;
-		}
-		match c {
-			'\\' => escaped = true,
-			'"' | '\'' => match quote {
-				Some(q) if q == c => quote = None,
-				None => quote = Some(c),
-				_ => {}
-			},
-			'#' if quote.is_none() => return value[..at].trim_end(),
-			_ => {}
-		}
-	}
-	value
+	comment_at(value).map_or(value, |at| value[..at].trim_end())
+}
+
+// Where a value's comment starts, as shcl reads it. A backslash is plain text
+// since 3.0, an apostrophe inside a bare value opens no quote, and a '#' against
+// text opens a comment too (H008).
+fn comment_at(value: &str) -> Option<usize> {
+	let mut tokens = shcl::Tokens::default();
+	shcl::tokenize_value(value, 0, shcl::Rules::Current, &mut tokens);
+	tokens.comment
 }
 
 // Rewrite the template line for `path` as an active assignment of `value`,
@@ -2299,70 +4401,263 @@ fn strip_trailing_comment(value: &str) -> &str {
 fn activate_line(lines: &mut [String], path: &str, value: &str) -> bool {
 	let text = lines.join("\n");
 	for w in walk_settings(&text) {
-		if let WalkLine::Setting { index, path: p, .. } = w {
-			if p == path {
-				let line = &lines[index];
-				let trimmed = line.trim_start();
-				let indent = &line[..line.len() - trimmed.len()];
-				let Some(key) = line_setting_key(line) else {
-					return false;
-				};
-				lines[index] = format!("{indent}{key}: {value}");
-				return true;
-			}
+		if let WalkLine::Setting { index, path: p, .. } = w
+			&& p == path
+		{
+			let line = &lines[index];
+			let trimmed = line.trim_start();
+			let indent = &line[..line.len() - trimmed.len()];
+			let Some(key) = line_setting_key(line) else {
+				return false;
+			};
+			lines[index] = format!("{indent}{key}: {value}");
+			return true;
 		}
 	}
 	false
 }
 
-// One-time conversion of a pre-nesting config: the flat `wallpaper_*`-style
-// namespace became nested blocks, and rewriting that in place would shred the
-// old file's comments and grouping. Instead the old file is moved aside to a
-// `.bak` and a fresh template is written with every ACTIVE old value carried
-// over to its new path - settings survive, and the file's documentation is
-// current instead of half-old. Unknown `themes.*` subtrees (user data for a
-// future feature) are carried verbatim in dotted form.
-fn convert_legacy_config(path: &std::path::Path) {
-	let Ok(text) = std::fs::read_to_string(path) else {
+// A column-0 `wallpaper:` line with a value. No current setting reads one.
+fn valued_wallpaper_line(line: &str) -> bool {
+	line.get(..9).is_some_and(|head| head.eq_ignore_ascii_case("wallpaper")) && line_setting_key(line).is_some_and(|key| key.eq_ignore_ascii_case("wallpaper")) && line_setting_value(line).is_some_and(|v| !strip_trailing_comment(v).trim().is_empty())
+}
+
+// An earlier build converted a flat `wallpaper: <image>` onto the template's
+// `wallpaper:` heading. shcl still reads the block under it, so only the image
+// was lost, but the line kept the file reading as flat and every launch
+// converted it again. The value moves to `image:`, or is dropped when the file
+// names an image already. No other line changes, but line endings come back LF.
+fn wallpaper_heading_repaired(text: &str) -> Option<String> {
+	// every launch comes through here, and almost no file has such a line
+	if !text.lines().any(valued_wallpaper_line) {
+		return None;
+	}
+	let lines: Vec<&str> = text.lines().collect();
+	// the walk leaves out lines inside a fenced value, which are text
+	let valued: Vec<usize> = walk_settings(text)
+		.into_iter()
+		.filter_map(|w| match w {
+			WalkLine::Setting { index, active: true, .. } if valued_wallpaper_line(lines[index]) => Some(index),
+			_ => None,
+		})
+		.collect();
+	// 2 of them can't be told apart
+	let [at] = valued[..] else {
+		return None;
+	};
+	// What follows must be the template's block. A flat file's next setting is
+	// at column 0, or is an old flat name indented by hand, and the conversion
+	// reads that correctly. Comments give no depth.
+	let child = lines[at + 1..].iter().find(|line| {
+		let trimmed = line.trim_start();
+		!trimmed.is_empty() && !trimmed.starts_with('#')
+	})?;
+	let indent = &child[..child.len() - child.trim_start().len()];
+	if indent.is_empty() {
+		return None;
+	}
+	let child_path = format!("wallpaper.{}", line_setting_key(child)?.to_ascii_lowercase());
+	let in_template = walk_settings(default_config()).iter().any(|w| matches!(w, WalkLine::Setting { path, .. } if *path == child_path));
+	if !in_template {
+		return None;
+	}
+	let value = line_setting_value(lines[at])?;
+	let named = shcl::Document::parse(text).count("wallpaper.image") > 0;
+	let mut out = String::with_capacity(text.len() + indent.len() + 8);
+	for (index, line) in lines.iter().enumerate() {
+		if index != at {
+			out.push_str(line);
+			out.push('\n');
+			continue;
+		}
+		out.push_str("wallpaper:\n");
+		if !named {
+			out.push_str(indent);
+			out.push_str("image: ");
+			out.push_str(value);
+			out.push('\n');
+		}
+	}
+	Some(out)
+}
+
+// In place and with no backup: an install this damaged converted the file at
+// every launch, and has used up most of the backup names doing it.
+fn repair_wallpaper_heading(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(text) = file.text() else {
 		return;
 	};
-	let lines: Vec<&str> = text.lines().collect();
-	let walked = walk_settings(&text);
-	// Only an ACTIVE flat key marks a file as legacy: any real old config has
-	// several (the template shipped with them), while a comment that merely
-	// spells an old name - e.g. one a relayouted save left at column 0 - must
-	// never nuke a current-format file.
-	let legacy = walked.iter().any(|w| {
-		matches!(w, WalkLine::Setting { path: p, header: false, active: true, .. }
-			if !p.contains('.') && LEGACY_KEYS.iter().any(|(old, _)| old == p))
-	});
-	if !legacy {
+	let Some(out) = wallpaper_heading_repaired(text) else {
+		return;
+	};
+	// the image line is added only when the file named no image already
+	let added = out.lines().count() > text.lines().count();
+	if config_open_elsewhere(path) {
+		note_config_busy(path);
 		return;
 	}
+	if let Err(e) = file.write(out) {
+		eprintln!("{APP_NAME}: couldn't repair config {}: {e:#}", path.display());
+		return;
+	}
+	if added {
+		eprintln!("{APP_NAME}: moved the wallpaper image in {} from the `wallpaper:` line to `image:`", path.display());
+	} else {
+		eprintln!("{APP_NAME}: cleared the `wallpaper:` line in {}; the file already names an image under `image:`", path.display());
+	}
+}
 
-	// active values: current-format paths carry as themselves (a mixed file
-	// loses nothing), old spellings map through the table, best (lowest table
-	// index) spelling winning per new path
-	let known_new: std::collections::HashSet<String> = setting_lines(default_config())
-		.into_iter()
-		.map(|(p, _)| p)
+// One-time conversion of a pre-nesting config. The flat `wallpaper_*`-style
+// namespace became nested blocks, and rewriting that in place would shred the old
+// file's comments and grouping. So the old file is copied to a `.bak` and a fresh
+// template is written over it, with every active old value copied to its new
+// path, so settings survive and the file's comments are current. Themes and
+// the `kept` block are copied as is in dotted form (`copied_as_is`). A setting
+// with nowhere to go is counted and reported. The rewrite keeps a linked file
+// linked and a private one private.
+fn convert_legacy_config(file: &mut LaunchFile) {
+	convert_legacy_config_with(file, write_config_atomic);
+}
+
+// The writer is a parameter so a test can fail it the ways the real one can.
+fn convert_legacy_config_with(file: &mut LaunchFile, write: fn(&std::path::Path, &str) -> anyhow::Result<()>) {
+	let path = file.path;
+	let Some(text) = file.text() else {
+		return;
+	};
+	let Some((joined, left)) = converted_config(text) else {
+		return;
+	};
+	let text = text.to_owned();
+	if config_open_elsewhere(path) {
+		note_config_busy(path);
+		return;
+	}
+	let Some(backup) = backup_copy(path, text.as_bytes()) else {
+		return;
+	};
+	let written = write(path, &joined);
+	file.wrote(written.is_ok(), joined);
+	if let Err(e) = written {
+		// A file that stays unwritable would gain a backup at every launch, so one
+		// that reads back whole needs none. Anything else keeps it: ReplaceFile can
+		// fail after the file it replaces is gone and writing it again fails,
+		// leaving the backup the only copy.
+		if file.body.as_deref() == Some(text.as_bytes()) {
+			let _ = std::fs::remove_file(&backup);
+			eprintln!("{APP_NAME}: couldn't convert config {}: {e:#}", path.display());
+		} else {
+			eprintln!("{APP_NAME}: couldn't convert config {}: {e:#}; the old file is kept at {}", path.display(), backup.display());
+		}
+		return;
+	}
+	if left > 0 {
+		say_lost(ConversionLoss { path: path.to_path_buf(), backup: Some(backup), lost: left, how: Converted::Rewritten, lines: Vec::new() });
+		return;
+	}
+	eprintln!("{APP_NAME}: config converted to the new nested layout; the old file is kept at {}", backup.display());
+}
+
+// The conversion as text: None for a file that isn't pre-nesting.
+fn converted_config_text(text: &str) -> Option<String> {
+	converted_config(text).map(|(text, _)| text)
+}
+
+// The same, with how many settings it left behind.
+fn converted_config(text: &str) -> Option<(String, usize)> {
+	// Only an active flat key marks a file as legacy, since any real old config has
+	// several. A comment that only contains an old name, such as one a save left at
+	// column 0, must never wipe a current-format file.
+	let flat: Vec<usize> = walk_settings(text)
+		.iter()
+		.filter_map(|w| match w {
+			WalkLine::Setting { index, path: p, header: false, active: true } if !p.contains('.') && LEGACY_KEYS.iter().any(|(old, _)| old == p) => Some(*index),
+			_ => None,
+		})
 		.collect();
-	let mut carry: std::collections::HashMap<String, (usize, String)> =
-		std::collections::HashMap::new();
+	if flat.is_empty() {
+		return None;
+	}
+	// A line shcl can't read sets nothing, whatever it is called. The walk puts
+	// a line that steps back to a depth nothing uses at the top level, where an
+	// old flat name such as `margin` looked like a whole old file.
+	let unread = unreadable_lines(&shcl::Document::parse(text));
+	if flat.iter().all(|index| unread.contains(&(index + 1))) {
+		return None;
+	}
+	Some(rebuilt_config_text(text, &[]))
+}
+
+// The template with every active setting of `text` that still reads copied
+// over, and how many lines with a setting it left behind: each one shcl
+// can't read, and each setting it reads that has nowhere to go. Lines listed
+// in `garbled` (0-based) didn't decode and are never copied. A renamed
+// setting goes under its new name, as the launch's rename would put it. A
+// retired one isn't counted. Where a later launch step moves it, to the shell
+// list, the tab text or the state file, it is kept as a dotted line for that
+// step, as for a file converted in place, and otherwise it is dropped.
+fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
+	let lines: Vec<&str> = text.lines().collect();
+	let walked = walk_settings(text);
+	// shcl reads the garbled lines as comments, so a block under one reads as
+	// lines with no parent
+	let clean: String = text.split('\n').enumerate().map(|(index, line)| if garbled.contains(&index) { format!("#{line}") } else { line.to_string() }).collect::<Vec<_>>().join("\n");
+	let parsed = shcl::Document::parse(&clean);
+	let unread = unreadable_lines(&parsed);
+	let read = |index: usize| !unread.contains(&(index + 1)) && !garbled.contains(&index);
+
+	// active values: current-format paths copy as themselves, so a mixed file loses
+	// nothing, and old spellings map through the table, with the lowest table index
+	// winning per new path.
+	// Settings only, never a block heading: a flat `wallpaper:` had the image,
+	// and matched as a current path it was written onto the `wallpaper:` heading.
+	let known_new: std::collections::HashSet<String> = walk_settings(default_config())
+		.into_iter()
+		.filter_map(|w| match w {
+			WalkLine::Setting { path, header: false, .. } => Some(path),
+			_ => None,
+		})
+		.collect();
+	// what the launch's rename checks for its new name, read only when a
+	// file has an old one
+	let present = std::cell::OnceCell::new();
+	let has = |new: &str| {
+		present
+			.get_or_init(|| {
+				saved_paths(text).unwrap_or_else(|| {
+					walked
+						.iter()
+						.filter_map(|w| match w {
+							WalkLine::Setting { path, .. } => Some(path.clone()),
+							_ => None,
+						})
+						.collect()
+				})
+			})
+			.contains(new)
+	};
+	let renamed = |path: String| CONFIG_RENAMES.iter().find(|(old, new)| *old == path && !has(new)).map_or(path, |(_, new)| (*new).to_string());
+	let mut carry: std::collections::HashMap<String, (usize, String)> = std::collections::HashMap::new();
 	let mut extras: Vec<String> = Vec::new();
-	let mut had_font_family = false;
-	let mut had_use_system = false;
+	let mut left: std::collections::BTreeSet<usize> = unread.iter().map(|line| line - 1).collect();
+	left.extend(garbled.iter().copied().filter(|index| {
+		lines.get(*index).is_some_and(|line| {
+			let line = line.trim();
+			!line.is_empty() && !line.starts_with('#')
+		})
+	}));
 	for w in &walked {
-		let WalkLine::Setting {
-			index,
-			path: p,
-			active,
-			header,
-		} = w
-		else {
+		let WalkLine::Setting { index, path: p, active, header } = w else {
 			continue;
 		};
 		if !active || *header {
+			continue;
+		}
+		// A value that opens a raw block would be copied without its body. No
+		// setting takes one.
+		if !read(*index) || fence_run(lines[*index]).is_some() {
+			left.insert(*index);
 			continue;
 		}
 		let Some(value) = line_setting_value(lines[*index]) else {
@@ -2372,53 +4667,48 @@ fn convert_legacy_config(path: &std::path::Path) {
 		if value.is_empty() {
 			continue;
 		}
-		if p == "use_system_font" {
-			had_use_system = true;
-		}
-		if p == "font_family" {
-			had_font_family = true;
-		}
-		let target = if known_new.contains(p) {
-			Some((0, p.clone()))
-		} else {
-			LEGACY_KEYS
-				.iter()
-				.position(|(old, _)| old == p)
-				.map(|rank| (rank + 1, LEGACY_KEYS[rank].1.to_string()))
+		let target = if known_new.contains(p) { Some((0, p.clone())) } else { LEGACY_KEYS.iter().position(|(old, _)| old == p).map(|rank| (rank + 1, LEGACY_KEYS[rank].1.to_string())).or_else(|| (CONFIG_CONVERTS.iter().any(|(old, ..)| old == p) || CONFIG_RENAMES.iter().any(|(old, _)| old == p) || retired(p)).then(|| (LEGACY_KEYS.len() + 1, p.clone()))) }.map(|(rank, new)| (rank, renamed(new)));
+		// an old unit has a template line only under its new name, and a value
+		// that isn't a number keeps its text, as a launch's rename would
+		let (target, value) = match target {
+			Some((rank, new)) => match CONFIG_CONVERTS.iter().find(|(old, ..)| *old == new) {
+				Some((_, to, convert)) => (Some((rank, (*to).to_string())), converted_value(value, *convert).unwrap_or_else(|| value.to_string())),
+				None => (Some((rank, new)), value.to_string()),
+			},
+			None => (None, value.to_string()),
 		};
+		let value = value.as_str();
 		if let Some((rank, new)) = target {
-			// a mapped path that has since been retired stays retired - the
-			// old value is still in the .bak, but never resurrects here
-			if !CONFIG_REMOVED.contains(&new.as_str()) {
-				let slot = carry.entry(new).or_insert((rank, value.to_string()));
-				if rank < slot.0 {
-					*slot = (rank, value.to_string());
+			if retired(&new) && !moved_later(&new) {
+				continue;
+			}
+			match carry.entry(new) {
+				std::collections::hash_map::Entry::Vacant(slot) => {
+					slot.insert((rank, value.to_string()));
+				}
+				// a setting written 2 ways keeps one
+				std::collections::hash_map::Entry::Occupied(mut slot) => {
+					left.insert(*index);
+					if rank < slot.get().0 {
+						slot.insert((rank, value.to_string()));
+					}
 				}
 			}
-		} else if p.starts_with("themes.") {
+		} else if copied_as_is(p) {
 			extras.push(format!("{p}: {value}"));
+		} else if !p.starts_with("shells.") {
+			// dropped from the new file, still in the copy
+			left.insert(*index);
 		}
-		// anything else: dropped from the new file, still in the .bak
+		// a shell list is copied whole, below
 	}
-	// Old semantics: no use_system_font line + an explicit font_family meant
-	// "use that font" - keep meaning that, not the new template's default.
-	if had_font_family && !had_use_system {
-		carry
-			.entry("font.use_system_family".to_string())
-			.or_insert((usize::MAX, "false".to_string()));
-	}
-
-	if config_open_elsewhere(path) {
-		note_config_busy(path);
-		return;
-	}
-	let Some(backup) = backup_aside(path) else {
-		return;
-	};
 	let mut out: Vec<String> = default_config().lines().map(str::to_string).collect();
+	let mut later: Vec<String> = Vec::new();
 	for (new_path, (_, value)) in &carry {
-		if !activate_line(&mut out, new_path, value) {
-			// no template line (shouldn't happen) - keep it as a dotted line
+		if retired(new_path) {
+			later.push(format!("{new_path}: {value}"));
+		} else if !activate_line(&mut out, new_path, value) {
+			// no template line, which shouldn't happen, so keep it as a dotted line
 			extras.push(format!("{new_path}: {value}"));
 		}
 	}
@@ -2429,46 +4719,49 @@ fn convert_legacy_config(path: &std::path::Path) {
 	}
 	let mut joined = out.join("\n");
 	joined.push('\n');
-	if let Err(e) = std::fs::write(path, joined) {
-		eprintln!(
-			"{APP_NAME}: could not convert config {}: {e}",
-			path.display()
-		);
-		return;
+	// The shell list is the user's, and its order names the default shell, so it
+	// is copied whole and in order rather than as sorted dotted lines.
+	let shells = read_shells(&parsed);
+	if !shells.is_empty() {
+		let mut doc = shcl::Document::parse(&joined);
+		write_shells(&mut doc, &[], &shells);
+		joined = doc.to_canonical();
 	}
-	eprintln!(
-		"{APP_NAME}: config converted to the new nested layout; the old file is kept at {}",
-		backup.display()
-	);
+	// After the shell list, which would move them into the blocks they name,
+	// and before the footer, which a step that removes one would take with it
+	if !later.is_empty() {
+		later.sort();
+		joined = format!("{}\n\n{}\n", joined.trim_end(), later.join("\n"));
+		if let Some(moved) = with_shcl_banner(&joined) {
+			joined = moved;
+		}
+	}
+	(joined, left.len())
 }
 
 // Migrate an existing config in place across program updates: rename keys whose
 // name changed, drop keys that no longer exist. Preserves the user's values,
 // comments, and layout (line-based, like backfill). New keys are added by
 // backfill_config; this only renames/removes, so run it first.
-fn migrate_config(path: &std::path::Path) {
-	let Ok(text) = std::fs::read_to_string(path) else {
+fn migrate_config(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(out) = file.text().and_then(|text| migrated_text(text, true)) else {
 		return;
 	};
-	if let Some(out) = migrate_config_text(&text) {
-		if config_open_elsewhere(path) {
-			note_config_busy(path);
-			return;
-		}
-		if let Err(e) = std::fs::write(path, out) {
-			eprintln!(
-				"{APP_NAME}: could not migrate config {}: {e}",
-				path.display()
-			);
-		}
+	if config_open_elsewhere(path) {
+		note_config_busy(path);
+		return;
+	}
+	if let Err(e) = file.write(out) {
+		eprintln!("{APP_NAME}: couldn't migrate config {}: {e:#}", path.display());
 	}
 }
 
-// Best-effort check that some OTHER process has the config file open right now
-// (e.g. the user is editing it). Linux only, via /proc/<pid>/fd; elsewhere we
-// assume it's free. It only catches editors that hold the descriptor open, so a
-// false "not busy" is possible - fine, because the writes we gate on it only add
-// program-driven options and never touch the user's own values or comments.
+// Best-effort check that another process has the config file open right now,
+// such as an editor. Linux only, through /proc/<pid>/fd, and elsewhere it reads
+// as free. It only catches editors that hold the descriptor open, so a false "not
+// busy" is possible. That's acceptable, since the writes gated on it only add
+// program-driven options and never touch the user's values or comments.
 #[cfg(target_os = "linux")]
 fn config_open_elsewhere(path: &std::path::Path) -> bool {
 	let Ok(target) = path.canonicalize() else {
@@ -2479,11 +4772,7 @@ fn config_open_elsewhere(path: &std::path::Path) -> bool {
 		return false;
 	};
 	for proc in procs.flatten() {
-		let Some(pid) = proc
-			.file_name()
-			.to_str()
-			.and_then(|s| s.parse::<u32>().ok())
-		else {
+		let Some(pid) = proc.file_name().to_str().and_then(|s| s.parse::<u32>().ok()) else {
 			continue;
 		};
 		if pid == me {
@@ -2507,111 +4796,183 @@ fn config_open_elsewhere(_path: &std::path::Path) -> bool {
 }
 
 fn note_config_busy(path: &std::path::Path) {
-	eprintln!(
-		"{APP_NAME}: {} looks open in another program; leaving it as-is for now.",
-		path.display()
-	);
+	eprintln!("{APP_NAME}: {} looks open in another program; leaving it as-is for now.", path.display());
 }
 
-// Bring a font_family line still carrying a superseded default stack up to the
-// current one. Only a bare, exactly-matching quoted value migrates, so an edited
-// stack - or one trailing a comment - is left exactly as the user wrote it.
+// Bring a font_family line that still has a superseded default stack up to the
+// current one. The value is matched as it reads, in either quote, since a save
+// before shcl 3.0.0-beta1 swapped one for the other. An edited stack, or one with
+// a note on the line, is left exactly as the user wrote it.
 fn refresh_font_stack(line: &str) -> Option<String> {
 	let (head, value) = line.split_once(':')?;
-	let inner = value.trim().strip_prefix('"')?.strip_suffix('"')?;
-	SUPERSEDED_FONT_STACKS
-		.contains(&inner)
-		.then(|| format!("{head}: \"{DEFAULT_FONT_STACK}\""))
+	let value = value.trim();
+	if strip_trailing_comment(value) != value {
+		return None;
+	}
+	let doc = shcl::Document::parse(&format!("v: {value}\n"));
+	if doc.lost_count() > 0 {
+		return None;
+	}
+	doc.get_string("v").is_ok_and(|read| SUPERSEDED_FONT_STACKS.contains(&read.as_str())).then(|| format!("{head}: \"{DEFAULT_FONT_STACK}\""))
 }
 
-// Everything after a settings line's first colon, trimmed - a trailing `##`
-// comment included, deliberately, so the exact-match test below refuses any line
-// the user has written a note on.
+// Everything after a settings line's first colon, trimmed, with a trailing `##`
+// comment included on purpose, so the exact-match test below refuses any line the
+// user wrote a note on.
 fn line_setting_value(line: &str) -> Option<&str> {
-	Some(line.split_once(':')?.1.trim())
+	let key = line_setting_key(line);
+	let after_key = key.map_or(line, |key| {
+		let at = key.as_ptr() as usize - line.as_ptr() as usize + key.len();
+		&line[at..]
+	});
+	Some(after_key.split_once(':')?.1.trim())
 }
 
 // Bring a commented line still echoing a superseded default up to the template's
-// current line for that path. Only a bare, exactly-matching value migrates, so an
-// edited value - or one trailing a note - stays as the user wrote it.
+// current line for that path. Only a bare, exactly matching value migrates, so an
+// edited value, or one followed by a note, stays as the user wrote it.
 fn refresh_superseded_default(line: &str, path: &str) -> Option<String> {
 	if !line.trim_start().starts_with('#') {
 		return None; // active: the user's own value, leave it alone
 	}
-	// a path can carry several superseded values (a default retuned more than
-	// once), so every entry for it is a candidate - not just the first
+	// a path can have several superseded values, from a default retuned more
+	// than once, so every entry for it is a candidate
 	let value = line_setting_value(line)?;
-	if !SUPERSEDED_DEFAULTS
-		.iter()
-		.any(|(name, old)| *name == path && *old == value)
-	{
+	if !SUPERSEDED_DEFAULTS.iter().any(|(name, old)| *name == path && *old == value) {
 		return None;
 	}
-	setting_lines(default_config())
-		.into_iter()
-		.find(|(name, _)| name == path)
-		.map(|(_, template)| template)
-		.filter(|template| template != line)
+	setting_lines(default_config()).into_iter().find(|(name, _)| name == path).map(|(_, template)| template).filter(|template| template != line)
 }
 
 // The rename/remove/refresh transform, as a pure fn (testable). Returns
 // Some(new text) only if something changed.
 fn migrate_config_text(text: &str) -> Option<String> {
+	migrated_text(text, false)
+}
+
+// A line's key is its path less what the headings above it give: the leaf,
+// the whole path, or anything between, such as `minimap.keep_for` under
+// `scroll:`. Renames only change the leaf, so the rest stays as typed.
+fn renamed_key(key: &str, path: &str, new: &str) -> String {
+	if key.eq_ignore_ascii_case(path) {
+		return new.to_string();
+	}
+	let leaf = new.rsplit('.').next().unwrap_or(new);
+	match key.rsplit_once('.') {
+		Some((parents, _)) => format!("{parents}.{leaf}"),
+		None => leaf.to_string(),
+	}
+}
+
+// `keep_default_shell` is for the write to disk. An active `shell.default`
+// leaves with its adoption into the shell list (`adopt_default_shell`), which
+// removes it once that save goes through. Where the save was refused it has to
+// stay, or the choice is lost. A read drops it either way.
+fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 	let lines: Vec<&str> = text.lines().collect();
 	// full path per line index, for the lines that are settings
 	let mut path_of: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
+	let mut keep: std::collections::HashSet<usize> = std::collections::HashSet::new();
+	let mut active_old_name = false;
+	let mut active_blink = false;
+	let mut first_tab_part: Option<usize> = None;
+	let mut active_tab_text = false;
 	for w in walk_settings(text) {
-		if let WalkLine::Setting { index, path, .. } = w {
+		if let WalkLine::Setting { index, path, active, header } = w {
+			if keep_default_shell && active && !header && path == "shell.default" {
+				keep.insert(index);
+			}
+			if active && !header && OLD_TAB_PARTS.contains(&path.as_str()) {
+				first_tab_part.get_or_insert(index);
+			}
+			active_tab_text |= active && !header && path == "window.tab_text";
+			active_old_name |= active && (CONFIG_RENAMES.iter().any(|(old, _)| *old == path) || CONFIG_CONVERTS.iter().any(|(old, ..)| *old == path));
+			active_blink |= active && !header && path == "cursor.blink";
 			path_of.insert(index, path);
 		}
 	}
-	// rename targets already present (active or commented): don't create a dup
-	let have: std::collections::HashSet<&str> = path_of.values().map(String::as_str).collect();
+	// Rename targets already present (active or commented): don't create a dup.
+	// Only an active old name moves a value, so only then is the answer taken
+	// from the saved form; the template's commented `# focus:` pays nothing.
+	let raw_paths = || path_of.values().cloned().collect();
+	let have: std::collections::HashSet<String> = if active_old_name { saved_paths(text).unwrap_or_else(raw_paths) } else { raw_paths() };
+
+	// The old check boxes become one template line where the first of them was,
+	// unless the file already has a template of its own.
+	let tab_text = first_tab_part.filter(|_| !active_tab_text).and_then(|index| tab_text_line(text, lines[index]).map(|line| (index, line)));
+	let old_comment = old_tab_comment_at(&lines);
 
 	let mut changed = false;
 	let mut out: Vec<String> = Vec::new();
+	let mut skip = 0;
 	for (index, line) in lines.iter().enumerate() {
+		if skip > 0 {
+			skip -= 1;
+			continue;
+		}
+		if let Some((at, len, new)) = &old_comment
+			&& *at == index
+		{
+			out.extend(new.iter().cloned());
+			skip = len - 1;
+			changed = true;
+			continue;
+		}
 		let Some(path) = path_of.get(&index) else {
 			out.push((*line).to_string());
 			continue;
 		};
-		if CONFIG_REMOVED.contains(&path.as_str()) {
+		if let Some((at, new)) = &tab_text
+			&& *at == index
+		{
+			out.push(new.clone());
+			changed = true;
+			continue;
+		}
+		if retired(path) && !keep.contains(&index) {
 			changed = true;
 			continue; // drop
 		}
 		// A rename fires only while the new spelling is absent. Where both are
-		// present the old line is left ALONE, never dropped: a rename can free
-		// its old name for a NEW setting (colors.focus did exactly that), and
+		// present the old line is left alone, never dropped: a rename can free
+		// its old name for a new setting (colors.focus did exactly that), and
 		// dropping there would delete that setting's own line on every launch.
-		let renamed = CONFIG_RENAMES
-			.iter()
-			.find(|(old, _)| old == path)
-			.filter(|(_, new)| !have.contains(*new));
+		let renamed = CONFIG_RENAMES.iter().map(|&(old, new)| (old, new, None)).chain(CONFIG_CONVERTS.iter().map(|&(old, new, convert)| (old, new, Some(convert)))).find(|(old, ..)| old == path).filter(|(_, new, _)| !have.contains(*new));
 		let mut kept = match renamed {
-			Some((_, new)) => {
+			Some((_, new, convert)) => {
 				changed = true;
-				// the line spells the leaf (nested) or the full path
-				// (dotted); rewrite whichever token is actually there
 				let old_leaf = path.rsplit('.').next().unwrap_or(path);
-				let new_leaf = new.rsplit('.').next().unwrap_or(new);
 				let key = line_setting_key(line).unwrap_or(old_leaf);
-				let target = if key == *path { new } else { new_leaf };
-				line.replacen(key, target, 1)
+				let line = line.replacen(key, &renamed_key(key, path, new), 1);
+				convert.and_then(|convert| convert_line_value(&line, convert)).unwrap_or(line)
 			}
 			None => (*line).to_string(),
 		};
-		// the refreshes below key on where the line ENDS UP, not where it came
-		// from - a just-renamed line belongs to its new path now
-		let path: &str = renamed.map_or(path.as_str(), |(_, new)| new);
+		// the refreshes below key on where the line ends up rather than where it
+		// came from, since a renamed line belongs to its new path now
+		let mut path: &str = renamed.map_or(path.as_str(), |(_, new, _)| new);
+		// an active "none" becomes the switch that says it now, unless the file
+		// already sets that switch itself
+		if path == "cursor.animation" && !active_blink && !kept.trim_start().starts_with('#') && line_setting_value(&kept).is_some_and(animation_is_none) {
+			let key = line_setting_key(&kept).unwrap_or("animation");
+			let target = renamed_key(key, path, "cursor.blink");
+			let indent = &kept[..kept.len() - kept.trim_start().len()];
+			let value = kept.split_once(':').map_or("", |(_, rest)| rest.trim_start());
+			let note = &value[strip_trailing_comment(value).len()..];
+			kept = format!("{indent}{target}: false{note}");
+			path = "cursor.blink";
+			changed = true;
+		}
 		if let Some(refreshed) = refresh_superseded_default(&kept, path) {
 			kept = refreshed;
 			changed = true;
 		}
-		if path == "font.family" && !kept.trim_start().starts_with('#') {
-			if let Some(refreshed) = refresh_font_stack(&kept) {
-				kept = refreshed;
-				changed = true;
-			}
+		if path == "font.family"
+			&& !kept.trim_start().starts_with('#')
+			&& let Some(refreshed) = refresh_font_stack(&kept)
+		{
+			kept = refreshed;
+			changed = true;
 		}
 		out.push(kept);
 	}
@@ -2622,61 +4983,166 @@ fn migrate_config_text(text: &str) -> Option<String> {
 	})
 }
 
+// The 4 check boxes `window.tab_text` replaced.
+const OLD_TAB_PARTS: [&str; 4] = ["window.tab_shows_title", "window.tab_shows_shell", "window.tab_shows_program", "window.tab_shows_directory"];
+
+// The template line that says what the old check boxes in `text` said, in the
+// place and spelling of `line`, the first of them set. None where they said
+// what the template says, since then the commented default is enough.
+// Read as the old build read them: a value that isn't a yes or no, or one set
+// twice, is on.
+fn tab_text_line(text: &str, line: &str) -> Option<String> {
+	let doc = parse_kept(text);
+	let on = |leaf: &str| doc.get_bool(&format!("window.tab_shows_{leaf}")).unwrap_or(true);
+	let parts = crate::tabtitle::Parts { title: on("title"), shell: on("shell"), program: on("program"), directory: on("directory") };
+	if parts == crate::tabtitle::Parts::default() {
+		return None;
+	}
+	let template = crate::tabtitle::tab_text_for(parts);
+	let mut one = shcl::Document::new();
+	if one.set_string("window.tab_text", &template) != shcl::SetStatus::Ok {
+		return None;
+	}
+	let value = one.to_canonical().lines().find_map(|l| {
+		let key = line_setting_key(l)?;
+		(key.rsplit('.').next() == Some("tab_text")).then(|| line_setting_value(l).map(str::to_string)).flatten()
+	})?;
+	let indent = &line[..line.len() - line.trim_start().len()];
+	let dotted = line_setting_key(line).is_some_and(|key| key.contains('.'));
+	let key = if dotted { "window.tab_text" } else { "tab_text" };
+	Some(format!("{indent}{key}: {value}"))
+}
+
+// The paragraph the template had over the 4 check boxes, as every config
+// written since has it. It describes settings that are gone, so where it is
+// found word for word it gives way to the template's paragraph for the text.
+const OLD_TAB_COMMENT: [&str; 7] = ["## What a tab says, and whether the window title falls back to it. The", "## first line lets a title the running program asked for name the tab,", "## outranked only by a name typed on the tab itself. The three after it", "## are what the tab works out on its own; turning them all off leaves a", "## tab naming its shell, since a tab with no text cannot be told from the", "## one beside it. The tab's flyover always names the lot, whatever these", "## say."];
+
+// Where the old paragraph starts, how many lines it is, and what replaces it,
+// at its indent.
+fn old_tab_comment_at(lines: &[&str]) -> Option<(usize, usize, Vec<String>)> {
+	let at = lines.windows(OLD_TAB_COMMENT.len()).position(|run| run.iter().zip(OLD_TAB_COMMENT).all(|(l, old)| l.trim() == old))?;
+	let indent = &lines[at][..lines[at].len() - lines[at].trim_start().len()];
+	let new: Vec<String> = setting_groups(default_config()).into_iter().find(|(path, ..)| path == "window.tab_text")?.1.iter().filter(|l| l.trim_start().starts_with("##")).map(|l| format!("{indent}{}", l.trim_start())).collect();
+	Some((at, OLD_TAB_COMMENT.len(), new))
+}
+
+// What a launch parses when its rewrites were put off because the file looked
+// open elsewhere: the renames still apply, in memory.
+fn loaded_text(text: &str) -> std::borrow::Cow<'_, str> {
+	rewritten_by(text, &[from_shcl2_text, migrate_config_text])
+}
+
+// What the next launch parses: the text its rewrites leave, in the launch's own
+// order. The rating check compares through this, since a step can read how a
+// line is written as well as what it says. There were 2 that did: the font list
+// refresh looked at the quote character, which the conversion before it copies,
+// and the renames took a commented heading for a parent. A save changes both, so
+// a rating write moved another setting a launch later. Neither reads layout now,
+// and this catches the next step that does. Backfill is left out on purpose,
+// since it only adds lines the program owns, and it runs whether or not a rating
+// was written. A step added to `load` belongs here too.
+type LaunchStep = fn(&str) -> Option<String>;
+
+const LAUNCH_STEPS: [LaunchStep; 5] = [from_shcl2_text, wallpaper_heading_repaired, converted_config_text, adopted_shell_text, migrate_config_text];
+
+#[cfg(test)]
+fn next_launch_text(text: &str) -> std::borrow::Cow<'_, str> {
+	rewritten_by(text, &LAUNCH_STEPS)
+}
+
+fn rewritten_by<'a>(text: &'a str, steps: &[LaunchStep]) -> std::borrow::Cow<'a, str> {
+	let mut out: Option<String> = None;
+	for step in steps {
+		if let Some(next) = step(out.as_deref().unwrap_or(text)) {
+			out = Some(next);
+		}
+	}
+	out.map_or(std::borrow::Cow::Borrowed(text), std::borrow::Cow::Owned)
+}
+
+// Every setting path, active and commented, where every save agrees on it. A
+// save that keeps the lines leaves a comment where it is, but one that falls
+// back to the canonical form writes it at the depth of the setting below it, so
+// a commented new name can move into the old name's block, and a rename that a
+// save turns on or off moved a value at the next launch. shcl picks between the
+// 2 by what the save changes, not by the file: a window size save can fall
+// back where a font size save keeps the lines. So the answer is the canonical
+// form's, which is also the canonical form of whatever either save writes.
+// Where the file has a lost line a fallback is refused and only the lines are
+// kept, so the file as it is has the answer.
+fn saved_paths(text: &str) -> Option<std::collections::HashSet<String>> {
+	let doc = parse_kept(text);
+	if doc.lost_count() > 0 {
+		return None;
+	}
+	Some(
+		walk_settings(&doc.to_canonical())
+			.into_iter()
+			.filter_map(|w| match w {
+				WalkLine::Setting { path, .. } => Some(path),
+				_ => None,
+			})
+			.collect(),
+	)
+}
+
 // One-time: `shell.default` used to name the default shell on its own. The list
-// names it now - its first active entry - so the two could disagree, and the
-// stored value is the user's own statement of which one they meant. Move the
-// entry it names to the top (creating one if the list has nothing running that
-// program) and drop the key; `CONFIG_REMOVED` clears any commented remnant.
+// names it now, as its first active entry, so the 2 could disagree, and the
+// stored value is the user's own statement of which one they meant. The entry it
+// names moves to the top, created if the list has nothing running that program,
+// and the key is dropped. `CONFIG_REMOVED` clears any commented leftover.
 //
-// It runs BEFORE that removal, and only while the key is actively set: a config
-// that never had one, or has already been through this, is not touched at all.
-fn adopt_default_shell(path: &std::path::Path) {
-	let Some(doc) = read_doc(path) else { return };
-	let Some(wanted) = doc
-		.get_string("shell.default")
-		.ok()
-		.map(|v| v.trim().to_string())
-		.filter(|v| !v.is_empty())
-	else {
+// It runs before that removal, and only while the key is actively set, so a
+// config that never had one, or has been through this already, isn't touched.
+fn adopt_default_shell(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(body) = file.body.as_deref() else {
+		return;
+	};
+	let Some(adopted) = adopted_shell_doc(&editable_doc(settings_text(body))) else {
 		return;
 	};
 	if config_open_elsewhere(path) {
 		note_config_busy(path);
 		return;
 	}
-	let stored = read_shells(&doc);
+	let _ = write_doc(path, &adopted);
+	file.reread();
+}
+
+// None for a file with no active `shell.default`.
+fn adopted_shell_doc(doc: &shcl::Document) -> Option<shcl::Document> {
+	let wanted = doc.get_string("shell.default").ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())?;
+	let stored = read_shells(doc);
 	let moved = adopt_default_into(&stored, &wanted);
-	let mut doc = doc;
+	let mut doc = doc.clone();
 	write_shells(&mut doc, &stored, &moved);
 	doc.remove("shell.default");
-	write_doc(path, &doc);
+	Some(doc)
+}
+
+// The adoption as text, for `next_launch_text`. Where the save is refused the
+// file is left alone.
+fn adopted_shell_text(text: &str) -> Option<String> {
+	adopted_shell_doc(&parse_kept(text)).filter(|doc| !save_refused(doc)).map(|doc| saved_text(&doc))
 }
 
 // The list with `wanted` at the front. An entry already running that shell moves;
-// anything else is added as a new entry, since a command the list does not carry
+// anything else is added as a new entry, since a command the list doesn't have
 // is still a shell the user chose to launch.
 //
-// "Already running that shell" is an identity question, not a string one: the
-// retired `shell.default` was routinely a bare name where the scan had already
-// stored the full path to the same file, and a string compare therefore promoted
-// a DUPLICATE of the user's default shell to the top of their list.
-fn adopt_default_into(
-	stored: &[crate::shells::ShellEntry],
-	wanted: &str,
-) -> Vec<crate::shells::ShellEntry> {
+// "Already running that shell" compares files rather than strings. The retired
+// `shell.default` was often a bare name where the scan had stored the full path
+// to the same file, and a string compare put a duplicate of the user's default
+// shell at the top of their list.
+fn adopt_default_into(stored: &[crate::shells::ShellEntry], wanted: &str) -> Vec<crate::shells::ShellEntry> {
 	adopt_default_into_with(stored, wanted, &crate::shells::same_command)
 }
 
-fn adopt_default_into_with(
-	stored: &[crate::shells::ShellEntry],
-	wanted: &str,
-	same: &dyn Fn(&str, &str) -> bool,
-) -> Vec<crate::shells::ShellEntry> {
+fn adopt_default_into_with(stored: &[crate::shells::ShellEntry], wanted: &str, same: &dyn Fn(&str, &str) -> bool) -> Vec<crate::shells::ShellEntry> {
 	let mut out = stored.to_vec();
-	let at = out
-		.iter()
-		.position(|e| e.command.trim() == wanted)
-		.or_else(|| out.iter().position(|e| same(&e.command, wanted)));
+	let at = out.iter().position(|e| e.command.trim() == wanted).or_else(|| out.iter().position(|e| same(&e.command, wanted)));
 	match at {
 		Some(at) => {
 			let entry = out.remove(at);
@@ -2687,48 +5153,197 @@ fn adopt_default_into_with(
 	out
 }
 
-// Revert config keys to their defaults: drop the active assignment from
-// config.shcl (dotted keys are paths), then backfill so the
-// key comes back as the template's commented default line. Used by the Settings
-// dialog's revert-to-default buttons.
+/// Revert config keys to their defaults: drop the active assignment from
+/// config.shcl (dotted keys are paths), then backfill so the
+/// key comes back as the template's commented default line. Used by the Settings
+/// dialog's revert-to-default buttons.
 pub fn revert_keys(keys: &[&str]) {
 	if keys.is_empty() {
 		return;
 	}
+	let _lock = crate::peers::save_lock();
 	let Some(path) = config_path() else { return };
 	if config_open_elsewhere(&path) {
 		note_config_busy(&path);
 		return;
 	}
-	let Some(mut doc) = read_doc(&path) else {
+	let Ok(text) = std::fs::read_to_string(&path) else {
 		return;
 	};
-	// A dotted key ("colors.foreground") is already a path, nested or not.
-	for full_key in keys {
-		doc.remove(full_key);
+	let Some(out) = reverted_text(&text, keys) else {
+		return;
+	};
+	if let Err(e) = write_config_atomic(&path, &out) {
+		eprintln!("{APP_NAME}: couldn't update config {}: {e:#}", path.display());
+		return;
 	}
-	write_doc(&path, &doc);
-	backfill_config(&path);
+	backfill_config(&mut LaunchFile::read(&path));
 }
 
-// Insert any settings the shipped template defines that `path` lacks,
-// using the template's own (commented or active) line so follow-system keys stay
-// absent and behavior is unchanged. Existing values, comments, and formatting are
-// preserved (nothing already in the file is rewritten). Every setting is one
-// self-contained line - nested keys are written in dotted form - so there is no
+/// Comment the named settings out, so each is as good as absent. Used for a
+/// setting the user cleared: there is no value to write, and leaving the old line
+/// alone brought it back next launch.
+pub fn disable_keys(keys: &[&str]) {
+	if keys.is_empty() {
+		return;
+	}
+	let _lock = crate::peers::save_lock();
+	let Some(path) = config_path() else { return };
+	if config_open_elsewhere(&path) {
+		note_config_busy(&path);
+		return;
+	}
+	let Ok(text) = std::fs::read_to_string(&path) else {
+		return;
+	};
+	let Some(out) = disabled_text(&text, keys) else {
+		return;
+	};
+	if let Err(e) = write_config_atomic(&path, &out) {
+		eprintln!("{APP_NAME}: couldn't update config {}: {e:#}", path.display());
+	}
+}
+
+// What becomes of one setting's line.
+enum LineEdit {
+	Keep,
+	Put(String),
+	Drop,
+}
+
+// Rewrite the named settings' own lines, leaving everything above them alone.
+//
+// It's a line edit rather than a document one, since removing the node takes its
+// leading comments with it. Reverting a scrim setting used to destroy 7 lines of
+// comments, and a note written above a value went the same way. `line_for` gets
+// the key, the file's indentation, the current line, and every other commented
+// line for that key, and returns what becomes of it. Returns None when nothing
+// needs writing.
+//
+// A setting's own line is its active one. A save adds a set value as a new
+// line, sometimes above the commented default it replaces, and taking the
+// last line for the path found that comment instead, so a revert left the
+// value in force.
+fn edit_setting_lines(text: &str, keys: &[&str], line_for: impl Fn(&str, &str, &str, &[&str]) -> LineEdit) -> Option<String> {
+	let mut lines: Vec<Option<String>> = text.lines().map(|l| Some(l.to_string())).collect();
+	let mut active: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+	let mut commented: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+	for w in walk_settings(text) {
+		let WalkLine::Setting { index, path, active: is_active, .. } = w else {
+			continue;
+		};
+		let by_path = if is_active { &mut active } else { &mut commented };
+		by_path.entry(path).or_default().push(index);
+	}
+	let mut changed = false;
+	for key in keys {
+		let others = commented.get(*key).map_or(&[][..], Vec::as_slice);
+		// A setting written twice reads as neither copy, so the edit goes on the
+		// first and the later copies go. Editing only one left the other in force.
+		let copies = active.get(*key).map_or(&[][..], Vec::as_slice);
+		let Some(i) = copies.first().copied().or_else(|| others.last().copied()) else {
+			continue;
+		};
+		for &extra in copies.iter().skip(1) {
+			lines[extra] = None;
+			changed = true;
+		}
+		let Some(line) = lines[i].clone() else {
+			continue;
+		};
+		let indent: String = line.chars().take_while(|c| *c == '\t' || *c == ' ').collect();
+		let rest: Vec<&str> = others.iter().filter(|&&k| k != i).filter_map(|&k| lines[k].as_deref()).collect();
+		match line_for(key, &indent, &line, &rest) {
+			LineEdit::Keep => {}
+			LineEdit::Put(replacement) => {
+				if line != replacement {
+					lines[i] = Some(replacement);
+					changed = true;
+				}
+			}
+			LineEdit::Drop => {
+				lines[i] = None;
+				changed = true;
+			}
+		}
+	}
+	if !changed {
+		return None;
+	}
+	let mut out = lines.into_iter().flatten().collect::<Vec<_>>().join("\n");
+	if text.ends_with('\n') {
+		out.push('\n');
+	}
+	Some(out)
+}
+
+// One setting's line commented out, so the setting is as good as absent.
+fn commented(indent: &str, line: &str) -> LineEdit {
+	let body = line.trim_start();
+	if body.starts_with('#') { LineEdit::Keep } else { LineEdit::Put(format!("{indent}# {body}")) }
+}
+
+// The file with each named setting put back the way the template has it. A
+// value saved beside the template's own commented line is removed, rather than
+// leaving a second copy of that line, which would pile up one more each time.
+fn reverted_text(text: &str, keys: &[&str]) -> Option<String> {
+	let template: std::collections::HashMap<String, String> = setting_lines(default_config()).into_iter().collect();
+	edit_setting_lines(text, keys, |key, indent, line, others| {
+		match template.get(key) {
+			Some(shipped) if !line.trim_start().starts_with('#') && others.iter().any(|other| other.trim() == shipped.trim()) => LineEdit::Drop,
+			Some(shipped) => LineEdit::Put(format!("{indent}{}", shipped.trim_start())),
+			// the template doesn't have it, so commenting it out is the whole revert
+			None => commented(indent, line),
+		}
+	})
+}
+
+// The file with each named setting commented out. This is what a cleared box
+// means, "not set", which isn't the same as the template's default, since the
+// template has some of these with a value.
+fn disabled_text(text: &str, keys: &[&str]) -> Option<String> {
+	edit_setting_lines(text, keys, |_, indent, line, _| commented(indent, line))
+}
+
+// Insert any settings the template defines that `path` lacks, using the
+// template's own line, commented or active, so follow-system keys stay absent and
+// behavior is unchanged. Nothing already in the file is rewritten. Every setting
+// is one self-contained line, with nested keys in dotted form, so there's no
 // table header to insert under.
 //
 // A template group is one comment block plus the settings it introduces, and the
-// block belongs to the group's FIRST setting. A group the file has never seen is
-// appended whole, comments and all - but a group the file already has PART of
-// already carries those comments, and re-appending them would duplicate the whole
-// paragraph at the end of the file. Stragglers from a part-present group are put
-// back beside the siblings that explain them instead.
-fn backfill_config(path: &std::path::Path) {
-	let Ok(text) = std::fs::read_to_string(path) else {
+// block belongs to the group's first setting. A group the file has never seen is
+// appended whole, comments and all. A group the file already has part of already
+// has those comments, so stragglers from it are put back beside the siblings that
+// explain them instead.
+fn backfill_config(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(text) = file.text() else {
 		return;
 	};
+	let out = match backfilled_text(text) {
+		Ok(Some(out)) => out,
+		Ok(None) => return,
+		Err(setting) => {
+			eprintln!("{APP_NAME}: {}: adding the missing settings would stop {setting} from being read, so they weren't added", path.display());
+			return;
+		}
+	};
+	if config_open_elsewhere(path) {
+		note_config_busy(path);
+		return;
+	}
+	if let Err(e) = file.write(out) {
+		eprintln!("{APP_NAME}: couldn't update config {}: {e:#}", path.display());
+	}
+}
+
+// The backfill as text: None where the file lacks nothing. Err names a setting
+// whose value would stop loading, in which case nothing may be written.
+fn backfilled_text(text: &str) -> Result<Option<String>, Buried> {
 	let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+	// where each line came from, None for one added here
+	let mut origin: Vec<Option<usize>> = (0..lines.len()).map(Some).collect();
 
 	let mut groups: Vec<Vec<(String, Vec<String>)>> = Vec::new();
 	for (p, block, new_group) in setting_groups(default_config()) {
@@ -2742,74 +5357,977 @@ fn backfill_config(path: &std::path::Path) {
 	// template order of every path, for sibling anchoring across group bounds
 	let order: Vec<String> = groups.iter().flatten().map(|(p, _)| p.clone()).collect();
 
+	// A heading counts as there when a dotted line such as
+	// `window.rows: 34` already speaks for its block.
+	let has = |at: &std::collections::HashMap<String, usize>, p: &str| at.contains_key(p) || at.keys().any(|k| k.strip_prefix(p).is_some_and(|r| r.starts_with('.')));
+
+	// A group refused because of where it would go can fit once the groups after
+	// it are in, so the groups are tried again until a round adds nothing. That
+	// is what the next launch would do, and it would write the file again.
 	let mut changed = false;
-	for group in &groups {
-		// fresh view after any earlier insertion
-		let at = paths_at(&lines);
-		let present = group.iter().filter(|(p, _)| at.contains_key(p)).count();
-		if present == group.len() {
-			continue;
-		}
-		if present == 0 {
-			// wholly-new group: comments and all, in template position
-			let block: Vec<String> = group.iter().flat_map(|(_, b)| b.iter().cloned()).collect();
-			match anchor_for(&group[0].0, &order, &at, &lines, true) {
-				Anchor::Before(index) => {
-					// separate from the next group's comment block below
-					lines.insert(index, String::new());
-					for (offset, line) in block.into_iter().enumerate() {
-						lines.insert(index + offset, line);
-					}
-				}
-				Anchor::After(index) => {
-					let mut insert = vec![String::new()];
-					insert.extend(block);
-					for (offset, line) in insert.into_iter().enumerate() {
-						lines.insert(index + 1 + offset, line);
-					}
-				}
-				Anchor::Append => {
-					lines.push(String::new());
-					lines.extend(block);
-				}
-			}
-			changed = true;
-			continue;
-		}
-		// part-present group: the comments are already in the file next to the
-		// siblings, so re-appending them would duplicate the paragraph - put
-		// each straggler back beside its siblings, line only, template order
-		for (p, block) in group {
-			let at = paths_at(&lines);
-			if at.contains_key(p) {
+	// walked again only after an insertion, not once per group: it was 7 ms a launch
+	let mut at = paths_at(&lines);
+	loop {
+		let mut round = false;
+		for group in &groups {
+			let present = group.iter().filter(|(p, _)| has(&at, p)).count();
+			if present == group.len() {
 				continue;
 			}
-			let Some(line) = block.last() else { continue };
-			match anchor_for(p, &order, &at, &lines, false) {
-				Anchor::Before(index) => lines.insert(index, line.clone()),
-				Anchor::After(index) => lines.insert(index + 1, line.clone()),
-				Anchor::Append => lines.push(line.clone()),
+			if present == 0 {
+				// wholly-new group: comments and all, in template position
+				let saved = (lines.clone(), origin.clone());
+				let block: Vec<String> = group.iter().flat_map(|(_, b)| b.iter().cloned()).collect();
+				match anchor_for(&group[0].0, &order, &at, &lines, true) {
+					Anchor::Before(index) => {
+						// separate from the next group's comment block below, and from
+						// whatever ends above
+						add_line(&mut lines, &mut origin, index, String::new());
+						let mut index = index;
+						if index > 0 && !lines[index - 1].trim().is_empty() {
+							add_line(&mut lines, &mut origin, index, String::new());
+							index += 1;
+						}
+						for (offset, line) in block.into_iter().enumerate() {
+							add_line(&mut lines, &mut origin, index + offset, line);
+						}
+					}
+					Anchor::After(index) => {
+						let mut added = vec![String::new()];
+						added.extend(block);
+						for (offset, line) in added.into_iter().enumerate() {
+							add_line(&mut lines, &mut origin, index + 1 + offset, line);
+						}
+					}
+					Anchor::Append => {
+						let end = lines.len();
+						add_line(&mut lines, &mut origin, end, String::new());
+						for line in block {
+							let end = lines.len();
+							add_line(&mut lines, &mut origin, end, line);
+						}
+					}
+				}
+				let paths: Vec<&String> = group.iter().map(|(p, _)| p).collect();
+				let mut now = (lines, origin);
+				round |= settle(text, &mut now, saved, &paths);
+				(lines, origin) = now;
+				at = paths_at(&lines);
+				continue;
 			}
-			changed = true;
+			// part-present group: the comments are already in the file next to the
+			// siblings, so each straggler goes back beside them, line only, in template
+			// order
+			for (p, block) in group {
+				if has(&at, p) {
+					continue;
+				}
+				let Some(line) = block.last() else { continue };
+				let saved = (lines.clone(), origin.clone());
+				match anchor_for(p, &order, &at, &lines, false) {
+					Anchor::Before(index) => add_line(&mut lines, &mut origin, index, line.clone()),
+					Anchor::After(index) => {
+						add_line(&mut lines, &mut origin, index + 1, line.clone());
+					}
+					Anchor::Append => {
+						let end = lines.len();
+						add_line(&mut lines, &mut origin, end, line.clone());
+					}
+				}
+				let mut now = (lines, origin);
+				round |= settle(text, &mut now, saved, &[p]);
+				(lines, origin) = now;
+				at = paths_at(&lines);
+			}
+		}
+		changed |= round;
+		if !round {
+			break;
 		}
 	}
 	if !changed {
-		return;
+		return Ok(None);
 	}
+	unbury(text, &mut lines, &origin)?;
 
 	let mut out = lines.join("\n");
 	out.push('\n');
-	if out != text {
-		if config_open_elsewhere(path) {
-			note_config_busy(path);
-			return;
+	Ok((out != text).then_some(out))
+}
+
+// A backfilled file's lines, and where each came from: None for one added.
+type Backfill = (Vec<String>, Vec<Option<usize>>);
+
+fn add_line(lines: &mut Vec<String>, origin: &mut Vec<Option<usize>>, at: usize, line: String) {
+	lines.insert(at, line);
+	origin.insert(at, None);
+}
+
+// An added line is kept only where it reads as the setting it was added for,
+// once `unbury` has moved out any line it buried. Under a line that has a
+// value, as in `shell: bash`, beside a heading indented unlike the template's,
+// or above a line that `unbury` moves out, it would read as something else,
+// and every launch would find the setting still missing and add it again.
+fn settle(text: &str, now: &mut Backfill, saved: Backfill, paths: &[&String]) -> bool {
+	let mut tidied = now.0.clone();
+	let placed = unbury(text, &mut tidied, &now.1).is_ok() && {
+		let at = paths_at(&tidied);
+		paths.iter().all(|p| at.contains_key(*p))
+	};
+	if placed {
+		now.0 = tidied;
+	} else {
+		*now = saved;
+	}
+	placed
+}
+
+// A line indented deeper than its block needs still reads as that block's, until
+// a line is added beside it at the block's own depth. An active line above then
+// takes it for a child and its value stops loading, and a line below it at the
+// shallower depth can't be read at all, which makes every later save refuse.
+// Nothing says so either way. A short hand-written file is where it happens:
+// `rows:` 2 tabs in under `window:`, and the template's lines added around
+// it. Such lines are moved out to the depth their block gives, one at a time
+// until the file reads as it did, which a save would do anyway. Err names what
+// still reads differently after that.
+fn unbury(text: &str, lines: &mut [String], origin: &[Option<usize>]) -> Result<(), Buried> {
+	let before = shcl::Document::parse(text);
+	let source: Vec<&str> = text.lines().collect();
+	let walked = walk_settings(text);
+	// each active setting with the line it should be: its block's indent plus a tab
+	let mut settings: Vec<(usize, &str, String)> = Vec::new();
+	for w in &walked {
+		let WalkLine::Setting { index, path, active: true, header: false } = w else {
+			continue;
+		};
+		let key = line_setting_key(source[*index]).map_or_else(|| path.clone(), str::to_ascii_lowercase);
+		let block = path.strip_suffix(key.as_str()).map_or("", |rest| rest.trim_end_matches('.'));
+		let indent = if block.is_empty() {
+			String::new()
+		} else {
+			let header = walked.iter().rev().find_map(|w| match w {
+				WalkLine::Setting { index: at, path: p, active: true, header: true } if at < index && p == block => Some(*at),
+				_ => None,
+			});
+			let Some(header) = header else { continue };
+			let line = source[header];
+			format!("{}\t", &line[..line.len() - line.trim_start().len()])
+		};
+		settings.push((*index, path.as_str(), format!("{indent}{}", source[*index].trim_start())));
+	}
+	let reads = |doc: &shcl::Document, path: &str| {
+		let read = doc.read_string(path);
+		(read.value, read.status)
+	};
+	// What shcl reads is the measure, and it can differ from the walk on a file
+	// that is part junk. A setting the walk can't point at isn't moved.
+	let loaded: Vec<String> = before.paths().into_iter().filter(|path| before.get_string(path).is_ok()).collect();
+	// The lines shcl can't read stay exactly those. A line added at a depth a
+	// dropped one steps back to gives it a block, and it starts being read.
+	let unread: Vec<Option<usize>> = unreadable_lines(&before).into_iter().map(Some).collect();
+	let unread_now = |doc: &shcl::Document| -> Vec<Option<usize>> { unreadable_lines(doc).into_iter().map(|line| origin.get(line - 1).copied().flatten().map(|from| from + 1)).collect() };
+	// each pass moves one line, and a line is never moved twice
+	for _ in 0..=settings.len() {
+		let mut joined = lines.join("\n");
+		joined.push('\n');
+		let after = shcl::Document::parse(&joined);
+		let changed = loaded.iter().find(|path| reads(&before, path) != reads(&after, path));
+		if changed.is_none() && after.lost_count() == before.lost_count() && unread_now(&after) == unread {
+			return Ok(());
 		}
-		if let Err(e) = std::fs::write(path, out) {
-			eprintln!(
-				"{APP_NAME}: could not update config {}: {e}",
-				path.display()
-			);
+		let now_at = |index: usize| origin.iter().position(|from| *from == Some(index));
+		// the setting that changed, or with only a line gone unreadable, the first
+		// one still deeper than it should be. A changed one already in place can
+		// still be under a line that isn't, which skips it with that line.
+		let misplaced = |index: usize, proper: &String| now_at(index).is_some_and(|now| lines[now] != *proper);
+		let pick = changed.and_then(|changed| settings.iter().find(|(index, path, proper)| path == changed && misplaced(*index, proper))).or_else(|| settings.iter().find(|(index, _, proper)| misplaced(*index, proper)));
+		let what = || changed.map_or(Buried::Line, |path| Buried::Setting(path.clone()));
+		let Some((index, _, proper)) = pick else {
+			return Err(what());
+		};
+		let Some(now) = now_at(*index) else {
+			return Err(what());
+		};
+		if lines[now] == *proper {
+			return Err(what());
 		}
+		lines[now].clone_from(proper);
+	}
+	Err(Buried::Unnamed)
+}
+
+// What a backfill would stop reading, and so why it wrote nothing. A name for
+// the launch message, not a message itself.
+#[derive(Debug, PartialEq, Eq)]
+enum Buried {
+	Setting(String),
+	// a line shcl could read before and can't now
+	Line,
+	// still not as it read after every line was moved
+	Unnamed,
+}
+
+impl std::fmt::Display for Buried {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Buried::Setting(path) => write!(f, "`{path}`"),
+			Buried::Line => f.write_str("a line"),
+			Buried::Unnamed => f.write_str("a setting"),
+		}
+	}
+}
+
+/// What became of a rating's lines.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Kept {
+	// the file has every value asked for, including when it already did
+	Written,
+	// another process has the file open (Linux); nothing written
+	Busy,
+	// the file has a line the parse drops, and the values couldn't go in beside
+	// it; nothing written
+	Unreadable,
+	// the file reads clean, but the values couldn't go in so that they read back
+	// and every other setting reads as it did; nothing written
+	Unplaced,
+	// no settings path, or the read or the rename failed: the reason
+	Unwritable(String),
+}
+
+/// The only line a rating writes in the settings file. The tested profile and
+/// the hardware id go to the state file. The key is fixed here, so no caller
+/// can hand the writer a path.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RatingLines {
+	pub check_next_run: Option<bool>,
+}
+
+/// Write a finished rating into the settings file line by line, the way migrate
+/// and backfill write at launch. `persist` refuses a file the parse dropped a
+/// line from, which is right for the user's own values, but a rating that never
+/// sticks is a test at every launch with nothing on screen to say why. These are
+/// lines the program owns, so every other byte stays as it was, except on a file
+/// that reads clean and still has nowhere to put them, which gets what the
+/// dialog's save would write.
+#[must_use]
+pub fn keep_rating(lines: RatingLines) -> Kept {
+	let _lock = crate::peers::save_lock();
+	let Some(path) = config_path() else {
+		return Kept::Unwritable("no settings file location".to_string());
+	};
+	let body = match std::fs::read(&path) {
+		Ok(body) => body,
+		Err(e) => return Kept::Unwritable(format!("couldn't read {}: {e}", path.display())),
+	};
+	// A file a busy launch left with lines that aren't UTF-8 is written again
+	// without them, as the launch would have.
+	let text = settings_text(&body);
+	let out = match with_rating_lines(&text, lines) {
+		Ok(out) => out,
+		Err(kept) => return kept,
+	};
+	if out.as_bytes() == body {
+		return Kept::Written;
+	}
+	if config_open_elsewhere(&path) {
+		note_config_busy(&path);
+		return Kept::Busy;
+	}
+	match write_config_atomic(&path, &out) {
+		Ok(()) => Kept::Written,
+		// the reason already names the file
+		Err(e) => Kept::Unwritable(format!("couldn't write {e:#}")),
+	}
+}
+
+// How every setting reads, in file order, leaving out the keys being written
+// and anything under them. A new line can move which line a parse drops without
+// changing how many it drops, so the count alone would let another setting load
+// differently. A rating key this write doesn't touch counts as another setting,
+// since a new `profile:` line can pull a deeper `check_next_run:` under itself.
+// The block that contains a written key is left out while it has no value of its
+// own, because a write into a file with no such block creates it. The quoted
+// flag is left out, since a save adds or drops quotes and no read sees the flag
+// (`a_save_that_requotes_a_value_changes_no_read`). What a quote character or an
+// indent does to the launch's migration is compared by the caller, on the
+// migrated text.
+fn settings_besides(doc: &shcl::Document, written: &[String]) -> Vec<(String, Vec<String>, shcl::Status)> {
+	doc.paths()
+		.into_iter()
+		.filter(|path| {
+			!written.iter().any(|key| {
+				let under = path.strip_prefix(key.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('.'));
+				let holds = key.strip_prefix(path.as_str()).is_some_and(|rest| rest.starts_with('.'));
+				under || (holds && doc.read_string(path).status == shcl::Status::Empty)
+			})
+		})
+		.map(|path| {
+			let read = doc.read_string(&path);
+			let instances = doc.instances(&path);
+			(path, instances, read.status)
+		})
+		.collect()
+}
+
+// The file's text with the rating's values in it, or why not. Pure, so every
+// placement rule is testable without a file. Line by line first, so every other
+// byte stays as it was. Where that fails on a file that reads clean, the text is
+// what the dialog's save would write, since that save kept a rating in any such
+// file. Either result is parsed back before it is offered.
+fn with_rating_lines(text: &str, lines: RatingLines) -> Result<String, Kept> {
+	with_rating_lines_through(text, lines, &LAUNCH_STEPS)
+}
+
+// The launch's rewrites are a parameter so a test can hand in one that reads
+// how a line is written. None of the real ones does any more, and the check
+// still has to catch the next one that does.
+fn with_rating_lines_through(text: &str, lines: RatingLines, steps: &[LaunchStep]) -> Result<String, Kept> {
+	let wanted = [("check_next_run", lines.check_next_run)];
+	let before = parse_kept(text);
+	let migrated = migrated_parse(text, steps);
+	let loaded = migrated.as_ref().unwrap_or(&before);
+	// A file that reads clean is never said to have a line that can't be read.
+	let refused = if before.lost_count() == 0 { Kept::Unplaced } else { Kept::Unreadable };
+	let mut spelled = Vec::new();
+	for (leaf, value) in wanted {
+		let Some(value) = value else { continue };
+		let Some(spelling) = rating_spelling(leaf, value) else {
+			return Err(refused);
+		};
+		spelled.push((leaf, spelling));
+	}
+	if let Some(out) = placed_rating_lines(text, &spelled)
+		&& reads_as_asked(&before, loaded, &out, &wanted, steps)
+	{
+		return Ok(out);
+	}
+	if let Some(out) = saved_rating(&before, &wanted)
+		&& reads_as_asked(&before, loaded, &out, &wanted, steps)
+	{
+		return Ok(out);
+	}
+	Err(refused)
+}
+
+// The lines with each value put in place, joined the way backfill joins them.
+fn placed_rating_lines(text: &str, spelled: &[(&str, String)]) -> Option<String> {
+	let mut out: Vec<String> = text.lines().map(str::to_string).collect();
+	for (leaf, spelling) in spelled {
+		place_rating_line(&mut out, leaf, spelling)?;
+	}
+	let mut joined = out.join("\n");
+	joined.push('\n');
+	Some(joined)
+}
+
+// What the dialog's save leaves: shcl's own setters over the parse, then the
+// text its save writes. Only for a file that lost nothing, since that save falls
+// back to the canonical text there, which deletes the line it lost.
+fn saved_rating(before: &shcl::Document, wanted: &[(&str, Option<bool>)]) -> Option<String> {
+	let mut doc = before.clone();
+	for (leaf, value) in wanted {
+		let path = format!("performance.{leaf}");
+		let applied = match value {
+			None => shcl::SetStatus::Ok,
+			Some(flag) => doc.set_bool(&path, *flag),
+		};
+		if applied != shcl::SetStatus::Ok {
+			return None;
+		}
+	}
+	(!save_refused(&doc)).then(|| saved_text(&doc))
+}
+
+// The parse a launch makes of this text, or None where the launch's rewrites
+// leave the text alone and the caller's own parse of it is enough.
+fn migrated_parse(text: &str, steps: &[LaunchStep]) -> Option<shcl::Document> {
+	match rewritten_by(text, steps) {
+		std::borrow::Cow::Owned(text) => Some(shcl::Document::parse(&text)),
+		std::borrow::Cow::Borrowed(_) => None,
+	}
+}
+
+// Whether a result is fit to write: it loses no more than the input already
+// had, every setting it doesn't write loads as it did, and each key reads as
+// exactly what was asked. Lost lines are counted on the bytes (`before` and
+// `out`). Settings are compared as a launch parses them (`loaded` and the
+// migrated `out`), because the launch's renames and refreshes read how a line is
+// written, such as the quotes around a font stack or the indent of a commented
+// header, and a save changes both.
+fn reads_as_asked(before: &shcl::Document, loaded: &shcl::Document, out: &str, wanted: &[(&str, Option<bool>)], steps: &[LaunchStep]) -> bool {
+	let raw_after = shcl::Document::parse(out);
+	let migrated = migrated_parse(out, steps);
+	let after = migrated.as_ref().unwrap_or(&raw_after);
+	let written: Vec<String> = wanted.iter().filter(|(_, value)| value.is_some()).map(|(leaf, _)| format!("performance.{leaf}")).collect();
+	raw_after.lost_count() <= before.lost_count()
+		&& settings_besides(after, &written) == settings_besides(loaded, &written)
+		// in the file as written and as the next launch leaves it: that launch
+		// writes a file from before the nested layout afresh, rating and all
+		&& [&raw_after, after].into_iter().all(|doc| {
+			wanted.iter().all(|(leaf, value)| {
+				let path = format!("performance.{leaf}");
+				value.is_none_or(|flag| doc.get_bool(&path) == Ok(flag))
+			})
+		})
+}
+
+// The value as a canonical save writes it, taken from shcl rather than written
+// by hand, so a rating line never differs from what the dialog's save would
+// leave (G68, G69).
+fn rating_spelling(leaf: &str, flag: bool) -> Option<String> {
+	let path = format!("performance.{leaf}");
+	let mut doc = shcl::Document::new();
+	if doc.set_bool(&path, flag) != shcl::SetStatus::Ok {
+		return None;
+	}
+	doc.to_canonical().lines().find_map(|line| {
+		let key = line_setting_key(line)?;
+		if key.rsplit('.').next() != Some(leaf) {
+			return None;
+		}
+		line_setting_value(line).map(str::to_string)
+	})
+}
+
+// One value into the lines: over the key's active line, else after its
+// commented default inside the `performance:` block, else first in that block.
+// None when there is no block to put it in.
+fn place_rating_line(lines: &mut Vec<String>, leaf: &str, spelled: &str) -> Option<()> {
+	let path = format!("performance.{leaf}");
+	let walk = walk_settings(&lines.join("\n"));
+	let depth = |line: &str| line.len() - line.trim_start().len();
+	// (index, path, header) of every active setting line
+	let active: Vec<(usize, &str, bool)> = walk
+		.iter()
+		.filter_map(|w| match w {
+			WalkLine::Setting { index, path, active: true, header } => Some((*index, path.as_str(), *header)),
+			_ => None,
+		})
+		.collect();
+	let has_child = |at: usize| active.iter().find(|(index, ..)| *index > at).is_some_and(|(index, ..)| depth(&lines[*index]) > depth(&lines[at]));
+	// A value cleared by hand leaves `check_next_run:`, which the walk takes for
+	// a header. With nothing under it, it is still the key's own line.
+	let own: Vec<usize> = active.iter().filter(|(index, p, header)| *p == path && (!header || !has_child(*index))).map(|(index, ..)| *index).collect();
+	if let Some((&first, later)) = own.split_first() {
+		lines[first] = with_setting_value(&lines[first], spelled);
+		// Only the program writes this key, and 2 of it read as the default,
+		// which is itself a test at every launch.
+		for &index in later.iter().rev() {
+			lines.remove(index);
+		}
+		return Some(());
+	}
+	// A block written twice reads as one, so the first takes the line.
+	let header = active.iter().find(|(_, p, header)| *header && *p == "performance").map(|(index, ..)| *index)?;
+	// The block runs to the next active line at or left of its header; comments
+	// don't end it. shcl sets the block's depth from its first active line and
+	// ignores comments, so that line's indent is the one a new line must match.
+	let end = active.iter().map(|(index, ..)| *index).find(|&index| index > header && depth(&lines[index]) <= depth(&lines[header])).unwrap_or(lines.len());
+	let first_child = active.iter().map(|(index, ..)| *index).find(|&index| index > header && index < end);
+	let commented = walk.iter().find_map(|w| match w {
+		WalkLine::Setting { index, path: p, active: false, .. } if *p == path && index > &header && *index < end => Some(*index),
+		_ => None,
+	});
+	let indent = |line: &str| line[..depth(line)].to_string();
+	let lead = match (first_child, commented) {
+		(Some(child), _) => indent(&lines[child]),
+		(None, Some(comment)) if depth(&lines[comment]) > depth(&lines[header]) => indent(&lines[comment]),
+		_ => format!("{}\t", indent(&lines[header])),
+	};
+	let line = format!("{lead}{leaf}: {spelled}");
+	// the commented default is filled in where it is, so no line below moves
+	match commented {
+		Some(index) if is_default_line(&lines[index], &path) => lines[index] = line,
+		Some(index) => lines.insert(index + 1, line),
+		None => lines.insert(header + 1, line),
+	}
+	Some(())
+}
+
+// An active setting line with a new value: the indent, key and colon kept, and
+// any comment after the old value kept after it, 2 spaces out as canonical
+// writes one.
+fn with_setting_value(line: &str, spelled: &str) -> String {
+	let Some((head, rest)) = line.split_once(':') else {
+		return line.to_string();
+	};
+	match trailing_comment(rest) {
+		Some(comment) => format!("{head}: {spelled}  {comment}"),
+		None => format!("{head}: {spelled}"),
+	}
+}
+
+fn trailing_comment(rest: &str) -> Option<&str> {
+	comment_at(rest).map(|at| &rest[at..])
+}
+
+// shcl's own footer. Kept last: backfill appends a wholly-new section at the
+// end of the file, which would otherwise leave the footer stranded in the
+// middle. Its Format line is also what marks a file as past shcl 2.x.
+const SHCL_BANNER: &str = shcl::GEN_BANNER;
+
+// The first 3.0 footer, whose Syntax link named a tag that was never cut.
+const SHCL_BANNER_OLD_V3: &str = "\
+##
+## This config file format is SHCL.
+## \"Simple Hierarchical Config Language\"
+##    Format   3
+##    Home     https://github.com/yottacore/shcl
+##    Syntax   https://github.com/yottacore/shcl/blob/v3.0.0/project/spec.md
+##    Legal    SHCL is Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]. License: MIT. No warranty.
+##
+";
+
+// The footer from before it had a Format line.
+const SHCL_BANNER_OLD_MAIN: &str = "\
+##
+## This config file format is SHCL.
+## \"Simple Hierarchical Config Language\"
+##    Home     https://github.com/yottacore/shcl
+##    Syntax   https://github.com/yottacore/shcl/blob/main/project/spec.md
+##    Legal    SHCL is Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]. License: MIT. No warranty.
+##
+";
+
+// The same footer from before shcl moved to the yottacore org.
+const SHCL_BANNER_OLD_HOME: &str = "\
+##
+## This config file format is SHCL.
+## \"Simple Hierarchical Config Language\"
+##    Home     https://github.com/jim-collier/shcl
+##    Syntax   https://github.com/jim-collier/shcl/blob/main/project/spec.md
+##    Legal    SHCL is Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]. License: MIT. No warranty.
+##
+";
+
+// The single-'#' form it had before the '##' convention won.
+const SHCL_BANNER_OLD: &str = "\
+#
+# This config file format is SHCL.
+# \"Simple Hierarchical Config Language\"
+#    Home     https://github.com/jim-collier/shcl
+#    Syntax   https://github.com/jim-collier/shcl/blob/main/project/spec.md
+#    Legal    SHCL is Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]. License: MIT. No warranty.
+#
+";
+
+// Enough of it to recognize one somebody has rewritten.
+const SHCL_BANNER_MARK: &str = "This config file format is SHCL.";
+
+// Put the footer back on a config that predates it, and move it under anything
+// backfill appended below it. A footer that has been edited is left alone, so
+// nobody's own wording is replaced.
+fn with_shcl_banner(text: &str) -> Option<String> {
+	let mut lines: Vec<&str> = text.lines().collect();
+	for spelling in [SHCL_BANNER, SHCL_BANNER_OLD_V3, SHCL_BANNER_OLD_MAIN, SHCL_BANNER_OLD_HOME, SHCL_BANNER_OLD] {
+		let run: Vec<&str> = spelling.trim_end_matches('\n').lines().collect();
+		while let Some(at) = run_at(&lines, &run) {
+			lines.drain(at..at + run.len());
+		}
+	}
+	if lines.iter().any(|l| l.contains(SHCL_BANNER_MARK)) {
+		return None;
+	}
+	while lines.last().is_some_and(|l| l.trim().is_empty()) {
+		lines.pop();
+	}
+	if !lines.is_empty() {
+		lines.push("");
+	}
+	lines.extend(SHCL_BANNER.trim_end_matches('\n').lines());
+	let mut out = lines.join("\n");
+	out.push('\n');
+	(out != text).then_some(out)
+}
+
+// First index where `run` appears in `lines`.
+fn run_at(lines: &[&str], run: &[&str]) -> Option<usize> {
+	if run.is_empty() || lines.len() < run.len() {
+		return None;
+	}
+	(0..=lines.len() - run.len()).find(|&i| lines[i..i + run.len()] == *run)
+}
+
+// How a file in an older SHCL format is brought to the current one, and how
+// many settings it leaves behind. shcl's migration respells the file in
+// place, comments and layout kept, wherever it can. A file shcl can't read
+// (not UTF-8) or can't migrate is written new from the template instead, with
+// every setting that still reads. A current file that isn't UTF-8 is written
+// again without the lines that don't decode. The writer keeps the old file
+// every time. This is the one place that chooses, so a later shcl that
+// converts whole files can take it over here.
+#[derive(Debug, PartialEq)]
+enum Upgrade {
+	Current,
+	InPlace { text: String, lost: usize },
+	Rewritten { text: String, lost: usize },
+	// `lines` are the ones that didn't decode, numbered from 1
+	Dropped { text: String, lost: usize, lines: Vec<usize>, rewrite: Rewrite },
+}
+
+/// What a current file with lines that aren't UTF-8 is written again as.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rewrite {
+	// the file as it was, those lines left out
+	Kept,
+	// the template with every setting that still reads, since leaving the lines
+	// out would change what another line means
+	Template,
+}
+
+fn upgrade(body: &[u8]) -> Upgrade {
+	let Ok(text) = std::str::from_utf8(body) else {
+		return unreadable(body);
+	};
+	// shcl 2.x wrote no Format line, and 3.0 reads a few of its spellings
+	// differently, most of all a backslash outside double quotes, which a
+	// Windows path is full of. `migrate_unstamped` can't say when it couldn't
+	// finish, so the stamped `migrate` is asked: it adds the Format line only
+	// to a file it migrated whole, and not, for one, to a raw block that never
+	// closes.
+	let stamped = shcl::migrate(text, true);
+	if stamped.current {
+		return match from_a_beta(text) {
+			Some((text, lost)) => Upgrade::InPlace { text, lost },
+			None => Upgrade::Current,
+		};
+	}
+	if shcl::format_version(&stamped.text).is_none_or(|n| n < shcl::FORMAT_MAJOR) {
+		let respelled = shcl::migrate_unstamped(text, true).text;
+		let (new, lost) = rebuilt_config_text(&respelled, &[]);
+		return Upgrade::Rewritten { text: with_own_look(text, new), lost };
+	}
+	// The footer's Format line is what says it was done, so the footer goes on
+	// in place of migrate's own stamp wherever it is ours.
+	let migrated = shcl::migrate_unstamped(text, true);
+	// None here is a footer somebody rewrote, which gets migrate's stamp
+	let out = with_shcl_banner(&migrated.text).filter(|out| out.contains(shcl::FORMAT_LINE)).unwrap_or(stamped.text);
+	if out == text {
+		return Upgrade::Current;
+	}
+	Upgrade::InPlace { text: with_own_look(text, out), lost: migrated.lost }
+}
+
+// A 3.0 build of shcl from before beta1 (b10c2009, dogfood only) stamped Format
+// 3 too, in its own spellings: comma lists, doubled backslashes, bare monitor
+// keys. Where only such lines no longer read, shcl's `upgrade` takes the file
+// for 2.x. That is kept only when it loses nothing, and every line that still
+// reads reads the same after, or with its backslashes halved. So a beta1 file
+// with one comma list typed in never has the `\n` in a path turned into a line
+// break. The count is what the conversion couldn't copy.
+fn from_a_beta(text: &str) -> Option<(String, usize)> {
+	if shcl::format_version(text) != Some(shcl::FORMAT_MAJOR) {
+		return None;
+	}
+	// a comma list is E026 and a bare name not led by a letter E014; a line
+	// that doesn't read for any other reason is a beta1 file's own
+	let before = shcl::Document::parse(text);
+	let errors = || before.diagnostics().iter().filter(|d| matches!(d.severity, shcl::Severity::Error));
+	// shcl's `upgrade` leaves a clean file named this format as it is
+	if errors().next().is_none() || !errors().all(|d| matches!(d.code, "E026" | "E014")) {
+		return None;
+	}
+	let up = shcl::upgrade(text, true);
+	if up.current || up.ambiguous > 0 || up.lost > 0 || !up.errors_left.is_empty() {
+		return None;
+	}
+	let after = shcl::Document::parse(&up.text);
+	let unread = unreadable_lines(&before);
+	let kept = before.fields().iter().filter(|field| !unread.contains(&field.line)).all(|field| {
+		let (was, now) = (before.get_string(&field.path), after.get_string(&field.path));
+		was == now || matches!((&was, &now), (Ok(was), Ok(now)) if *was == now.replace('\\', "\\\\"))
+	});
+	kept.then_some((up.text, up.lost))
+}
+
+// A file from before the performance profiles (v1.0.0-beta3) drew exactly what
+// it said. A look set there by hand that differs from Max silk would sit under
+// whatever profile the launch picks, so it comes up as Custom with the choice
+// made by hand, as an edit in Settings does. An untouched file stays automatic.
+fn with_own_look(old: &str, new: String) -> String {
+	let has_profile = walk_settings(old).iter().any(|w| {
+		matches!(w, WalkLine::Setting { path, .. }
+			if path == "performance" || path.starts_with("performance."))
+	});
+	if has_profile {
+		return new;
+	}
+	let spec = crate::fields::spec();
+	let Some(group) = spec.groups.iter().find(|g| g.id == crate::fields::PROFILE) else {
+		return new;
+	};
+	let max = crate::profile::Profile::Max.key();
+	let Some(shipped) = group.presets.iter().find(|p| p.key == max) else {
+		return new;
+	};
+	let renamed = rewritten_by(&new, &[migrate_config_text]);
+	let model = crate::fields::load(&shcl::Document::parse(&renamed));
+	let own = &model.values.own;
+	let differs = group.members.iter().any(|id| own.get(id).is_some_and(|v| shipped.values.get(id) != Some(v)));
+	if !differs {
+		return new;
+	}
+	let mut doc = shcl::Document::parse(&new);
+	doc.put_bool("performance.automatic", false);
+	doc.put_string("performance.profile", knobs::CUSTOM);
+	saved_text(&doc)
+}
+
+// Not UTF-8. A line that doesn't decode is left out, and counted when it had
+// a setting. An older file is written new, as one shcl can't migrate is.
+fn unreadable(body: &[u8]) -> Upgrade {
+	let lossy = String::from_utf8_lossy(body);
+	let garbled = garbled_indexes(body);
+	if format_of(&lossy) >= shcl::FORMAT_MAJOR {
+		return dropped(&lossy, &garbled);
+	}
+	// migrate keeps every line where it was, so the indexes still match
+	let respelled = shcl::migrate_unstamped(&lossy, true).text;
+	let (text, lost) = rebuilt_config_text(&respelled, &garbled);
+	Upgrade::Rewritten { text, lost }
+}
+
+// A current file keeps its own layout with the garbled lines left out, as long
+// as every other line reads as it did beside them: a block heading that
+// doesn't decode would hand its lines to the block above. Otherwise, and when no
+// setting is left at all, it gets the template with what still reads, which at
+// worst is the defaults. A line of shcl's own footer goes back to the default.
+fn dropped(lossy: &str, garbled: &[usize]) -> Upgrade {
+	let all: Vec<&str> = lossy.split('\n').collect();
+	let footer = garbled_footer(&all, garbled);
+	let left_out: Vec<usize> = garbled.iter().copied().filter(|index| !footer.iter().any(|(at, _)| at == index)).collect();
+	let lines: Vec<usize> = left_out.iter().map(|index| index + 1).collect();
+	let kept = all
+		.iter()
+		.enumerate()
+		.filter_map(|(index, line)| match footer.iter().find(|(at, _)| *at == index) {
+			Some((_, shipped)) => Some(shipped.as_str()),
+			None => (!left_out.contains(&index)).then_some(*line),
+		})
+		.collect::<Vec<_>>()
+		.join("\n");
+	let before: Vec<LineReading> = line_readings(lossy).into_iter().enumerate().filter(|(index, _)| !left_out.contains(index)).map(|(_, reading)| reading).collect();
+	let after = line_readings(&kept);
+	let sets_something = after.iter().any(|reading| reading.active && reading.read);
+	if left_out.is_empty() || (before == after && sets_something) {
+		let mut lost = left_out
+			.iter()
+			.filter(|index| {
+				let line = all[**index].trim();
+				!line.is_empty() && !line.starts_with('#')
+			})
+			.count();
+		// a pre-beta1 spelling left in, such as a bare monitor key, would be
+		// respelled by the next launch, so it goes in the same pass
+		let text = match from_a_beta(&kept) {
+			Some((text, more)) => {
+				lost += more;
+				text
+			}
+			None => kept,
+		};
+		return Upgrade::Dropped { text, lost, lines, rewrite: Rewrite::Kept };
+	}
+	let (text, lost) = rebuilt_config_text(lossy, garbled);
+	Upgrade::Dropped { text, lost, lines, rewrite: Rewrite::Template }
+}
+
+// The lines of shcl's footer in `all` that didn't decode, each with its text
+// as SilkTerm writes it. An editor saving in Latin-1 turns the footer's
+// copyright sign into one, and left out, the footer would read as edited and
+// never be refreshed again. A run counts as the footer while the lines that
+// decode outnumber the ones that don't, and each that decodes is the default.
+fn garbled_footer(all: &[&str], garbled: &[usize]) -> Vec<(usize, String)> {
+	let banner: Vec<&str> = SHCL_BANNER.trim_end_matches('\n').lines().collect();
+	let Some(last) = all.len().checked_sub(banner.len()) else {
+		return Vec::new();
+	};
+	for start in (0..=last).rev() {
+		let bad: Vec<usize> = (start..start + banner.len()).filter(|index| garbled.contains(index)).collect();
+		if bad.is_empty() || bad.len() * 2 >= banner.len() {
+			continue;
+		}
+		let fits = banner.iter().enumerate().all(|(at, shipped)| {
+			let index = start + at;
+			bad.contains(&index) || all[index].trim_end_matches('\r') == *shipped
+		});
+		if fits {
+			return bad
+				.into_iter()
+				.map(|index| {
+					let ending = if all[index].ends_with('\r') { "\r" } else { "" };
+					(index, format!("{}{ending}", banner[index - start]))
+				})
+				.collect();
+		}
+	}
+	Vec::new()
+}
+
+// How one line reads: the setting it names, whether that is active, whether it
+// is part of a raw block, and whether shcl reads it.
+#[derive(Debug, PartialEq)]
+struct LineReading {
+	path: Option<String>,
+	active: bool,
+	fence: bool,
+	read: bool,
+}
+
+// shcl 3.0 reads the lines under a heading it refused, under that heading and
+// without a word. They count as unread here, as 2.x's E018 had them.
+fn line_readings(text: &str) -> Vec<LineReading> {
+	let doc = shcl::Document::parse(text);
+	let mut unread = unreadable_lines(&doc);
+	let fields = doc.fields();
+	let refused: Vec<String> = fields.iter().filter(|field| unread.contains(&field.line)).map(|field| format!("{}.", field.path)).collect();
+	unread.extend(fields.iter().filter(|field| refused.iter().any(|head| field.path.starts_with(head))).map(|field| field.line));
+	walk_settings(text)
+		.into_iter()
+		.enumerate()
+		.map(|(index, walked)| {
+			let read = !unread.contains(&(index + 1));
+			match walked {
+				WalkLine::Setting { path, active, header, .. } => LineReading { path: Some(path), active: active && !header, fence: false, read },
+				WalkLine::Fence => LineReading { path: None, active: false, fence: true, read },
+				WalkLine::Blank | WalkLine::Other(_) => LineReading { path: None, active: false, fence: false, read },
+			}
+		})
+		.collect()
+}
+
+// The text a file converts to, or None for a current one.
+fn upgraded_text(body: &[u8]) -> Option<String> {
+	match upgrade(body) {
+		Upgrade::Current => None,
+		Upgrade::InPlace { text, .. } | Upgrade::Rewritten { text, .. } | Upgrade::Dropped { text, .. } => Some(text),
+	}
+}
+
+fn from_shcl2_text(text: &str) -> Option<String> {
+	upgraded_text(text.as_bytes())
+}
+
+// The indexes of the lines in `body` that aren't UTF-8. A newline byte is
+// never part of a longer character, so each line decodes or not on its own.
+fn garbled_indexes(body: &[u8]) -> Vec<usize> {
+	body.split(|b| *b == b'\n').enumerate().filter(|(_, line)| std::str::from_utf8(line).is_err()).map(|(index, _)| index).collect()
+}
+
+// The settings file's text as a reader takes it. A file shcl can't read reads
+// as what the write that converts it puts there, so a launch that found it busy,
+// and a save after that launch, read what the file is about to contain.
+fn settings_text(body: &[u8]) -> String {
+	match std::str::from_utf8(body) {
+		Ok(text) => text.to_string(),
+		// `upgrade` writes again every file that isn't UTF-8, so the lossy
+		// read is never reached
+		Err(_) => upgraded_text(body).unwrap_or_else(|| String::from_utf8_lossy(body).into_owned()),
+	}
+}
+
+fn read_settings(path: &std::path::Path) -> std::io::Result<String> {
+	let text = std::fs::read(path).map(|body| settings_text(&body))?;
+	note_seen(path, &text);
+	Ok(text)
+}
+
+fn read_settings_text(path: &std::path::Path) -> Option<String> {
+	read_settings(path).ok()
+}
+
+fn convert_shcl2_config(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(out) = file.body.as_deref().and_then(upgraded_text) else {
+		return;
+	};
+	if config_open_elsewhere(path) {
+		note_config_busy(path);
+		return;
+	}
+	if let Err(e) = file.write(out) {
+		eprintln!("{APP_NAME}: couldn't update config {}: {e:#}", path.display());
+	}
+}
+
+// What the conversion of `body`, the file as it was, couldn't copy over. In
+// place, shcl counts the lines 2.x gave a bracketed list to: the new format has
+// no way to write one, so they stay as written and set nothing. A line it
+// can't read at all is reported at every launch by `config_complaints`. A new
+// file counts every setting it left behind. A current file written again for
+// lines that aren't UTF-8 is always reported, since that write made a copy.
+fn conversion_losses(body: &[u8], path: &std::path::Path, backup: Option<PathBuf>) -> Option<ConversionLoss> {
+	let (lost, how, lines) = match upgrade(body) {
+		Upgrade::Current => return None,
+		Upgrade::InPlace { lost, .. } => (lost, Converted::InPlace, Vec::new()),
+		Upgrade::Rewritten { lost, .. } => (lost, Converted::Rewritten, Vec::new()),
+		Upgrade::Dropped { lost, lines, rewrite, .. } => (lost, Converted::Dropped(rewrite), lines),
+	};
+	(lost > 0 || matches!(how, Converted::Dropped(_))).then(|| ConversionLoss { path: path.to_path_buf(), backup, lost, how, lines })
+}
+
+/// Settings a conversion couldn't keep, at launch or in a later write. The
+/// terminal gets it at once; the window shows it in a notice once it is on screen,
+/// as for a refused save.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConversionLoss {
+	pub path: PathBuf,
+	pub backup: Option<PathBuf>,
+	pub lost: usize,
+	pub how: Converted,
+	/// the lines left out for not being UTF-8, numbered from 1 (`Dropped` only)
+	pub lines: Vec<usize>,
+}
+
+/// Whether the file was converted where it stood, written new, or written again
+/// without lines that aren't UTF-8 (`upgrade`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Converted {
+	InPlace,
+	Rewritten,
+	Dropped(Rewrite),
+}
+
+impl ConversionLoss {
+	fn terminal_line(&self) -> String {
+		let kept = self.backup.as_ref().map(|copy| format!(" The old file is at {}.", copy.display())).unwrap_or_default();
+		match self.how {
+			Converted::InPlace => format!("{APP_NAME}: {}: {} line(s) set a list in brackets, which the new format can't store; they're kept as written but don't set anything.{kept}", self.path.display(), self.lost),
+			Converted::Rewritten => format!("{APP_NAME}: {}: couldn't be converted in place, so a new file was written; {} setting(s) couldn't be copied to it.{kept}", self.path.display(), self.lost),
+			Converted::Dropped(Rewrite::Kept) if self.lines.is_empty() => format!("{APP_NAME}: {}: its SHCL footer wasn't UTF-8 text, so the file was written again with the default footer.{kept}", self.path.display()),
+			Converted::Dropped(Rewrite::Kept) => format!("{APP_NAME}: {}: not UTF-8 text at{}, so the file was written again without {}.{kept}", self.path.display(), line_list(&self.lines), if self.lines.len() == 1 { "it" } else { "them" }),
+			Converted::Dropped(Rewrite::Template) => format!("{APP_NAME}: {}: not UTF-8 text at{}, so a new file was written from the defaults; {} setting(s) couldn't be copied to it.{kept}", self.path.display(), line_list(&self.lines), self.lost),
+		}
+	}
+}
+
+static LOST_IN_CONVERSION: std::sync::Mutex<Option<ConversionLoss>> = std::sync::Mutex::new(None);
+
+/// What the last conversion lost, if anything. Cleared once read.
+pub fn take_conversion_loss() -> Option<ConversionLoss> {
+	crate::locks::lock(&LOST_IN_CONVERSION).take()
+}
+
+fn refresh_shcl_banner(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(text) = file.text() else {
+		return;
+	};
+	// The footer's Format line says a file was converted. One still in 2.x
+	// spellings, because its conversion was put off, waits for the next launch.
+	if from_shcl2_text(text).is_some() {
+		return;
+	}
+	let Some(out) = with_shcl_banner(text) else {
+		return;
+	};
+	if config_open_elsewhere(path) {
+		note_config_busy(path);
+		return;
+	}
+	if let Err(e) = file.write(out) {
+		eprintln!("{APP_NAME}: couldn't update config {}: {e:#}", path.display());
 	}
 }
 
@@ -2834,63 +6352,45 @@ enum Anchor {
 // Where a missing template path belongs in the file: before the next present
 // template sibling (same parent), after the last present earlier sibling's
 // subtree, after the parent block header, or appended at the end. Whole-group
-// inserts back up over the next sibling's comment block so the new group lands
+// inserts back up over the next sibling's comment block so the new group goes
 // above it rather than splitting the comments from their setting.
-fn anchor_for(
-	p: &str,
-	order: &[String],
-	at: &std::collections::HashMap<String, usize>,
-	lines: &[String],
-	whole_group: bool,
-) -> Anchor {
+fn anchor_for(p: &str, order: &[String], at: &std::collections::HashMap<String, usize>, lines: &[String], whole_group: bool) -> Anchor {
 	let parent = p.rsplit_once('.').map_or("", |(head, _)| head);
 	let my_pos = order.iter().position(|o| o == p);
-	let siblings: Vec<&String> = order
-		.iter()
-		.filter(|o| o.as_str() != p && o.rsplit_once('.').map_or("", |(head, _)| head) == parent)
-		.collect();
+	let siblings: Vec<&String> = order.iter().filter(|o| o.as_str() != p && o.rsplit_once('.').map_or("", |(head, _)| head) == parent).collect();
 	if let Some(my_pos) = my_pos {
 		// next sibling in template order that the file has
-		let next = siblings.iter().find(|s| {
-			order
-				.iter()
-				.position(|o| o == **s)
-				.is_some_and(|pos| pos > my_pos)
-				&& at.contains_key(**s)
-		});
+		let next = siblings.iter().find(|s| order.iter().position(|o| o == **s).is_some_and(|pos| pos > my_pos) && at.contains_key(**s));
 		if let Some(next) = next {
 			let mut index = at[*next];
 			if whole_group {
-				// land above the sibling's own comment block, not inside it
-				while index > 0 && lines[index - 1].trim_start().starts_with('#') {
+				// go above the sibling's own comment block, not inside it. A
+				// commented-out setting isn't part of that block, and neither is a
+				// comment at another depth: both belong to what comes before, often
+				// a group added a moment ago.
+				let indent_of = |line: &str| line.len() - line.trim_start().len();
+				let depth = indent_of(&lines[index]);
+				while index > 0 && {
+					let above = &lines[index - 1];
+					above.trim_start().starts_with('#') && line_setting_key(above).is_none() && indent_of(above) == depth
+				} {
 					index -= 1;
 				}
 			}
 			return Anchor::Before(index);
 		}
 		// last earlier sibling present: insert after its whole subtree
-		let prev = siblings.iter().rev().find(|s| {
-			order
-				.iter()
-				.position(|o| o == **s)
-				.is_some_and(|pos| pos < my_pos)
-				&& at.contains_key(**s)
-		});
+		let prev = siblings.iter().rev().find(|s| order.iter().position(|o| o == **s).is_some_and(|pos| pos < my_pos) && at.contains_key(**s));
 		if let Some(prev) = prev {
 			let prefix = format!("{prev}.");
-			let end = at
-				.iter()
-				.filter(|(path, _)| *path == *prev || path.starts_with(&prefix))
-				.map(|(_, index)| *index)
-				.max()
-				.unwrap_or(at[*prev]);
+			let end = at.iter().filter(|(path, _)| *path == *prev || path.starts_with(&prefix)).map(|(_, index)| *index).max().unwrap_or(at[*prev]);
 			return Anchor::After(end);
 		}
 	}
-	if !parent.is_empty() {
-		if let Some(index) = at.get(parent) {
-			return Anchor::After(*index);
-		}
+	if !parent.is_empty()
+		&& let Some(index) = at.get(parent)
+	{
+		return Anchor::After(*index);
 	}
 	Anchor::Append
 }
@@ -2899,48 +6399,61 @@ fn anchor_for(
 // location for this process.
 static CONFIG_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
 // Serializes the tests that install a config-path override. The override is
-// process-global, so two of them running at once would each read the other's
-// file - and they live in different modules, so the guard has to live here.
+// process-global, so 2 of them running at once would each read the other's
+// file, and also they're in different modules, so the guard has to be here.
+// The refusal `write_doc` leaves for the window is process-global too, so a
+// test whose save can be refused takes this as well.
 #[cfg(test)]
 pub fn test_config_lock() -> std::sync::MutexGuard<'static, ()> {
 	static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-	LOCK.lock()
-		.unwrap_or_else(std::sync::PoisonError::into_inner)
+	crate::locks::lock(&LOCK)
+}
+
+// Serializes the tests that put settings into the live store, which is
+// process-global as well. A test that installs a rated profile would otherwise
+// change the scroll feel under a scroll test running beside it.
+#[cfg(test)]
+pub fn test_store_lock() -> std::sync::MutexGuard<'static, ()> {
+	static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+	crate::locks::lock(&LOCK)
 }
 
 pub fn set_config_override(path: PathBuf) {
 	#[cfg(test)]
 	{
-		*test_override()
-			.lock()
-			.unwrap_or_else(std::sync::PoisonError::into_inner) = Some(path.clone());
+		*crate::locks::lock(test_override()) = Some(path.clone());
 	}
 	let _ = CONFIG_OVERRIDE.set(path);
 }
 
-// `--config` is decided once, before any setting is read, which is exactly what
-// a OnceLock says - but a test installs SEVERAL throwaway configs in one
-// process, and the second `set` there is silently ignored. That failed quietly
-// and in the worst possible way: every later test wrote its own file and read
-// the FIRST one's, so one test's leftovers steered another's assertions
-// (measured: the theme round-trip read theme_mode "light" out of the generic
-// row test's config and stored its edit in the wrong variant of the palette).
-// So a test build gets a settable door beside the OnceLock. It is still
-// process-global, hence `test_config_lock` around any test that uses it.
+// `--config` is decided once, before any setting is read, which is what a
+// OnceLock is for. But a test installs several configs in one process, and the
+// second `set` there is quietly ignored, so every later test wrote its own file
+// and read the first one's. So a test build gets a settable override beside the
+// OnceLock. It's still process-global, hence `test_config_lock` around any test
+// that uses it.
 #[cfg(test)]
 fn test_override() -> &'static std::sync::Mutex<Option<PathBuf>> {
 	static OVERRIDE: OnceLock<std::sync::Mutex<Option<PathBuf>>> = OnceLock::new();
 	OVERRIDE.get_or_init(|| std::sync::Mutex::new(None))
 }
 
-// The directory name under whichever base a platform hands us. One spelling, so
-// the config dir, the data dir and the legacy probe cannot drift apart.
+// Stands in for the box's own settings file, so a test can show what a run
+// with no override would do to it without going near the real one.
+#[cfg(test)]
+fn test_native_config() -> &'static std::sync::Mutex<Option<PathBuf>> {
+	static NATIVE: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+	&NATIVE
+}
+
+// The directory name under whichever base a platform gives. One name, so the
+// config dir, the data dir, and the legacy probe can't drift apart.
 const APP_DIR: &str = "silkterm";
 
-// Which platform's conventions to lay the paths out by. Named rather than read
-// off `cfg!` at each site so the WHOLE scheme can be tested for every platform
-// from any one of them - the boxes here are Linux and Windows, and a macOS path
-// nobody present can run is exactly the kind that rots unnoticed.
+// Which platform's conventions to lay the paths out by. It's named rather than
+// read off `cfg!` at each site, so tests cover the scheme for every platform from
+// any one of them. A macOS path that can't be run here is the kind that rots
+// unnoticed.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Layout {
 	Windows,
@@ -2958,65 +6471,59 @@ fn host_layout() -> Layout {
 	}
 }
 
-// An environment variable as a path, treating empty as unset - an exported but
-// empty HOME is not a home directory.
+// An environment variable as a path, treating empty as unset, since an exported
+// but empty HOME isn't a home directory.
 fn env_path(name: &str) -> Option<PathBuf> {
-	std::env::var_os(name)
-		.filter(|value| !value.is_empty())
-		.map(PathBuf::from)
+	std::env::var_os(name).filter(|value| !value.is_empty()).map(PathBuf::from)
 }
 
 pub fn home_dir() -> Option<PathBuf> {
 	env_path("HOME").or_else(|| env_path("USERPROFILE"))
 }
 
-// Where settings live, by platform convention.
+// Where settings go, by platform convention.
 //
-// An explicit XDG_CONFIG_HOME is honoured on EVERY platform - somebody who sets
-// it means it - and only then does the platform get its say: Roaming on Windows
-// (settings are meant to follow the user between machines), Application Support
-// on macOS, ~/.config elsewhere. Each falls back to ~/.config if the native base
-// is missing from the environment, which is better than having no config at all.
-fn config_base_for(
-	layout: Layout,
-	xdg: Option<&std::path::Path>,
-	home: Option<&std::path::Path>,
-	appdata: Option<&std::path::Path>,
-) -> Option<PathBuf> {
+// An explicit XDG_CONFIG_HOME is honored on every platform, since somebody who
+// sets it means it. Otherwise it's Roaming on Windows, so settings follow the
+// user between machines, Application Support on macOS, and ~/.config elsewhere.
+// Each falls back to ~/.config if the native base is missing from the
+// environment, which beats having no config at all.
+fn config_base_for(layout: Layout, xdg: Option<&std::path::Path>, home: Option<&std::path::Path>, appdata: Option<&std::path::Path>) -> Option<PathBuf> {
 	if let Some(dir) = xdg {
 		return Some(dir.to_path_buf());
 	}
 	let dotconfig = || home.map(|h| h.join(".config"));
 	match layout {
 		Layout::Windows => appdata.map(std::path::Path::to_path_buf).or_else(dotconfig),
-		Layout::MacOs => home
-			.map(|h| h.join("Library").join("Application Support"))
-			.or_else(dotconfig),
+		Layout::MacOs => home.map(|h| h.join("Library").join("Application Support")).or_else(dotconfig),
 		Layout::Xdg => dotconfig(),
 	}
 }
 
 fn config_path() -> Option<PathBuf> {
+	// Every override a test sets goes through this door as well (G52), so the
+	// OnceLock adds nothing there, and leaving it out lets a test go back to none.
 	#[cfg(test)]
-	if let Some(p) = test_override()
-		.lock()
-		.unwrap_or_else(std::sync::PoisonError::into_inner)
-		.clone()
-	{
-		return Some(p);
+	let chosen = crate::locks::lock(test_override()).clone();
+	#[cfg(not(test))]
+	let chosen = CONFIG_OVERRIDE.get().cloned();
+	chosen.or_else(native_config_path)
+}
+
+// The settings file with no `--config`: the box's own.
+fn native_config_path() -> Option<PathBuf> {
+	#[cfg(test)]
+	if let Some(path) = crate::locks::lock(test_native_config()).clone() {
+		return Some(path);
 	}
-	if let Some(p) = CONFIG_OVERRIDE.get() {
-		return Some(p.clone());
-	}
+	env_config_path()
+}
+
+fn env_config_path() -> Option<PathBuf> {
 	let xdg = env_path("XDG_CONFIG_HOME");
 	let home = home_dir();
 	let appdata = env_path("APPDATA");
-	let base = config_base_for(
-		host_layout(),
-		xdg.as_deref(),
-		home.as_deref(),
-		appdata.as_deref(),
-	)?;
+	let base = config_base_for(host_layout(), xdg.as_deref(), home.as_deref(), appdata.as_deref())?;
 	Some(base.join(APP_DIR).join("config.shcl"))
 }
 
@@ -3024,224 +6531,540 @@ pub fn config_dir() -> Option<PathBuf> {
 	Some(config_path()?.parent()?.to_path_buf())
 }
 
-// Where bulk, machine-local data goes. On Windows that is Local rather than
-// Roaming: a wallpaper pack is 60 MiB and has no business following the user
-// onto every machine they sign into. Everywhere else it IS the config dir, which
-// is what those platforms' conventions already mean.
-//
-// Two cases deliberately keep everything together instead: a `--config` override
-// (so an alternate config still gets its own wallpaper and history rather than
-// sharing the default ones - that isolation is the point of the flag), and an
-// explicit XDG_CONFIG_HOME (somebody who asks for one tree means one tree).
-pub fn data_dir() -> Option<PathBuf> {
-	if CONFIG_OVERRIDE.get().is_some() || env_path("XDG_CONFIG_HOME").is_some() {
-		return config_dir();
+// A test run reads the box's own config on purpose (G6), but writes nothing
+// there or beside it: a test's launch once refreshed a line in a real file. A
+// test that needs a write points the config at a file of its own.
+#[cfg(test)]
+pub(crate) fn may_write(path: &std::path::Path) -> bool {
+	let seam = crate::locks::lock(test_native_config()).clone();
+	let mut dirs: Vec<PathBuf> = [seam, env_config_path()].into_iter().flatten().filter_map(|file| file.parent().map(std::path::Path::to_path_buf)).collect();
+	// where a pre-layout or beta1 file is moved from, off Linux
+	dirs.extend(home_dir().map(|home| home.join(".config").join(APP_DIR)));
+	dirs.extend(data_dir_for(host_layout(), env_path("XDG_CONFIG_HOME").is_some(), env_path("LOCALAPPDATA").as_deref(), None));
+	dirs.extend(cache_dir_for(host_layout(), false, env_path("XDG_CACHE_HOME").as_deref(), env_path("XDG_CONFIG_HOME").is_some(), home_dir().as_deref(), env_path("LOCALAPPDATA").as_deref(), None));
+	dirs.extend(state_dir_for(host_layout(), false, env_path("XDG_STATE_HOME").as_deref(), env_path("XDG_CONFIG_HOME").is_some(), home_dir().as_deref(), env_path("LOCALAPPDATA").as_deref(), None));
+	let real: Vec<PathBuf> = dirs.iter().flat_map(std::fs::canonicalize).collect();
+	dirs.extend(real);
+	// a link into the box's folder, or a name not made yet
+	let mut names = vec![path.to_path_buf()];
+	names.extend(std::fs::canonicalize(path));
+	if let (Some(parent), Some(name)) = (path.parent(), path.file_name()) {
+		names.extend(std::fs::canonicalize(parent).map(|dir| dir.join(name)));
 	}
-	match host_layout() {
-		Layout::Windows => env_path("LOCALAPPDATA")
-			.map(|dir| dir.join(APP_DIR))
-			.or_else(config_dir),
-		_ => config_dir(),
+	!names.iter().any(|name| dirs.iter().any(|dir| name.starts_with(dir)))
+}
+
+#[cfg(not(test))]
+pub(crate) fn may_write(_: &std::path::Path) -> bool {
+	true
+}
+
+/// Where bulk, machine-local data goes. On Windows that's Local rather than
+/// Roaming, since a 60 MiB wallpaper pack shouldn't follow the user onto every
+/// machine they sign into. Everywhere else it's the config dir.
+///
+/// Everything stays together in 2 cases: a `--config` override, so an alternate
+/// config gets its own wallpaper and history, which is the point of the flag, and
+/// an explicit `XDG_CONFIG_HOME`, since somebody who asks for one tree means one
+/// tree.
+pub fn data_dir() -> Option<PathBuf> {
+	data_dir_for(host_layout(), CONFIG_OVERRIDE.get().is_some() || env_path("XDG_CONFIG_HOME").is_some(), env_path("LOCALAPPDATA").as_deref(), config_dir())
+}
+
+/// `data_dir` as it is with no `--config`. For what belongs to the account
+/// rather than to one config, such as which shell profiles were written to: the
+/// profiles are the same whichever config a launch names.
+pub fn native_data_dir() -> Option<PathBuf> {
+	data_dir_for(host_layout(), env_path("XDG_CONFIG_HOME").is_some(), env_path("LOCALAPPDATA").as_deref(), native_config_path()?.parent().map(std::path::Path::to_path_buf))
+}
+
+// The decision above with its inputs passed in, so every platform's answer can
+// be checked from any box (G15).
+fn data_dir_for(layout: Layout, one_tree: bool, local_appdata: Option<&std::path::Path>, config_dir: Option<PathBuf>) -> Option<PathBuf> {
+	match layout {
+		Layout::Windows if !one_tree => local_appdata.map(|dir| dir.join(APP_DIR)).or(config_dir),
+		_ => config_dir,
 	}
 }
 
-// Every directory a wallpaper folder may sit in, best first. More than one entry
-// only where the data dir split off from the config dir - a pack already beside
-// the config still has to be found, because nobody should have to move 60 MiB to
-// keep what already worked.
+/// Where the program keeps what it works out on this machine: the machine
+/// test's pick and the last window size (`state.shcl`). Not for hand edits, and
+/// safe to lose. A `--config` override or an explicit `XDG_CONFIG_HOME` keeps it
+/// beside that config, as `cache_dir` does.
+pub fn state_dir() -> Option<PathBuf> {
+	state_dir_for(host_layout(), CONFIG_OVERRIDE.get().is_some(), env_path("XDG_STATE_HOME").as_deref(), env_path("XDG_CONFIG_HOME").is_some(), home_dir().as_deref(), env_path("LOCALAPPDATA").as_deref(), config_dir())
+}
+
+// The decision above with its inputs passed in (G15).
+fn state_dir_for(layout: Layout, overridden: bool, xdg_state: Option<&std::path::Path>, xdg_config: bool, home: Option<&std::path::Path>, local_appdata: Option<&std::path::Path>, config_dir: Option<PathBuf>) -> Option<PathBuf> {
+	if overridden || (xdg_config && xdg_state.is_none()) {
+		return config_dir;
+	}
+	if let Some(dir) = xdg_state {
+		return Some(dir.join(APP_DIR));
+	}
+	match layout {
+		Layout::Windows => local_appdata.map(|dir| dir.join(APP_DIR)),
+		Layout::MacOs => home.map(|h| h.join("Library").join("Application Support").join(APP_DIR)),
+		Layout::Xdg => home.map(|h| h.join(".local").join("state").join(APP_DIR)),
+	}
+}
+
+// A test's state file is beside the config it points at, so one test's never
+// mixes with another's or the box's.
+fn state_path() -> Option<PathBuf> {
+	let dir = if cfg!(test) { config_dir() } else { state_dir() };
+	Some(dir?.join("state.shcl"))
+}
+
+/// Where copies that can always be made again go, such as prepared wallpapers.
+/// The platform's own cache folder, which backup tools and cleaners know they
+/// may skip or empty. A `--config` override keeps it beside that config, for
+/// the same reason `data_dir` does, and so does an explicit `XDG_CONFIG_HOME`
+/// unless `XDG_CACHE_HOME` is set too.
+pub fn cache_dir() -> Option<PathBuf> {
+	cache_dir_for(host_layout(), CONFIG_OVERRIDE.get().is_some(), env_path("XDG_CACHE_HOME").as_deref(), env_path("XDG_CONFIG_HOME").is_some(), home_dir().as_deref(), env_path("LOCALAPPDATA").as_deref(), config_dir())
+}
+
+// The decision above with its inputs passed in (G15).
+fn cache_dir_for(layout: Layout, overridden: bool, xdg_cache: Option<&std::path::Path>, xdg_config: bool, home: Option<&std::path::Path>, local_appdata: Option<&std::path::Path>, config_dir: Option<PathBuf>) -> Option<PathBuf> {
+	let beside_config = || config_dir.map(|dir| dir.join("cache"));
+	if overridden {
+		return beside_config();
+	}
+	if let Some(dir) = xdg_cache {
+		return Some(dir.join(APP_DIR));
+	}
+	if xdg_config {
+		return beside_config();
+	}
+	match layout {
+		Layout::Windows => local_appdata.map(|dir| dir.join(APP_DIR).join("cache")),
+		Layout::MacOs => home.map(|h| h.join("Library").join("Caches").join(APP_DIR)),
+		Layout::Xdg => home.map(|h| h.join(".cache").join(APP_DIR)),
+	}
+	.or_else(beside_config)
+}
+
+// Every directory a wallpaper folder may be in, best first. More than one entry
+// only where the data dir split off from the config dir, since a pack already
+// beside the config still has to be found, and nobody should have to move 60 MiB
+// to keep what already worked.
 fn wallpaper_search_dirs() -> Vec<PathBuf> {
 	let mut dirs = Vec::new();
 	if let Some(dir) = data_dir() {
 		dirs.push(dir);
 	}
-	if let Some(dir) = config_dir() {
-		if !dirs.contains(&dir) {
-			dirs.push(dir);
-		}
+	if let Some(dir) = config_dir()
+		&& !dirs.contains(&dir)
+	{
+		dirs.push(dir);
 	}
 	dirs
 }
 
 // A config left at ~/.config by a build that predates the per-platform layout.
-// None where that IS the native location, so there is nothing to adopt on Linux.
+// None where that is the native location, so there is nothing to adopt on Linux.
 fn legacy_config_path() -> Option<PathBuf> {
 	if CONFIG_OVERRIDE.get().is_some() || host_layout() == Layout::Xdg {
 		return None;
 	}
-	let legacy = home_dir()?
-		.join(".config")
-		.join(APP_DIR)
-		.join("config.shcl");
-	// An XDG_CONFIG_HOME pointing at the old spot makes the two the same file.
+	let legacy = home_dir()?.join(".config").join(APP_DIR).join("config.shcl");
+	// An XDG_CONFIG_HOME pointing at the old spot makes the 2 the same file.
 	if config_path().is_some_and(|native| native == legacy) {
 		return None;
 	}
 	Some(legacy)
 }
 
-// Bring a pre-layout config across, ONCE, and only when the native location
-// holds nothing. If both exist the native one is the live file and the old one
-// is left exactly where it is - guessing which of two real configs somebody
-// wants is not a call this can make, so it says what it found and moves on.
+// Bring a pre-layout config across, once, and only when the native location
+// has nothing. If both exist the native one is the live file and the old one is
+// left where it is. This can't guess which of 2 real configs somebody wants, so
+// it says what it found and moves on.
 // Called before the default template would be written, or a fresh template
 // would win the race against the file being adopted.
 fn adopt_legacy_config() {
 	let (Some(native), Some(legacy)) = (config_path(), legacy_config_path()) else {
 		return;
 	};
-	if !legacy.exists() {
+	adopt_config_from(&native, &legacy);
+}
+
+// The move takes the old file away, so a test run may not make it from the
+// box's own folder either.
+fn adopt_config_from(native: &std::path::Path, legacy: &std::path::Path) {
+	adopt_config_with(native, legacy, |from, to| std::fs::rename(from, to));
+}
+
+// The rename is a parameter so a test can fail it the way a move across
+// volumes does.
+fn adopt_config_with(native: &std::path::Path, legacy: &std::path::Path, rename: fn(&std::path::Path, &std::path::Path) -> std::io::Result<()>) {
+	if !legacy.exists() || !may_write(native) || !may_write(legacy) {
 		return;
 	}
 	if native.exists() {
-		eprintln!(
-			"{APP_NAME}: using {}; the older {} is being ignored (delete it, or point --config at it)",
-			native.display(),
-			legacy.display()
-		);
+		eprintln!("{APP_NAME}: using {}; the older {} is being ignored (delete it, or point --config at it)", native.display(), legacy.display());
 		return;
 	}
-	if let Some(dir) = native.parent() {
-		if let Err(e) = std::fs::create_dir_all(dir) {
-			eprintln!("{APP_NAME}: could not create {}: {e}", dir.display());
-			return;
-		}
+	if let Some(dir) = native.parent()
+		&& let Err(e) = std::fs::create_dir_all(dir)
+	{
+		eprintln!("{APP_NAME}: couldn't create {}: {e}", dir.display());
+		return;
 	}
 	// rename first: same volume is the ordinary case and it is atomic. A cross
 	// volume move fails EXDEV, so fall back to copy-then-remove, and keep the
-	// original if the remove fails rather than risk having neither.
-	let moved = std::fs::rename(&legacy, &native).is_ok()
-		|| (std::fs::copy(&legacy, &native).is_ok() && std::fs::remove_file(&legacy).is_ok());
+	// original if the remove fails rather than risk having neither. The copy
+	// goes under a name of its own first, so a crash can't leave a half-written
+	// file that the next launch would take for the whole one.
+	let moved = rename(legacy, native).is_ok() || (copy_whole(legacy, native).is_ok() && std::fs::remove_file(legacy).is_ok());
 	if moved {
-		eprintln!(
-			"{APP_NAME}: moved your config from {} to {}",
-			legacy.display(),
-			native.display()
-		);
+		eprintln!("{APP_NAME}: moved your config from {} to {}", legacy.display(), native.display());
 	} else {
-		eprintln!(
-			"{APP_NAME}: could not move {} to {}",
-			legacy.display(),
-			native.display()
-		);
+		eprintln!("{APP_NAME}: couldn't move {} to {}", legacy.display(), native.display());
 	}
 }
 
-// The shipped template, with the one line whose default is platform-specific
-// filled in. `{HOME}` is the only substitution and it is the home-directory
-// token a person on THIS platform would type - a Windows user reading `$HOME`
-// in their own config would not recognize it as a default they could edit.
+// Never replaces a file already at `to`, unless it has the same bytes.
+fn copy_whole(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+	let body = std::fs::read(from)?;
+	#[cfg(unix)]
+	let perms = std::fs::metadata(from).ok().map(|meta| meta.permissions());
+	#[cfg(not(unix))]
+	let perms = None;
+	write_new_file(|_| to.to_path_buf(), &body, perms.as_ref()).map(|_| ())
+}
+
+// SilkTerm v1.0.0-beta1, never released, kept its settings in TOML: beside
+// where the settings file is now, `config.toml` for `config.shcl`, or in
+// ~/.config where that isn't the native place.
+fn beta1_config_paths(native: &std::path::Path) -> Vec<PathBuf> {
+	let mut paths = vec![native.with_extension("toml")];
+	if let Some(legacy) = legacy_config_path() {
+		paths.push(legacy.with_extension("toml"));
+	}
+	paths
+}
+
+// A launch that finds no settings file but a beta1 one reads its values into
+// the template, once. The old file is renamed where it is, the way a converted
+// one is kept, so nothing reads it again. Called before the default template
+// would be written.
+fn import_beta1_config(native: &std::path::Path) {
+	import_beta1_config_from(native, beta1_config_paths(native));
+}
+
+// The old file is renamed after the read, so a test run skips one in the box's
+// own folder.
+fn import_beta1_config_from(native: &std::path::Path, olds: Vec<PathBuf>) {
+	if native.exists() || !may_write(native) {
+		return;
+	}
+	let Some((old, body)) = olds.into_iter().filter(|old| may_write(old)).find_map(|old| std::fs::read(&old).ok().map(|body| (old, body))) else {
+		return;
+	};
+	if let Some(dir) = native.parent() {
+		let _ = std::fs::create_dir_all(dir);
+	}
+	let text = imported_beta1_config(&String::from_utf8_lossy(&body));
+	if let Err(e) = write_config_atomic(native, &text) {
+		eprintln!("{APP_NAME}: couldn't import {}: {e:#}", old.display());
+		return;
+	}
+	match keep_beta1_config(&old) {
+		Some(kept) => eprintln!("{APP_NAME}: read the settings in {} into {}; the old file is kept at {}", old.display(), native.display(), kept.display()),
+		None => eprintln!("{APP_NAME}: read the settings in {} into {}, but couldn't rename the old file", old.display(), native.display()),
+	}
+}
+
+// `config.toml` -> `config_backup_20261110-170000_beta1.toml`, with `_2` and
+// on for a second one in the same second.
+fn keep_beta1_config(old: &std::path::Path) -> Option<PathBuf> {
+	let stem = old.file_stem()?.to_string_lossy().into_owned();
+	let (stamp, _) = local_stamp();
+	let kept = (1..=BACKUPS_MAX)
+		.map(|attempt| {
+			let again = if attempt > 1 { format!("_{attempt}") } else { String::new() };
+			old.with_file_name(format!("{stem}_backup_{stamp}_beta1{again}.toml"))
+		})
+		.find(|name| name.symlink_metadata().is_err())?;
+	std::fs::rename(old, &kept).ok().map(|()| kept)
+}
+
+// The template with every beta1 setting this build still has. Its flat names
+// are the ones a pre-nesting SHCL file used, so the values go through the same
+// conversion. A name that has since moved again is followed first, since a
+// beta1 file predates every such move.
+fn imported_beta1_config(toml: &str) -> String {
+	let mut flat = shcl::Document::new();
+	for (path, value) in beta1_values(toml) {
+		let path = CONFIG_RENAMES.iter().find(|(old, _)| *old == path).map_or(path.as_str(), |(_, new)| new);
+		let _ = match value {
+			TomlValue::Bool(on) => flat.set_bool(path, on),
+			TomlValue::Int(n) => flat.set_int(path, n),
+			TomlValue::Float(n) => flat.set_float(path, n),
+			TomlValue::Text(text) => flat.set_string(path, &text),
+		};
+	}
+	let shell = flat.get_string("default_shell").ok();
+	let flat = flat.to_string();
+	let (new, _) = rebuilt_config_text(&flat, &[]);
+	let new = with_own_look(&flat, new);
+	// The conversion drops `shell.default`, which a launch otherwise moves to
+	// the top of the shell list.
+	let Some(shell) = shell else {
+		return new;
+	};
+	let mut doc = parse_kept(&new);
+	let _ = doc.set_string("shell.default", &shell);
+	adopted_shell_doc(&doc).map_or(new, |doc| saved_text(&doc))
+}
+
+// A value in a beta1 `config.toml`, of the kinds its settings took.
+#[derive(Debug, Clone, PartialEq)]
+enum TomlValue {
+	Bool(bool),
+	Int(i64),
+	Float(f64),
+	Text(String),
+}
+
+// Each setting in a beta1 `config.toml`, by its dotted SHCL path, in file
+// order. beta1 wrote flat `key = value` lines and a `[colors]` table, so only
+// that much TOML is read. A line in any other shape is skipped, which leaves
+// its setting at the default, as beta1's own reader did with a line it
+// couldn't read. A setting given twice keeps the first.
+fn beta1_values(text: &str) -> Vec<(String, TomlValue)> {
+	let mut table: Option<Vec<String>> = Some(Vec::new());
+	let mut out: Vec<(String, TomlValue)> = Vec::new();
+	for line in text.lines() {
+		let line = line.trim();
+		if line.is_empty() || line.starts_with('#') {
+			continue;
+		}
+		// an array of tables, `[[name]]`, reads as no table, so its lines are skipped
+		if let Some(rest) = line.strip_prefix('[') {
+			table = toml_key(rest).and_then(|(key, rest)| {
+				let rest = rest.strip_prefix(']')?;
+				toml_line_end(rest).then_some(key)
+			});
+			continue;
+		}
+		let Some(prefix) = &table else {
+			continue;
+		};
+		let Some((key, rest)) = toml_key(line) else {
+			continue;
+		};
+		let Some((value, rest)) = rest.strip_prefix('=').and_then(|rest| toml_value(rest.trim_start())) else {
+			continue;
+		};
+		if !toml_line_end(rest) {
+			continue;
+		}
+		let path = prefix.iter().chain(&key).map(|segment| shcl::quote_segment(segment)).collect::<Vec<_>>().join(".");
+		if !out.iter().any(|(seen, _)| *seen == path) {
+			out.push((path, value));
+		}
+	}
+	out
+}
+
+fn toml_line_end(rest: &str) -> bool {
+	let rest = rest.trim_start();
+	rest.is_empty() || rest.starts_with('#')
+}
+
+// A dotted key, each part bare or quoted, and the text after it.
+fn toml_key(text: &str) -> Option<(Vec<String>, &str)> {
+	let mut segments = Vec::new();
+	let mut rest = text.trim_start();
+	loop {
+		let (segment, after) = if rest.starts_with(['"', '\'']) {
+			toml_string(rest)?
+		} else {
+			let end = rest.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-')).unwrap_or(rest.len());
+			if end == 0 {
+				return None;
+			}
+			(rest[..end].to_string(), &rest[end..])
+		};
+		segments.push(segment);
+		rest = after.trim_start();
+		match rest.strip_prefix('.') {
+			Some(after) => rest = after.trim_start(),
+			None => return Some((segments, rest)),
+		}
+	}
+}
+
+// A one-line string, basic or literal, and the text after it. No setting took
+// a multi-line one.
+fn toml_string(text: &str) -> Option<(String, &str)> {
+	if text.starts_with("\"\"\"") || text.starts_with("'''") {
+		return None;
+	}
+	if let Some(body) = text.strip_prefix('\'') {
+		let end = body.find('\'')?;
+		return Some((body[..end].to_string(), &body[end + 1..]));
+	}
+	let body = text.strip_prefix('"')?;
+	let mut out = String::new();
+	let mut chars = body.char_indices();
+	while let Some((at, c)) = chars.next() {
+		match c {
+			'"' => return Some((out, &body[at + 1..])),
+			'\\' => {
+				let (_, escape) = chars.next()?;
+				out.push(match escape {
+					'"' => '"',
+					'\\' => '\\',
+					'n' => '\n',
+					't' => '\t',
+					'r' => '\r',
+					'b' => '\u{8}',
+					'f' => '\u{c}',
+					'e' => '\u{1b}',
+					'u' | 'U' => {
+						let len = if escape == 'u' { 4 } else { 8 };
+						let hex: String = chars.by_ref().take(len).map(|(_, c)| c).collect();
+						if hex.len() != len || !hex.bytes().all(|c| c.is_ascii_hexdigit()) {
+							return None;
+						}
+						char::from_u32(u32::from_str_radix(&hex, 16).ok()?)?
+					}
+					_ => return None,
+				});
+			}
+			_ => out.push(c),
+		}
+	}
+	None
+}
+
+// A value and the text after it. Arrays, inline tables and dates are skipped.
+fn toml_value(text: &str) -> Option<(TomlValue, &str)> {
+	if text.starts_with(['"', '\'']) {
+		return toml_string(text).map(|(value, rest)| (TomlValue::Text(value), rest));
+	}
+	let end = text.find(|c: char| c.is_whitespace() || c == '#').unwrap_or(text.len());
+	let (word, rest) = text.split_at(end);
+	let value = match word {
+		"true" => TomlValue::Bool(true),
+		"false" => TomlValue::Bool(false),
+		_ => toml_number(word)?,
+	};
+	Some((value, rest))
+}
+
+// beta1 also read a float with no digit before the point, such as `.25`.
+fn toml_number(word: &str) -> Option<TomlValue> {
+	let digits = word.replace('_', "");
+	if let Ok(n) = digits.parse::<i64>() {
+		return Some(TomlValue::Int(n));
+	}
+	if !digits.bytes().all(|c| c.is_ascii_digit() || b"+-.eE".contains(&c)) {
+		return None;
+	}
+	digits.parse::<f64>().ok().filter(|n| n.is_finite()).map(TomlValue::Float)
+}
+
+// The template, with `{HOME}` filled in from the same constant
+// `Settings::default()` uses, so the commented default line and the real
+// default can't drift apart.
 //
 // Everything that compares a config against the template (backfill, the
 // superseded-default refresh, the group walk) reads it through here, so the
 // text is assembled once and every one of them sees the same bytes.
-static DEFAULT_CONFIG_TEXT: std::sync::LazyLock<String> =
-	std::sync::LazyLock::new(|| DEFAULT_CONFIG_TEMPLATE.replace("{HOME}", HOME_TOKEN));
+static DEFAULT_CONFIG_TEXT: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| DEFAULT_CONFIG_TEMPLATE.replace("{HOME}", HOME_TOKEN).replace("{WPDIR}", WALLPAPER_DIR_TOKEN).replace("{KEYS}", &crate::keys::template_lines(cfg!(target_os = "macos"))));
 
 fn default_config() -> &'static str {
 	DEFAULT_CONFIG_TEXT.as_str()
 }
 
-// How a person on this platform spells "my home directory" in a path. Also what
-// `expand_path` understands, along with the other platform's spelling and `~`:
-// a config that is carried between machines should not stop working.
+/// A launch's read of the bundled config, then a save of one changed value, with
+/// no file behind either. A round of the heap-growth test (`heap_growth.rs`).
+#[cfg(test)]
+pub(crate) fn heap_round(value: f64) -> usize {
+	let text = default_config();
+	let (raw, _) = read_config_text(text, std::path::Path::new("config.shcl"));
+	let mut settings = resolve(raw);
+	let mut doc = parse_kept(text);
+	settings.model = crate::fields::load(&doc);
+	doc.put_float("scroll.alt_scroll_lines", value);
+	std::hint::black_box(&settings);
+	saved_text(&doc).len()
+}
+
+/// How a default names the home directory: the variable somebody on this
+/// platform would type. A config written here still works if it's copied
+/// elsewhere, since both names are read on both platforms.
 #[cfg(windows)]
 pub const HOME_TOKEN: &str = "%USERPROFILE%";
 #[cfg(not(windows))]
 pub const HOME_TOKEN: &str = "$HOME";
 
+/// The wallpaper folder's default: the usual place on this platform, in
+/// the same spelling. It is looked up rather than expanded (`rotation_folder_for`),
+/// so it is right even where `XDG_CONFIG_HOME` is unset. A backslash is plain
+/// text to shcl 3.0, so the template writes it as it is.
+#[cfg(windows)]
+pub const WALLPAPER_DIR_TOKEN: &str = r"%LOCALAPPDATA%\silkterm\wallpaper";
+#[cfg(target_os = "macos")]
+pub const WALLPAPER_DIR_TOKEN: &str = "$HOME/Library/Application Support/silkterm/wallpaper";
+#[cfg(not(any(windows, target_os = "macos")))]
+pub const WALLPAPER_DIR_TOKEN: &str = "$XDG_CONFIG_HOME/silkterm/wallpaper";
+
 const DEFAULT_CONFIG_TEMPLATE: &str = r##"# SilkTerm configuration file.
 #
-#
-# This config file format is:
-#
-# SHCL: Simple Hierarchical Config Language.
-#
-#    "Predictable, precise, and forgiving. The parser does the hard work, not you."
-#
-#    Home     https://github.com/jim-collier/shcl
-#    Syntax   https://github.com/jim-collier/shcl/blob/main/project/spec.md
-#    License  MIT. Copyright © 2026 Jim Collier.
-#
-#
-## Delete this file to regenerate defaults.
-## Convention: '## ' starts an explanatory comment; a single '# ' before a
-## `key: value` is a commented-out (disabled) setting you can uncomment - it
-## shows the built-in default. This file is yours to edit: your values and
-## comments are kept. Saving may tidy layout (indentation, grouping), but never
-## rewrites what you wrote. A malformed line is skipped on its own rather than
-## sinking the whole file. On launch SilkTerm only adds options new to this
-## version (and renames/removes ones that changed) - and even that is skipped
-## if the file looks open elsewhere.
+## Delete this file to reset everything. A line starting with '# ' is a
+## default, remove the '# ' to change it. Paths can use ~, $NAME, and %NAME%.
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-## Font
+## Performance
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-font:
+performance:
 
-	## System font face
-	## Use the OS default monospace font FAMILY: put it at the head of the family
-	## stack below. Turn off to start at family instead. Ignored where the OS has
-	## no monospace setting to read (Windows has none).
-	use_system_family: true
+	# automatic: true  ## Default
 
-	## System font size
-	## Use the OS default monospace font SIZE, overriding size below. Turn off to
-	## size the font yourself. Ignored where the OS reports no size.
-	# use_system_size: true  ## Default
+	## Effects level when automatic is off. One of "max", "high", "low",
+	## "standard", or "custom". Standard is no effects at all, and custom uses
+	## what's in this file. Tweaks to the other profiles end up at the bottom.
+	# profile: "max"  ## Default
 
-	## Font family
-	## A comma-separated fallback stack, first installed one wins. The same list
-	## is consulted on every platform; use_system_family above only decides
-	## whether the OS font is tried ahead of it. Anything not installed is
-	## skipped, and a built-in stack backs the whole list up.
-	family: "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New"
+	# check_hardware: true  ## Default
+	# check_next_run: false  ## Default
 
-	## Font size
-	## In logical pixels. Used when use_system_size is off.
-	## Range: 4.0 and up
-	# size: 17.0  ## Default
-
-	## Line height
-	## As a multiple of the font's natural height.
-	## Range: 0.5 and up - 1.0 is tight, higher is airier
-	line_height_scale: 1.22
+	## Go easy on the effects over Remote Desktop, VNC, X forwarding and such.
+	# detect_remote: true  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-## Window
+## Theme and colors
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-window:
+## A built-in theme, one saved in Settings, or "custom" for the colors below.
+theme: SilkTerm
+theme_mode: dark
 
-	## Margin
-	## Pixels between the text and the pane edge.
-	margin: 8.0
-
-	## Initial window size
-	## In character cells. Used when remember_size is off.
-	columns: 160
-	rows: 48
-
-	## Remember last size
-	## Launch at the last window size instead of columns/rows. The remembered
-	## size updates automatically whenever you resize the window (kept separate
-	## from columns/rows so unchecking reverts to your defined size).
-	# remember_size: true  ## Default
-	# remembered_columns: 160  ## Default
-	# remembered_rows: 48  ## Default
-
-	## Hide single tab
-	## Hide the tab bar while only one tab is open (also in the View menu).
-	# hide_single_tab: false  ## Default
-
-	## Tab width
-	## How wide a tab may be, as a percentage of the window's width. Tabs share
-	## the bar evenly between these two bounds. Raising the minimum keeps tabs
-	## readable when many are open, at the cost of showing them a page at a time -
-	## the wheel over the tab bar turns the page, and switching tabs brings the
-	## new one onto it.
-	# tab_min_width_pct: 8.0  ## Default
-	# tab_max_width_pct: 26.0  ## Default
+## Only the custom theme uses these. Tweaks to other themes end up at the
+## bottom of this file.
+colors:
+	## Pick the text and cursor colors from the wallpaper. Changing either one
+	## in Settings turns this off.
+	# from_wallpaper: true  ## Default
+	# background: "#000000"
+	# foreground: "#88eecc"  ## Default
+	# cursor: "#8a3fa4"  ## Default
+	# highlight: "#c8a05a"
+	# focus: "#4086ff"
+	# menu_background: "#36363b"
+	# menu_foreground: "#f0f0f2"
+	# dialog_background: "#20202a"
+	# dialog_foreground: "#e2e2ea"
+	# gutter: "#16161e"
+	# scrollbar_thumb: "#8a8a92"
+	# scrollbar_trough: "#2e2e36"
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Background and transparency
@@ -3249,92 +7072,72 @@ window:
 
 transparency:
 
-	## Transparency
-	## When on, the terminal background (only - never the text, window frame, or
-	## menus) becomes see-through, using opacity below as its alpha. The code
-	## picks the method (per-pixel via a GL surface on X11; native elsewhere).
-	# enabled: true  ## Default
-
-	## Background opacity
-	## Only takes effect when enabled above is on.
-	## Range: 0.0 to 1.0 - 0.0 is fully transparent, 1.0 is opaque
+	# enabled: false  ## Default
 	opacity: 0.95
 
-	## Blur-behind
-	## Ask the compositor to blur the desktop showing through the translucent
-	## background ("frosted glass"); text stays crisp. Only honored by KWin and
-	## picom-with-blur; on Compiz/GNOME it does nothing (enable blur in the
-	## compositor instead). The compositor controls the blur radius.
-	# blur_behind: true  ## Default
+	# blur_behind: false  ## Default
 
 wallpaper:
 
-	## Wallpaper
-	## Master switch for the wallpaper image.
 	# enabled: true  ## Default
-
-	## Wallpaper image
-	## A single pinned image. Leave commented to auto-detect
-	## wallpaper/wallpaper.{png,jpg,jpeg}. The value may be an absolute path or
-	## a filename relative to this directory.
-	# image: "wallpaper.png"  ## Default
-
-	## Built-in fallback
-	## Show a built-in wallpaper when none is configured (no image found above
-	## and no rotation folder below).
+	## One image instead of the folder below. Empty means use the folder.
+	# image: ""  ## Default
 	# fallback_builtin: true  ## Default
 
-	## Rotation
-	## Rotate the wallpaper through a folder of images (overrides image while
-	## set). The folder is absolute or relative to this directory. Left
-	## commented, a wallpaper/ dir here with images in it rotates on its own -
-	## unless image above pins one, or one is given on the command line for that
-	## run. Random picks avoid whatever came up recently, so runs feel varied
-	## rather than repeating; set random false for plain filename order.
-	## Interval 0 means only at launch.
+	## A folder of images. With interval_s at 0 you get a new one each launch.
 	rotate:
 		# enabled: true  ## Default
-		# folder: "wallpaper/"  ## Default
+		## The wallpaper folder in SilkTerm's config folder. A wallpapers or
+		## backgrounds folder there works too.
+		# folder: "{WPDIR}"  ## Default
 		# interval_s: 0.0  ## Default
 		# random: true  ## Default
 
-	## Image visibility
-	## How visible the image is against the background color (independent of the
-	## transparency opacity above).
-	## Range: 0.0 to 1.0 - 0.0 is all background color, 1.0 is all image
+	## How much picture shows through. Light mode is adjusted so the same
+	## number looks about the same.
 	# opacity: 0.10  ## Default
 
-	## Default fit
-	## How the image fits when it has nothing to say for itself: "stretch"
-	## (fill, ignore aspect) or "zoom" (cover, keep aspect, crop the overhang).
+	## Tone down bright photos and boost dark ones, so they all look about as
+	## visible as opacity says. 0 turns it off.
+	# even_visibility: 1.0  ## Default
+
+	## "stretch" fills the window, squished if need be. "zoom" keeps the
+	## proportions and crops.
 	# default_fit: "stretch"  ## Default
 
-	## Honor tags
-	## Let a wallpaper carry its own layout in its XMP metadata, overriding the
-	## default above per image. `wallpaper:Fit` is "stretch" or "zoom";
-	## `wallpaper:Anchor` is "<horizontal>%, <vertical>%" (0% is left/top, 100%
-	## is right/bottom) and picks which part of the image a zoom crop keeps. A
-	## photo can then refuse to be squashed while a gradient still fills the
-	## window.
+	## Let an image's own tags set its fit, opacity, or blur.
 	# honor_xmp: true  ## Default
-
-	## Wallpaper blur
-	## Gaussian blur applied to the wallpaper (sigma in pixels; 0 = none).
-	## Range: 0.0 to 100.0
 	# blur: 10.0  ## Default
+	# honor_xmp_look: true  ## Default
 
-	## Contrast mask
-	## Flatten the wallpaper's contrast so it stops competing with text. size is
-	## the flatten scale (1.0 = half the longest pixel dimension, so the whole
-	## image collapses toward one tone; small = only fine detail flattens).
-	## strength is how far each pixel is pulled toward that local mean. auto
-	## blends the two manual knobs with values derived from the image's own
-	## busyness (1.0 = full auto override, 0.0 = manual only, 0.5 = average).
 	contrast_mask:
 		# enabled: true  ## Default
 		# size: 0.5  ## Default
 		# strength: 0.5  ## Default
 		# auto: 0.5  ## Default
+
+	## "bc1" uses less graphics memory but gradients can band a bit. "bc7" is
+	## twice the size, no banding. "auto" picks by profile.
+	# compression: "auto"  ## Default
+
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+## Font
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+
+font:
+
+	## Follow the desktop's monospace face and size. Turn one off to use the
+	## family or size below.
+	# use_system_family: true  ## Default
+	# use_system_size: true  ## Default
+	# family: "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New"
+	# size: 17.0
+
+	line_height_scale: 1.22
+
+	## Themes saved in Settings remember a font too. While this is on, picking
+	## one leaves the font alone.
+	# ignore_themes: true  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Text
@@ -3342,41 +7145,36 @@ wallpaper:
 
 text:
 
-	## Text scrim
-	## A blurry background-colored halo behind each glyph, so text stays legible
-	## over a light/busy background or a near-transparent terminal. On by
-	## default; uncomment enabled and set it false to disable.
+	## The scrim. A soft, blurred patch of background color hugs every letter,
+	## so text stays readable over even the busiest wallpaper, without a dim
+	## box over the whole picture. We're kinda proud of this one.
 	scrim:
 		# enabled: true  ## Default
-		## How much bolder to make the finished halo, as a percent: each 20% doubles
-		## its opacity (100% = five doublings), so a faint halo turns into a solid
-		## plate. 0 leaves it exactly as built.
-		## Range: 0 to 100
-		# strength: 15  ## Default
-		## Halo radius in pixels.
-		# radius: 5.0  ## Default
-		## Range: 0.0 to 1.0 - 0.0 is hard/solid, 1.0 is soft/faint
+		## Light mode goes a bit easier, since pale patches show more.
+		# strength: 20  ## Default
+		# radius: 8.0  ## Default
 		# softness: 0.5  ## Default
-		## Halo shape: "sdf" (round, full corners), "dt", "dilate" (square), or
-		## "gaussian" (legacy, corners recede).
+		## Patch shape. "sdf" is round and soft, "dt" is round with hard edges,
+		## "dilate" is square, and "gaussian" is the old way and looks worse.
 		# function: "sdf"  ## Default
-		## Halo falloff curve: "exp", "half_normal", "log", "sigmoid", or "linear".
+		## How the patch fades out. "exp" stays strong then drops fast, "log"
+		## drops fast then trails off, "sigmoid" is smooth at both ends,
+		## "half_normal" is a bell curve, and "linear" is, well, linear.
 		# ramp: "exp"  ## Default
-		## Blur bold text at regular weight so its halo matches non-bold text.
 		# regular_weight: true  ## Default
 
-	## Text outline
-	## Antialiased outline around glyphs, in pixels (0 = none).
-	## Range: 0.0 to 8.0
 	# outline: 1.0  ## Default
 
-	## Color emoji
-	## Paint color emoji (COLRv1); false renders them as monochrome outlines.
-	# color_emoji: true  ## Default
+	## Beef up dark text on light themes, which otherwise looks thin and
+	## washed out. 1.0 matches dark theme weight and 0 is off. Go up to 2 if
+	## it still looks skinny, but small letters start to fill in.
+	# dark_on_light: 1.0  ## Default
 
-	## Embolden inverse
-	## Render reverse-video (dark-on-light) text bold so it reads as strongly as
-	## normal text.
+	## Nudge text that's nearly the same color as its background until it's
+	## readable. 0 turns it off.
+	# min_contrast: 0.45  ## Default
+
+	# color_emoji: true  ## Default
 	# embolden_inverse: true  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -3385,50 +7183,24 @@ text:
 
 cursor:
 
-	## Cursor size
-	## As a percent of the cell: height grows from the bottom, width from the
-	## left. Together they make any shape: a block (100 / 100), a thin bar
-	## (100 / 25), or an underline (15 / 100). Used when the app doesn't set its
-	## own; alt-screen apps (vim, less) still control theirs.
-	## Range: 1 to 100
+	## Percent of a cell. 100 and 100 is a block, 100 and 25 a bar, and 15 and
+	## 100 an underline.
 	size:
 		# height: 100  ## Default
 		# width: 100  ## Default
 
-	## Cursor animation
-	## "none" (steady), "phase" (smooth fade), or a pulse that grows/shrinks
-	## each cycle - "pulse_vertical", "pulse_horizontal", "pulse_both". The
-	## cursor always slides smoothly as you type.
+	# blink: true  ## Default
+
+	## Seconds per blink.
+	# blink_rate_s: 1.0  ## Default
+
+	## "phase" fades. Or "pulse_vertical", "pulse_horizontal", "pulse_both".
+	## They all take a nap once you stop typing for a while.
 	# animation: "pulse_vertical"  ## Default
 
-	## Animation resume delay
-	## While you type, the animation glides to the cursor's full size and holds
-	## there; it resumes this many seconds after input goes idle. Pausing and
-	## resuming always happen at full size, so the cursor never jumps. This
-	## delay is for typing only - a command's output holds the cursor still
-	## while it writes, then hands it straight back when the prompt returns.
-	## Refocusing the window, tab, or pane also resumes at once.
-	## Range: 0.05 to 3600.0 (seconds)
 	# animation_resume_s: 1  ## Default
-
-	## Animation idle stop
-	## After this many seconds with no input the animation stops entirely,
-	## parked at full size, so an idle window costs nothing. Typing - or
-	## refocusing the window, tab, or pane - brings it back. 0 = never stop.
-	## Range: 0.0 to 86400.0 (seconds)
 	# animation_idle_stop_s: 60  ## Default
-
-	## Blink rate
-	## Cursor animation cycle length, in milliseconds.
-	## Range: 50.0 and up
-	# blink_rate_ms: 500  ## Default
-
-	## Cursor scrim
-	## The cursor joins the scrim halo.
 	# scrim: false  ## Default
-
-	## Cursor outline
-	## The cursor joins the text outline.
 	# outline: true  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -3437,84 +7209,8 @@ cursor:
 
 selection:
 
-	## Word separators
-	## Delimiters that bound a double-click word selection. The default keeps
-	## : / . - _ ~ as part of a word, so paths (incl. C:\ drive paths), URLs and
-	## namespaced identifiers stay selected whole. Leave commented for the
-	## default; set to your own string of separator characters to override (add
-	## ':' back to split on it).
-	# word_separators: ",|\"' ()[]{}<>"  ## Default
-
-	## Selection pairs
-	## Pairs whose contents a double-click selects when the click is inside a
-	## matched pair (highest precedence first). Leave commented for the default.
+	# word_separators: ",│`|\"' ()[]{}<>\t"  ## Default
 	# pairs: "`` \"\" '' {} () [] <>"  ## Default
-
-## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-## Shell
-## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-
-## The shell for new windows, tabs and panes is the first ACTIVE entry in the
-## shells.<name> blocks below - "the one at the top". Those blocks are written
-## for you a few seconds after launch, by a look around for what is installed,
-## and the Settings dialog's "Shells" tab is where the order is set. A CLI
-## --shell and per-pane inheritance still take precedence over both.
-
-shell:
-
-	## Default command line
-	## Applied when SilkTerm is launched with no arguments - the same
-	## window/tab/pane options the CLI accepts (see --help). Any actual
-	## command-line arguments override this entirely. Leave blank/commented for
-	## none.
-	# command_line: "--new-pane --right --size 35%"  ## Default
-
-	## Default startup directory
-	## Where a shell starts when nothing else has said. It is the LOWEST
-	## precedence of four: a --directory on the command line wins outright, a
-	## new tab, pane or window inherits the directory of the pane it was opened
-	## from, and a SilkTerm launched from a shell keeps the directory that shell
-	## was in - so this is what a launch from the desktop, a menu or a shortcut
-	## gets. `~` and either platform's home token
-	## ($HOME, %USERPROFILE%) are understood, as is any other environment
-	## variable in the same spellings. A directory that does not exist is
-	## reported and ignored.
-	# startup_directory: "{HOME}"  ## Default
-
-	## Shell integration
-	## Add a small block to each PowerShell profile that reports the shell's
-	## directory, so a new tab, pane or window opens where that shell is.
-	## PowerShell keeps its location to itself, so without it the OS has nothing
-	## to report and a new pane starts where the old one was launched. Every
-	## other shell moves its own process and needs nothing. A profile that
-	## already reports - ours or anyone else's - is left alone, what is there is
-	## kept with a copy beside it, and deleting the block switches it off for
-	## good. See shell-integration.md.
-	# integration: true  ## Default
-
-	## Copy on select
-	## Start every pane with "Copy on select" enabled (selected text goes to the
-	## clipboard). The menu-bar checkbox still toggles it live per pane.
-	# copy_on_select: false  ## Default
-
-## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-## Hyperlinks
-## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-
-hyperlinks:
-
-	## Hyperlinks
-	## Underline a URL in the output while the pointer is over it; Ctrl+click
-	## opens it, and a right-click there offers "Open link" and "Copy link".
-	## Only these schemes are recognized, and nothing else can be opened:
-	## http, https, ftp, ftps, sftp, ssh, file, mailto.
-	# enabled: true  ## Default
-
-	## Open command
-	## Program that opens a clicked link, argv-split, with the URL appended as
-	## its last argument. Leave blank/commented to use the desktop's own handler
-	## (xdg-open, or start on Windows).
-	# open_command: "firefox --new-tab"  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Scrolling
@@ -3522,211 +7218,384 @@ hyperlinks:
 
 scroll:
 
-	## Scrollback
-	## Lines of scrollback history kept per pane.
 	scrollback: 10000
-
-	## Smooth scrolling
-	## Master switch for all scroll animation: eased wheel scrolling, eased
-	## output scrolling, and the sliding of full-screen apps. Off = every
-	## scroll lands instantly; the speed settings below then have no effect.
 	# smooth: true  ## Default
 
-	## The five settings below are the named segments of the output-scroll
-	## speed curve, in the order one burst traverses them: Ease-in lifts the
-	## speed from rest, Ramp-up accelerates it toward the top, Single-screen
-	## speed is the top while the burst still fits on screen (unbounded once it
-	## has scrolled off), Ramp-down winds the speed back down when output
-	## ceases, and Ease-out lands the last fraction of a line. Each segment
-	## hands its end point to the next and controls nothing else.
-
-	## Ease-in
-	## How long the view takes to build speed when it starts moving from rest:
-	## the first few lines per second arrive over this many milliseconds
-	## (wheel scrolling eases in over the same time). 82 ms is about 50 on the
-	## 1..100 dialog scale, where higher means a crisper start.
-	## Range: 1.0 and up (milliseconds) - higher is gentler
+	## How new output glides in, in milliseconds. Way easier to tune with the
+	## sliders in Settings.
 	ease_in_ms: 82.0
-
-	## Ramp-up
-	## How quickly a burst accelerates once past the ease-in: the catch-up
-	## speed doubles every this many milliseconds until it reaches the top
-	## speed that applies. Lower ramps harder, so a buffer dump is caught
-	## sooner. 96 ms (about ten doublings a second) is around 75 on the
-	## 1..100 dialog scale, where higher means a harder ramp.
-	## Range: 1.0 and up (milliseconds) - lower ramps harder
 	ramp_up_ms: 96.0
-
-	## Single-screen speed
-	## Top scrolling speed for an output burst whose own first line is still on
-	## screen (a short directory listing, say): one line per this many
-	## milliseconds. Once a burst has scrolled its first line off the top, the
-	## ramp-up is unlimited and reaches whatever speed keeps up. 32 ms (~31
-	## lines/s) is about 75 on the 1..100 dialog scale.
-	## Range: 1.0 and up (milliseconds) - lower is faster
 	single_screen_tau_ms: 32.0
-
-	## Ramp-down
-	## How gradually the speed winds down once output ceases with lines still
-	## to render: the catch-up speed halves every this many milliseconds on the
-	## way to the landing. The view keeps that wind-down's distance in reserve
-	## behind a fast burst, so the stop is a descent, never a cliff. 144 ms is
-	## around 75 on the 1..100 dialog scale, where higher means a harder stop.
-	## Range: 1.0 and up (milliseconds) - lower stops harder
 	ramp_down_ms: 144.0
-
-	## Ease-out
-	## How gradually the view settles onto its final line. The last fraction of
-	## a line is given at least this long, so the tail sweeps in instead of
-	## crawling to a halt. Higher is a softer, longer landing; lower is crisper.
-	## 212 ms is about 40 on the 1..100 dialog scale, where higher means a
-	## crisper landing.
-	## Range: 1.0 and up (milliseconds) - higher is gentler
 	ease_out_ms: 212.0
 
-	## Wheel lines
-	## Lines per wheel notch (smooth scrollback).
 	wheel_lines: 3.0
-
-	## Alt-screen wheel lines
-	## Lines per wheel notch in full-screen apps (less, nano).
 	alt_scroll_lines: 3.0
-
-	## Output ease distance
-	## How far new output slides in before easing to rest, in lines.
 	output_ease_lines: 1.0
 
-	## Smooth-scroll apps
-	## Ease the whole-line jumps of apps that repaint a scrolling region instead
-	## of growing scrollback: full-screen apps that own the screen (less, vim,
-	## nano, htop, tmux, ...) and, on Windows, ConPTY-driven TUIs whose output
-	## scrolls above a fixed input line. Their scrolling slides instead of
-	## snapping; the revealed strip fills with the background during the
-	## ~quarter-second slide. Only clean line-scrolls are eased (big page-jumps
-	## still snap).
+	## Smooth scrolling in less, vim and friends too.
 	# smooth_apps: true  ## Default
 
-	## Scrollbar
-	## A scrollbar over each pane's right edge, showing where the view sits in
-	## the scrollback. It floats over the text rather than taking a column, so
-	## turning it on or off never changes the grid. Full-screen apps (less, vim)
-	## keep their own screen and get no scrollbar. Drag the thumb to scroll;
-	## click the track to page.
 	scrollbar:
-
-		## Enabled
 		# enabled: true  ## Default
-
-		## Thickness
-		## Width in pixels.
-		## Range: 4 to 64
 		# thickness: 16.0  ## Default
-
-		## Auto-hide
-		## Fade the scrollbar out while the view sits idle at the bottom, and back
-		## in on scroll or when the pointer nears it. Off keeps it always visible.
 		# auto_hide: true  ## Default
 
+	## The minimap eats some text width. The scrollbar doesn't.
+	minimap:
+		# enabled: true  ## Default
+		# width: 100.0  ## Default
+		# tui_process_whitelist: ""  ## Default
+
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-## Theme and colors
+## Window
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-## Color theme
-## Pick a built-in (SilkTerm, Matrix, Retro Amber) or one you add in a themes.*
-## entry. theme_mode is "dark", "light", or "system" (follow the OS).
-theme: SilkTerm
-theme_mode: dark
+window:
 
-## Color overrides
-## Per-color overrides on top of the theme (uncomment any to tweak one color).
-## The menu_*/dialog_*/scrollbar_*/gutter keys recolor the chrome (menu bar +
-## dropdowns, the pop-out Settings/About dialogs, the scrollbar, and the strip
-## the dialog's tabs sit on); by default every theme shares the same neutral
-## chrome. Menu hover/border shades derive from menu_background automatically.
-## highlight marks several things at once (the live pane's ring, slider handles,
-## revert arrows, the default button); focus marks only what the keyboard is on.
-colors:
-	# background: "#000000"  ## Default
-	# foreground: "#88eecc"  ## Default
-	# cursor: "#9649af"  ## Default
-	# highlight: "#c8a05a"  ## Default
-	# focus: "#4086ff"  ## Default
-	# menu_background: "#36363b"  ## Default
-	# menu_foreground: "#f0f0f2"  ## Default
-	# dialog_background: "#20202a"  ## Default
-	# dialog_foreground: "#e2e2ea"  ## Default
-	# gutter: "#16161e"  ## Default
-	# scrollbar_thumb: "#8a8a92"  ## Default
-	# scrollbar_trough: "#2e2e36"  ## Default
+	margin: 8.0
+
+	## Reopen at the last size and zoom. Off uses columns and rows below.
+	# remember_size: true  ## Default
+	# columns: 160
+	# rows: 48
+
+	## Remember a size for each monitor too. Those are saved elsewhere, not in
+	## this file.
+	# remember_per_monitor: true  ## Default
+
+	# remember_maximized: false  ## Default
+
+	## Zooming the font resizes the window to keep the same columns and rows.
+	## Off keeps the window size and changes the grid instead.
+	# resize_on_zoom: false  ## Default
+
+	# hide_single_tab: false  ## Default
+
+	## Menu bar in new windows. The View menu toggles it per window. macOS has
+	## its own, so it ignores this.
+	# menu_bar: true  ## Default
+
+	## New tabs open next to the current one instead of at the end.
+	# new_tab_next_to_current: true  ## Default
+
+	## What each tab says. Macros between percent signs get swapped out.
+	## USER_DEFINED is a name typed on the tab, PROGRAM_DEFINED is the title
+	## the program sets, then SHELL, PROGRAM, LAST_PROGRAM, and
+	## CURRENT_DIRECTORY. "a || b" shows b when a is empty. { } groups stuff
+	## quietly and [ ] groups it with brackets. A group whose macros are all
+	## empty vanishes. title_shows_tab copies it to the title bar when the
+	## program doesn't set one.
+	# tab_text: "%USER_DEFINED% || %PROGRAM_DEFINED% || { %SHELL% {[{ %PROGRAM% || last: %LAST_PROGRAM% }] || -} %CURRENT_DIRECTORY% }"  ## Default
+	# title_shows_tab: true  ## Default
+
+	## Let go of graphics memory while the window sits idle, and grab it back
+	## when it's used. Waits are in minutes, first for a hidden window, second
+	## for an unfocused quiet one.
+	# idle_release: true  ## Default
+	# idle_release_hidden_min: 1  ## Default
+	# idle_release_min: 240  ## Default
+
+	## Draw on the CPU instead of the graphics card. Slower but uses no
+	## graphics memory, and kicks in by itself if the card can't cope. Not on
+	## macOS.
+	# software_rendering: false  ## Default
+
+	## Tab widths, in percent of the window.
+	# tab_regular_width_pct: 10.0  ## Default
+	# tab_max_width_pct: 100.0  ## Default
+
+	## Seconds a tab's flyover stays up. 0 leaves it up.
+	# tab_tip_max_s: 30  ## Default
+
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+## Hyperlinks
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+
+hyperlinks:
+
+	## Clickable http, https, ftp, ftps, sftp, ssh, file, and mailto links.
+	# enabled: true  ## Default
+
+	## Empty uses the desktop's default opener. Example: "firefox --new-tab"
+	# open_command: ""  ## Default
+
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+## Keys
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+
+keys:
+
+	## Each hotkey is one or more combos separated by spaces, like
+	## "Ctrl+Shift+T". Modifiers are Ctrl, Alt, Shift, and Command. Alt is
+	## Option on a Mac, and Command is the Windows or Super key everywhere
+	## else. Spelled-out keys are Plus, Minus, Space, Tab, Enter, Escape,
+	## Backspace, Insert, Delete, Home, End, PageUp, PageDown, Left, Right, Up,
+	## Down, Menu, and F1 to F12. "none" turns a hotkey off. A combo set here
+	## gets taken away from any other hotkey that had it.
+{KEYS}
+	## Mac only. Which Option key acts as Alt, for shell and editor shortcuts
+	## like Option+B: off, left, right, or both. Off types the character Option
+	## makes, like { on a German layout.
+	# option_as_alt: off  ## Default
+
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+## Shell
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+
+## Installed shells get listed here after the first launch. The first
+## enabled one is the default.
+
+shell:
+
+	## Options for every launch, same as on the command line. The real command
+	## line wins. Example: "--new-pane --right --size 35%"
+	# command_line: ""  ## Default
+
+	## Where SilkTerm starts from a menu or shortcut. New tabs and splits
+	## start wherever their pane is.
+	# startup_directory: "{HOME}"  ## Default
+
+	## Add a few lines to PowerShell profiles, so new tabs and splits can open
+	## in the current directory.
+	# integration: true  ## Default
+
+	## Use the x9ps1-git prompt in bash, with git branch and status. It
+	## replaces the prompt from .bashrc.
+	# bash_prompt: false  ## Default
+
+	## TERM for new panes. Empty means xterm-256color, which works everywhere.
+	## alacritty gets curly underlines and such, but a host without its
+	## terminfo will grumble at full-screen programs.
+	# term: ""  ## Default
+
+	# copy_on_select: true  ## Default
+
+	## Start each new tab and split in its own tmux session, so it lives on
+	## after the window closes. Off still leaves "New tab in tmux" on the Tabs
+	## menu. session_name can use %YYYYmmDD%, %HHMMSS%, and %HHMMSSNN%.
+	## on_close is detach, end, or prompt. Needs tmux, so no Windows.
+	tmux:
+		# always_new_session: false  ## Default
+		# session_name: "%YYYYmmDD%-%HHMMSSNN%"  ## Default
+		# on_close: prompt  ## Default
+
+##
+## This config file format is SHCL.
+## "Simple Hierarchical Config Language"
+##    Format   3
+##    Home     https://github.com/yottacore/shcl
+##    Syntax   https://github.com/yottacore/shcl/blob/v3.0.0-beta1/project/spec.md
+##    Legal    SHCL is Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]. License: MIT. No warranty.
+##
 "##;
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 
+	use crate::ui_spec::Key;
+	use knobs::Value;
+
+	// The image named by hand or for the run, or None while it is the default.
+	fn image_of(s: &Settings) -> Option<String> {
+		crate::fields::by_hand(s, Key::BgImage).then(|| s.wallpaper_raw.clone())
+	}
+
+	// The person's own value, whether it shows or is kept for later.
+	fn own_of(s: &Settings, key: Key) -> Option<Value> {
+		s.model.values.own.get(key.name()).cloned()
+	}
+
+	// A change made in Settings, as the dialog makes it.
+	fn change(s: &mut Settings, key: Key, v: impl Into<Value>) {
+		crate::fields::set(s, key, &v.into(), None);
+	}
+
+	// A config text read the way a launch reads it, the model and all.
+	fn read_text(text: &str) -> Settings {
+		let p = std::path::Path::new("test.shcl");
+		settled(resolve(read_raw(text, p).0), &shcl::Document::parse(text))
+	}
+
+	// The About box reports how long the session has been up, and the clock it
+	// reads runs from the mark main sets rather than from whatever first asked.
+	// A second mark must not restart it, or a later caller would reset the
+	// session's own clock.
+	// Test ID: dcwrh
+	#[test]
+	fn a_session_uptime_runs_from_the_launch_mark() {
+		mark_launch();
+		let first = uptime();
+		std::thread::sleep(std::time::Duration::from_millis(20));
+		let later = uptime();
+		assert!(later >= first + std::time::Duration::from_millis(10), "{later:?}");
+		mark_launch();
+		assert!(uptime() >= later, "a second mark restarted the clock");
+	}
+
+	// The default menu background is the inactive tab's own bytes, so a tip
+	// filled with it drew as a tab that grew downward. It has to stand off every
+	// tab color, lighter and warm where the whole strip leans blue, without
+	// turning into a different surface. The lightness floor and ceiling are the
+	// strip's own inactive-to-active step either side, so "slightly lighter"
+	// means what the strip already means by it.
+	// Test ID: dcwfk
+	#[test]
+	fn a_tip_sits_off_every_tab_color() {
+		let l = |c: [u8; 3]| crate::palette::to_oklab(c).0;
+		let warmth = |c: [u8; 3]| crate::palette::to_oklab(c).2;
+		let tip = tip_bg_of(crate::theme::MENU_BG_DEF);
+		let step = l(TAB_ACTIVE) - l(TAB_INACTIVE);
+		for (name, tab) in [("bar", TAB_BAR_BG), ("inactive", TAB_INACTIVE), ("active", TAB_ACTIVE)] {
+			assert!(l(tip) - l(tab) >= step * 0.75, "{name}: the tip is not clearly lighter ({:.4} against a {step:.4} tab step)", l(tip) - l(tab));
+			assert!(warmth(tip) - warmth(tab) >= 0.012, "{name}: the tip is not warmer than the tab");
+		}
+		// The ceiling is against the lightest tab, since that is the one a tip can
+		// stop looking like chrome by outrunning.
+		assert!(l(tip) - l(TAB_ACTIVE) <= step * 2.5, "the tip has stopped being a shade of the chrome ({:.4})", l(tip) - l(TAB_ACTIVE));
+	}
+
+	// The 3 tip colors are the point of the item, so none of them may come
+	// back as the menu color it is derived from.
+	// Test ID: dcwfm
+	#[test]
+	fn a_tip_is_not_painted_in_the_menu_colors() {
+		let (bg, fg) = (crate::theme::MENU_BG_DEF, crate::theme::MENU_FG_DEF);
+		assert_ne!(tip_bg_of(bg), bg);
+		assert_ne!(tip_border_of(bg), bg);
+		assert_ne!(tip_border_of(bg), tip_bg_of(bg));
+		assert_ne!(tip_fg_of(fg), fg);
+	}
+
+	// A custom menu color takes the tip with it, which is why these are shades
+	// rather than 2 more colors on the Themes tab. shade()
+	// picks its direction from luminance, so a light menu color has to send the
+	// tip the other way rather than off the top end.
+	// Test ID: dcwfn
+	#[test]
+	fn a_tip_follows_a_custom_menu_color_either_way() {
+		let l = |c: [u8; 3]| crate::palette::to_oklab(c).0;
+		let dark = [0x18, 0x1a, 0x20];
+		let light = [0xe4, 0xe4, 0xe8];
+		assert!(l(tip_bg_of(dark)) > l(dark), "a dark menu wants a lighter tip");
+		assert!(l(tip_bg_of(light)) < l(light), "a light menu wants a darker tip");
+	}
+
+	// A Windows console writes the terminal's rights into the titles it sends
+	// while elevated, and that copy is taken back off. Nothing on unix writes
+	// one, so taking anything off there could only lose somebody's own text.
+	// The one seam between the rights this process has and the title that says
+	// so. Without it the whole thing can be cut with nothing to notice. It only
+	// bites when the suite is run with those rights, which on unix needs no
+	// privilege at all: `unshare -Ur cargo test`.
+	// Test ID: dcdaq
+	#[test]
+	fn the_title_reports_the_rights_this_process_has() {
+		assert_eq!(rights().say, privilege_word());
+		assert_eq!(rights().decorated, cfg!(windows));
+	}
+
+	// This used to abort before the window existed, which left the file that
+	// caused it unfixable from the terminal it killed. Both halves cut a string
+	// at a fixed byte offset: a hex color, and the `env:` in front of a variable
+	// name.
+	// Test ID: dcbd0
+	#[test]
+	fn a_config_value_cannot_abort_the_launch_on_a_byte_slice() {
+		// 6 bytes, 3 characters
+		assert_eq!(parse_hex("\u{20ac}abc"), None);
+		assert_eq!(parse_hex("#\u{20ac}abc"), None);
+		// still reads the ordinary ones
+		assert_eq!(parse_hex("#ff8000"), Some([255, 128, 0]));
+		assert_eq!(parse_hex("00ff00"), Some([0, 255, 0]));
+		// a name whose fourth byte falls inside a character
+		assert_eq!(strip_env_prefix("ab\u{20ac}cd"), "ab\u{20ac}cd");
+		assert_eq!(strip_env_prefix("env:X"), "X");
+		assert_eq!(strip_env_prefix("ENV:X"), "X", "case");
+	}
+
+	// The case that keeps coming up is a file manager's "Open in terminal": no
+	// tty, but a directory that was very much chosen. Only the 3 directories
+	// a launcher leaves SilkTerm in by default may fall through to the setting.
+	// Test ID: dbsxm
+	#[test]
+	fn an_inherited_directory_is_a_choice_unless_a_launcher_picked_it() {
+		let home = PathBuf::from("/home/u");
+		let exe_dir = PathBuf::from("/opt/silkterm");
+		let choice = |cwd: &str| dir_is_a_choice(Some(&PathBuf::from(cwd)), Some(&home), Some(&exe_dir), &[]);
+		assert!(choice("/home/u/src/thing"), "a file manager's folder");
+		assert!(!choice("/home/u"), "where a desktop icon starts");
+		assert!(!choice("/opt/silkterm"), "double-clicked the executable");
+		assert!(!choice("/"), "a launcher with no directory of its own");
+		assert!(!dir_is_a_choice(None, Some(&home), Some(&exe_dir), &[]), "no directory at all is not a statement either");
+	}
+
+	// An MSIX package's Start-menu entry has no working directory, so Windows
+	// starts it in System32. That's where the launcher left it, rather than a folder
+	// anybody picked, so the first shell goes to the setting instead.
+	// Test ID: dd7yq
+	#[test]
+	fn a_start_in_the_windows_system_folder_is_not_a_choice() {
+		let home = PathBuf::from("C:/Users/u");
+		let exe_dir = PathBuf::from("C:/Program Files/SilkTerm");
+		let system = [PathBuf::from("C:/Windows/System32"), PathBuf::from("C:/Windows/SysWOW64")];
+		let choice = |cwd: &str| dir_is_a_choice(Some(&PathBuf::from(cwd)), Some(&home), Some(&exe_dir), &system);
+		assert!(!choice("C:/Windows/System32"), "a packaged Start-menu launch");
+		assert!(!choice("C:/Windows/SysWOW64"), "the same for a 32-bit build");
+		assert!(choice("C:/Windows"), "the folder above is somewhere a person went");
+		assert!(choice("C:/Windows/System32/drivers"), "and so is one below");
+		assert!(choice("C:/Users/u/src"), "an ordinary folder is still a choice");
+		assert!(system_dirs().is_empty() || cfg!(windows), "the system folder only counts on Windows");
+	}
+
 	// Each platform keeps settings somewhere of its own, and the reason the
 	// decision is a pure function of (layout, environment) is exactly this test:
 	// it pins the macOS answer from a box that has no macOS, and the Windows one
 	// from Linux. Reading cfg! at each use site instead would leave two thirds of
 	// this unrunnable wherever it happens to be run.
+	// Test ID: dbfgz
 	#[test]
 	fn each_platform_keeps_its_config_where_that_platform_keeps_settings() {
 		let home = PathBuf::from("/home/u");
 		let roaming = PathBuf::from("C:/Users/u/AppData/Roaming");
-		assert_eq!(
-			config_base_for(Layout::Windows, None, Some(&home), Some(&roaming)),
-			Some(roaming.clone()),
-			"Windows settings roam, so they belong in Roaming"
-		);
-		assert_eq!(
-			config_base_for(Layout::MacOs, None, Some(&home), None),
-			Some(home.join("Library").join("Application Support"))
-		);
-		assert_eq!(
-			config_base_for(Layout::Xdg, None, Some(&home), None),
-			Some(home.join(".config"))
-		);
-		// and no platform reaches for another's spelling
-		assert_ne!(
-			config_base_for(Layout::Windows, None, Some(&home), Some(&roaming)),
-			Some(home.join(".config"))
-		);
+		assert_eq!(config_base_for(Layout::Windows, None, Some(&home), Some(&roaming)), Some(roaming.clone()), "Windows settings roam, so they belong in Roaming");
+		assert_eq!(config_base_for(Layout::MacOs, None, Some(&home), None), Some(home.join("Library").join("Application Support")));
+		assert_eq!(config_base_for(Layout::Xdg, None, Some(&home), None), Some(home.join(".config")));
+		// and no platform uses another's spelling
+		assert_ne!(config_base_for(Layout::Windows, None, Some(&home), Some(&roaming)), Some(home.join(".config")));
 	}
 
+	// Test ID: dbfh0
 	#[test]
 	fn an_explicit_xdg_config_home_wins_on_every_platform() {
 		// Setting it is a deliberate act, so it outranks the platform default
-		// everywhere - including the two platforms that have a native answer.
+		// everywhere, including the 2 platforms that have a native answer.
 		let xdg = PathBuf::from("/elsewhere/cfg");
 		let home = PathBuf::from("/home/u");
 		let roaming = PathBuf::from("C:/Users/u/AppData/Roaming");
 		for layout in [Layout::Windows, Layout::MacOs, Layout::Xdg] {
-			assert_eq!(
-				config_base_for(layout, Some(&xdg), Some(&home), Some(&roaming)),
-				Some(xdg.clone()),
-				"{layout:?} ignored an explicit XDG_CONFIG_HOME"
-			);
+			assert_eq!(config_base_for(layout, Some(&xdg), Some(&home), Some(&roaming)), Some(xdg.clone()), "{layout:?} ignored an explicit XDG_CONFIG_HOME");
 		}
 	}
 
+	// Test ID: dbfh1
 	#[test]
 	fn a_missing_native_base_falls_back_rather_than_leaving_no_config() {
-		// A stripped environment (a service, a bare shell) can carry no APPDATA.
+		// A stripped environment (a service, a bare shell) can have no APPDATA.
 		// Falling back to ~/.config is better than having nowhere to put settings.
 		let home = PathBuf::from("/home/u");
-		assert_eq!(
-			config_base_for(Layout::Windows, None, Some(&home), None),
-			Some(home.join(".config"))
-		);
-		// With nothing at all to go on there is genuinely no answer.
+		assert_eq!(config_base_for(Layout::Windows, None, Some(&home), None), Some(home.join(".config")));
+		// With nothing at all to go on there is no answer.
 		assert_eq!(config_base_for(Layout::Windows, None, None, None), None);
 		assert_eq!(config_base_for(Layout::Xdg, None, None, None), None);
 	}
 
-	// The whole point of the DIP pass: a chrome measurement is the same physical
-	// size on any display, so it doubles when the scale factor does. The floor is
-	// the other half - a hairline the author asked to be visible must never round
-	// down to nothing, which is what a 1 DIP rule does on a display below 1x.
+	// The DIP pass: a chrome measurement is the same physical size on any display,
+	// so it doubles when the scale factor does. The floor is the other half, since a
+	// hairline meant to be visible must never round down to nothing, which is what a
+	// 1 DIP rule does on a display below 1x.
+	// Test ID: dbenh
 	#[test]
 	fn a_chrome_measurement_scales_and_a_hairline_survives() {
 		assert_eq!(dip(10.0, 1.0), 10.0);
@@ -3735,26 +7604,16 @@ mod tests {
 		// fractional factors round to whole pixels so a rule stays crisp
 		assert_eq!(dip(10.0, 1.5), 15.0);
 		assert_eq!(dip(9.0, 1.25), 11.0);
-		// a hairline holds at every factor, including down-scaled displays
+		// a hairline survives at every factor, including down-scaled displays
 		for scale in [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0] {
-			assert!(
-				dip(PANE_GAP_PX, scale) >= 1.0,
-				"the pane gap vanished at {scale}x"
-			);
+			assert!(dip(PANE_GAP_PX, scale) >= 1.0, "the pane gap vanished at {scale}x");
 		}
-		// zero stays zero - the floor is for measurements meant to be seen
+		// zero stays zero, since the floor is for measurements meant to be seen
 		assert_eq!(dip(0.0, 2.0), 0.0);
 	}
 
 	fn shell_entry(slug: &str, command: &str) -> crate::shells::ShellEntry {
-		crate::shells::ShellEntry {
-			slug: slug.into(),
-			title: slug.into(),
-			command: command.into(),
-			active: true,
-			comment: String::new(),
-			last_seen: String::new(),
-		}
+		crate::shells::ShellEntry { slug: slug.into(), title: slug.into(), command: command.into(), active: true, comment: String::new(), last_seen: String::new() }
 	}
 
 	fn doc_with_shells(list: &[crate::shells::ShellEntry]) -> shcl::Document {
@@ -3763,16 +7622,35 @@ mod tests {
 		doc
 	}
 
-	// File order IS the list's order - it decides what the menu offers first and
-	// therefore which shell is the default - and a reorder changes no entry, so
-	// the per-entry write path would have written nothing at all and lost it.
+	// The scan stamps the date daily, so this fires on its own on the first launch
+	// of each day. It used to drop the entry's subtree and put it back at the end
+	// of the block, which loses its comments and moves it, and the first entry in
+	// the file is the default shell.
+	// Test ID: dcbd5
+	#[test]
+	fn a_daily_stamp_leaves_a_shell_where_it_is() {
+		let text = "shells:\n\n\t## the one I use\n\tbash:\n\t\ttitle: \"bash\"\n\t\tcommand: \"/bin/bash\"\n\t\tactive: true\n\n\tzsh:\n\t\ttitle: \"zsh\"\n\t\tcommand: \"/bin/zsh\"\n\t\tactive: true\n";
+		let mut doc = shcl::Document::parse(text);
+		let stored = read_shells(&doc);
+		assert_eq!(stored.len(), 2);
+		let mut now = stored.clone();
+		now[0].last_seen = "2026-09-08".to_string();
+
+		write_shells(&mut doc, &stored, &now);
+
+		assert_eq!(doc.children("shells"), vec!["bash", "zsh"], "the default shell is the first entry, so it may not move");
+		let out = doc.to_canonical();
+		assert!(out.contains("## the one I use"), "its comment survives: {out:?}");
+		assert!(out.contains("2026-09-08"), "the stamp went in: {out:?}");
+	}
+
+	// File order is the list's order, which decides what the menu offers first and
+	// so which shell is the default. A reorder changes no entry, so the per-entry
+	// write path would have written nothing at all and lost it.
+	// Test ID: dbfrp
 	#[test]
 	fn a_reorder_is_written_even_though_no_entry_changed() {
-		let list = vec![
-			shell_entry("bash", "/bin/bash"),
-			shell_entry("fish", "/usr/bin/fish"),
-			shell_entry("zsh", "/bin/zsh"),
-		];
+		let list = vec![shell_entry("bash", "/bin/bash"), shell_entry("fish", "/usr/bin/fish"), shell_entry("zsh", "/bin/zsh")];
 		let mut doc = doc_with_shells(&list);
 		assert_eq!(doc.children("shells"), vec!["bash", "fish", "zsh"]);
 		let moved = vec![list[2].clone(), list[0].clone(), list[1].clone()];
@@ -3780,19 +7658,181 @@ mod tests {
 		assert_eq!(doc.children("shells"), vec!["zsh", "bash", "fish"]);
 		// and every entry survived the rewrite whole
 		let back = read_shells(&doc);
-		assert_eq!(
-			back.iter().map(|e| e.command.as_str()).collect::<Vec<_>>(),
-			vec!["/bin/zsh", "/bin/bash", "/usr/bin/fish"]
-		);
+		assert_eq!(back.iter().map(|e| e.command.as_str()).collect::<Vec<_>>(), vec!["/bin/zsh", "/bin/bash", "/usr/bin/fish"]);
 	}
 
+	// A first launch writes the scan's list into a brand-new file, and the file's
+	// order is the menu's and names the default shell.
+	// Test ID: dd5fm
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_fresh_file_keeps_the_order_the_scan_found() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_freshshells_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, default_config()).unwrap();
+		set_config_override(path.clone());
+
+		let orig = load();
+		assert!(orig.shells.is_empty(), "a fresh file has no list yet");
+		let found = crate::shells::detect_every_known();
+		let mut new = orig.clone();
+		new.shells = crate::shells::merge(&orig.shells, &found);
+		assert!(persist(&orig, &new));
+		let titles = |list: &[crate::shells::ShellEntry]| -> Vec<String> { list.iter().map(|e| e.title.clone()).collect() };
+		assert_eq!(titles(&load().shells), found.iter().map(|f| f.title.clone()).collect::<Vec<_>>());
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A test run with no override reads the box's own file and must leave it,
+	// and its folder, exactly as they were: no launch refresh, conversion, backup
+	// or rewrite, no save, no rating, no reset. A file in a folder of its own
+	// stands in for the box's, so the real one is never at risk here.
+	// Test ID: ddgbt
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_test_run_never_writes_the_boxs_own_config() {
+		struct PutBack(Option<PathBuf>);
+		impl Drop for PutBack {
+			fn drop(&mut self) {
+				*crate::locks::lock(test_native_config()) = None;
+				*crate::locks::lock(test_override()) = self.0.take();
+			}
+		}
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let _put_back = PutBack(crate::locks::lock(test_override()).take());
+		let stale = default_config().replace("\t# idle_release: true  ## Default", "\t# idle_release: false  ## Default");
+		assert_ne!(stale, default_config(), "the template moved");
+		let (first, rest) = default_config().split_once('\n').unwrap();
+		let mut garbled = format!("{first}\n").into_bytes();
+		garbled.extend(b"# caf\xe9\n");
+		garbled.extend(rest.as_bytes());
+		let cases: [(&str, Option<Vec<u8>>); 4] = [("stale commented default", Some(stale.into_bytes())), ("shcl 2.x", Some(b"font:\n\tsize: 12\n".to_vec())), ("not UTF-8", Some(garbled)), ("no file", None)];
+		for (n, (what, body)) in cases.into_iter().enumerate() {
+			let home = crate::testdir::run_dir().join(format!("silkterm_ownconfig_{}_{n}", std::process::id()));
+			let _ = std::fs::remove_dir_all(&home);
+			std::fs::create_dir_all(&home).unwrap();
+			let dir = home.join(APP_DIR);
+			let path = dir.join("config.shcl");
+			if let Some(body) = &body {
+				std::fs::create_dir_all(&dir).unwrap();
+				std::fs::write(&path, body).unwrap();
+			}
+			*crate::locks::lock(test_native_config()) = Some(path.clone());
+			assert_eq!(config_path().as_ref(), Some(&path), "{what}");
+
+			let loaded = load();
+			if let Some(body) = &body {
+				assert!(std::fs::read(&path).unwrap() == *body, "{what}: the launch wrote it");
+			}
+			let mut moved = loaded.clone();
+			change(&mut moved, Key::FontSize, Value::Float(f64::from(loaded.font_size + 1.0)));
+			let _ = persist(&loaded, &moved);
+			let _ = keep_rating(RatingLines { check_next_run: Some(true) });
+			disable_keys(&["font.size"]);
+			let _ = reset_config();
+
+			let seen: Vec<String> = std::fs::read_dir(&dir).map(|list| list.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
+			match &body {
+				Some(body) => {
+					assert_eq!(seen, ["config.shcl"], "{what}");
+					assert!(std::fs::read(&path).unwrap() == *body, "{what}: file changed");
+				}
+				None => assert!(!dir.exists(), "{what}: {seen:?}"),
+			}
+			assert!(!may_write(&dir.join(".wallpaper-history")), "{what}");
+			*crate::locks::lock(test_native_config()) = None;
+			let _ = std::fs::remove_dir_all(&home);
+		}
+		// asked only, never written
+		if let Some(real) = env_config_path() {
+			assert!(!may_write(&real));
+			assert!(!may_write(&real.with_file_name(".wallpaper-history")));
+		}
+		if let Some(real) = cache_dir_for(host_layout(), false, env_path("XDG_CACHE_HOME").as_deref(), env_path("XDG_CONFIG_HOME").is_some(), home_dir().as_deref(), env_path("LOCALAPPDATA").as_deref(), None) {
+			assert!(!may_write(&real.join("wallpaper").join("x.wpc")));
+		}
+	}
+
+	// There are 2 windows, and the second one loaded before the first one's scan
+	// saved a new find. Its own scan finds the same program and saves. It used to
+	// take out only the entries it had loaded and rewrite them, so the find it
+	// never loaded stayed above them all and a REPL became the default shell.
+	// Test ID: dd5fn
+	#[test]
+	fn a_stale_window_cannot_put_another_windows_find_on_top() {
+		let loaded = vec![shell_entry("bash", "/bin/bash"), shell_entry("nushell", "/bin/nu"), shell_entry("zsh", "/bin/zsh")];
+		let mut on_disk = loaded.clone();
+		on_disk.push(shell_entry("node_js_2", "/nvm/bin/node"));
+		let mut doc = parse_kept(&saved_text(&doc_with_shells(&on_disk)));
+
+		write_shells(&mut doc, &loaded, &on_disk);
+
+		assert_eq!(doc.children("shells"), vec!["bash", "nushell", "zsh", "node_js_2"]);
+	}
+
+	// The same window with an older list, doing something else to it. Every save
+	// keeps what the other window did, unless this window changed that entry.
+	// Test ID: dd5fp
+	#[test]
+	fn a_stale_window_keeps_what_another_window_saved() {
+		let loaded = vec![shell_entry("bash", "/bin/bash"), shell_entry("nushell", "/bin/nu"), shell_entry("python_3", "/bin/python3"), shell_entry("zsh", "/bin/zsh")];
+		let slugs = |doc: &shcl::Document| doc.children("shells");
+
+		// another window switched Zsh off and added Fish; this one switches
+		// Python off
+		let mut theirs = loaded.clone();
+		theirs[3].active = false;
+		theirs.push(shell_entry("fish", "/bin/fish"));
+		let mut doc = doc_with_shells(&theirs);
+		let mut mine = loaded.clone();
+		mine[2].active = false;
+		write_shells(&mut doc, &loaded, &mine);
+		assert_eq!(slugs(&doc), vec!["bash", "nushell", "python_3", "zsh", "fish"]);
+		let back = read_shells(&doc);
+		assert!(!back[2].active, "this window's change went in");
+		assert!(!back[3].active, "the other window's change stayed");
+
+		// another window removed Nushell; this one stamps the date on everything
+		let mut theirs = loaded.clone();
+		theirs.remove(1);
+		let mut doc = doc_with_shells(&theirs);
+		let mut mine = loaded.clone();
+		for entry in &mut mine {
+			entry.last_seen = "2026-09-27".into();
+		}
+		write_shells(&mut doc, &loaded, &mine);
+		assert_eq!(slugs(&doc), vec!["bash", "python_3", "zsh"], "it stays removed");
+
+		// another window moved Zsh to the top; this one only switches Python off
+		let theirs = vec![loaded[3].clone(), loaded[0].clone(), loaded[1].clone(), loaded[2].clone()];
+		let mut doc = doc_with_shells(&theirs);
+		let mut mine = loaded.clone();
+		mine[2].active = false;
+		write_shells(&mut doc, &loaded, &mine);
+		assert_eq!(slugs(&doc), vec!["zsh", "bash", "nushell", "python_3"]);
+
+		// but a move made in this window is written, with the other window's
+		// new entry after it
+		let mut theirs = loaded.clone();
+		theirs.push(shell_entry("fish", "/bin/fish"));
+		let mut doc = doc_with_shells(&theirs);
+		let mine = vec![loaded[1].clone(), loaded[0].clone(), loaded[2].clone(), loaded[3].clone()];
+		write_shells(&mut doc, &loaded, &mine);
+		assert_eq!(slugs(&doc), vec!["nushell", "bash", "python_3", "zsh", "fish"]);
+	}
+
+	// Test ID: dbfrq
 	#[test]
 	fn the_date_a_shell_was_last_seen_round_trips() {
 		let mut entry = shell_entry("bash", "/bin/bash");
 		entry.last_seen = "2026-08-19".into();
 		let doc = doc_with_shells(std::slice::from_ref(&entry));
 		assert_eq!(read_shells(&doc)[0].last_seen, "2026-08-19");
-		// a value that is not a date is not written, and reads as never seen
+		// a value that isn't a date isn't written, and reads as never seen
 		let mut junk = shell_entry("fish", "/usr/bin/fish");
 		junk.last_seen = "whenever".into();
 		let doc = doc_with_shells(std::slice::from_ref(&junk));
@@ -3801,19 +7841,14 @@ mod tests {
 
 	// The list names the default now (its top active entry), so an old
 	// `shell.default` has to become the top of the list rather than be dropped.
+	// Test ID: dbfrr
 	#[test]
 	fn an_old_default_shell_becomes_the_top_of_the_list() {
-		let list = vec![
-			shell_entry("bash", "/bin/bash"),
-			shell_entry("fish", "/usr/bin/fish"),
-		];
-		// one the list already carries simply moves
+		let list = vec![shell_entry("bash", "/bin/bash"), shell_entry("fish", "/usr/bin/fish")];
+		// one the list already has moves
 		let moved = adopt_default_into(&list, "/usr/bin/fish");
-		assert_eq!(
-			moved.iter().map(|e| e.slug.as_str()).collect::<Vec<_>>(),
-			vec!["fish", "bash"]
-		);
-		// one it does not know is still the shell they chose, so it is added there
+		assert_eq!(moved.iter().map(|e| e.slug.as_str()).collect::<Vec<_>>(), vec!["fish", "bash"]);
+		// one it doesn't know is still the shell they chose, so it is added there
 		let added = adopt_default_into(&list, "/opt/ion --login");
 		assert_eq!(added.len(), 3);
 		assert_eq!(added[0].command, "/opt/ion --login");
@@ -3821,81 +7856,1106 @@ mod tests {
 		assert_eq!(added[1].slug, "bash", "and nothing else moved");
 	}
 
-	// ':' must NOT be a word separator, else a double-click on C:\... drops the
-	// drive prefix (the alacritty default splits on ':'). Regression guard.
+	// The migration drops `shell.default` only once its adoption into the list is
+	// saved. A line shcl can't read is written back as it was, so the save goes
+	// through beside one. Where the save can't keep the lines it would delete the
+	// line instead, so it is refused and the choice has to wait.
+	// Test ID: dcnw3
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_old_default_shell_waits_for_a_save_that_can_happen() {
+		let _guard = super::test_config_lock();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_default_shell_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let mut doc = shcl::Document::parse(default_config());
+		write_shells(&mut doc, &[], &[shell_entry("bash", "/bin/bash"), shell_entry("zsh", "/bin/zsh")]);
+		doc.put_string("shell.default", "/bin/zsh");
+		let clean = doc.to_canonical();
+		let order = |text: &str| -> Vec<String> { read_shells(&shcl::Document::parse(text)).into_iter().map(|e| e.slug).collect() };
+		let default_of = |text: &str| shcl::Document::parse(text).get_string("shell.default").ok();
+
+		std::fs::write(&path, format!("{clean}mm:\n\t\tnn: 1\n\too: 2\n")).unwrap();
+		adopt_default_shell(&mut LaunchFile::read(&path));
+		migrate_config(&mut LaunchFile::read(&path));
+		let beside = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(default_of(&beside), None, "{beside}");
+		assert_eq!(order(&beside), ["zsh", "bash"]);
+		assert!(beside.contains("mm:\n\t\tnn: 1\n\too: 2\n"), "{beside}");
+
+		// a second shell block sends the save back to the canonical form
+		std::fs::write(&path, format!("{clean}shell:\n\t\tnn: 1\n\too: 2\n")).unwrap();
+		adopt_default_shell(&mut LaunchFile::read(&path));
+		migrate_config(&mut LaunchFile::read(&path));
+		let refused = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(default_of(&refused).as_deref(), Some("/bin/zsh"), "{refused}");
+		assert_eq!(order(&refused), ["bash", "zsh"]);
+
+		std::fs::write(&path, &clean).unwrap();
+		adopt_default_shell(&mut LaunchFile::read(&path));
+		migrate_config(&mut LaunchFile::read(&path));
+		let saved = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(default_of(&saved), None, "{saved}");
+		assert_eq!(order(&saved), ["zsh", "bash"]);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// ':' must not be a word separator, else a double-click on C:\... drops the
+	// drive prefix (the alacritty default splits on ':'). Regression guard.
+	// Test ID: da493
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn default_word_separators_keep_drive_colon() {
 		let d = Settings::default();
-		assert!(
-			!d.word_separators.contains(':'),
-			"':' should stay a word char so drive paths select whole"
-		);
+		assert!(!d.word_separators.contains(':'), "':' should stay a word char so drive paths select whole");
 		// still a real separator set (space + comma remain delimiters)
 		assert!(d.word_separators.contains(' '));
 		assert!(d.word_separators.contains(','));
 	}
 
+	// Word separators are read from the file, not only defaulted.
+	// Test ID: dd5mq
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn word_separators_come_from_the_file() {
+		let s = resolve(read_raw("selection:\n\tword_separators: \" ,;\"\n", std::path::Path::new("test.shcl")).0);
+		assert_eq!(s.word_separators, " ,;");
+	}
+
+	// Pairs are 2 characters each, in precedence order; a lone character
+	// isn't a pair and is dropped.
+	// Test ID: dd5mr
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn selection_pairs_parse_in_order_and_come_from_the_file() {
+		assert_eq!(parse_pairs(DEFAULT_SELECTION_PAIRS), [('`', '`'), ('"', '"'), ('\'', '\''), ('{', '}'), ('(', ')'), ('[', ']'), ('<', '>'),]);
+		assert_eq!(parse_pairs("() ab x"), [('(', ')'), ('a', 'b')]);
+		let s = resolve(read_raw("selection:\n\tpairs: \"()\"\n", std::path::Path::new("test.shcl")).0);
+		assert_eq!(s.selection_pairs, "()");
+	}
+
 	// A bare-decimal float (`.1`, missing leading zero) must not stop persist from
 	// saving. Regressed once under TOML, where persist strict-parsed the raw file,
 	// bailed on `.1`, and silently dropped every dialog change (relaunch reverted).
-	// `.1` is simply a valid float now, and the writer never rewrites a scalar, so
+	// `.1` is a valid float now, and the writer never rewrites a scalar, so
 	// the value is also left exactly as the user typed it.
+	// A profile's values ride on top of the live settings, and a write that
+	// starts from a live copy (the minimap toggle, the remembered size) must
+	// not write them into the file, or Custom would have nothing to put back.
+	// Test ID: dc57n
 	#[test]
-	fn persist_survives_bare_decimal_float() {
-		// Memoize settings() BEFORE installing the override: a test on another
-		// thread initializing settings() after the override would load() - an
-		// in-place migrate/backfill REWRITE of our temp file - racing our own
-		// read below (parallel-suite flake: truncated read -> defaults).
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_file_keeps_the_users_values_under_a_profile() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_cfgsave_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgprof_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "scroll:\n\tease_in_ms: 300.0\nperformance:\n\tprofile: \"low\"\n").unwrap();
+		set_config_override(path.clone());
+
+		let live = load();
+		assert_eq!(live.performance_profile, crate::profile::Profile::Low);
+		assert!(!live.text_scrim, "Low drops the halo");
+		assert_ne!(live.scroll_ease_in_ms, 300.0, "and shows its own value");
+		let own = |s: &Settings, key: Key| s.model.values.own.get(key.name()).cloned();
+		assert_eq!(own(&live, Key::ScrollEaseIn), Some(Value::Float(300.0)), "the file is read as written");
+
+		let mut new = live.clone();
+		change(&mut new, Key::Minimap, Value::Bool(!live.minimap));
+		assert!(persist(&live, &new));
+		let back = load();
+		assert_eq!(back.minimap, new.minimap, "the change itself is written");
+		assert_eq!(own(&back, Key::ScrollEaseIn), Some(Value::Float(300.0)), "the profile's value was not");
+		assert_eq!(own(&back, Key::TextScrim), None, "nor its halo switch");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A text color the wallpaper picked is session state, the same as a display
+	// step. Written down, every rotation would rewrite the file, and the colors
+	// would outlive the picture they came from.
+	// Test ID: dcww3
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_text_color_taken_from_the_wallpaper_never_reaches_the_file() {
+		let mine = ([0x12u8, 0x34, 0x56], [0x65u8, 0x43, 0x21]);
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgwp_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, format!("theme: custom\ncolors:\n\tfrom_wallpaper: true\n\tforeground: \"{}\"\n\tcursor: \"{}\"\n", format_hex(mine.0), format_hex(mine.1))).unwrap();
+		set_config_override(path.clone());
+
+		let mut stored = load();
+		assert!(stored.colors_from_wallpaper, "the file is read as written");
+		assert!(stored.wallpaper_enabled);
+		stored.wallpaper_summary = Some(crate::autotheme::Summary { luma_hi: 0.3, luma_lo: 0.02, luma_mean: 0.13, spread: [[0.13; 3]; crate::autotheme::SPREAD], alpha: 1.0, hue: 250.0, chroma: 0.08, opacity: 0.35 });
+		let mut live = stored.clone();
+		crate::fields::fill(&mut live, None);
+		assert_ne!(live.fg, mine.0, "the derived text colour is what is drawn");
+
+		// a save that changes something else takes nothing of the derived pair
+		let mut new = live.clone();
+		change(&mut new, Key::Minimap, Value::Bool(!live.minimap));
+		assert!(persist(&live, &new));
+		let back = load();
+		assert_eq!(back.model.values.own.get(Key::ColFg.name()), Some(&Value::Text(format_hex(mine.0))), "the file's own colour stays");
+
+		// a color changed by hand turns the switch off, and is saved
+		let mut edited = live.clone();
+		change(&mut edited, Key::ColFg, Value::Text("#0a0b0c".into()));
+		assert!(!edited.colors_from_wallpaper);
+		assert!(persist(&live, &edited));
+		let back = load();
+		assert!(!back.colors_from_wallpaper);
+		assert_eq!(back.fg, [0x0a, 0x0b, 0x0c]);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// An old file with "Text colors from wallpaper" off keeps
+	// the theme's text colors with a picture up. The switch is stored, so no
+	// color line has to be written for it, and one written by hand stays.
+	// Test ID: ddwm5
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_with_the_wallpaper_colors_off_keeps_the_theme_s() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgwpoff_{}", std::process::id()));
+		let pal = crate::theme::resolve("Matrix", crate::theme::Mode::Dark, true);
+		let mine = ([0x12u8, 0x34, 0x56], [0x65u8, 0x43, 0x21]);
+		let plain = "theme: \"Matrix\"\ntheme_mode: dark\ncolors:\n\tfrom_wallpaper: false\n";
+		// a launch before 10-09 left the machine test's lines, which is what
+		// marks an old file
+		let rated = format!("performance:\n\trated_hardware: \"cfgwpoff\"\n{plain}");
+		let own = format!("{rated}\tforeground: \"{}\"\n\tcursor: \"{}\"\n", format_hex(mine.0), format_hex(mine.1));
+		let lines = |text: &str| {
+			let doc = shcl::Document::parse(text);
+			["colors.foreground", "colors.cursor", "colors.from_wallpaper"].map(|p| doc.get_string(p).ok())
+		};
+		let theme_s = (pal.fg, pal.cursor);
+		for (file, want) in [(plain.to_string(), theme_s), (rated, theme_s), (own, mine)] {
+			let _ = std::fs::remove_dir_all(&dir);
+			std::fs::create_dir_all(&dir).unwrap();
+			let path = dir.join("config.shcl");
+			std::fs::write(&path, &file).unwrap();
+			set_config_override(path.clone());
+
+			let mut live = load();
+			let once = std::fs::read_to_string(&path).unwrap();
+			assert!(!live.colors_from_wallpaper, "the switch reads off");
+			live.wallpaper_summary = Some(crate::autotheme::Summary { luma_hi: 0.3, luma_lo: 0.02, luma_mean: 0.13, spread: [[0.13; 3]; crate::autotheme::SPREAD], alpha: 1.0, hue: 250.0, chroma: 0.08, opacity: 0.35 });
+			crate::fields::fill(&mut live, None);
+			assert_eq!((live.fg, live.cursor), want, "{file}");
+			assert!(!live.colors_from_wallpaper);
+			assert_eq!(lines(&once), lines(&file), "the launch left them: {once}");
+
+			// a second launch writes nothing more
+			let again = load();
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), once);
+			assert!(!again.colors_from_wallpaper);
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A step the display watch took lasts the session. Written down, one stall
+	// became every later launch's profile, with no way back while automatic was
+	// on. That took a desktop to Standard terminal and its wallpaper with it.
+	// Test ID: dcf3s
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_session_step_down_never_reaches_the_file() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgstep_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "performance:\n\tautomatic: true\n\tprofile: \"max\"\n").unwrap();
+		set_config_override(path.clone());
+
+		let live = load();
+		let before = std::fs::read_to_string(&path).unwrap();
+		let mut stepped = live.clone();
+		stepped.stepped_profile = Some(crate::profile::Profile::Low);
+		crate::fields::fill(&mut stepped, None);
+		assert!(!stepped.text_scrim, "the step is in force live");
+		assert!(persist(&live, &stepped));
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), before, "nothing about the step is written");
+
+		let mut changed = stepped.clone();
+		change(&mut changed, Key::Minimap, Value::Bool(!stepped.minimap));
+		assert!(persist(&stepped, &changed));
+		let after = std::fs::read_to_string(&path).unwrap();
+		let new_lines: Vec<&str> = after.lines().filter(|l| !before.contains(l)).collect();
+		assert!(!new_lines.is_empty(), "the unrelated change is written");
+		assert!(new_lines.iter().all(|l| !l.contains("profile")), "and nothing about the profile: {new_lines:?}");
+		let back = load();
+		assert_eq!(back.minimap, changed.minimap);
+		assert_eq!(back.performance_profile, crate::profile::Profile::Max);
+		assert!(back.stepped_profile.is_none());
+		assert!(back.wallpaper_enabled && back.text_scrim);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// "Reload config" re-reads the file, which never has the session's own
+	// state, so a reload must not lift a remote profile or a watch step.
+	// Test ID: dcf3t
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_reload_keeps_what_the_file_never_held() {
+		let mut live = Settings { stepped_profile: Some(crate::profile::Profile::High), ..Settings::default() };
+		crate::profile::set_remote(&mut live, true);
+		let mut reloaded = Settings::default();
+		keep_session(&live, &mut reloaded, false);
+		assert!(crate::profile::remote(&reloaded));
+		assert_eq!(reloaded.stepped_profile, Some(crate::profile::Profile::High));
+	}
+
+	// An Apply from a dialog opened earlier keeps a remote switch or a watch step
+	// taken since, and the dialog's own pick, revert or automatic switch still
+	// lifts them.
+	// Test ID: dcf60
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_apply_keeps_the_session_state_the_dialog_did_not_touch() {
+		use crate::profile::Profile;
+		let apply = |live: &Settings, opened: &Settings, edited: &Settings| {
+			let mut out = edited.clone();
+			keep_session_on_apply(live, opened, &mut out);
+			(out.stepped_profile, crate::profile::remote(&out))
+		};
+		let base = Settings { tested_profile: Some(Profile::Max), ..Settings::default() };
+		let stepped = Settings { stepped_profile: Some(Profile::Low), ..base.clone() };
+		let mut remote = base.clone();
+		crate::profile::set_remote(&mut remote, true);
+		let mut other_row = base.clone();
+		change(&mut other_row, Key::Minimap, Value::Bool(!base.minimap));
+		let mut picked = base.clone();
+		change(&mut picked, Key::PerfProfile, Value::Text("high".into()));
+		let mut manual = base.clone();
+		change(&mut manual, Key::PerfAuto, Value::Bool(false));
+
+		// taken after the dialog opened: an Apply of an unrelated row keeps it
+		assert_eq!(apply(&stepped, &base, &base), (Some(Profile::Low), false));
+		assert_eq!(apply(&stepped, &base, &other_row), (Some(Profile::Low), false));
+		assert_eq!(apply(&remote, &base, &base), (None, true));
+		assert_eq!(apply(&remote, &base, &other_row), (None, true));
+		// switched off since: it stays off
+		assert_eq!(apply(&base, &remote, &remote), (None, false));
+		assert_eq!(apply(&base, &stepped, &stepped), (None, false));
+		// the dialog lifted what it opened with (a pick, a revert, the switch)
+		assert_eq!(apply(&stepped, &stepped, &base), (None, false));
+		assert_eq!(apply(&remote, &remote, &base), (None, false));
+		// a pick or the automatic switch over a step the dialog never saw
+		assert_eq!(apply(&stepped, &base, &picked), (None, false));
+		assert_eq!(apply(&stepped, &base, &manual), (None, false));
+		// a pick lowers a Remote the dialog never saw; the switch doesn't
+		assert_eq!(apply(&remote, &base, &picked), (None, false));
+		assert_eq!(apply(&remote, &base, &manual), (None, true));
+		// Remote picked in the dialog
+		assert_eq!(apply(&base, &base, &remote), (None, true));
+		// and over a step taken since the dialog opened, which the pick lifts
+		assert_eq!(apply(&stepped, &base, &remote), (None, true));
+	}
+
+	// `silkterm --wallpaper PATH` set the image and left the switch off, so it
+	// said ok and showed nothing. Naming one turns the switch on, the way
+	// `--wallpaper-file` does at launch, and a profile that turns the wallpaper
+	// off still wins for both.
+	// Test ID: dcq7g
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn naming_a_wallpaper_turns_it_on_unless_the_profile_says_off() {
+		let picked = |profile: &str| crate::fields::owning(Settings::default(), &[(Key::PerfAuto, Value::Bool(false)), (Key::PerfProfile, Value::Text(profile.into())), (Key::BgEnabled, Value::Bool(false))]);
+		let off = picked("custom");
+		assert!(!off.wallpaper_enabled);
+		let mut named = off.clone();
+		name_wallpaper(&mut named, Some("/x.png".into()));
+		assert!(named.wallpaper_enabled);
+		assert_eq!(image_of(&named).as_deref().unwrap_or_default(), "/x.png");
+		assert!(crate::fields::lines_of(&named).iter().all(|(p, _)| p != "wallpaper.image"), "held for the run, never saved");
+		// a clear names nothing and leaves the switch alone
+		let mut cleared = off.clone();
+		name_wallpaper(&mut cleared, None);
+		assert!(!cleared.wallpaper_enabled && image_of(&cleared).is_none());
+		let mut flat = picked("standard");
+		name_wallpaper(&mut flat, Some("/x.png".into()));
+		assert!(!flat.wallpaper_enabled, "the Standard profile keeps it off");
+	}
+
+	// A wallpaper given on the command line lasts the session: a reload keeps it
+	// over the file, and an Apply keeps it unless the dialog picked another.
+	// Test ID: dcnvv
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_command_line_wallpaper_outlasts_a_reload_and_an_apply() {
+		let with = |raw: &str| {
+			let mut s = if raw.is_empty() { Settings::default() } else { crate::fields::owning(Settings::default(), &[(Key::BgImage, Value::Text(raw.into()))]) };
+			s.wallpaper = (!raw.is_empty()).then(|| std::path::PathBuf::from(raw));
+			s
+		};
+		let mut live = Settings::default();
+		name_wallpaper(&mut live, Some("/cli.png".into()));
+		let mut reloaded = with("/file.png");
+		keep_session(&live, &mut reloaded, true);
+		assert_eq!(reloaded.wallpaper, live.wallpaper);
+		assert_eq!(image_of(&reloaded).as_deref(), Some("/cli.png"));
+		let mut reloaded = with("/file.png");
+		keep_session(&live, &mut reloaded, false);
+		assert_eq!(image_of(&reloaded).as_deref().unwrap_or_default(), "/file.png", "no lock, the file wins");
+		// a file with the wallpaper off doesn't hide one the session named
+		let custom_off = |s: Settings| crate::fields::owning(s, &[(Key::PerfAuto, Value::Bool(false)), (Key::PerfProfile, Value::Text("custom".into())), (Key::BgEnabled, Value::Bool(false))]);
+		let mut named = custom_off(Settings::default());
+		name_wallpaper(&mut named, Some("/cli.png".into()));
+		let mut reloaded = custom_off(with("/file.png"));
+		keep_session(&named, &mut reloaded, true);
+		assert!(reloaded.wallpaper_enabled);
+		// a clear on the command line hands the file's back
+		let mut cleared = live.clone();
+		name_wallpaper(&mut cleared, None);
+		let mut reloaded = with("/file.png");
+		keep_session(&cleared, &mut reloaded, true);
+		assert_eq!(image_of(&reloaded).as_deref(), Some("/file.png"));
+
+		// a dialog opened before the lock, applied without touching the wallpaper
+		let (mut opened, mut edited) = (with("/old.png"), with("/old.png"));
+		keep_wallpaper_on_apply(&live, true, &mut opened, &mut edited);
+		assert_eq!(edited.wallpaper, live.wallpaper);
+		assert_eq!((&opened.wallpaper_raw, &opened.wallpaper), (&edited.wallpaper_raw, &edited.wallpaper), "both sides match, so the save writes nothing about it");
+		// the dialog picked one itself
+		let (mut opened, mut edited) = (with("/old.png"), with("/picked.png"));
+		keep_wallpaper_on_apply(&live, true, &mut opened, &mut edited);
+		assert_eq!(image_of(&edited).as_deref().unwrap_or_default(), "/picked.png");
+		assert_eq!(image_of(&opened).as_deref().unwrap_or_default(), "/old.png");
+		// no lock
+		let (mut opened, mut edited) = (with("/old.png"), with("/old.png"));
+		keep_wallpaper_on_apply(&live, false, &mut opened, &mut edited);
+		assert_eq!(image_of(&edited).as_deref().unwrap_or_default(), "/old.png");
+	}
+
+	// Every launch-time rewrite used to truncate the file before writing it, so a
+	// crash or a full disk during one left nothing where the config was.
+	// Test ID: dcbeh
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
+	fn a_launch_time_rewrite_never_truncates_the_config() {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgatomic_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).expect("temp dir");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "font.size: 12.0\n").expect("write");
+
+		write_config_atomic(&path, "font.size: 13.0\n").expect("rewrite");
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), "font.size: 13.0\n");
+		assert!(!dir.join("config.shcl.new").exists(), "no half-written file left beside it");
+
+		// nothing in the module writes the config any other way
+		let body = include_str!("config.rs").split("\nmod tests {").next().expect("the file above its own tests");
+		let raw: Vec<&str> = body.lines().filter(|l| l.contains("fs::write(") && l.contains("path")).map(str::trim).collect();
+		assert!(raw.is_empty(), "these truncate the config before writing it: {raw:?}");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// On Windows nothing said a file with a line it can't read could no longer
+	// be saved. Only the window can say so, so a refused write leaves word of it.
+	// Test ID: dct5k
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't sync a folder")]
+	fn a_refused_save_leaves_word_for_the_window() {
+		let _guard = super::test_config_lock();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_refused_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let doc = shcl::Document::parse("window:\n\t\tmargin: 4\n\tstray: 1\n");
+		assert_eq!(doc.lost_count(), 1);
+		// whatever another test refused before this one
+		let _ = take_refusal();
+		assert!(!write_doc(&path, &doc));
+		assert_eq!(take_refusal(), Some(Refusal { path: path.clone(), lines: vec![3], lost: 1 }));
+		assert_eq!(take_refusal(), None, "taken once");
+		assert!(write_doc(&path, &shcl::Document::parse("font:\n\tsize: 12.0\n")));
+		assert_eq!(take_refusal(), None, "a save that went through");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A failed save used to present to the dialog as a clean one, so it closed as
+	// if it had written. shcl refusing a lossy round trip is the case that makes
+	// this permanent.
+	// Test ID: dcbd1
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't sync a folder")]
+	fn a_save_that_failed_is_not_reported_as_a_save() {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgfail_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let doc = shcl::Document::parse("font.size: 12.0\n");
+		// a directory that isn't there is the cheapest unwritable path
+		let missing = dir.join("no-such-dir").join("config.shcl");
+		assert!(!write_doc(&missing, &doc), "an unwritable path is not a save");
+		assert!(write_doc(&dir.join("config.shcl"), &doc), "and a real one is");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Stands in for shcl's publish, which on Windows can take the old file off its
+	// name and then fail (1176, 1177).
+	type RestorePublish = fn(&str, &str) -> Result<(), String>;
+
+	fn restore_test_dir(what: &str) -> std::path::PathBuf {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_{what}_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		dir
+	}
+
+	fn restore_pauses() -> u32 {
+		super::RESTORE_PAUSES.with(std::cell::Cell::get)
+	}
+
+	fn names_in_dir(dir: &std::path::Path) -> Vec<String> {
+		let mut names: Vec<String> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+		names.sort();
+		names
+	}
+
+	// shcl deletes its temp copy after a replace that took the old file fails, so
+	// the settings are written at the empty name instead of lost, keeping the
+	// file's mode and leaving nothing beside it.
+	// Test ID: dcfx8
+	#[test]
+	fn a_write_that_took_the_file_writes_it_again() {
+		let took: RestorePublish = |file, _| {
+			std::fs::remove_file(std::fs::canonicalize(file).unwrap()).unwrap();
+			Err(format!("{file}: The replacement file could not be renamed. (os error 1176)"))
+		};
+		let dir = restore_test_dir("restore");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "font:\n\tsize: 12\n").unwrap();
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+		}
+		let new = "font:\n\tsize: 13\n";
+
+		let result = write_config_atomic_with(&path, new, took);
+
+		let text = std::fs::read_to_string(&path).ok();
+		let names = names_in_dir(&dir);
+		#[cfg(unix)]
+		let mode = std::fs::metadata(&path).ok().map(|m| std::os::unix::fs::PermissionsExt::mode(&m.permissions()) & 0o777);
+		let _ = std::fs::remove_dir_all(&dir);
+		assert_eq!(result, Ok(()), "the write is reported as done");
+		assert_eq!(text.as_deref(), Some(new), "the new text is at the name");
+		assert_eq!(names, ["config.shcl"], "no temp file and no backup");
+		#[cfg(unix)]
+		assert_eq!(mode, Some(0o640), "the file keeps its mode");
+	}
+
+	// The real file is found before the write, since a link to a file the replace
+	// took no longer resolves. The link stays and the real file keeps its mode.
+	// Test ID: dcfx9
+	#[cfg(unix)]
+	#[test]
+	fn a_restore_keeps_a_linked_private_settings_file() {
+		use std::os::unix::fs::PermissionsExt;
+		let took: RestorePublish = |file, _| {
+			std::fs::remove_file(std::fs::canonicalize(file).unwrap()).unwrap();
+			Err("replaced file gone".to_string())
+		};
+		let dir = restore_test_dir("restorelink");
+		let real = dir.join("real.shcl");
+		std::fs::write(&real, "font:\n\tsize: 12\n").unwrap();
+		std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o600)).unwrap();
+		let link = dir.join("config.shcl");
+		std::os::unix::fs::symlink(&real, &link).unwrap();
+		let new = "font:\n\tsize: 13\n";
+
+		let result = write_config_atomic_with(&link, new, took);
+
+		let still_link = std::fs::symlink_metadata(&link).is_ok_and(|m| m.file_type().is_symlink());
+		let target = std::fs::read_link(&link).ok();
+		let text = std::fs::read_to_string(&real).ok();
+		let mode = std::fs::metadata(&real).ok().map(|m| m.permissions().mode() & 0o777);
+		let names = names_in_dir(&dir);
+		let _ = std::fs::remove_dir_all(&dir);
+		assert_eq!(result, Ok(()), "the write is reported as done");
+		assert!(still_link, "still a link");
+		assert_eq!(target, Some(real), "to the same file");
+		assert_eq!(text.as_deref(), Some(new), "the real file holds the new text");
+		assert_eq!(mode, Some(0o600), "and stays private");
+		assert_eq!(names, ["config.shcl", "real.shcl"], "nothing beside them");
+	}
+
+	// The ordinary failure (read-only, held open) leaves the old file in place, so
+	// nothing is written over it and nothing waits.
+	// Test ID: dcfxa
+	#[test]
+	fn a_failed_write_that_left_the_file_changes_nothing() {
+		let refuse: RestorePublish = |_, _| Err("refused".to_string());
+		let dir = restore_test_dir("restorekeep");
+		let path = dir.join("config.shcl");
+		let old = "font:\n\tsize: 12\n";
+		std::fs::write(&path, old).unwrap();
+
+		let before = restore_pauses();
+		let result = write_config_atomic_with(&path, "font:\n\tsize: 13\n", refuse);
+		let pauses = restore_pauses() - before;
+
+		let bytes = std::fs::read(&path).ok();
+		let _ = std::fs::remove_dir_all(&dir);
+		assert_eq!(result, Err("refused".to_string()), "the publish's own error");
+		assert_eq!(bytes.as_deref(), Some(old.as_bytes()), "the file as it was");
+		assert_eq!(pauses, 0, "no pause when the file is still there");
+	}
+
+	// Something can take the empty name before the restore does. A link left
+	// there is never written through, even one whose target doesn't exist.
+	// Test ID: dcfxb
+	#[cfg(unix)]
+	#[test]
+	fn a_restore_never_writes_through_a_name_taken_meanwhile() {
+		let planted: RestorePublish = |file, _| {
+			std::fs::remove_file(file).unwrap();
+			let victim = std::path::Path::new(file).with_file_name("victim");
+			std::os::unix::fs::symlink(victim, file).unwrap();
+			Err("replaced file gone".to_string())
+		};
+		let dir = restore_test_dir("restoreplant");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "font:\n\tsize: 12\n").unwrap();
+
+		let result = write_config_atomic_with(&path, "font:\n\tsize: 13\n", planted);
+
+		let victim = std::fs::symlink_metadata(dir.join("victim")).is_ok();
+		let link = std::fs::read_link(&path).ok();
+		let _ = std::fs::remove_dir_all(&dir);
+		assert_eq!(result, Err("replaced file gone".to_string()), "the publish's own error");
+		assert!(!victim, "nothing written through the link");
+		assert_eq!(link, Some(dir.join("victim")), "the link left as it was");
+	}
+
+	// A restore that can't write stops within its bound and says the file is gone,
+	// rather than retrying forever or reporting the replace's error alone.
+	// Test ID: dcfxc
+	#[cfg(unix)]
+	#[test]
+	fn a_restore_that_cannot_write_gives_up_and_says_so() {
+		use std::os::unix::fs::PermissionsExt;
+		let locked: RestorePublish = |file, _| {
+			let path = std::path::Path::new(file);
+			std::fs::remove_file(path).unwrap();
+			let folder = path.parent().unwrap();
+			std::fs::set_permissions(folder, std::fs::Permissions::from_mode(0o500)).unwrap();
+			Err("replaced file gone".to_string())
+		};
+		let dir = restore_test_dir("restorefail");
+		let unlock = || {
+			let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+		};
+		// a run with the rights to write there anyway has nothing to test
+		std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+		let writable = std::fs::File::create(dir.join("probe")).is_ok();
+		unlock();
+		if writable {
+			let _ = std::fs::remove_dir_all(&dir);
+			return;
+		}
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "font:\n\tsize: 12\n").unwrap();
+
+		let before = restore_pauses();
+		let started = std::time::Instant::now();
+		let result = write_config_atomic_with(&path, "font:\n\tsize: 13\n", locked);
+		let elapsed = started.elapsed();
+		let pauses = restore_pauses() - before;
+
+		unlock();
+		let left = std::fs::symlink_metadata(&path).is_ok();
+		let _ = std::fs::remove_dir_all(&dir);
+		let err = result.expect_err("a restore that could not write is not a save");
+		assert!(err.contains("replaced file gone") && err.contains("is gone"), "names the replace's error and that the file is gone: {err}");
+		assert_eq!(pauses, RESTORE_ATTEMPTS, "five tries");
+		// a pause can only run long, so load can't fail this
+		assert!(elapsed >= std::time::Duration::from_millis(400), "a tenth of a second apart: {elapsed:?}");
+		assert!(!left, "nothing at the name");
+	}
+
+	// Leaves the name waiting for its delete while a reader holds the file, and
+	// lets the reader go after `hold`. A plain delete frees the name at once
+	// where the volume deletes POSIX-style, so this closes a delete-on-close
+	// handle instead.
+	#[cfg(windows)]
+	fn delete_while_held(real: &std::path::Path, hold: std::time::Duration) {
+		use std::os::windows::fs::OpenOptionsExt;
+		use windows_sys::Win32::Storage::FileSystem::{DELETE, FILE_FLAG_DELETE_ON_CLOSE, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE};
+		let share_all = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+		let holder = std::fs::OpenOptions::new().read(true).share_mode(share_all).open(real).unwrap();
+		let deleter = std::fs::OpenOptions::new().access_mode(DELETE).share_mode(share_all).custom_flags(FILE_FLAG_DELETE_ON_CLOSE).open(real).unwrap();
+		drop(deleter);
+		let listed = std::fs::symlink_metadata(real).is_ok();
+		let refused = match std::fs::OpenOptions::new().write(true).create_new(true).open(real) {
+			Ok(file) => {
+				drop(file);
+				let _ = std::fs::remove_file(real);
+				false
+			}
+			Err(e) => e.kind() == std::io::ErrorKind::PermissionDenied,
+		};
+		// a pass for the wrong reason is worse than a failure
+		assert!(listed && refused, "the name was freed at once, so this cannot see a pending delete");
+		std::thread::spawn(move || {
+			std::thread::sleep(hold);
+			drop(holder);
+		});
+	}
+
+	// so the cleanup never meets a name still being deleted
+	#[cfg(windows)]
+	fn wait_until_gone(path: &std::path::Path) {
+		let started = std::time::Instant::now();
+		while std::fs::symlink_metadata(path).is_ok() && started.elapsed() < std::time::Duration::from_secs(3) {
+			std::thread::sleep(std::time::Duration::from_millis(10));
+		}
+	}
+
+	// Error 5 alone can't tell a pending delete from a file this process may not
+	// open, so every look-alike is checked beside the real one.
+	// Test ID: dcfz8
+	#[cfg(windows)]
+	#[test]
+	fn only_a_delete_in_progress_reads_as_pending() {
+		use std::os::windows::fs::OpenOptionsExt;
+		let dir = std::fs::canonicalize(restore_test_dir("pendcheck")).unwrap();
+
+		let missing = delete_pending(&dir.join("missing.shcl"));
+
+		let plain_path = dir.join("plain.shcl");
+		std::fs::write(&plain_path, "a").unwrap();
+		let plain = delete_pending(&plain_path);
+
+		let readonly_path = dir.join("readonly.shcl");
+		std::fs::write(&readonly_path, "a").unwrap();
+		let mut perms = std::fs::metadata(&readonly_path).unwrap().permissions();
+		perms.set_readonly(true);
+		std::fs::set_permissions(&readonly_path, perms.clone()).unwrap();
+		let readonly = delete_pending(&readonly_path);
+		// only the read-only flag on Windows, cleared so the cleanup can remove it
+		#[allow(clippy::permissions_set_readonly_false)]
+		perms.set_readonly(false);
+		let _ = std::fs::set_permissions(&readonly_path, perms);
+
+		let held_path = dir.join("held.shcl");
+		std::fs::write(&held_path, "a").unwrap();
+		let held_file = std::fs::OpenOptions::new().read(true).share_mode(0).open(&held_path).unwrap();
+		let held = delete_pending(&held_path);
+		drop(held_file);
+
+		let folder_path = dir.join("folder");
+		std::fs::create_dir(&folder_path).unwrap();
+		let folder = delete_pending(&folder_path);
+
+		let pending_path = dir.join("config.shcl");
+		std::fs::write(&pending_path, "a").unwrap();
+		delete_while_held(&pending_path, std::time::Duration::from_millis(300));
+		let pending = delete_pending(&pending_path);
+		wait_until_gone(&pending_path);
+		let freed = delete_pending(&pending_path);
+		let gone = std::fs::symlink_metadata(&pending_path).is_err();
+
+		let _ = std::fs::remove_dir_all(&dir);
+		assert_eq!([("missing", missing), ("plain", plain), ("read-only", readonly), ("held without sharing", held), ("folder", folder), ("pending", pending), ("freed", freed),], [("missing", false), ("plain", false), ("read-only", false), ("held without sharing", false), ("folder", false), ("pending", true), ("freed", false),]);
+		assert!(gone, "the name is gone once the reader lets go");
+	}
+
+	// A replace that fails can leave the old name waiting on a scanner's handle.
+	// The restore waits that out within its bound and writes the text there.
+	// Test ID: dcfz9
+	#[cfg(windows)]
+	#[test]
+	fn a_restore_waits_for_a_name_still_being_deleted() {
+		let pending: RestorePublish = |file, _| {
+			delete_while_held(&std::fs::canonicalize(file).unwrap(), std::time::Duration::from_millis(250));
+			Err(format!("{file}: The replacement file could not be renamed. (os error 1176)"))
+		};
+		let dir = restore_test_dir("pendwait");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "font:\n\tsize: 12\n").unwrap();
+		let new = "font:\n\tsize: 13\n";
+
+		let started = std::time::Instant::now();
+		let result = write_config_atomic_with(&path, new, pending);
+		let elapsed = started.elapsed();
+
+		let text = std::fs::read_to_string(&path).ok();
+		let names = names_in_dir(&dir);
+		let _ = std::fs::remove_dir_all(&dir);
+		assert_eq!(result, Ok(()), "the write is reported as done");
+		assert_eq!(text.as_deref(), Some(new), "the new text is at the name");
+		assert_eq!(names, ["config.shcl"], "nothing beside it");
+		assert!(elapsed < std::time::Duration::from_secs(2), "within the restore's bound: {elapsed:?}");
+	}
+
+	// A name still pending when the tries run out gets the give-up error, and
+	// nothing is written at it or beside it.
+	// Test ID: dcfza
+	#[cfg(windows)]
+	#[test]
+	fn a_restore_gives_up_on_a_delete_that_stays_pending() {
+		let pending: RestorePublish = |file, _| {
+			delete_while_held(&std::fs::canonicalize(file).unwrap(), std::time::Duration::from_millis(1500));
+			Err(format!("{file}: The replacement file could not be renamed. (os error 1176)"))
+		};
+		let dir = restore_test_dir("pendstay");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "font:\n\tsize: 12\n").unwrap();
+
+		let started = std::time::Instant::now();
+		let result = write_config_atomic_with(&path, "font:\n\tsize: 13\n", pending);
+		let elapsed = started.elapsed();
+
+		wait_until_gone(&path);
+		let names = names_in_dir(&dir);
+		let _ = std::fs::remove_dir_all(&dir);
+		let err = result.expect_err("a restore that could not write is not a save");
+		assert!(err.contains("could not be renamed. (os error 1176)") && err.contains("is gone"), "names the replace's error and that the file is gone: {err}");
+		assert!(elapsed >= std::time::Duration::from_millis(400) && elapsed < std::time::Duration::from_millis(1400), "five tries, a tenth of a second apart: {elapsed:?}");
+		assert!(names.is_empty(), "nothing written: {names:?}");
+	}
+
+	// shcl's own save has no seam and no restore, so every settings write goes
+	// through write_config_atomic instead.
+	// Test ID: dcfxd
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_settings_write_goes_through_the_restore() {
+		let body = include_str!("config.rs").split("\nmod tests {").next().expect("the file above its own tests");
+		for call in [".save_file(", "save_file_lossy("] {
+			assert!(!body.contains(call), "{call} skips the restore");
+		}
+		let publish = "shcl::write_file_atomic";
+		assert_eq!(body.matches(publish).count(), 1, "{publish} is named once");
+		// "\n}" alone: a Windows checkout can end the line with "\r\n"
+		let fn_body = |name: &str| {
+			let start = body.find(&format!("fn {name}(")).expect("the writer");
+			&body[start..start + body[start..].find("\n}").expect("its end")]
+		};
+		assert!(fn_body("write_config_atomic").contains("write_config_keeping("), "write_config_atomic is write_config_keeping");
+		assert!(fn_body("write_config_keeping").contains(publish), "{publish} is called from write_config_keeping");
+	}
+
+	// A hotkey set in the file is what loads. A bad one keeps its default and
+	// is reported at launch with its line, rather than dropped in silence, and
+	// so is a chord taken from another hotkey's default.
+	// Test ID: ddesb
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported() {
+		use crate::input::Hotkey;
+		use crate::keys::Chord;
+		use crate::pane::Toward;
+		let path = std::path::Path::new("test.shcl");
+		let text = "keys:\n\tsplit_right: \"Ctrl+Alt+R\"\n\tsplit_down: \"Ctrl+Alt+Bogus\"\n\tfocus_left: \"none\"\n\tclose_pane: \"Ctrl+Shift+W\"\n\tfocus_up: Alt+K\n\tfont_reset: 5\n";
+		let (raw, said) = read_config_text(text, path);
+		let s = resolve(raw);
+		let d = Settings::default();
+		let chord = |text| Chord::parse(text).expect(text);
+		assert_eq!(s.keys.chords(Hotkey::SplitRight), [chord("Ctrl+Alt+R")]);
+		assert_eq!(s.keys.chords(Hotkey::SplitDown), d.keys.chords(Hotkey::SplitDown));
+		assert!(s.keys.chords(Hotkey::Focus(Toward::Left)).is_empty());
+		// quotes are optional
+		assert_eq!(s.keys.chords(Hotkey::Focus(Toward::Up)), [chord("Alt+K")]);
+		assert_eq!(s.keys.chords(Hotkey::ZoomReset), d.keys.chords(Hotkey::ZoomReset));
+		assert_eq!(s.keys.chords(Hotkey::Focus(Toward::Right)), d.keys.chords(Hotkey::Focus(Toward::Right)));
+		let about_keys: Vec<&String> = said.iter().filter(|line| line.contains("keys.")).collect();
+		assert!(about_keys.iter().any(|line| line.contains("`keys.split_down` line 3 isn't used") && line.contains("Bogus is not a key name")), "{said:?}");
+		assert!(about_keys.iter().any(|line| line.contains("`keys.font_reset` line 7 isn't used")), "{said:?}");
+		if !cfg!(target_os = "macos") {
+			assert!(about_keys.iter().any(|line| line.contains("so `keys.close_tab` no longer responds to it")), "{said:?}");
+			assert_eq!(about_keys.len(), 3, "{said:?}");
+		}
+	}
+
+	// A changed hotkey goes back into the file under its own name, by the
+	// platform's spelling, and the next load reads the same bindings. The
+	// Settings dialog's Keys tab is to save through this.
+	// Test ID: ddesc
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_changed_hotkey_is_written_back_by_its_name() {
+		use crate::input::Hotkey;
+		use crate::keys::{Bindings, Chord, value_text};
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let mac = cfg!(target_os = "macos");
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgkeys_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "keys:\n\tclose_pane: \"Ctrl+Shift+W\"\n").unwrap();
+		set_config_override(path.clone());
+		let chord = |text| Chord::parse(text).expect(text);
+		let orig = load();
+		assert_eq!(orig.keys.shown(Hotkey::ClosePane), Some(chord("Ctrl+Shift+W")));
+		let mut edited = orig.clone();
+		let right = vec![chord("Ctrl+Alt+R"), chord("Ctrl+Alt+Right")];
+		edited.keys = Bindings::with(mac, &[(Hotkey::ClosePane, vec![chord("Ctrl+Shift+W")]), (Hotkey::SplitRight, right.clone())]).0;
+		assert!(persist(&orig, &edited));
+		let saved = std::fs::read_to_string(&path).unwrap();
+		let want = format!("split_right: \"{}\"", value_text(&right, mac));
+		assert!(saved.contains(&want), "{want} in {saved}");
+		assert!(saved.contains("close_pane: \"Ctrl+Shift+W\""), "{saved}");
+		assert!(load().keys == edited.keys);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A save can add a value as a new line above the template's commented one.
+	// The revert has to find the value, not the comment, and leave the file as
+	// the template wrote it rather than with a second copy of the commented
+	// line. A row's arrow is a save of the default, and a hotkey is taken out
+	// by name.
+	// Test ID: ddev5
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_revert_takes_out_a_value_saved_beside_its_default() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_revertline_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		set_config_override(path.clone());
+		reload_from_disk(); // lays the template down
+		let pristine = std::fs::read_to_string(&path).unwrap();
+		// rows outside the profile, whose change under a preset picks it by hand
+		for key in [Key::CopyOnSelect, Key::CursorOutline, Key::Hyperlinks] {
+			let base = reload_from_disk();
+			let mut changed = base.clone();
+			let on = crate::fields::get(&changed, key).unwrap().as_bool();
+			change(&mut changed, key, Value::Bool(!on));
+			assert!(persist(&base, &changed));
+			assert!(reload_from_disk() == changed, "{key:?} was saved");
+			let mut back = changed.clone();
+			crate::fields::reset(&mut back, key, None);
+			assert!(persist(&changed, &back));
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), pristine, "{key:?}");
+			assert!(reload_from_disk() == base, "{key:?} went back to its default");
+		}
+		let base = reload_from_disk();
+		let mut changed = base.clone();
+		changed.keys = changed.keys.with_own(crate::input::Hotkey::ClosePane, Some(Vec::new()));
+		assert!(persist(&base, &changed));
+		assert!(reload_from_disk() == changed, "the hotkey was saved");
+		revert_keys(&["keys.close_pane"]);
+		assert!(reload_from_disk() == base, "the hotkey went back to its default");
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), pristine);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A setting written twice reads as neither copy. A revert or a cleared box
+	// doesn't leave any copy in force, and a write leaves one copy with the new value,
+	// whether the copies share a block or sit in a block written twice. A note
+	// between them stays.
+	// Test ID: dfehx
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_setting_written_twice_is_written_once() {
+		let doubled = ["font:\n\tsize: 14\n\t# a note\n\tsize: 15\n", "font:\n\tsize: 14\n\t# a note\nwindow:\n\trows: 30\nfont:\n\tsize: 15\n"];
+		let active = |out: &str| out.lines().filter(|l| matches!(l.trim(), "size: 14" | "size: 15")).count();
+		for text in doubled {
+			let reverted = reverted_text(text, &["font.size"]).expect("something to write");
+			assert_eq!(active(&reverted), 0, "{reverted}");
+			assert!(shcl::Document::parse(&reverted).count("font.size") <= 1, "{reverted}");
+			let disabled = disabled_text(text, &["font.size"]).expect("something to write");
+			assert_eq!(active(&disabled), 0, "{disabled}");
+			assert_eq!(shcl::Document::parse(&disabled).count("font.size"), 0, "{disabled}");
+			for out in [&reverted, &disabled] {
+				assert!(out.contains("# a note"), "{out}");
+			}
+
+			let mut doc = shcl::Document::parse(text);
+			doc.put_float("font.size", 20.0);
+			assert_eq!(doc.count("font.size"), 1, "{}", saved_text(&doc));
+			assert_eq!(doc.get_float("font.size"), Ok(20.0));
+			let saved = saved_text(&doc);
+			assert!(saved.contains("# a note"), "{saved}");
+			assert_eq!(shcl::Document::parse(&saved).get_float("font.size"), Ok(20.0));
+		}
+	}
+
+	// A Settings save of a setting written twice in the file writes it, and a
+	// revert takes it back to its default, rather than leaving the file as it
+	// was. The state file's window size and machine test pick are updated the
+	// same way.
+	// Test ID: dfehy
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_save_over_a_setting_written_twice_sticks() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_twice_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		set_config_override(path.clone());
+		let template = reload_from_disk();
+		let laid = std::fs::read_to_string(&path).unwrap();
+		std::fs::write(&path, format!("{laid}\nscroll:\n\tscrollback: 7000\n\tscrollback: 8000\n")).unwrap();
+		let base = reload_from_disk();
+		assert_eq!(base.scrollback, template.scrollback, "a doubled line reads as neither");
+		let mut changed = base.clone();
+		changed.scrollback = 9000;
+		assert!(persist(&base, &changed));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(shcl::Document::parse(&text).count("scroll.scrollback"), 1, "{text}");
+		assert_eq!(reload_from_disk().scrollback, 9000);
+
+		let twice = format!("{laid}\ncursor:\n\toutline: true\n\toutline: false\n");
+		std::fs::write(&path, &twice).unwrap();
+		revert_keys(&["cursor.outline"]);
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(shcl::Document::parse(&text).count("cursor.outline") <= 1, "{text}");
+		assert!(reload_from_disk() == template, "a revert leaves neither copy in force");
+		std::fs::write(&path, &twice).unwrap();
+		let base = reload_from_disk();
+		let on = crate::fields::get(&base, Key::CursorOutline).unwrap().as_bool();
+		let mut changed = base.clone();
+		change(&mut changed, Key::CursorOutline, Value::Bool(!on));
+		assert!(persist(&base, &changed));
+		assert!(reload_from_disk() == changed, "the change was saved");
+		let mut back = changed.clone();
+		crate::fields::reset(&mut back, Key::CursorOutline, None);
+		assert!(persist(&changed, &back));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(shcl::Document::parse(&text).count("cursor.outline") <= 1, "{text}");
+		assert!(reload_from_disk() == base, "the revert went back to the default");
+
+		let state = dir.join("state.shcl");
+		std::fs::write(&state, "window:\n\tremembered_columns: 90\n\tremembered_columns: 91\nperformance:\n\ttested_profile: low\n\ttested_profile: low\n").unwrap();
+		let base = reload_from_disk();
+		let mut moved = base.clone();
+		moved.remembered_columns = 123;
+		assert!(persist(&base, &moved));
+		assert!(matches!(keep_tested(crate::profile::Profile::High, None), Kept::Written));
+		let doc = shcl::Document::parse(&std::fs::read_to_string(&state).unwrap());
+		assert_eq!(doc.get_int("window.remembered_columns"), Ok(123));
+		assert_eq!(doc.get_string("performance.tested_profile").as_deref(), Ok("high"));
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A file from before hotkeys gets the whole keys block at its next launch,
+	// every line commented at its default, and loads the same bindings.
+	// Test ID: ddesd
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_older_file_gains_the_keys_block_commented() {
+		let text = "window:\n\tmargin: 6\n";
+		let after = backfilled_text(text).expect("nothing refused").expect("something added");
+		let path = std::path::Path::new("test.shcl");
+		assert!(after.contains("\nkeys:\n"), "{after}");
+		for (_, path) in crate::keys::config_paths() {
+			let name = path.trim_start_matches("keys.");
+			assert!(after.contains(&format!("\t# {name}: \"")), "{name}");
+		}
+		assert!(after.contains("\"none\" turns a hotkey off."), "{after}");
+		assert!(resolve(read_raw(&after, path).0).keys == Settings::default().keys);
+		assert_eq!(backfilled_text(&after), Ok(None), "settles in one launch");
+	}
+
+	// Test ID: dcq6v
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn persist_writes_nothing_for_a_nan_on_both_sides() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgnan_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "font.use_system_size: false\nfont.size: 17\n").unwrap();
+		set_config_override(path.clone());
+
+		let orig = load();
+		assert_eq!(orig.font_size, 17.0);
+		// What --font-size nan folded into the live settings, standing on both
+		// sides of the diff: it is the run's own value, not a change to save.
+		let mut live = orig.clone();
+		live.model.hold(Key::FontSize.name(), &Value::Float(f64::NAN));
+		crate::fields::fill(&mut live, None);
+		let same = live.clone();
+		assert!(persist(&live, &same));
+		let saved = std::fs::read_to_string(&path).unwrap();
+		assert!(saved.contains("size: 17"), "NaN written over the user's size: {saved:?}");
+		assert!(!saved.to_lowercase().contains("nan"), "{saved:?}");
+		assert_eq!(load().font_size, 17.0);
+
+		// and a real change is still written to the file
+		let mut edited = live.clone();
+		change(&mut edited, Key::FontSize, Value::Float(22.0));
+		assert!(persist(&live, &edited));
+		assert_eq!(load().font_size, 22.0);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Test ID: d9rw2
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn persist_survives_bare_decimal_float() {
+		// Memoize settings() before installing the override. A test on another thread
+		// that first calls settings() after the override would load(), which rewrites
+		// this temp file in place, racing the read below (a truncated read gave
+		// defaults).
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgsave_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, "wallpaper.opacity: .1\ntext.scrim.ramp: \"s\"\n").unwrap();
 		set_config_override(path.clone());
 
 		let orig = load();
-		assert_eq!(orig.text_scrim_ramp, "sigmoid"); // the file's older spelling
+		assert_eq!(orig.text_scrim_ramp, crate::scrim::Ramp::Sigmoid); // the file's older spelling
 		let mut edited = orig.clone();
-		edited.text_scrim_ramp = "log".to_string();
-		assert!(
-			persist(&orig, &edited),
-			"persist should write to our temp file"
-		);
+		change(&mut edited, Key::ScrimRamp, Value::Text("log".into()));
+		assert!(persist(&orig, &edited), "persist should write to our temp file");
 
-		assert_eq!(
-			load().text_scrim_ramp,
-			"log",
-			"dialog change lost after relaunch"
-		);
+		assert_eq!(load().text_scrim_ramp, crate::scrim::Ramp::Log, "dialog change lost after relaunch");
 		// and the value is still spelled the way the user wrote it
 		let saved = std::fs::read_to_string(&path).unwrap();
-		assert!(
-			saved.contains("opacity: .1"),
-			"scalar should be left verbatim: {saved:?}"
-		);
+		assert!(saved.contains("opacity: .1"), "scalar should be left verbatim: {saved:?}");
 		assert_eq!(load().wallpaper_opacity, 0.1);
+
+		// clearing the Family box has to take the line out: writing nothing left
+		// it there and the font came back next launch
+		let before = load();
+		let mut named = before.clone();
+		change(&mut named, Key::FontFamily, Value::Text("Iosevka".into()));
+		assert!(persist(&before, &named));
+		assert_eq!(load().font_family, "Iosevka");
+
+		let before = load();
+		let mut cleared = before.clone();
+		crate::fields::reset(&mut cleared, Key::FontFamily, None);
+		assert!(persist(&before, &cleared));
+		assert!(!crate::fields::by_hand(&load(), Key::FontFamily), "cleared, and it stays cleared");
 	}
 
 	// The /proc-based busy check: a child process holding the file open is seen as
 	// busy; once it exits the file reads as free again. Linux only (the check is a
 	// no-op elsewhere).
+	// Test ID: d9vt3
 	#[cfg(target_os = "linux")]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn config_open_elsewhere_sees_a_holder() {
-		let path = std::env::temp_dir().join(format!("silkterm_busy_{}.shcl", std::process::id()));
+		let path = crate::testdir::run_dir().join(format!("silkterm_busy_{}.shcl", std::process::id()));
 		std::fs::write(&path, "margin: 8.0\n").unwrap();
 		assert!(!config_open_elsewhere(&path), "nobody holds it yet");
 
 		// A child with the file as its stdin holds the descriptor open until it exits.
 		let hold = std::fs::File::open(&path).unwrap();
-		let mut child = std::process::Command::new("sleep")
-			.arg("30")
-			.stdin(std::process::Stdio::from(hold))
-			.spawn()
-			.unwrap();
+		let mut child = std::process::Command::new("sleep").arg("30").stdin(std::process::Stdio::from(hold)).spawn().unwrap();
 
-		// give the child a moment to exist in /proc, then confirm we see it
+		// give the child a moment to exist in /proc, then confirm it's seen
 		let mut seen = false;
 		for _ in 0..50 {
 			if config_open_elsewhere(&path) {
@@ -3910,41 +8970,1233 @@ mod tests {
 		assert!(seen, "a process holding the file open should read as busy");
 	}
 
+	// Where a rating's line goes, and that nothing else in the file moves.
+	// Test ID: dcf83
+	#[test]
+	fn rating_lines_replace_insert_and_collapse() {
+		let clear = RatingLines { check_next_run: Some(false) };
+		let cases = [("an active line is replaced in place, its indent kept", "theme_mode: dark\nperformance:\n    automatic: true\n    check_next_run: true\n    profile: high\n\nwindow:\n\tmargin: 4\n", "theme_mode: dark\nperformance:\n    automatic: true\n    check_next_run: false\n    profile: high\n\nwindow:\n\tmargin: 4\n"), ("a trailing note is kept", "performance:\n\tcheck_next_run: true  ## note\n", "performance:\n\tcheck_next_run: false  ## note\n"), ("only the commented default: in its place", "performance:\n\n\t# automatic: true  ## Default\n\t# check_next_run: false  ## Default\n\t# profile: \"max\"  ## Default\n\n## next\n", "performance:\n\n\t# automatic: true  ## Default\n\tcheck_next_run: false\n\t# profile: \"max\"  ## Default\n\n## next\n"), ("a comment typed by hand: directly after it", "performance:\n\t# check_next_run: true  ## mine\n\tautomatic: true\n", "performance:\n\t# check_next_run: true  ## mine\n\tcheck_next_run: false\n\tautomatic: true\n"), ("only the header: first in the block, at its children's depth", "performance:\n\tautomatic: true\n", "performance:\n\tcheck_next_run: false\n\tautomatic: true\n"), ("a header with no child: one tab deeper", "performance:\nwindow:\n\tmargin: 4\n", "performance:\n\tcheck_next_run: false\nwindow:\n\tmargin: 4\n"), ("two active lines: one is left, holding the new value", "performance:\n\tcheck_next_run: true\n\tautomatic: true\n\tcheck_next_run: true\n", "performance:\n\tcheck_next_run: false\n\tautomatic: true\n")];
+		for (what, text, want) in cases {
+			assert_eq!(with_rating_lines(text, clear).as_deref(), Ok(want), "{what}");
+		}
+
+		// A block written twice reads as one, so the first takes the line.
+		assert_eq!(with_rating_lines("performance:\n\tautomatic: true\nperformance:\n\tprofile: high\n", clear).as_deref(), Ok("performance:\n\tcheck_next_run: false\n\tautomatic: true\nperformance:\n\tprofile: high\n"), "two performance headers");
+		// With no block to put a line in, a file that reads clean gets what the
+		// dialog's save would write.
+		let bare = "window:\n\tmargin: 4\n";
+		let mut saved = shcl::Document::parse(bare);
+		assert_eq!(saved.set_bool("performance.check_next_run", false), shcl::SetStatus::Ok);
+		assert_eq!(with_rating_lines(bare, clear).as_deref(), Ok(saved.to_canonical().as_str()), "no performance header");
+	}
+
+	// The template is a save fixed point (G69), and a rating written into it must
+	// not be the thing that makes the next save rewrite it.
+	// Test ID: dcf84
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_leaves_a_canonical_file_canonical() {
+		for flag in [false, true] {
+			let lines = RatingLines { check_next_run: Some(flag) };
+			let out = with_rating_lines(default_config(), lines).unwrap_or_else(|kept| panic!("{flag}: {kept:?}"));
+			assert_ne!(out, default_config(), "{flag}: the value is in it");
+			assert_eq!(shcl::Document::parse(&out).to_canonical(), out, "{flag}");
+		}
+	}
+
+	// A line placed in a block that already drops one can change which line the
+	// parse drops. The count doesn't grow, and another setting loads differently.
+	// Test ID: dcfa5
+	#[test]
+	fn a_rating_changes_no_other_setting() {
+		let clear = RatingLines { check_next_run: Some(false) };
+		let text = "performance:\n\t\t# check_next_run: false  ## Default\n\t\t\tautomatic: false\n\t\tcheck_hardware: false\n";
+		let before = shcl::Document::parse(text);
+		assert_eq!(before.lost_count(), 1);
+		assert_eq!(before.get_bool("performance.automatic"), Ok(false));
+		assert_eq!(before.get_bool("performance.check_hardware"), Err(shcl::Status::NotFound));
+		if let Ok(out) = with_rating_lines(text, clear) {
+			let after = shcl::Document::parse(&out);
+			assert_eq!(after.get_bool("performance.automatic"), Ok(false), "automatic loads as before:\n{out}");
+			assert_eq!(after.get_bool("performance.check_hardware"), Err(shcl::Status::NotFound), "check_hardware loads as before:\n{out}");
+		}
+
+		// A new `check_next_run:` line above a deeper line takes that line in as a
+		// child.
+		let text = "performance:\n\t# check_next_run: false  ## Default\n\t\tcheck_hardware: false\n";
+		assert_eq!(shcl::Document::parse(text).get_bool("performance.check_hardware"), Ok(false));
+		if let Ok(out) = with_rating_lines(text, clear) {
+			assert_eq!(shcl::Document::parse(&out).get_bool("performance.check_hardware"), Ok(false), "check_hardware loads as before:\n{out}");
+		}
+
+		// Every later line for the key is deleted, and what was under one moves up to
+		// the line above. Placement alone loses no line and reads the value back, so
+		// the comparison is the only thing that refuses it.
+		let text = "performance:\n\tcheck_next_run: true\nperformance.check_next_run: true\n\tcheck_hardware: false\n";
+		assert!(migrate_config_text(text).is_none(), "a launch parses this text as it is");
+		let before = shcl::Document::parse(text);
+		assert_eq!(before.get_bool("performance.check_hardware"), Err(shcl::Status::NotFound));
+		let placed = placed_rating_lines(text, &[("check_next_run", "false".to_string())]).expect("a performance block to place into");
+		let placed = shcl::Document::parse(&placed);
+		assert!(placed.lost_count() <= before.lost_count() && placed.get_bool("performance.check_next_run") == Ok(false) && placed.get_bool("performance.check_hardware") == Ok(false), "placement no longer moves check_hardware, so the case proves nothing");
+		if let Ok(out) = with_rating_lines(text, clear) {
+			assert_eq!(shcl::Document::parse(&out).get_bool("performance.check_hardware"), Err(shcl::Status::NotFound), "check_hardware loads as before:\n{out}");
+		}
+	}
+
+	// The template in forms that read clean but that a rating's line didn't go
+	// into: a line typed in a spaces editor, a value cleared by hand, a comment
+	// indented deeper than the block.
+	fn clean_rating_shapes() -> Vec<(&'static str, String)> {
+		let template = default_config();
+		let default_line = "\t# check_next_run: false  ## Default\n";
+		let shapes = [("a line typed with spaces first in the block", template.replacen("\nperformance:\n", "\nperformance:\n    automatic: true\n", 1)), ("a line typed with spaces after the commented defaults", template.replacen(default_line, &format!("{default_line}    check_hardware: true\n"), 1)), ("check_next_run cleared by hand", template.replacen(default_line, "\tcheck_next_run:\n", 1)), ("the commented default deeper than the block", template.replacen(default_line, "\t\t# check_next_run: false  ## Default\n\tautomatic: true\n", 1))];
+		for (what, text) in &shapes {
+			assert_ne!(text, template, "{what}: the template no longer has that line");
+			assert_eq!(shcl::Document::parse(text).lost_count(), 0, "{what}: reads clean");
+		}
+		shapes.into()
+	}
+
+	// Each of these kept a rating through the dialog's save, and the line writer
+	// reported that it had a line that couldn't be read, so the test ran at
+	// every launch. The value written is the one the template doesn't have, so
+	// a reload shows the write.
+	// Test ID: dcfam
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_reaches_a_clean_file_wherever_its_lines_sit() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_ratingclean_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let lines = RatingLines { check_next_run: Some(true) };
+		for (what, text) in clean_rating_shapes() {
+			std::fs::write(&path, &text).unwrap();
+			assert!(!reload_from_disk().performance_check_next_run, "{what}");
+			assert_eq!(keep_rating(lines), Kept::Written, "{what}");
+			assert!(reload_from_disk().performance_check_next_run, "{what}");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// On those files the line goes in on its own: every line already there stays,
+	// byte for byte and in order, apart from the cleared value that gets one and
+	// the commented default that the value takes the place of.
+	// Test ID: dcfan
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_in_a_clean_file_moves_no_other_line() {
+		let lines = RatingLines { check_next_run: Some(true) };
+		for (what, text) in clean_rating_shapes() {
+			let out = with_rating_lines(&text, lines).unwrap_or_else(|kept| panic!("{what}: {kept:?}"));
+			let mut rest = out.lines();
+			let taken = |line: &str| line.trim() == "check_next_run:" || is_default_line(line, "performance.check_next_run") && line.trim_start().starts_with("# check_next_run:");
+			for line in text.lines().filter(|line| !taken(line)) {
+				assert!(rest.any(|kept| kept == line), "{what}: {line:?} is not where it was");
+			}
+		}
+	}
+
+	// A value cleared by hand leaves `check_next_run:` with nothing under it, and
+	// that line takes the rating. Beside a line the parse drops there is no save's
+	// text to fall back on, so a second line for the key leaves the rating unread
+	// and the test runs at every launch.
+	// Test ID: dcfgt
+	#[test]
+	fn a_value_cleared_by_hand_takes_the_rating_on_its_own_line() {
+		let lines = RatingLines { check_next_run: Some(true) };
+		let lost = "window:\n\t\tmargin: 4\n\tstray: 1\n";
+		for (what, block, want) in [("first in the block", "performance:\n\tcheck_next_run:\n\tautomatic: true\n", "performance:\n\tcheck_next_run: true\n\tautomatic: true\n"), ("last in the block", "performance:\n\tautomatic: true\n\tcheck_next_run:\n", "performance:\n\tautomatic: true\n\tcheck_next_run: true\n")] {
+			let text = format!("{block}{lost}");
+			assert_eq!(shcl::Document::parse(&text).lost_count(), 1, "{what}: the line stepping back to no level is the one the parse drops");
+			assert_eq!(with_rating_lines(&text, lines), Ok(format!("{want}{lost}")), "{what}");
+		}
+	}
+
+	// Deleting a later line for the key moves what was under it up into the block,
+	// and at an indent the block doesn't use the parse drops it. It was under a
+	// written key before and isn't read at all after, so no setting reads
+	// differently, and only the lost-line count stops a file the next Settings
+	// save refuses whole.
+	// Test ID: dcfj6
+	#[test]
+	fn a_rating_loses_no_line_the_file_did_not_already_lose() {
+		let lines = RatingLines { check_next_run: Some(true) };
+		let spelled = [("check_next_run", rating_spelling("check_next_run", true).expect("a flag"))];
+		let written = ["performance.check_next_run".to_string()];
+		let block = "performance:\n\t\tcheck_next_run: false\nperformance.check_next_run: false\n\tcheck_hardware: false\n";
+		let lost = "window:\n\t\tmargin: 4\n\tstray: 1\n";
+		for (what, text, had) in [("a file that reads clean", block.to_string(), 0), ("a file that already lost a line", format!("{block}{lost}"), 1)] {
+			let before = shcl::Document::parse(&text);
+			assert_eq!(before.lost_count(), had, "{what}");
+			let placed = placed_rating_lines(&text, &spelled).expect("a performance block to place into");
+			assert!(migrate_config_text(&text).is_none() && migrate_config_text(&placed).is_none(), "{what}: a launch parses both texts as they are");
+			let placed = shcl::Document::parse(&placed);
+			assert!(placed.lost_count() > had && placed.get_bool("performance.check_next_run") == Ok(true), "{what}: placement no longer drops check_hardware, so the case proves nothing");
+			assert_eq!(settings_besides(&placed, &written), settings_besides(&before, &written), "{what}: the comparison refuses this text as well, so the case proves nothing");
+			if let Ok(out) = with_rating_lines(&text, lines) {
+				assert!(shcl::Document::parse(&out).lost_count() <= had, "{what}: a line was lost, and the next Settings save refuses the file:\n{out}");
+			}
+		}
+	}
+
+	// The dialog's save was how a rating was written before, so the files it kept
+	// one in are the floor: the rating writer keeps one in each of them too.
+	// Test ID: dcfap
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_is_kept_wherever_the_dialogs_save_kept_it() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_ratingparity_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let lines = RatingLines { check_next_run: Some(true) };
+		let holds = || reload_from_disk().performance_check_next_run;
+		let mut files = vec![("the template", default_config().to_string())];
+		files.extend(clean_rating_shapes());
+		for (what, text) in files {
+			std::fs::write(&path, &text).unwrap();
+			let orig = reload_from_disk();
+			let mut new = orig.clone();
+			change(&mut new, Key::PerfCheckNext, Value::Bool(true));
+			let saved = persist(&orig, &new) && holds();
+
+			std::fs::write(&path, &text).unwrap();
+			let _ = reload_from_disk();
+			let kept = keep_rating(lines);
+			let written = kept == Kept::Written && holds();
+			assert!(!saved || written, "{what}: the save keeps a rating here, and the rating writer answers {kept:?}");
+			assert!(saved, "{what}: the save keeps no rating here, so the case proves nothing");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// "A line that cannot be read" is said only of a file that has one. A clean
+	// file the writer still can't place gets a reason that is true of it.
+	// Test ID: dcfaq
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_clean_file_is_never_called_unreadable() {
+		let clear = RatingLines { check_next_run: Some(false) };
+		let mut cases: Vec<(&str, String)> = vec![("no performance block", "window:\n\tmargin: 4\n".to_string()), ("a dotted performance setting only", "performance.automatic: true\n".to_string()), ("two performance blocks", "performance:\n\tautomatic: true\nperformance:\n\tprofile: high\n".to_string())];
+		cases.extend(clean_rating_shapes());
+		for (what, text) in cases {
+			assert_eq!(shcl::Document::parse(&text).lost_count(), 0, "{what}: reads clean");
+			assert_ne!(with_rating_lines(&text, clear), Err(Kept::Unreadable), "{what}");
+		}
+	}
+
+	// A canonical save quotes a bare value with a space or a colon. Since shcl
+	// 3.0.0-beta1 it keeps the quotes a value already has, the quote character
+	// too. The rating check leaves the quoted flag out because of the first.
+	// Test ID: dcfck
+	#[test]
+	fn a_save_that_requotes_a_value_changes_no_read() {
+		const PATH: &str = "blk.k";
+		let values = ["Cascadia Mono", r"C:\Users\x", "a: b", r#""unclosed"#, "it's fine", "12:30", "2026-09-10T10:00:00", "2026-09-10 10:00", r"1\,000", r#""5""#, "'5'", r#""true""#, r#""yes""#, r#""on""#, r#""off""#, r#""FALSE""#, r#""0x10""#, r#""1e5""#, r#""08""#, r#""-0""#, r#""+5""#, r#""0.5""#, r#"".25""#, r#""1""#, r#""2026-09-10""#, r#""1,000""#, r#""1,000.5""#, r"'1\,000'", r#""a, b""#, "a, b", r#""a,b", c"#, r"x\", r#""@null""#];
+		let reads = |doc: &shcl::Document| (doc.get_string(PATH), doc.instances(PATH), doc.count(PATH), doc.read_string(PATH).status, doc.get_int(PATH), doc.get_float(PATH).map(f64::to_bits), doc.get_bool(PATH), doc.get_datetime(PATH), doc.get_string_array(PATH), doc.lost_count());
+		let (mut added, mut dropped) = (false, false);
+		for value in values {
+			let before = shcl::Document::parse(&format!("blk:\n\tk: {value}\n"));
+			let after = shcl::Document::parse(&before.to_canonical());
+			assert_eq!(reads(&after), reads(&before), "{value}");
+			let (was, is) = (before.read_string(PATH).quoted, after.read_string(PATH).quoted);
+			added |= !was && is;
+			dropped |= was && !is;
+		}
+		assert!(added, "a save quotes none of these now, so the rating check's handling of quoting needs another look");
+		assert!(!dropped, "a save unquotes a value again, so the rating check's handling of quoting needs another look");
+	}
+
+	// With no performance block the rating gets the save's text, which requoted
+	// values nobody changed where it fell back to the canonical form, and no load
+	// reads the difference. Each file is
+	// written again just before the rating, since a load adds the block and the
+	// line writer would then never fall back to the save's text.
+	// Test ID: dcfcm
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_is_kept_where_a_save_only_requotes() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_ratingrequote_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let lines = RatingLines { check_next_run: Some(true) };
+		let files: [(&str, &str, fn(&Settings) -> String); 4] = [("a bare font name with a space", "performance.automatic: true\nfont:\n\tfamily: Cascadia Mono\n", |s| format!("{:?}", s.font_family)), ("a bare Windows folder", "performance.automatic: true\nshell:\n\tstartup_directory: C:\\Users\\x\n", |s| s.startup_directory.clone()), ("a bare font name, nothing else in the file", "font:\n\tfamily: Cascadia Mono\n", |s| format!("{:?}", s.font_family)), ("a quoted number", "performance.automatic: true\nwindow:\n\tmargin: \"5\"\n", |s| s.margin.to_string())];
+		for (what, text, other) in files {
+			let mut saved = parse_kept(text);
+			assert_eq!(saved.set_bool("performance.check_next_run", true), shcl::SetStatus::Ok, "{what}");
+			assert_eq!(with_rating_lines(text, lines).as_deref(), Ok(saved_text(&saved).as_str()), "{what}");
+
+			std::fs::write(&path, text).unwrap();
+			let loaded = other(&reload_from_disk());
+			assert_ne!(loaded, other(&Settings::default()), "{what}: the value is the default, so the case proves nothing");
+			std::fs::write(&path, text).unwrap();
+			assert_eq!(keep_rating(lines), Kept::Written, "{what}");
+			let reloaded = reload_from_disk();
+			assert!(reloaded.performance_check_next_run, "{what}");
+			assert_eq!(other(&reloaded), loaded, "{what}: the other value loads as before");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A launch parses migrated text, and the migration reads how a line is
+	// written: an old font list is refreshed, and a commented heading deeper than
+	// its block becomes the parent of the setting under it. The save's text may
+	// move either without changing a value. Each file is written
+	// again before the rating, as a launch that found it busy leaves it.
+	// Test ID: dcfef
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_changes_nothing_the_next_launch_migrates() {
+		let stack = format!("performance.automatic: true\nfont:\n\tuse_system_family: false\n\tfamily: '{}'\n", SUPERSEDED_FONT_STACKS[0]);
+		rating_leaves_other_loads_alone("ratingmigrate", vec![("an old default font list in single quotes", stack.clone(), |s| format!("{:?}", s.font_family)), ("the same beside a bare Windows folder", format!("{stack}shell:\n\tstartup_directory: C:\\Users\\x\n"), |s| format!("{:?}", s.font_family)), ("a renamed color under a commented heading", "performance.automatic: true\ncolors:\n\t# x:\n\t\tfocus: \"#112233\"\n".to_string(), |s| format!("{:?} {:?}", s.focus, s.highlight)), ("a renamed tab width under a commented heading", "performance.automatic: true\nwindow:\n\t# x:\n\t\ttab_min_width_pct: 12\n".to_string(), |s| s.tab_regular_pct.to_string())]);
+	}
+
+	// The same one launch step earlier. A file from before the nested layout is
+	// converted first, and the conversion copies a font list with its quotes, which
+	// the refresh after it reads. A save before shcl 3.0.0-beta1 spelled them the
+	// other way, so the rating check has to look through the conversion as well.
+	// Test ID: dctab
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_changes_nothing_the_next_launch_converts() {
+		let flat = format!("font_family: '{}'\n", SUPERSEDED_FONT_STACKS[0]);
+		let font = |s: &Settings| format!("{:?}", s.font_family);
+		rating_leaves_other_loads_alone("ratingconvert", vec![("an old font list in a flat file", flat.clone(), font), ("the same with the system font switched off", format!("use_system_font: false\n{flat}"), font), ("the same with Windows line ends", format!("use_system_font: false\r\n{}", flat.replace('\n', "\r\n")), font), ("the same beside a bare Windows folder", format!("use_system_font: false\n{flat}wallpaper_folder: C:\\Users\\x\\Pictures\n"), font)]);
+	}
+
+	// A short file gets most of the template at its first launch, one group at a
+	// time. A group placed above the next section used to step back over the
+	// commented-out settings of the group added just before it, so `font:` went
+	// in under `contrast_mask:` and the later groups split each other. Their
+	// settings read as missing at the next launch and were added again.
+	// Test ID: dd3q1
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn backfill_puts_each_group_in_its_own_section() {
+		let text = "wallpaper:\n\timage: x\nwindow:\n\tmargin: 6\nperformance:\n\tautomatic: false\n\tprofile: custom\n";
+		let text = next_launch_text(text).into_owned();
+		let out = backfilled_text(&text).unwrap().unwrap();
+		let at = paths_at(&out.lines().map(str::to_string).collect::<Vec<_>>());
+		for path in ["font", "wallpaper.contrast_mask.strength", "wallpaper.contrast_mask.auto", "text.color_emoji", "text.embolden_inverse"] {
+			assert!(at.contains_key(path), "{path} is not where it belongs\n{out}");
+		}
+		assert_eq!(backfilled_text(&out), Ok(None), "\n{out}");
+
+		// a file written with dotted keys only, like the scroll harness's
+		let dotted = "performance.automatic: false\nperformance.profile: custom\nscroll.smooth_apps: true\nscroll.minimap.enabled: false\ntransparency.enabled: false\ntext.scrim.enabled: false\nwallpaper.fallback_builtin: false\nwindow.columns: 100\nwindow.rows: 34\ncursor.animation: none\n";
+		let mut text = dotted.to_string();
+		for launch in 1..=3 {
+			let next = next_launch_text(&text).into_owned();
+			let next = backfilled_text(&next).unwrap().unwrap_or(next);
+			if launch > 1 {
+				assert_eq!(next, text, "launch {launch} changed the file");
+			}
+			text = next;
+		}
+	}
+
+	// The check compares what the next launch loads, through that launch's own
+	// rewrites. Here one of them reads how a value is written: a bare one is
+	// replaced. The only text that keeps a rating in this file is a save's, which
+	// quotes a value with a space, so the step stops firing and the value loads
+	// differently. That write has to be refused, and with no such step it goes
+	// through. A save keeps the quote character since shcl 3.0.0-beta1, so the
+	// step reads a bare value, where the font list refresh once read the quote.
+	// A setting typed 2 tabs in under its block loads, until the launch adds the
+	// template's own active lines above it. It then read as part of one of those
+	// and was ignored from the next launch on, with nothing said.
+	// `stray` steps back to a depth nothing under `window:` uses, so shcl drops
+	// it. The window settings backfill would add at one tab give that depth a
+	// block, and the stray started being read as a window setting.
+	// Test ID: dd801
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn backfill_leaves_a_dropped_line_dropped() {
+		let text = "window:\n\t\tmargin: 4\n\trows: 40\n";
+		let before = shcl::Document::parse(text);
+		assert_eq!(before.lost_count(), 1);
+		assert!(before.get_string("window.rows").is_err());
+		let out = backfilled_text(text).expect("nothing that loaded changes").expect("other groups are still missing");
+		let after = shcl::Document::parse(&out);
+		assert_eq!(after.lost_count(), 1, "{out}");
+		assert!(after.get_string("window.rows").is_err(), "{out}");
+		assert_eq!(after.get_string("window.margin"), before.get_string("window.margin"));
+		assert!(out.contains("\nfont:\n"), "another block is still added");
+	}
+
+	// shcl reads `Window:` as `window:`, so a launch must too. Backfill added a
+	// second `window:` block under one typed with a capital.
+	// Test ID: ddk3h
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_name_typed_in_capitals_is_the_same_setting() {
+		let text = default_config().replacen("\nwindow:\n", "\nWindow:\n", 1).replacen("\tcolumns:", "\tColumns:", 1).replacen("\nfont:\n", "\nFONT:\n", 1);
+		assert_ne!(text, default_config());
+		assert_eq!(next_launch_text(&text), text);
+		assert_eq!(backfilled_text(&text), Ok(None));
+	}
+
+	// A backfill that would stop a setting reading says which at launch, in the
+	// same words it always did.
+	// Test ID: ddktf
+	#[test]
+	fn a_backfill_that_would_bury_a_setting_names_it() {
+		let named = |buried: Buried| buried.to_string();
+		assert_eq!(named(Buried::Setting("window.rows".into())), "`window.rows`");
+		assert_eq!(named(Buried::Line), "a line");
+		assert_eq!(named(Buried::Unnamed), "a setting");
+	}
+
+	// Test ID: dcfp3
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn backfill_keeps_a_setting_that_is_indented_too_deep() {
+		let files = [
+			("window.rows", "window:\n\t# x:\n\t\trows: 31\n"),
+			("window.rows", "window:\n\t\trows: 31\n"),
+			("window.tab_regular_width_pct", "window:\n\t# x:\n\t\ttab_regular_width_pct: 12\n"),
+			("wallpaper.rotate.interval_s", "wallpaper:\n\trotate:\n\t\t\t\tinterval_s: 40\n"),
+			// with 2 of them: a line added between at the block's depth couldn't be
+			// read, and no save went through after that
+			("window.columns", "window:\n\t# x:\n\t\trows: 31\n\t\tcolumns: 97\n"),
+		];
+		for (path, text) in files {
+			let wanted = shcl::Document::parse(text).get_string(path);
+			assert!(wanted.is_ok(), "{path} loads to begin with");
+			let out = backfilled_text(text).unwrap_or_else(|lost| panic!("{path}: gave up over {lost}")).expect("a short file lacks settings");
+			assert_eq!(shcl::Document::parse(&out).get_string(path), wanted, "{path} still loads:\n{out}");
+			assert_eq!(shcl::Document::parse(&out).lost_count(), 0, "{path}: every line still reads:\n{out}");
+			assert_eq!(backfilled_text(&out), Ok(None), "{path}: settles in one pass");
+		}
+	}
+
+	// Test ID: dcfp4
+	#[test]
+	fn a_rating_is_refused_where_a_launch_step_reads_the_layout() {
+		fn reads_bare(text: &str) -> Option<String> {
+			text.contains("family: Old Mono\n").then(|| text.replace("family: Old Mono\n", "family: \"New Mono\"\n"))
+		}
+		let lines = RatingLines { check_next_run: Some(true) };
+		// the save keeps a bare value bare in a file it can keep line by line
+		let single = "font:\n\tfamily: Old Mono\n";
+		let out = with_rating_lines_through(single, lines, &[reads_bare]).expect("kept");
+		assert!(out.contains("family: Old Mono\n"), "{out}");
+		// `font` twice is folded into one block, so the save falls back to the
+		// canonical form
+		let text = "font:\n\tfamily: Old Mono\nwindow:\n\tcolumns: 90\nfont:\n\tsize: 13\n";
+		let plain = with_rating_lines_through(text, lines, &[]).expect("no step, so it is kept");
+		assert!(plain.contains("\"Old Mono\""), "the save respells the value:\n{plain}");
+		assert_eq!(with_rating_lines_through(text, lines, &[reads_bare]), Err(Kept::Unplaced), "the next launch would load another font");
+		// a file with somewhere to put the lines is written line by line, the value
+		// stays bare, and the step fires on both sides
+		let blocked = format!("{text}performance:\n\tautomatic: true\n");
+		let out = with_rating_lines_through(&blocked, lines, &[reads_bare]).expect("kept");
+		assert!(out.contains("family: Old Mono\n"), "{out}");
+	}
+
+	// Each file is loaded, put back as it was (the state a launch leaves when it
+	// finds the file open elsewhere), rated, and loaded again. Either the rating
+	// went in and `other` loads as before, or nothing was written and it goes in a
+	// launch later.
+	fn rating_leaves_other_loads_alone(tag: &str, files: Vec<(&str, String, fn(&Settings) -> String)>) {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_{tag}_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let lines = RatingLines { check_next_run: Some(true) };
+		for (what, text, other) in files {
+			std::fs::write(&path, &text).unwrap();
+			let loaded = other(&reload_from_disk());
+			std::fs::write(&path, &text).unwrap();
+			let kept = keep_rating(lines);
+			let disk = std::fs::read_to_string(&path).unwrap();
+			if kept == Kept::Written {
+				assert_eq!(other(&reload_from_disk()), loaded, "{what}: loads as before");
+			} else {
+				assert_eq!(kept, Kept::Unplaced, "{what}");
+				assert_eq!(disk, text, "{what}: nothing written");
+				// a launch that isn't busy migrates the file, and the rating goes in then
+				let _ = reload_from_disk();
+				assert_eq!(keep_rating(lines), Kept::Written, "{what}: next launch");
+				let reloaded = reload_from_disk();
+				assert!(reloaded.performance_check_next_run, "{what}");
+				assert_eq!(other(&reloaded), loaded, "{what}: loads as before after the next launch");
+			}
+
+			// Each case ended by showing that a plain save of the same rating did
+			// move `other`. The launch steps read no quotes or indents since
+			// 2026-09-18, so a save moves none of them and that guard could only
+			// fail. `a_rating_is_refused_where_a_launch_step_reads_the_layout` holds
+			// the check to account instead, with a step of its own.
+			//   assert_ne!(other(&reload_from_disk()), loaded, "... proves nothing");
+			let mut saved = shcl::Document::parse(&text);
+			assert_eq!(saved.set_bool("performance.check_next_run", true), shcl::SetStatus::Ok, "{what}");
+			std::fs::write(&path, saved.to_canonical()).unwrap();
+			assert_eq!(other(&reload_from_disk()), loaded, "{what}: a save of the same rating loads it as before too");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A line the parse can't place made every save refuse, and the rating is a
+	// save, so the test ran at every launch. The rating goes in beside it now, and
+	// so does the dialog's save, with the line kept as it was. The line is in a
+	// theme, where the reload's backfill adds nothing that could give it a level.
+	// Test ID: dcf85
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_is_kept_beside_an_unreadable_line() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_ratinglost_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		let text = "themes:\n\tone:\n\t\t\tname: One\n\t\tstray: 1\n\nperformance:\n\t# profile: \"max\"  ## Default\n\t# check_next_run: false  ## Default\n";
+		assert_eq!(shcl::Document::parse(text).lost_count(), 1, "the line stepping back to no level is the one the parse drops");
+		std::fs::write(&path, text).unwrap();
+		set_config_override(path.clone());
+
+		let lines = RatingLines { check_next_run: Some(true) };
+		assert_eq!(keep_rating(lines), Kept::Written);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), "themes:\n\tone:\n\t\t\tname: One\n\t\tstray: 1\n\nperformance:\n\t# profile: \"max\"  ## Default\n\tcheck_next_run: true\n", "the unreadable line and its neighbours are as they were");
+		let reloaded = reload_from_disk();
+		assert!(reloaded.performance_check_next_run);
+
+		let mut next = reloaded.clone();
+		change(&mut next, Key::PerfCheckNext, Value::Bool(false));
+		assert!(persist(&reloaded, &next), "the dialog's save goes through");
+		let after = std::fs::read_to_string(&path).unwrap();
+		assert!(after.starts_with("themes:\n\tone:\n\t\t\tname: One\n\t\tstray: 1\n"), "the unreadable line is as it was\n{after}");
+		assert!(!reload_from_disk().performance_check_next_run);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Every launch-time write defers to a holder, and so does a rating, which then
+	// has to say so rather than report a write.
+	// Test ID: dcf86
+	#[cfg(target_os = "linux")]
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_held_settings_file_keeps_no_rating() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_ratingheld_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		let text = "performance:\n\tcheck_next_run: true\n";
+		std::fs::write(&path, text).unwrap();
+		set_config_override(path.clone());
+		let lines = RatingLines { check_next_run: Some(false) };
+
+		let hold = std::fs::File::open(&path).unwrap();
+		let mut child = std::process::Command::new("sleep").arg("30").stdin(std::process::Stdio::from(hold)).spawn().unwrap();
+		let seen = (0..50).any(|_| {
+			std::thread::sleep(std::time::Duration::from_millis(20));
+			config_open_elsewhere(&path)
+		});
+		let held = keep_rating(lines);
+		let bytes = std::fs::read_to_string(&path).unwrap();
+		let _ = child.kill();
+		let _ = child.wait();
+		assert!(seen, "the holder never showed up");
+		assert_eq!(held, Kept::Busy);
+		assert_eq!(bytes, text, "nothing is written while it is held");
+
+		assert_eq!(keep_rating(lines), Kept::Written);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), "performance:\n\tcheck_next_run: false\n");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The window size is kept in the state file, so a resize changes nothing in the
+	// config and doesn't rewrite it. A config held open in another program, an
+	// editor most likely, held up the size as well, which is the program's own.
+	// A change to the config itself still waits for it.
+	// Test ID: ddqxp
+	#[cfg(target_os = "linux")]
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_window_size_saves_past_a_config_held_open() {
+		use std::os::unix::fs::MetadataExt;
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = format_test_dir("heldsize");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		set_config_override(path.clone());
+		let base = reload_from_disk();
+		let text = std::fs::read_to_string(&path).unwrap();
+		let inode = std::fs::metadata(&path).unwrap().ino();
+
+		let mut sized = base.clone();
+		remember_window(&mut sized, None, Some((121, 33)), None);
+		assert!(persist(&base, &sized), "nothing in the config to wait for");
+		assert_eq!(std::fs::metadata(&path).unwrap().ino(), inode, "not rewritten");
+
+		let hold = std::fs::File::open(&path).unwrap();
+		let mut child = std::process::Command::new("sleep").arg("30").stdin(std::process::Stdio::from(hold)).spawn().unwrap();
+		let seen = (0..50).any(|_| {
+			std::thread::sleep(std::time::Duration::from_millis(20));
+			config_open_elsewhere(&path)
+		});
+		let mut again = sized.clone();
+		remember_window(&mut again, None, Some((122, 34)), None);
+		let size_saved = persist(&sized, &again);
+		let mut font = again.clone();
+		change(&mut font, Key::FontSize, Value::Float(15.0));
+		let font_saved = persist(&again, &font);
+		let _ = child.kill();
+		let _ = child.wait();
+		assert!(seen, "the holder never showed up");
+		assert!(size_saved && !font_saved);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+		let back = reload_from_disk();
+		assert_eq!((back.remembered_columns, back.remembered_rows), (122, 34));
+		assert_ne!(back.font_size, 15.0);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A rename publishes a new file, so a rating written that way replaced a linked
+	// settings file with a plain copy and reset a private one's mode. The dialog's
+	// save never did either.
+	// Test ID: dcf9p
+	#[cfg(unix)]
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_keeps_a_linked_private_settings_file() {
+		use std::os::unix::fs::PermissionsExt;
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_ratinglink_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let real = dir.join("real.shcl");
+		std::fs::write(&real, "performance:\n\tcheck_next_run: true\n").unwrap();
+		std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o600)).unwrap();
+		let link = dir.join("config.shcl");
+		std::os::unix::fs::symlink(&real, &link).unwrap();
+		set_config_override(link.clone());
+
+		let lines = RatingLines { check_next_run: Some(false) };
+		assert_eq!(keep_rating(lines), Kept::Written);
+		let meta = std::fs::symlink_metadata(&link).unwrap();
+		assert!(meta.file_type().is_symlink(), "the settings file is still a link");
+		assert_eq!(std::fs::read_link(&link).unwrap(), real);
+		assert_eq!(std::fs::read_to_string(&real).unwrap(), "performance:\n\tcheck_next_run: false\n", "the linked file holds the rating");
+		let mode = std::fs::metadata(&real).unwrap().permissions().mode() & 0o777;
+		assert_eq!(mode, 0o600, "the file stays private");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Adding missing settings at launch had the same faults the rating write had,
+	// and so did the template write and the renames beside it.
+	// Test ID: dcnrj
+	#[cfg(unix)]
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_launch_rewrite_keeps_a_linked_private_settings_file() {
+		use std::os::unix::fs::PermissionsExt;
+		let dir = crate::testdir::run_dir().join(format!("silkterm_launchlink_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let real = dir.join("real.shcl");
+		std::fs::write(&real, "font:\n\tsize: 12\n").unwrap();
+		std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o600)).unwrap();
+		let link = dir.join("config.shcl");
+		std::os::unix::fs::symlink(&real, &link).unwrap();
+
+		backfill_config(&mut LaunchFile::read(&link));
+		let meta = std::fs::symlink_metadata(&link).unwrap();
+		assert!(meta.file_type().is_symlink(), "the settings file is still a link");
+		let text = std::fs::read_to_string(&real).unwrap();
+		assert!(text.contains("\tsize: 12") && text.lines().count() > 2, "the linked file got the missing settings: {text}");
+		let mode = std::fs::metadata(&real).unwrap().permissions().mode() & 0o777;
+		assert_eq!(mode, 0o600, "the file stays private");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Test ID: dcnrk
+	#[cfg(unix)]
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_launch_rewrite_writes_through_no_link_left_at_a_temp_name() {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_launchplant_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "font:\n\tsize: 12\n").unwrap();
+		let victim = dir.join("victim.txt");
+		std::fs::write(&victim, "untouched\n").unwrap();
+		// the name launch rewrites used to write, and the first one shcl's writer tries
+		for name in ["config.shcl.new".to_string(), format!(".config.shcl.tmp{}.0", std::process::id())] {
+			std::os::unix::fs::symlink(&victim, dir.join(name)).unwrap();
+		}
+
+		backfill_config(&mut LaunchFile::read(&path));
+		assert_eq!(std::fs::read_to_string(&victim).unwrap(), "untouched\n", "a link at a temp name is not written through");
+		let meta = std::fs::symlink_metadata(&path).unwrap();
+		assert!(meta.file_type().is_file(), "the settings file is a plain file");
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(text.contains("\tsize: 12") && text.lines().count() > 2, "the missing settings were added: {text}");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The temp file's name is predictable, so something already there must
+	// never be written through: a link to another file would get the settings text.
+	// Test ID: dcf9q
+	#[cfg(unix)]
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_writes_through_no_link_left_at_a_temp_name() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_ratingplant_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "performance:\n\tcheck_next_run: true\n").unwrap();
+		let victim = dir.join("victim.txt");
+		std::fs::write(&victim, "untouched\n").unwrap();
+		// the name the rating used to write, and the first one shcl's writer tries
+		for name in ["config.shcl.new".to_string(), format!(".config.shcl.tmp{}.0", std::process::id())] {
+			std::os::unix::fs::symlink(&victim, dir.join(name)).unwrap();
+		}
+		set_config_override(path.clone());
+
+		let lines = RatingLines { check_next_run: Some(false) };
+		assert_eq!(keep_rating(lines), Kept::Written);
+		assert_eq!(std::fs::read_to_string(&victim).unwrap(), "untouched\n", "a link at a temp name is not written through");
+		let meta = std::fs::symlink_metadata(&path).unwrap();
+		assert!(meta.file_type().is_file(), "the settings file is a plain file");
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), "performance:\n\tcheck_next_run: false\n");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// One unusable line must cost only its own setting, never the whole file. This
 	// used to need a hand-rolled retry loop (blank the offending line, reparse);
 	// the parser is forgiving now, so the guarantee has to be re-proven here.
+	// Test ID: damtn
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bad_line_drops_only_its_own_setting() {
 		let p = std::path::Path::new("test.shcl");
-		let s = resolve(read_raw(
-			"scroll.scrollback: 4242\nwindow.margin: not-a-number\ncolors.focus: \"#abcdef\"\n",
-			p,
-		));
+		let s = resolve(read_raw("scroll.scrollback: 4242\nwindow.margin: not-a-number\ncolors.focus: \"#abcdef\"\n", p).0);
 		assert_eq!(s.scrollback, 4242, "settings before the bad line survive");
 		assert_eq!(s.focus, [0xab, 0xcd, 0xef], "and settings after it");
-		assert_eq!(
-			s.margin,
-			Settings::default().margin,
-			"the unusable one falls back to its default"
-		);
+		assert_eq!(s.margin, Settings::default().margin, "the unusable one falls back to its default");
 	}
 
-	// A key written twice cannot resolve to one value, so the default takes
-	// effect. That is the right outcome, but it has to be SAID - the setting is
-	// there in the file, plainly set, and doing nothing.
+	// Every setting knobs keeps has a field that takes back what it gives, and
+	// a line in the template.
+	// Test ID: ddqa3
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_setting_knobs_keeps_has_a_field_and_a_template_line() {
+		let paths: std::collections::HashSet<String> = walk_settings(default_config())
+			.into_iter()
+			.filter_map(|w| match w {
+				WalkLine::Setting { path, .. } => Some(path),
+				_ => None,
+			})
+			.collect();
+		let mut s = Settings::default();
+		for setting in &crate::fields::spec().settings {
+			assert!(paths.contains(&setting.path), "{} is not in the template", setting.path);
+			let key = Key::parse(&setting.id).expect("a key");
+			let v = crate::fields::get(&s, key).expect("a field");
+			assert!(crate::fields::put(&mut s, key, &v), "{}", setting.id);
+			assert_eq!(crate::fields::get(&s, key), Some(v), "{}", setting.id);
+		}
+	}
+
+	// A setting under a switch follows its rule while the switch is on. Set by
+	// hand it turns the switch off, and turning the switch back on sets the
+	// value aside rather than dropping it.
+	// Test ID: ddqa4
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_switch_s_rule_gives_the_value_and_one_set_by_hand_comes_back() {
+		let mut s = Settings::default();
+		let os = crate::sysfont::monospace();
+		assert!(s.use_system_font);
+		assert_eq!(s.font_family, os.family.as_deref().map_or_else(|| DEFAULT_FONT_STACK.to_string(), desktop_font_stack));
+		s.remembered_columns = 133;
+		s.remembered_rows = 41;
+		assert_eq!(crate::fields::grid(&s, None), (133, 41));
+		// per monitor, where one is kept
+		s.monitor_sizes.push(MonitorSize { key: "m1".into(), columns: 90, rows: 25, font_zoom: 0 });
+		assert_eq!(crate::fields::grid(&s, Some("m1")), (90, 25));
+		change(&mut s, Key::RememberPerMonitor, Value::Bool(false));
+		assert_eq!(crate::fields::grid(&s, Some("m1")), (133, 41));
+
+		change(&mut s, Key::FontFamily, Value::Text("Iosevka".into()));
+		assert!(!s.use_system_font, "set by hand turns the switch off");
+		assert_eq!(s.font_family, "Iosevka");
+		change(&mut s, Key::Columns, Value::Int(100));
+		assert!(!s.remember_size);
+		assert_eq!(crate::fields::grid(&s, None), (100, 41), "rows kept what it showed");
+		change(&mut s, Key::RememberSize, Value::Bool(true));
+		assert_eq!(crate::fields::grid(&s, None), (133, 41));
+		let lines = crate::fields::lines_of(&s);
+		assert!(lines.iter().any(|(p, v)| p == "kept.set_aside.window.columns" && *v == Value::Int(100)), "{lines:?}");
+		change(&mut s, Key::RememberSize, Value::Bool(false));
+		assert_eq!(crate::fields::grid(&s, None), (100, 41), "and back it comes");
+	}
+
+	// Following the desktop shows its font ahead of the whole built-in list, and
+	// turning the switch off keeps and saves that list. It kept the desktop's
+	// one name, which on a desktop set to Monaspace Argon read as the list cut
+	// to its first font (2026100913394946).
+	// Test ID: ddwhp
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_family_keeps_the_whole_list_when_the_switch_goes_off() {
+		let mut s = Settings::default();
+		assert!(s.use_system_font);
+		let shown = s.font_family.clone();
+		for name in DEFAULT_FONT_STACK.split(',') {
+			assert!(shown.contains(name.trim()), "{name} is not in {shown:?}");
+		}
+		change(&mut s, Key::SystemFont, Value::Bool(false));
+		assert!(!s.use_system_font);
+		assert_eq!(s.font_family, shown, "off keeps what it showed");
+		let lines = crate::fields::lines_of(&s);
+		assert!(lines.iter().any(|(p, v)| p == "font.family" && v.as_text() == shown), "{lines:?}");
+	}
+
+	// Test ID: ddwhq
+	#[test]
+	fn the_desktop_s_font_leads_the_built_in_list() {
+		assert_eq!(desktop_font_stack("Monaspace Argon"), DEFAULT_FONT_STACK);
+		assert_eq!(desktop_font_stack(" DejaVu Sans Mono "), format!("DejaVu Sans Mono, {DEFAULT_FONT_STACK}"));
+		// one already in the list moves to the front and isn't named twice
+		let fira = desktop_font_stack("fira code");
+		assert!(fira.starts_with("fira code, Monaspace Argon, JetBrains Mono"), "{fira}");
+		assert_eq!(fira.split(", ").count(), DEFAULT_FONT_STACK.split(", ").count());
+		assert_eq!(desktop_font_stack(""), DEFAULT_FONT_STACK);
+	}
+
+	// The theme's colors come from the theme in force, in the mode in force. A
+	// color changed under it stays through a mode change, and Custom is the
+	// file's own lines.
+	// Test ID: ddqbp
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_theme_colors_follow_the_theme_and_a_change_stays() {
+		let _guard = test_config_lock();
+		let p = std::path::Path::new("test.shcl");
+		let read = |text: &str| settled(resolve(read_raw(text, p).0), &shcl::Document::parse(text));
+		let pal = crate::theme::resolve("SilkTerm", crate::theme::Mode::Light, true);
+		let light = read("theme_mode: light\n");
+		assert_eq!(light.bg, pal.bg);
+		assert_eq!(light.dialog_bg, pal.dialog_bg);
+		assert_eq!(light.gutter, pal.gutter);
+		assert_eq!(light.scrollbar_thumb, SCROLLBAR_THUMB_DEF, "in no theme");
+
+		let mut s = read("theme_mode: dark\n");
+		change(&mut s, Key::ColHighlight, Value::Text("#010203".into()));
+		assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "SilkTerm *");
+		change(&mut s, Key::ThemeMode, Value::Text("light".into()));
+		assert_eq!(s.bg, pal.bg);
+		assert_eq!(s.highlight, [1, 2, 3], "the change holds in both modes");
+
+		let custom = read("theme: custom\ncolors:\n\tbackground: \"#123456\"\n\tgutter: \"nope\"\n");
+		assert_eq!(custom.bg, [0x12, 0x34, 0x56]);
+		assert_eq!(custom.gutter, Settings::bare().gutter, "a color that does not parse is no line");
+		let preset = read("colors:\n\tbackground: \"#123456\"\n");
+		assert_eq!(preset.bg, crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true).bg, "a Custom line, under a theme");
+	}
+
+	// The open command, File or folder and its folder have a rule that gives the
+	// default. Empty text and the usual folder written out read as no line, the
+	// way an older build's file meant them.
+	// Test ID: ddqth
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_open_command_and_the_wallpaper_default_to_their_rules() {
+		let _guard = test_config_lock();
+		let p = std::path::Path::new("test.shcl");
+		let read = |text: &str| settled(resolve(read_raw(text, p).0), &shcl::Document::parse(text));
+		let none = read("");
+		assert!(!crate::fields::by_hand(&none, Key::LinkOpenCommand));
+		assert_eq!(none.hyperlink_open_command, crate::links::desktop_opener());
+		let blank = read("hyperlinks:\n\topen_command: \" \"\n");
+		assert!(!crate::fields::by_hand(&blank, Key::LinkOpenCommand));
+		let usual = read(&format!("wallpaper:\n\trotate:\n\t\tfolder: \"{WALLPAPER_DIR_TOKEN}\"\n"));
+		assert!(!crate::fields::by_hand(&usual, Key::BgFolder));
+		assert_eq!((&usual.wallpaper_folder, usual.wallpaper_folder_auto), (&none.wallpaper_folder, none.wallpaper_folder_auto), "the same folder, found the same way");
+		let named = read("wallpaper:\n\timage: \"/x.png\"\n");
+		assert_eq!(image_of(&named).as_deref(), Some("/x.png"));
+		assert!(image_of(&read("wallpaper:\n\timage: \"\"\n")).is_none());
+	}
+
+	// Set by hand, a color, the open command and the folder each write their
+	// line. The reset arrow takes it out, and the next launch reads the default.
+	// Test ID: ddqbr
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_value_writes_its_line_and_the_arrow_takes_it_out() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("auto_lines");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "theme: custom\n").unwrap();
+		set_config_override(path.clone());
+		let base = reload_from_disk();
+		let mut own = base.clone();
+		let folder = if cfg!(windows) { "C:\\pics" } else { "/pics" };
+		let hand = [(Key::ColBg, Value::Text("#123456".into())), (Key::ColScrollbarTrough, Value::Text("#010203".into())), (Key::LinkOpenCommand, Value::Text("firefox --new-tab".into())), (Key::BgFolder, Value::Text(folder.into()))];
+		for (key, v) in hand.clone() {
+			change(&mut own, key, v);
+		}
+		assert!(persist(&base, &own));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(text.contains("\tbackground: \"#123456\""), "{text}");
+		let loaded = reload_from_disk();
+		for (key, v) in hand.clone() {
+			assert_eq!(crate::fields::get(&loaded, key), Some(v), "{}", key.name());
+			assert!(crate::fields::by_hand(&loaded, key), "{}", key.name());
+		}
+		let mut back = loaded.clone();
+		for (key, _) in hand.clone() {
+			crate::fields::reset(&mut back, key, None);
+		}
+		assert!(persist(&loaded, &back));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(!text.contains("\n\tbackground: \"#123456\""), "{text}");
+		let again = reload_from_disk();
+		for (key, _) in hand {
+			assert!(!crate::fields::by_hand(&again, key), "{}: {text}", key.name());
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The switches are stored, so a relaunch reads them back as they were, and a
+	// value set aside under one comes back with it.
+	// Test ID: ddqa5
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_switch_and_what_it_set_aside_read_the_same_after_a_relaunch() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = format_test_dir("switch_relaunch");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		set_config_override(path.clone());
+		let loaded = load();
+		assert!(loaded.remember_size);
+		let mut edited = loaded.clone();
+		change(&mut edited, Key::Columns, Value::Int(111));
+		assert!(persist(&loaded, &edited));
+		let back = load();
+		assert!(!back.remember_size);
+		assert_eq!(crate::fields::grid(&back, None).0, 111);
+		// on again: 111 goes aside, and comes back off
+		let mut on = back.clone();
+		change(&mut on, Key::RememberSize, Value::Bool(true));
+		assert!(persist(&back, &on));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(text.contains("\nkept:"), "{text}");
+		assert!(!text.lines().any(|l| l.trim_start().starts_with("columns:") && !l.contains("111")), "{text}");
+		let again = load();
+		assert!(again.remember_size);
+		let mut off = again.clone();
+		change(&mut off, Key::RememberSize, Value::Bool(false));
+		assert_eq!(crate::fields::grid(&off, None).0, 111);
+
+		let p = std::path::Path::new("test.shcl");
+		let read = |text: &str| settled(resolve(read_raw(text, p).0), &shcl::Document::parse(text));
+		let off = "window:\n\tremember_size: false\n\tcolumns: lots\n";
+		assert_eq!(crate::fields::grid(&read(off), None).0, 160, "a bad value is no line");
+		assert_eq!(read("font:\n\tuse_system_size: false\n\tsize: 900\n").font_size, limits::FONT_SIZE.1);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The size remembered can change while the program runs. With Remember last
+	// size on, Columns and Rows follow it, and with it off they stay.
+	// Test ID: ddqa6
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_remembered_size_follows_the_window_and_one_set_by_hand_stays() {
+		let mut s = Settings::default();
+		remember_window(&mut s, Some("m1"), Some((120, 40)), Some(0));
+		assert_eq!(crate::fields::grid(&s, Some("m1")), (120, 40));
+		remember_window(&mut s, Some("m1"), Some((140, 44)), None);
+		assert_eq!(crate::fields::grid(&s, Some("m1")), (140, 44));
+		change(&mut s, Key::Rows, Value::Int(30));
+		remember_window(&mut s, Some("m1"), Some((150, 50)), None);
+		assert_eq!(crate::fields::grid(&s, Some("m1")), (140, 30), "set by hand");
+	}
+
+	// The switches came back under their old names, so a file from before they
+	// went loads with no conversion.
+	// Test ID: ddqa7
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_old_file_s_switches_are_read_as_they_are() {
+		let p = std::path::Path::new("test.shcl");
+		let read = |text: &str| {
+			let text = migrate_config_text(text).unwrap_or_else(|| text.to_string());
+			settled(resolve(read_raw(&text, p).0), &shcl::Document::parse(&text))
+		};
+		let s = read("window:\n\tremember_size: false\n\tcolumns: 100\n\trows: 30\n");
+		assert!(!s.remember_size);
+		assert_eq!(crate::fields::grid(&s, None), (100, 30));
+		let s = read("font:\n\tuse_system_family: false\n\tfamily: \"Iosevka\"\n");
+		assert!(!s.use_system_font);
+		assert_eq!(s.font_family, "Iosevka");
+		// the font block as an old template wrote it: the switch on and the list
+		// set, which is now the list set aside
+		let shipped = format!("font:\n\n\tuse_system_family: true\n\t# use_system_size: true  ## Default\n\n\tfamily: \"{DEFAULT_FONT_STACK}\"\n");
+		let s = read(&shipped);
+		assert!(s.use_system_font && s.use_system_font_size);
+		assert_eq!(migrate_config_text(&shipped), None, "a launch leaves the switches alone");
+	}
+
+	// Reverting used to remove the node, and shcl takes a node's leading comments
+	// with it, so a scrim setting destroyed 7 lines of comments, and a note written
+	// above a value went the same way.
+	// Test ID: dcbd6
+	#[test]
+	fn reverting_a_setting_keeps_the_comments_above_it() {
+		let text = "text:\n\n\t## A blurred patch of background color behind each letter, so text stays\n\t## readable over a wallpaper.\n\tscrim:\n\t\t## mine: I like it stronger\n\t\tstrength: 40\n";
+		let out = reverted_text(text, &["text.scrim.strength"]).expect("something to write");
+		assert!(out.contains("## A blurred patch of background color"), "the template's comments survive: {out:?}");
+		assert!(out.contains("## mine: I like it stronger"), "and so does a note written by hand: {out:?}");
+		assert!(!out.contains("strength: 40"), "the value itself is gone: {out:?}");
+		// back to how the template has it, at the file's own indentation
+		assert!(out.contains("\t\t# strength: 20  ## Default"), "the template line went back: {out:?}");
+		// and a second revert of the same key has nothing left to do
+		assert!(reverted_text(&out, &["text.scrim.strength"]).is_none());
+	}
+
+	// Every numeric setting, at both extremes, in one place. Floors were there
+	// already; ceilings weren't, and a value in the low thousands aborted the
+	// launch on a texture limit while a large scrollback grew until the process
+	// was killed. `1e400` is here because shcl reads it as infinity and reports
+	// it good, and infinity survives a clamp.
+	// Test ID: dcbd3
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_numeric_setting_has_a_floor_and_a_ceiling() {
+		#[rustfmt::skip]
+		let keys: &[(&str, f32, f32)] = &[
+			("font.size",                        limits::FONT_SIZE.0,   limits::FONT_SIZE.1),
+			("font.line_height_scale",           limits::LINE_HEIGHT.0, limits::LINE_HEIGHT.1),
+			("scroll.wheel_lines",               limits::WHEEL_LINES.0, limits::WHEEL_LINES.1),
+			("scroll.alt_scroll_lines",          limits::WHEEL_LINES.0, limits::WHEEL_LINES.1),
+			("scroll.ease_in_ms",                limits::EASE_MS.0,     limits::EASE_MS.1),
+			("scroll.ramp_up_ms",                limits::EASE_MS.0,     limits::EASE_MS.1),
+			("scroll.single_screen_tau_ms",      limits::EASE_MS.0,     limits::EASE_MS.1),
+			("scroll.ramp_down_ms",              limits::EASE_MS.0,     limits::EASE_MS.1),
+			("scroll.ease_out_ms",               limits::EASE_MS.0,     limits::EASE_MS.1),
+			("window.margin",                    limits::MARGIN.0,      limits::MARGIN.1),
+			("cursor.blink_rate_s",              limits::BLINK_S.0,     limits::BLINK_S.1),
+			("wallpaper.rotate.interval_s",      limits::ROTATE_S.0,    limits::ROTATE_S.1),
+		];
+		let read = |key: &str, value: &str| read_text(&format!("{key}: {value}\n"));
+		let of = |s: &Settings, key: &str| -> f32 {
+			match key {
+				"font.size" => s.font_size,
+				"font.line_height_scale" => s.line_height_scale,
+				"scroll.wheel_lines" => s.wheel_lines,
+				"scroll.alt_scroll_lines" => s.alt_scroll_lines,
+				"scroll.ease_in_ms" => s.scroll_ease_in_ms,
+				"scroll.ramp_up_ms" => s.scroll_ramp_up_ms,
+				"scroll.single_screen_tau_ms" => s.scroll_single_screen_tau_ms,
+				"scroll.ramp_down_ms" => s.scroll_ramp_down_ms,
+				"scroll.ease_out_ms" => s.scroll_ease_out_ms,
+				"window.margin" => s.margin,
+				"cursor.blink_rate_s" => s.cursor_blink_rate_s,
+				"wallpaper.rotate.interval_s" => s.wallpaper_rotate_interval_s,
+				other => panic!("{other} is not in the reader"),
+			}
+		};
+		for &(key, lo, hi) in keys {
+			for value in ["1e30", "1e400", "-1e30", "-1e400", "0"] {
+				let got = of(&read(key, value), key);
+				assert!(got.is_finite(), "{key} at {value} resolved to {got}");
+				assert!(got >= lo && got <= hi, "{key} at {value} resolved to {got}");
+			}
+		}
+
+		// the integers, each against its own limit
+		let huge = "99999999";
+		for (key, (lo, hi)) in [("window.columns", limits::GRID), ("window.rows", limits::GRID), ("window.remembered_columns", limits::GRID), ("window.remembered_rows", limits::GRID), ("window.idle_release_hidden_min", limits::IDLE_MIN), ("window.idle_release_min", limits::IDLE_MIN)] {
+			let s = read(key, huge);
+			let got = match key {
+				"window.columns" => crate::fields::grid(&s, None).0,
+				"window.rows" => crate::fields::grid(&s, None).1,
+				"window.remembered_columns" => s.remembered_columns,
+				"window.remembered_rows" => s.remembered_rows,
+				"window.idle_release_hidden_min" => s.idle_release_hidden_min,
+				"window.idle_release_min" => s.idle_release_min,
+				other => panic!("{other} is not in the reader"),
+			};
+			assert!((lo..=hi).contains(&got), "{key} resolved to {got}");
+		}
+		assert!(read("scroll.scrollback", huge).scrollback <= limits::SCROLLBACK.1, "an unbounded scrollback grows until the process is killed");
+	}
+
+	// A number the dialog lets through past its slider is one the file reads
+	// back as written and says nothing about. The dialog's own test saves and
+	// reloads it; this one reads it from a file written by hand.
+	// Test ID: ddp92
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_number_typed_past_a_slider_reads_back_without_a_word() {
+		let p = std::path::Path::new("test.shcl");
+		let ui = crate::ui_spec::ui();
+		let mut checked = 0;
+		for spec in &ui.specs {
+			let crate::ui_spec::Kind::Slider { max, typed_max, .. } = spec.kind else {
+				continue;
+			};
+			if typed_max <= max {
+				continue;
+			}
+			for path in ui.settings_of(spec.key) {
+				let nest: Vec<String> = path.split('.').enumerate().map(|(depth, part)| format!("{}{part}:", "\t".repeat(depth))).collect();
+				let text = format!("{} {typed_max}\n", nest.join("\n"));
+				let (raw, said) = read_config_text(&text, p);
+				assert!(said.is_empty(), "{path}: {said:?}");
+				let got = crate::settings_ui::slider_of(&resolve(raw), spec.key);
+				assert_eq!(got, typed_max, "{path} was held under {typed_max}");
+				checked += 1;
+			}
+		}
+		assert!(checked >= 11, "only {checked} checked");
+	}
+
+	// All 3 of these were silent, and the file looks perfectly fine while the
+	// setting does nothing. The first one also stops every future save.
+	// An unquoted color was read as empty and the theme's color used, with no word
+	// of it anywhere.
+	// Test ID: dd824
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_unquoted_color_is_named() {
+		let said = config_complaints("colors:\n\tbackground: #112233\n\tcursor: #abc  # mine\n");
+		assert_eq!(said.len(), 2, "{said:?}");
+		assert!(said[0].contains("colors.background"), "{said:?}");
+		assert!(said[0].contains("line 2"), "{said:?}");
+		assert!(said[0].contains("\"#112233\""), "{said:?}");
+		assert!(said[1].contains("\"#abc\""), "{said:?}");
+		assert!(config_complaints("colors:\n\tbackground: \"#112233\"\n").is_empty());
+		// a heading with a comment after it is still a heading
+		assert!(config_complaints("colors:  # the palette\n\tbackground: \"#112233\"\n").is_empty());
+		assert_eq!(unquoted_color("x: #aabbccdd"), Some("#aabbccdd"));
+		assert_eq!(unquoted_color("x: #abcd"), None);
+		assert_eq!(unquoted_color("x: #1234567g"), None);
+		assert_eq!(unquoted_color("x:"), None);
+	}
+
+	// Test ID: dcbej
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_config_says_what_is_wrong_with_it() {
+		// a key set twice
+		let twice = config_complaints("font:\n\tfamily: \"One\"\n\tsize: 13.0\n\tfamily: \"Two\"\n");
+		assert_eq!(twice.len(), 1, "{twice:?}");
+		assert!(twice[0].contains("font.family"), "{twice:?}");
+		assert!(twice[0].contains("lines 2, 4"), "{twice:?}");
+
+		// a key nothing reads
+		let typo = config_complaints("font:\n\tfamly: \"One\"\n");
+		assert_eq!(typo.len(), 1, "{typo:?}");
+		assert!(typo[0].contains("font.famly"), "{typo:?}");
+
+		// a monitor's size is read, and a misspelled field in one isn't
+		let kept = "window:\n\tmonitors:\n\t\t\"1920x1080_100pct\":\n\t\t\tcolumns: 90\n\t\t\trows: 30\n";
+		assert!(config_complaints(kept).is_empty(), "{:?}", config_complaints(kept));
+		let typo = config_complaints(&kept.replace("rows:", "rowz:"));
+		assert_eq!(typo.len(), 1, "{typo:?}");
+		assert!(typo[0].contains("window.monitors.1920x1080_100pct.rowz"), "{typo:?}");
+
+		// a line the parser had to drop, which a save writes back as it was
+		let lost = config_complaints("font:\n\t\tsize: 13.0\n\tfamily: \"One\"\n");
+		assert!(lost.iter().any(|m| m.contains("line 3") && m.contains("don't set anything")), "{lost:?}");
+
+		// the template says nothing, and neither does a config full of
+		// the user's own shells and themes
+		assert!(config_complaints(default_config()).is_empty());
+		let mine = "shells:\n\tmine:\n\t\ttitle: Mine\n\t\tcommand: /bin/sh\nthemes:\n\tone:\n\t\tname: One\n";
+		assert!(config_complaints(mine).is_empty(), "{:?}", config_complaints(mine));
+	}
+
+	// Saved themes are written and read under `themes.`, so a file with one has
+	// nothing in it to complain about. A real typo beside it still gets a line.
+	// Test ID: dcnwx
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_saved_theme_is_not_taken_for_a_typo() {
+		let pal = crate::theme::resolve_in(&[], "SilkTerm", crate::theme::Mode::Dark, true);
+		let theme = crate::theme::UserTheme { slug: "mine".to_string(), name: "Mine".to_string(), dark: pal, light: pal, font: crate::theme::ThemeFont::default() };
+		let mut doc = shcl::Document::parse(default_config());
+		write_user_themes(&mut doc, &[], &[theme]);
+		let text = doc.to_canonical();
+		assert_eq!(read_user_themes(&shcl::Document::parse(&text)).len(), 1);
+		assert!(config_complaints(&text).is_empty(), "{:?}", config_complaints(&text));
+		let typo = format!("{text}\ntheme_mdoe: dark\n");
+		assert!(config_complaints(&typo).iter().any(|m| m.contains("theme_mdoe")), "{:?}", config_complaints(&typo));
+	}
+
+	// A color changed under a theme, or given on the command line, stays put when
+	// the system switches between dark and light.
+	// Test ID: dcnwy
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_color_override_survives_the_system_switching_modes() {
+		let _store = test_store_lock();
+		let before = settings();
+		let was_dark = OS_DARK.load(Ordering::Relaxed);
+		OS_DARK.store(true, Ordering::Relaxed);
+		let mut s = read_text("theme_mode: system\n");
+		// a change made under the theme, and one from the command line, which the
+		// file never has
+		change(&mut s, Key::ColBg, Value::Text("#123456".into()));
+		s.model.hold(Key::ColFg.name(), &Value::Text("#010203".into()));
+		crate::fields::fill(&mut s, None);
+		update(s);
+		for dark in [false, true, false] {
+			assert!(reapply_for_os(dark));
+			let live = settings();
+			let pal = crate::theme::resolve_in(&live.user_themes, &live.theme, crate::theme::Mode::System, dark);
+			assert_eq!(live.bg, [0x12, 0x34, 0x56], "dark {dark}");
+			assert_eq!(live.fg, [1, 2, 3], "dark {dark}");
+			assert_eq!(live.dialog_bg, pal.dialog_bg, "dark {dark}");
+			assert_eq!(live.ansi, pal.ansi, "dark {dark}");
+		}
+		OS_DARK.store(was_dark, Ordering::Relaxed);
+		update((*before).clone());
+	}
+
+	// A key written twice can't resolve to one value, so the default takes
+	// effect. That's the right outcome, but it has to be said, since the setting is
+	// there in the file, plainly set, and doing nothing.
+	// Test ID: dav1f
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_setting_written_twice_falls_back_and_is_reported() {
 		let p = std::path::Path::new("test.shcl");
-		let s = resolve(read_raw(
-			"font:\n\tfamily: \"One\"\n\tsize: 13.0\n\tfamily: \"Two\"\n",
-			p,
-		));
+		let s = resolve(read_raw("font:\n\tfamily: \"One\"\n\tsize: 13.0\n\tfamily: \"Two\"\n", p).0);
 		// as good as absent: neither spelling wins
-		let absent = resolve(read_raw("font:\n\tsize: 13.0\n", p));
-		assert_eq!(
-			s.font_family, absent.font_family,
-			"a repeated key falls back as if it were not there"
-		);
+		let absent = resolve(read_raw("font:\n\tsize: 13.0\n", p).0);
+		assert_eq!(s.font_family, absent.font_family, "a repeated key falls back as if it were not there");
 		assert_eq!(s.font_size, 13.0, "its siblings are unaffected");
 		// the message is what makes the fallback discoverable; both lines cited
 		assert_eq!(line_list(&[2, 4]), " lines 2, 4");
@@ -3952,157 +10204,2179 @@ mod tests {
 		assert_eq!(line_list(&[0]), "", "an uncitable node adds nothing");
 	}
 
+	// Test ID: damtp
 	#[test]
 	fn default_config_is_valid_shcl() {
 		let doc = shcl::Document::parse(default_config());
-		let errors: Vec<_> = doc
-			.diagnostics()
-			.iter()
-			.filter(|d| matches!(d.severity, shcl::Severity::Error))
-			.collect();
-		assert!(
-			errors.is_empty(),
-			"the shipped template has errors: {errors:?}"
-		);
+		let errors: Vec<_> = doc.diagnostics().iter().filter(|d| matches!(d.severity, shcl::Severity::Error)).collect();
+		assert!(errors.is_empty(), "the shipped template has errors: {errors:?}");
 	}
 
-	// The shipped template must already be what a save would produce, or the very
-	// first save would reflow the file we just wrote. Nearly every setting here is
-	// a commented default with no active sibling - the shape that shcl used to
-	// re-pad to the block header's depth - so this is now the guard on the writer
-	// itself, and a bump that reintroduced the reflow would fail here.
+	// The template must already be what a save would produce, or the very first
+	// save would reflow the file just written. Nearly every setting here is a
+	// commented default with no active sibling, the form shcl used to re-pad to the
+	// block header's depth, so this guards the writer itself, and a bump that
+	// brought back the reflow would fail here.
+	// Test ID: damtq
 	#[test]
 	fn default_config_survives_a_save_unchanged() {
 		let doc = shcl::Document::parse(default_config());
-		assert_eq!(
-			doc.to_canonical(),
-			default_config(),
-			"a save would rewrite the shipped template"
+		assert_eq!(doc.to_canonical(), default_config(), "a save would rewrite the shipped template");
+	}
+
+	// A file from before 10-09 kept the machine's state with the settings, and
+	// colors over a theme as plain lines. Its first launch moves the state to the
+	// state file and makes those colors the theme's "*" changes, so nothing on
+	// screen changes, and the next launch changes nothing. A newer file's colors
+	// under a theme are Custom's, and stay that way.
+	// Test ID: ddqwh
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_old_file_moves_its_state_out_and_shows_the_same() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("oldfile");
+		let path = dir.join("config.shcl");
+		let state_file = dir.join("state.shcl");
+		let old = "performance:\n\tautomatic: true\n\tprofile: high\n\trated_hardware: 0123456789abcdef\n\
+			font:\n\tfamily: \"Some Mono\"\n\
+			window:\n\tremembered_columns: 132\n\tremembered_rows: 41\n\tremembered_font_zoom: -2\n\tremembered_maximized: true\n\
+			\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\t\t\tfont_zoom: 1\n\
+			theme: Matrix\ncolors:\n\tbackground: \"#123456\"\n";
+		std::fs::write(&path, old).unwrap();
+		set_config_override(path.clone());
+		let s = load();
+
+		let state = std::fs::read_to_string(&state_file).unwrap_or_else(|_| panic!("no state file: {:?}\n{}", dir_names(&dir), std::fs::read_to_string(&path).unwrap()));
+		let kept = shcl::Document::parse(&state);
+		assert_eq!(kept.get_int("window.remembered_columns"), Ok(132), "{state}");
+		assert_eq!(kept.get_int("window.monitors.1920x1080_100pct.columns"), Ok(90), "{state}");
+		assert_eq!(kept.get_string("performance.rated_hardware").as_deref(), Ok("0123456789abcdef"));
+		assert_eq!(kept.get_string("performance.tested_profile").as_deref(), Ok("high"), "automatic was on, so the profile line was the test's pick");
+		let text = std::fs::read_to_string(&path).unwrap();
+		let doc = shcl::Document::parse(&text);
+		for gone in ["window.remembered_columns", "window.monitors", "performance.rated_hardware"] {
+			assert!(!doc.exists(gone), "{gone} is still in the file:\n{text}");
+		}
+		assert_eq!(doc.get_string("kept.changes.theme.preset").as_deref(), Ok("Matrix"), "{text}");
+		assert_eq!(doc.get_string("kept.changes.theme.values.colors.background").as_deref(), Ok("#123456"));
+		assert_eq!(doc.get_string("colors.background").as_deref(), Ok("#123456"), "the line stays, as Custom's");
+		assert_eq!(config_complaints(&text), Vec::<String>::new());
+
+		// what shows is what the old build showed
+		assert_eq!(s.bg, [0x12, 0x34, 0x56]);
+		assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "Matrix *");
+		assert_eq!(s.performance_profile, crate::profile::Profile::High);
+		assert!(!s.use_system_font && s.font_family == "Some Mono");
+		assert_eq!((s.remembered_columns, s.remembered_rows, s.remembered_font_zoom, s.remembered_maximized), (132, 41, -2, true));
+		assert_eq!(s.monitor_sizes.len(), 1);
+
+		let again = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), text, "settled");
+		assert_eq!(std::fs::read_to_string(&state_file).unwrap(), state);
+		assert!(again == s);
+
+		// Commented out: this file has no Format line, so it is from before 10-09
+		// or written by hand, and its colors are over Matrix (2026101304551668).
+		// A file this build wrote is checked in ddx9q instead.
+		// // no state lines, so a file this build wrote: Custom's colors stay Custom's
+		// let new = "theme: Matrix\ncolors:\n\tbackground: \"#123456\"\n";
+		// std::fs::write(&path, new).unwrap();
+		// let s = load();
+		// let text = std::fs::read_to_string(&path).unwrap();
+		// assert!(!shcl::Document::parse(&text).exists("kept"), "{text}");
+		// assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "Matrix");
+		// assert_ne!(s.bg, [0x12, 0x34, 0x56]);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// An old file with no state lines had its colors over its theme too. A file
+	// written by hand has none, and no Format line either, which is the mark. A
+	// file from the old template with only the commented state line is old as
+	// well. Both get the move a file with state lines gets, once. A file this
+	// build wrote keeps Custom's colors as Custom's, however many launches.
+	// Test ID: ddx9q
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_old_file_with_no_state_lines_still_shows_its_colors_over_the_theme() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("oldcolors");
+		let path = dir.join("config.shcl");
+		let state_file = dir.join("state.shcl");
+		let launch = |text: Option<&str>| {
+			let _ = std::fs::remove_file(&state_file);
+			match text {
+				Some(text) => std::fs::write(&path, text).unwrap(),
+				None => {
+					let _ = std::fs::remove_file(&path);
+				}
+			}
+			set_config_override(path.clone());
+			let s = load();
+			(s, std::fs::read_to_string(&path).unwrap())
+		};
+		let colors = "theme: Matrix\ncolors:\n\tforeground: \"#a0b0c0\"\n\tcursor: \"#c0b0a0\"\n\tbackground: \"#123456\"\n";
+		let (want, _) = launch(Some(&format!("window:\n\tremembered_columns: 100\n{colors}")));
+		assert_eq!(crate::fields::shown_choice(&want, Key::Theme), "Matrix *");
+		assert_eq!(want.bg, [0x12, 0x34, 0x56]);
+
+		let by_hand = colors.to_string();
+		let old_template = format!("performance:\n\tautomatic: true\n\t# rated_hardware: \"\"  ## Default\n{colors}\n{SHCL_BANNER}");
+		for (what, old) in [("by hand", by_hand), ("old template", old_template)] {
+			let (s, text) = launch(Some(&old));
+			let doc = shcl::Document::parse(&text);
+			for key in ["foreground", "cursor", "background"] {
+				assert_eq!(doc.get_string(&format!("kept.changes.theme.values.colors.{key}")), shcl::Document::parse(colors).get_string(&format!("colors.{key}")), "{what}: {key}\n{text}");
+			}
+			assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "Matrix *", "{what}");
+			assert_eq!((s.fg, s.cursor, s.bg), (want.fg, want.cursor, want.bg), "{what}");
+			let again = load();
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), text, "{what}: settled");
+			assert!(again == s, "{what}");
+		}
+
+		// a file this build wrote, with Custom's colors and Matrix up
+		let (_, fresh) = launch(None);
+		let mut doc = shcl::Document::parse(&fresh);
+		doc.put_string("theme", "Matrix");
+		doc.put_string("colors.background", "#123456");
+		let (s, text) = launch(Some(&saved_text(&doc)));
+		assert!(!shcl::Document::parse(&text).exists("kept"), "{text}");
+		assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "Matrix");
+		assert_ne!(s.bg, [0x12, 0x34, 0x56]);
+		let _ = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), text, "settled");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The remembered size is kept in the state file, so the template has no line
+	// for it and a resize never rewrites the config.
+	// Test ID: dd5mk
+	#[test]
+	fn the_template_has_no_remembered_size() {
+		for path in ["window.remembered_columns", "window.remembered_rows", "window.remembered_font_zoom", "window.remembered_maximized", "window.monitors"] {
+			let found = walk_settings(default_config()).into_iter().any(|w| matches!(w, WalkLine::Setting { path: p, .. } if p == path || p.starts_with(&format!("{path}."))));
+			assert!(!found, "{path} is in the template");
+		}
+	}
+
+	// A size or zoom set by hand is the last one anywhere, and with
+	// remember_size and remember_per_monitor on, that monitor's own too.
+	// Opening on a monitor with none of its own takes the last anywhere.
+	// b23's portrait monitor read as 400x640 mm one day and 401x641 the next,
+	// after a power save, and so came up as a monitor with another size.
+	// Test ID: ddq73
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_monitor_read_to_the_cm_finds_and_keeps_its_own_entry() {
+		let entry = |key: &str, columns, rows, font_zoom| MonitorSize { key: key.to_string(), columns, rows, font_zoom };
+		let (mm, cm) = ("1600x2560_100pct_401x641mm", "1600x2560_100pct_400x640mm");
+		let landscape = "3440x1440_100pct_819x346mm";
+		let mut s = Settings { monitor_sizes: vec![entry(cm, 152, 28, -1), entry(landscape, 172, 39, 0)], ..Settings::default() };
+		let portrait = KeptWindow { columns: 152, rows: 28, font_zoom: -1 };
+		assert_eq!(remembered_window(&s, Some(mm)), portrait);
+		assert_eq!(remembered_window(&s, Some(cm)), portrait);
+		remember_window(&mut s, Some(mm), Some((143, 30)), Some(0));
+		assert_eq!(s.monitor_sizes.len(), 2, "the entry it had, not a new one");
+		assert_eq!(s.monitor_sizes[0], entry(cm, 143, 30, 0));
+		assert_eq!(s.monitor_sizes[1], entry(landscape, 172, 39, 0));
+		// a file that already has both: the first one, whichever way it reads
+		s.monitor_sizes.push(entry(mm, 160, 48, 0));
+		assert_eq!(remembered_window(&s, Some(mm)), remembered_window(&s, Some(cm)));
+		assert_eq!(remembered_window(&s, Some(mm)).columns, 143);
+	}
+
+	// Test ID: ddesq
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there() {
+		let mut s = Settings::default();
+		let (a, b) = (Some("2560x1440_125pct_597x336mm"), Some("1920x1080_100pct"));
+		let kept = |columns, rows, font_zoom| KeptWindow { columns, rows, font_zoom };
+		remember_window(&mut s, a, Some((200, 60)), Some(3));
+		remember_window(&mut s, b, Some((100, 30)), Some(0));
+		assert_eq!(remembered_window(&s, a), kept(200, 60, 3));
+		assert_eq!(remembered_window(&s, b), kept(100, 30, 0));
+		let last = kept(100, 30, 0);
+		assert_eq!(remembered_window(&s, Some("3840x2160_150pct")), last, "no entry");
+		assert_eq!(remembered_window(&s, None), last, "monitor unknown");
+		remember_window(&mut s, a, Some((210, 61)), Some(3));
+		assert_eq!(s.monitor_sizes.len(), 2, "an entry is updated, not added again");
+		assert_eq!(remembered_window(&s, a), kept(210, 61, 3));
+
+		// a zoom alone, as in a maximized window, leaves the size as it was;
+		// a monitor seen first that way starts from the last size anywhere
+		remember_window(&mut s, a, None, Some(-2));
+		assert_eq!(remembered_window(&s, a), kept(210, 61, -2));
+		remember_window(&mut s, Some("800x600_100pct"), None, Some(1));
+		assert_eq!(remembered_window(&s, Some("800x600_100pct")), kept(210, 61, 1));
+		// a font size from the command line isn't a zoom to keep
+		remember_window(&mut s, a, Some((150, 40)), None);
+		assert_eq!(remembered_window(&s, a), kept(150, 40, -2));
+
+		// switched off, a monitor's entry is neither used nor written
+		s.remember_per_monitor = false;
+		assert_eq!(remembered_window(&s, b), kept(150, 40, 1));
+		remember_window(&mut s, b, Some((90, 25)), Some(4));
+		s.remember_per_monitor = true;
+		assert_eq!(remembered_window(&s, b), kept(100, 30, 0));
+		// and nothing is kept per monitor while the size is set by hand
+		change(&mut s, Key::Columns, Value::Int(120));
+		change(&mut s, Key::Rows, Value::Int(40));
+		remember_window(&mut s, Some("640x480_100pct"), Some((80, 24)), Some(0));
+		assert_eq!(s.monitor_sizes.len(), 3);
+		assert_eq!((s.remembered_columns, s.remembered_rows, s.remembered_font_zoom), (80, 24, 0));
+	}
+
+	// The per-monitor sizes read back from the file as written, and a write
+	// touches only the numbers this window changed, so another window's entry,
+	// or its change to a shared one, stays.
+	// Test ID: ddesr
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn monitor_sizes_round_trip_and_leave_another_windows_alone() {
+		let p = std::path::Path::new("test.shcl");
+		let entry = |key: &str, columns, rows, font_zoom| MonitorSize { key: key.into(), columns, rows, font_zoom };
+		// another window kept B and changed A's rows since this one loaded
+		let mut doc = shcl::Document::parse("window:\n\tmonitors:\n\t\ta_100pct:\n\t\t\tcolumns: 100\n\t\t\trows: 41\n\t\t\tfont_zoom: 0\n\t\tb_100pct:\n\t\t\tcolumns: 70\n\t\t\trows: 20\n\t\t\tfont_zoom: -1\n");
+		let loaded = vec![entry("a_100pct", 100, 40, 0)];
+		let mine = vec![entry("a_100pct", 120, 40, 2), entry("c_150pct", 90, 30, 0)];
+		write_monitor_sizes(&mut doc, &loaded, &mine);
+		let back = resolve(read_raw(&doc.to_canonical(), p).0).monitor_sizes;
+		assert_eq!(back, vec![entry("a_100pct", 120, 41, 2), entry("b_100pct", 70, 20, -1), entry("c_150pct", 90, 30, 0)]);
+		// a written file is a fixed point: nothing changed, nothing written
+		let text = doc.to_canonical();
+		write_monitor_sizes(&mut doc, &back, &back);
+		assert_eq!(doc.to_canonical(), text);
+
+		// Names are folded to lower case, which is how the keys are written.
+		// A number out of range is clamped to its range, a missing one takes the
+		// default, and an entry with nothing readable is no entry.
+		let odd = "window:\n\tmonitors:\n\t\tX:\n\t\t\tcolumns: 0\n\t\t\tfont_zoom: 9999\n\t\ty:\n\t\t\tnote: 1\n";
+		let back = resolve(read_raw(odd, p).0).monitor_sizes;
+		let d = Settings::default();
+		assert_eq!(back, vec![entry("x", 1, d.remembered_rows, limits::FONT_ZOOM.1)]);
+	}
+
+	// What another window kept is read back the way a launch reads it.
+	// Test ID: ddest
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_window_reads_back_the_sizes_another_window_kept() {
+		let p = std::path::Path::new("state.shcl");
+		let text = "window:\n\tremembered_columns: 132\n\tremembered_font_zoom: -3\n\tremembered_maximized: true\n\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\t\t\tfont_zoom: 2\n";
+		let mut live = Settings::default();
+		window_memory_from(text, p, &mut live);
+		assert_eq!((live.remembered_columns, live.remembered_rows, live.remembered_font_zoom, live.remembered_maximized), (132, Settings::default().remembered_rows, -3, true));
+		assert_eq!(live.monitor_sizes, vec![MonitorSize { key: "1920x1080_100pct".to_string(), columns: 90, rows: 30, font_zoom: 2 }]);
+	}
+
+	// A file from before remember_per_monitor gets it as its own paragraph,
+	// comment and all, under the size it follows and above remember_maximized.
+	// Test ID: ddess
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows() {
+		let template = default_config();
+		let paragraph = "\t## Remember a size for each monitor";
+		let old = template.replace(&template[template.find(paragraph).unwrap()..template.find("\t# remember_maximized").unwrap()], "");
+		assert!(!old.contains("remember_per_monitor"));
+		let new = backfilled_text(&old).unwrap().unwrap();
+		let at = |text: &str| new.find(text).unwrap();
+		assert!(at("# rows: 48") < at(paragraph));
+		assert!(at("# remember_per_monitor: true  ## Default") < at("# remember_maximized"));
+		assert_eq!(new.matches("remember_per_monitor").count(), 1, "{new}");
+		assert_eq!(new.matches(paragraph).count(), 1, "{new}");
+	}
+
+	// A new file follows the Settings dialog's tabs: Themes, Background, Text,
+	// Cursor, Movement, Window, Shell. The Silk tab borrows rows from the others,
+	// so its performance block leads and the rest keep their home tab's place.
+	// The hotkeys come before Shell, though their tab comes after it.
+	// Test ID: dd5mm
+	#[test]
+	fn the_template_blocks_follow_the_dialog() {
+		let mut roots: Vec<&str> = Vec::new();
+		for line in default_config().lines() {
+			if line.starts_with(|c: char| c.is_whitespace() || c == '#') {
+				continue;
+			}
+			let Some((key, _)) = line.split_once(':') else {
+				continue;
+			};
+			if roots.last() != Some(&key) {
+				roots.push(key);
+			}
+		}
+		assert_eq!(roots, ["performance", "theme", "theme_mode", "colors", "transparency", "wallpaper", "font", "text", "cursor", "selection", "scroll", "window", "hyperlinks", "keys", "shell",]);
+	}
+
+	// The template's own header says a line starting with '# ' is a setting at
+	// its default, so removing the '# ' must change nothing. Once, 7 lines named
+	// an example instead, and uncommenting any of them quietly changed what
+	// loaded. This reads the template, so a line added later is checked too.
+	// Test ID: dcq4n
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_commented_default_line_loads_as_the_default() {
+		// resolve() hunts for a wallpaper folder under the config and data dirs,
+		// so a test that points those elsewhere mid-loop would move the answer
+		// between the 2 loads being compared.
+		let _guard = super::test_config_lock();
+		let base = read_text(default_config());
+		let lines: Vec<&str> = default_config().lines().collect();
+		let mut checked = 0;
+		for w in walk_settings(default_config()) {
+			let WalkLine::Setting { index, path: key, active, header } = w else {
+				continue;
+			};
+			if active || header || !lines[index].contains("## Default") {
+				continue;
+			}
+			// font.size is the one line that can't say it. A config older than
+			// the family/size split named a size to mean "not the system one",
+			// so resolve() still reads the key's presence that way.
+			if key == "font.size" {
+				continue;
+			}
+			let bare = {
+				let indent = lines[index].len() - lines[index].trim_start().len();
+				let rest = lines[index].trim_start().trim_start_matches('#').trim_start();
+				format!("{}{rest}", &lines[index][..indent])
+			};
+			let mut edited = lines.clone();
+			edited[index] = &bare;
+			let text = edited.join("\n") + "\n";
+			let mut loaded = read_text(&text);
+			// the line is now the person's own value, and it is the default
+			for (id, v) in &loaded.model.values.own {
+				if base.model.values.own.get(id) == Some(v) {
+					continue;
+				}
+				let key = Key::parse(id).expect("a dialog key");
+				assert_eq!(crate::fields::default_of(&base, key, None).as_ref(), Some(v), "`{}` is not the default", lines[index].trim());
+			}
+			loaded.model = base.model.clone();
+			// A hotkey uncommented is set in the file, which Settings shows on its
+			// Keys tab, but it answers to the same chords.
+			for (hotkey, _) in crate::keys::config_paths() {
+				assert_eq!(loaded.keys.chords(hotkey), base.keys.chords(hotkey), "uncommenting `{}` changes what {hotkey:?} answers to", lines[index].trim());
+			}
+			loaded.keys = base.keys.clone();
+			assert!(loaded == base, "uncommenting `{}` changes what loads", lines[index].trim());
+			checked += 1;
+		}
+		// the walk finding nothing would pass the loop in silence
+		assert!(checked > 50, "only {checked} commented defaults were checked");
+	}
+
+	// A new config file is read by people, comments and all, and "carry" for
+	// "has" had crept into one of them (2026100812334384).
+	// Test ID: ddp7y
+	#[test]
+	fn no_template_comment_says_carry() {
+		for line in default_config().lines() {
+			let words = line.split(|c: char| !c.is_ascii_alphabetic());
+			assert!(!words.map(str::to_ascii_lowercase).any(|w| ["carry", "carries", "carried", "carrying"].contains(&w.as_str())), "{line}");
+		}
+	}
+
+	// The template is where a new file gets the footer; the const is
+	// what puts it back on an old one. Nothing else keeps the 2 in step.
+	// Test ID: dc8vd
+	#[test]
+	fn the_template_ends_with_the_banner() {
+		assert!(default_config().ends_with(SHCL_BANNER));
+		assert!(with_shcl_banner(default_config()).is_none(), "the shipped template should need no footer work");
+	}
+
+	// Test ID: dc8ve
+	#[test]
+	fn the_banner_is_retrofitted_and_kept_last() {
+		let plain = "font:\n\tsize: 13.0\n";
+		let added = with_shcl_banner(plain).expect("a config without one gets it");
+		assert!(added.starts_with(plain) && added.ends_with(SHCL_BANNER));
+		assert_eq!(added, plain.to_string() + "\n" + SHCL_BANNER);
+		assert!(with_shcl_banner(&added).is_none(), "not idempotent");
+
+		// the single-'#' spelling is replaced, not duplicated
+		let old = format!("font:\n\tsize: 13.0\n\n{SHCL_BANNER_OLD}");
+		let fixed = with_shcl_banner(&old).expect("the old spelling is refreshed");
+		assert_eq!(fixed, added);
+		assert_eq!(fixed.matches(SHCL_BANNER_MARK).count(), 1);
+
+		// and the one from before it had a Format line
+		let main = format!("font:\n\tsize: 13.0\n\n{SHCL_BANNER_OLD_MAIN}");
+		assert_eq!(with_shcl_banner(&main).as_deref(), Some(added.as_str()));
+
+		// so is the one with the old shcl home
+		let moved_home = format!("font:\n\tsize: 13.0\n\n{SHCL_BANNER_OLD_HOME}");
+		assert_eq!(with_shcl_banner(&moved_home).as_deref(), Some(added.as_str()));
+
+		// and the first 3.0 one, whose link went nowhere
+		let first_v3 = format!("font:\n\tsize: 13.0\n\n{SHCL_BANNER_OLD_V3}");
+		assert_eq!(with_shcl_banner(&first_v3).as_deref(), Some(added.as_str()));
+
+		// backfill appends under it; it goes back to the bottom
+		let stranded = format!("{added}\nwindow:\n\tmargin: 8.0\n");
+		let moved = with_shcl_banner(&stranded).expect("a stranded footer moves");
+		assert!(moved.ends_with(SHCL_BANNER));
+		assert!(moved.contains("\tmargin: 8.0\n"));
+		assert_eq!(moved.matches(SHCL_BANNER_MARK).count(), 1);
+	}
+
+	// Someone who rewrote the footer gets to keep their wording.
+	// Test ID: dc8vf
+	#[test]
+	fn an_edited_banner_is_left_alone() {
+		let mine = "font:\n\tsize: 13.0\n\n## This config file format is SHCL. Go read the spec.\n";
+		assert!(with_shcl_banner(mine).is_none());
+	}
+
+	// These are the lines shcl 2.0.0 wrote for a UNC path, a drive path and a
+	// tab. Read as they stand, 3.0 doubles the backslashes in the first.
+	// Test ID: dd2f0
+	#[test]
+	fn a_file_shcl2_wrote_reads_the_same() {
+		let body = "shell:\n\tunc: \\\\\\\\server\\\\share\n\tdir: \"C:\\\\Users\\\\new\"\n\ttab: a\\tb\n";
+		let wanted = [("shell.unc", "\\\\server\\share"), ("shell.dir", "C:\\Users\\new"), ("shell.tab", "a\tb")];
+		for text in [body.to_string(), format!("{body}\n{SHCL_BANNER_OLD_MAIN}"), format!("{body}\n{SHCL_BANNER_OLD}")] {
+			let out = from_shcl2_text(&text).expect("a 2.x file is rewritten");
+			let doc = shcl::Document::parse(&out);
+			for (path, value) in wanted {
+				assert_eq!(doc.get_string(path).as_deref(), Ok(value), "{out}");
+			}
+			assert!(out.ends_with(SHCL_BANNER), "{out}");
+			assert_eq!(out.matches(shcl::FORMAT_LINE_HEAD).count(), 1, "{out}");
+			assert!(from_shcl2_text(&out).is_none(), "twice:\n{out}");
+			assert!(with_shcl_banner(&out).is_none(), "{out}");
+			assert_eq!(next_launch_text(&text), next_launch_text(&out));
+		}
+		// a footer somebody rewrote still gets marked, just not by ours
+		let mine = format!("{body}\n## This config file format is SHCL. Mine.\n");
+		let out = from_shcl2_text(&mine).expect("rewritten");
+		assert!(out.contains(shcl::FORMAT_LINE) && !out.contains(SHCL_BANNER));
+		assert!(from_shcl2_text(&out).is_none());
+		assert_eq!(shcl::Document::parse(&out).get_string("shell.unc").as_deref(), Ok("\\\\server\\share"));
+		// and the template has nothing to do
+		assert!(from_shcl2_text(default_config()).is_none());
+	}
+
+	// A 2.x file as a launch finds it: a UNC path the conversion respells.
+	const SHCL2_FILE: &str = "shell:\n\tunc: \\\\\\\\server\\\\share\n\tdir: \"C:\\\\Users\\\\new\"\n";
+
+	fn format_test_dir(what: &str) -> PathBuf {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_{what}_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		dir
+	}
+
+	fn dir_names(dir: &std::path::Path) -> Vec<String> {
+		let mut names: Vec<String> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+		names.sort();
+		names
+	}
+
+	// The copies beside a config, by name: everything but the file itself and a
+	// temp name still being written.
+	fn backups_in(dir: &std::path::Path, stem: &str) -> Vec<String> {
+		dir_names(dir).into_iter().filter(|name| name.starts_with(&format!("{stem}_backup_"))).collect()
+	}
+
+	// `<stem>_backup_YYYYmmDD-HHMMSS_format-v<n>.shcl`, as `backup_name` makes it.
+	fn is_backup_name(name: &str, stem: &str, n: u32) -> bool {
+		let Some(rest) = name.strip_prefix(&format!("{stem}_backup_")) else {
+			return false;
+		};
+		let Some(stamp) = rest.strip_suffix(&format!("_format-v{n}.shcl")) else {
+			return false;
+		};
+		stamp.len() == 15 && stamp.chars().enumerate().all(|(at, c)| if at == 8 { c == '-' } else { c.is_ascii_digit() })
+	}
+
+	// The launch that converts a 2.x file keeps it, byte for byte, as
+	// `config_backup_<time>_format-v2.shcl`, and reads the settings it had. The
+	// next launch has nothing to convert and leaves the copy alone.
+	// Test ID: ddeqz
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_launch_keeps_the_2x_file_beside_the_converted_one() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("fmtcopy_launch");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+		}
+		set_config_override(path.clone());
+
+		let _ = load();
+		let kept = backups_in(&dir, "config");
+		assert_eq!(kept.len(), 1, "{kept:?}");
+		assert!(is_backup_name(&kept[0], "config", 2), "{kept:?}");
+		let copy = dir.join(&kept[0]);
+		assert_eq!(std::fs::read_to_string(&copy).unwrap(), SHCL2_FILE);
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(shcl::format_version(&now), Some(shcl::FORMAT_MAJOR), "{now}");
+		assert_eq!(shcl::Document::parse(&now).get_string("shell.unc").as_deref(), Ok("\\\\server\\share"));
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			let mode = std::fs::metadata(&copy).unwrap().permissions().mode();
+			assert_eq!(mode & 0o777, 0o600, "the copy is as private as the file");
+		}
+
+		let _ = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
+		assert_eq!(std::fs::read_to_string(&copy).unwrap(), SHCL2_FILE);
+		assert_eq!(dir_names(&dir), ["config.shcl", kept[0].as_str()]);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Every older version is kept. A second conversion makes a second copy and
+	// leaves the first as it was, and a current file gets no copy at all.
+	// Test ID: dder0
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_second_conversion_keeps_a_second_copy() {
+		let dir = format_test_dir("fmtcopy_kept");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		convert_shcl2_config(&mut LaunchFile::read(&path));
+		let first = backups_in(&dir, "config");
+		assert_eq!(first.len(), 1, "{first:?}");
+
+		let other = "font:\n\tfamily: \"C:\\\\Fonts\\\\mine.ttf\"\n";
+		std::fs::write(&path, other).unwrap();
+		convert_shcl2_config(&mut LaunchFile::read(&path));
+		let both = backups_in(&dir, "config");
+		assert_eq!(both.len(), 2, "{both:?}");
+		assert!(both.contains(&first[0]), "{both:?}");
+		assert_eq!(std::fs::read_to_string(dir.join(&first[0])).unwrap(), SHCL2_FILE, "the first copy is untouched");
+		let second = both.iter().find(|name| **name != first[0]).unwrap();
+		assert_eq!(std::fs::read_to_string(dir.join(second)).unwrap(), other);
+		assert_eq!(shcl::format_version(&std::fs::read_to_string(&path).unwrap()), Some(shcl::FORMAT_MAJOR));
+
+		// a save of a current file, and a write over a blank one, keep nothing
+		write_config_atomic(&path, default_config()).unwrap();
+		std::fs::write(&path, "\n").unwrap();
+		write_config_atomic(&path, default_config()).unwrap();
+		assert_eq!(backups_in(&dir, "config"), both);
+
+		// a file named by --config keeps its own name, still ending in .shcl
+		for (name, stem) in [("mine.shcl", "mine"), ("mine.conf", "mine.conf")] {
+			let mine = dir.join(name);
+			std::fs::write(&mine, SHCL2_FILE).unwrap();
+			convert_shcl2_config(&mut LaunchFile::read(&mine));
+			let kept = backups_in(&dir, stem);
+			assert_eq!(kept.len(), 1, "{kept:?}");
+			assert!(is_backup_name(&kept[0], stem, 2), "{kept:?}");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Conversions in the same second never share a name: the second takes
+	// `_2`, and a name that already has something else is passed over untouched.
+	// The same bytes again are the same copy.
+	// Test ID: ddex1
+	#[test]
+	fn copies_made_in_one_second_never_replace_each_other() {
+		let dir = format_test_dir("fmtcopy_second");
+		let path = dir.join("config.shcl");
+		let stamp = "20261003-142233";
+		let keep = |body: &str| {
+			std::fs::write(&path, body).unwrap();
+			keep_old_format_at(&path, default_config(), stamp).unwrap().unwrap().0
+		};
+		let first = keep(SHCL2_FILE);
+		assert_eq!(first, dir.join("config_backup_20261003-142233_format-v2.shcl"));
+		std::fs::write(dir.join("config_backup_20261003-142233_format-v2_2.shcl"), "planted").unwrap();
+		let other = "font:\n\tsize: 9\n";
+		let second = keep(other);
+		assert_eq!(second, dir.join("config_backup_20261003-142233_format-v2_3.shcl"));
+		assert_eq!(std::fs::read_to_string(&first).unwrap(), SHCL2_FILE);
+		assert_eq!(std::fs::read_to_string(dir.join("config_backup_20261003-142233_format-v2_2.shcl")).unwrap(), "planted");
+		assert_eq!(std::fs::read_to_string(&second).unwrap(), other);
+		assert_eq!(keep(other), second, "the same file again is the same copy");
+		assert_eq!(backups_in(&dir, "config").len(), 3);
+		assert_eq!(dir_names(&dir).len(), 4, "no temp file is left");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Launches whose conversions straddle a tick stamp different seconds.
+	// The later copy has the same bytes as the earlier one, so it is dropped
+	// and the earlier one named. A copy with other bytes, or of another format,
+	// is its own copy and is left alone.
+	// Test ID: dee5k
+	#[test]
+	fn a_copy_stamped_a_second_later_with_the_same_bytes_is_the_earlier_one() {
+		let dir = format_test_dir("fmtcopy_tick");
+		let path = dir.join("config.shcl");
+		let keep = |body: &str, stamp: &str| {
+			std::fs::write(&path, body).unwrap();
+			keep_old_format_at(&path, default_config(), stamp).unwrap().unwrap().0
+		};
+		let earlier = dir.join("config_backup_20261025-100100_format-v2.shcl");
+		let other_format = dir.join("config_backup_20261025-100059_format-v1.shcl");
+		std::fs::write(&other_format, SHCL2_FILE).unwrap();
+		assert_eq!(keep(SHCL2_FILE, "20261025-100100"), earlier);
+		assert_eq!(keep(SHCL2_FILE, "20261025-100101"), earlier);
+		assert_eq!(keep(SHCL2_FILE, "20261025-100102"), earlier);
+		let other = "font:\n\tsize: 9\n";
+		let later = keep(other, "20261025-100103");
+		assert_eq!(later, dir.join("config_backup_20261025-100103_format-v2.shcl"));
+		assert_eq!(std::fs::read_to_string(&earlier).unwrap(), SHCL2_FILE);
+		assert_eq!(std::fs::read_to_string(&later).unwrap(), other);
+		assert_eq!(std::fs::read_to_string(&other_format).unwrap(), SHCL2_FILE);
+		assert_eq!(backups_in(&dir, "config"), ["config_backup_20261025-100059_format-v1.shcl", "config_backup_20261025-100100_format-v2.shcl", "config_backup_20261025-100103_format-v2.shcl",]);
+		assert_eq!(dir_names(&dir).len(), 4, "no temp file is left");
+
+		assert!(is_copy_name("config_backup_20261025-100100_format-v2.shcl", "config", 2));
+		assert!(is_copy_name("config_backup_20261025-100100_format-v2_12.shcl", "config", 2));
+		for name in ["config_backup_20261025-100100_format-v2_.shcl", "config_backup_20261025-100100_format-v21.shcl", "config_backup_20261025-1001_format-v2.shcl", "config_backup_20261025x100100_format-v2.shcl", "mine_backup_20261025-100100_format-v2.shcl", "config_backup_20261025-100100_format-v2.shcl.tmp"] {
+			assert!(!is_copy_name(name, "config", 2), "{name}");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The launch with the later stamp can write and look before the earlier one
+	// has written, and find nothing earlier. The earlier one, writing after it,
+	// still settles on its own copy and drops the later twin, so one is left.
+	// Test ID: dee97
+	#[test]
+	fn a_later_copy_written_first_gives_way_to_the_earlier_one() {
+		let dir = format_test_dir("fmtcopy_order");
+		let path = dir.join("config.shcl");
+		let keep = |body: &str, stamp: &str| {
+			std::fs::write(&path, body).unwrap();
+			keep_old_format_at(&path, default_config(), stamp).unwrap().unwrap().0
+		};
+		let later = dir.join("config_backup_20261025-100101_format-v2.shcl");
+		let earlier = dir.join("config_backup_20261025-100100_format-v2.shcl");
+		let other = dir.join("config_backup_20261025-100102_format-v2.shcl");
+		std::fs::write(&other, "font:\n\tsize: 9\n").unwrap();
+		assert_eq!(keep(SHCL2_FILE, "20261025-100101"), later);
+		assert_eq!(keep(SHCL2_FILE, "20261025-100100"), earlier);
+		assert_eq!(std::fs::read_to_string(&earlier).unwrap(), SHCL2_FILE);
+		assert_eq!(backups_in(&dir, "config"), ["config_backup_20261025-100100_format-v2.shcl", "config_backup_20261025-100102_format-v2.shcl",], "the later twin is gone, and a copy with other bytes stays");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Several windows can launch at once, and each converts the file it read.
+	// Every copy that comes of it is whole, they leave one copy however long the
+	// conversions take, and no temp file is left.
+	// Test ID: dder1
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn launches_converting_at_once_leave_one_whole_copy() {
+		let dir = format_test_dir("fmtcopy_race");
+		let path = dir.join("config.shcl");
+		// big enough that a copy written in place would be seen half done
+		let body = format!("{SHCL2_FILE}{}", "## filler line for size\n".repeat(200_000));
+		for _round in 0..5 {
+			for name in backups_in(&dir, "config") {
+				std::fs::remove_file(dir.join(name)).unwrap();
+			}
+			std::fs::write(&path, &body).unwrap();
+			let start = std::sync::Barrier::new(5);
+			let torn = std::sync::atomic::AtomicBool::new(false);
+			let done = std::sync::atomic::AtomicBool::new(false);
+			std::thread::scope(|scope| {
+				scope.spawn(|| {
+					start.wait();
+					// the names aren't known ahead, and listing the folder every pass
+					// would be too slow to catch a part copy, so each found is read a
+					// while before looking again
+					while !done.load(std::sync::atomic::Ordering::Relaxed) {
+						for name in backups_in(&dir, "config") {
+							let copy = dir.join(name);
+							for _ in 0..200 {
+								if let Ok(seen) = std::fs::read(&copy)
+									&& seen != body.as_bytes()
+								{
+									torn.store(true, std::sync::atomic::Ordering::Relaxed);
+								}
+							}
+						}
+					}
+				});
+				let launches: Vec<_> = (0..4)
+					.map(|_| {
+						scope.spawn(|| {
+							start.wait();
+							convert_shcl2_config(&mut LaunchFile::read(&path));
+						})
+					})
+					.collect();
+				for launch in launches {
+					launch.join().unwrap();
+				}
+				done.store(true, std::sync::atomic::Ordering::Relaxed);
+			});
+			assert!(!torn.load(std::sync::atomic::Ordering::Relaxed), "a part copy was seen");
+			let kept = backups_in(&dir, "config");
+			assert_eq!(kept.len(), 1, "{kept:?}");
+			for name in &kept {
+				assert!(is_backup_name(name, "config", 2), "{kept:?}");
+				assert_eq!(std::fs::read(dir.join(name)).unwrap(), body.as_bytes());
+			}
+			assert_eq!(dir_names(&dir).len(), kept.len() + 1, "no temp file is left");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// No file moves to a newer format without its copy: a file that can't be
+	// read to keep isn't written over.
+	// Test ID: dder2
+	#[cfg(unix)]
+	#[test]
+	fn a_write_that_cannot_keep_the_old_file_is_refused() {
+		use std::os::unix::fs::PermissionsExt;
+		let dir = format_test_dir("fmtcopy_refused");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o200)).unwrap();
+		let readable = std::fs::read(&path).is_ok();
+		let result = write_config_atomic(&path, default_config());
+		std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+		if !readable {
+			// root reads anything, so this only means something for a user
+			assert!(result.is_err(), "written with no copy kept");
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), SHCL2_FILE);
+			assert_eq!(dir_names(&dir), ["config.shcl"]);
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The footer's Format line marks a file converted, so it must not go onto one
+	// whose conversion was put off. Its backslashes would then read the 3.0 way
+	// and nothing would convert it again.
+	// Test ID: dder3
+	#[test]
+	fn the_footer_never_stamps_a_2x_file() {
+		let dir = format_test_dir("fmtcopy_footer");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		refresh_shcl_banner(&mut LaunchFile::read(&path));
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), SHCL2_FILE);
+		assert_eq!(dir_names(&dir), ["config.shcl"]);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A line 2.x gave a bracketed list binds nothing after the conversion, and
+	// the launch says so, naming the copy that still has it.
+	// Test ID: dder4
+	#[test]
+	fn a_setting_the_conversion_cannot_keep_is_reported() {
+		let path = std::path::Path::new("/cfg/config.shcl");
+		let copy = std::path::Path::new("/cfg").join("config_backup_20261003-142233_format-v2.shcl");
+		let text = "font:\n\tfamily:[One, Two]\n\tsize: 13\n";
+		let loss = conversion_losses(text.as_bytes(), path, Some(copy.clone())).unwrap();
+		assert_eq!(loss.lost, 1);
+		let said = loss.terminal_line();
+		assert!(said.contains("1 line(s)"), "{said}");
+		assert!(said.contains(&copy.display().to_string()), "{said}");
+		assert_eq!(conversion_losses(SHCL2_FILE.as_bytes(), path, Some(copy)), None);
+		// and every later launch still names the line
+		let out = from_shcl2_text(text).unwrap();
+		let complaints = config_complaints(&out);
+		assert!(complaints.iter().any(|c| c.contains("line 2")), "{complaints:?}");
+	}
+
+	// shcl 3.0 reads `[A, B]` as a list, and `get_string` hands one back as its
+	// bracketed text, so a list loaded as a font named that. A setting that takes
+	// one value sets nothing from a list, and the line is named once. A theme's
+	// `ansi` list still reads.
+	// Test ID: deyry
+	#[test]
+	fn a_list_sets_nothing_where_one_value_goes() {
+		let path = std::path::Path::new("test.shcl");
+		let text = "font:\n\tfamily: [Iosevka, Hack]\n\tsize: [13, 14]\n";
+		let (raw, said) = read_config_text(text, path);
+		let s = resolve(raw);
+		let d = Settings::default();
+		assert_eq!(s.font_family, d.font_family);
+		assert_eq!(s.font_size.to_bits(), d.font_size.to_bits());
+		assert!(config_complaints(text).iter().any(|c| c.contains("lines 2, 3")), "{said:?}");
+		assert_eq!(said.len(), 1, "named once: {said:?}");
+		let model = crate::fields::load(&shcl::Document::parse(text));
+		assert!(!format!("{:?}", model.values.own).contains("Iosevka"), "{:?}", model.values.own);
+		let theme = "themes:\n\tmine:\n\t\tdark:\n\t\t\tansi: [\"#000000\", \"#111111\"]\n";
+		assert_eq!(unreadable_lines(&shcl::Document::parse(theme)), [0usize; 0]);
+	}
+
+	// A backslash is plain text since shcl 3.0, so a folder ending in one closes
+	// its quotes, and the note after it is kept.
+	// Test ID: deyrz
+	#[test]
+	fn a_note_after_a_folder_ending_in_a_backslash_is_kept() {
+		assert_eq!(with_setting_value("\tfolder: \"C:\\Pics\\\"  # mine", "\"D:\\x\""), "\tfolder: \"D:\\x\"  # mine");
+		assert_eq!(strip_trailing_comment(r"'C:\Pics\' # mine"), r"'C:\Pics\'");
+		assert_eq!(strip_trailing_comment("it's # mine"), "it's");
+		assert_eq!(strip_trailing_comment("\"#112233\""), "\"#112233\"");
+	}
+
+	// The launch that loses a setting leaves word for the window, with the count
+	// and the copy it made. A launch that loses nothing leaves none.
+	// Test ID: ddex2
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_launch_that_loses_a_setting_leaves_a_notice_for_the_window() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("fmtcopy_notice");
+		let path = dir.join("config.shcl");
+		let text = "font:\n\tfamily:[One, Two]\n\tsize: 13\n";
+		std::fs::write(&path, text).unwrap();
+		set_config_override(path.clone());
+
+		let _ = load();
+		let loss = take_conversion_loss().expect("a notice is owed");
+		assert_eq!(loss.path, path);
+		assert_eq!(loss.lost, 1);
+		let copy = loss.backup.expect("a copy was kept");
+		assert_eq!(copy.parent(), Some(dir.as_path()));
+		assert_eq!(std::fs::read_to_string(&copy).unwrap(), text);
+		assert_eq!(take_conversion_loss(), None, "taken once");
+
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		let _ = load();
+		assert_eq!(take_conversion_loss(), None, "nothing was lost");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A Settings save that converts a file a busy launch left alone says what it
+	// lost as the launch does, once, with the count and the copy. A save that
+	// converts without losing anything still keeps a copy and says nothing.
+	// Test ID: ddf0n
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_save_that_loses_a_setting_converting_leaves_a_notice_for_the_window() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("fmtcopy_save");
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let orig = Settings::default();
+		let mut edited = orig.clone();
+		let size = f64::from(edited.font_size.round() + 1.0);
+		change(&mut edited, Key::FontSize, Value::Float(size));
+
+		let text = "font:\n\tfamily:[One, Two]\n";
+		std::fs::write(&path, text).unwrap();
+		assert!(persist(&orig, &edited));
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(shcl::format_version(&now), Some(shcl::FORMAT_MAJOR), "{now}");
+		let loss = take_conversion_loss().expect("a notice is owed");
+		assert_eq!(loss.path, path);
+		assert_eq!(loss.lost, 1);
+		let copy = loss.backup.expect("a copy was kept");
+		assert_eq!(copy.parent(), Some(dir.as_path()));
+		assert_eq!(std::fs::read_to_string(&copy).unwrap(), text);
+		assert_eq!(take_conversion_loss(), None, "taken once");
+
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		assert!(persist(&orig, &edited));
+		assert_eq!(backups_in(&dir, "config").len(), 2, "a copy is still kept");
+		assert_eq!(take_conversion_loss(), None, "nothing was lost");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A file shcl can migrate is converted where it stands. One it can't, here
+	// a raw block that never closes, is written new from the template with the
+	// settings that still read, and every line it couldn't copy is counted.
+	// Test ID: ddf6d
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_shcl_cannot_migrate_is_written_new() {
+		assert!(matches!(upgrade(SHCL2_FILE.as_bytes()), Upgrade::InPlace { lost: 0, .. }), "a file shcl can migrate stays where it is");
+		let text = "font:\n\tsize: 19\n\tfamily:[One, Two]\nwindow:\n\tcolumns: 103\nnotes: ```\nline one\nwindow.rows: 40\n";
+		let Upgrade::Rewritten { text: out, lost } = upgrade(text.as_bytes()) else {
+			panic!("not written new");
+		};
+		assert_eq!(lost, 2, "the list and the raw block");
+		let doc = shcl::Document::parse(&out);
+		assert_eq!(doc.get_float("font.size"), Ok(19.0), "{out}");
+		assert_eq!(doc.get_int("window.columns"), Ok(103), "{out}");
+		assert_eq!(shcl::format_version(&out), Some(shcl::FORMAT_MAJOR));
+		assert!(out.ends_with(SHCL_BANNER), "{out}");
+		assert!(!out.contains("```"), "{out}");
+		assert!(config_complaints(&out).is_empty(), "{out}");
+		assert_eq!(from_shcl2_text(&out), None, "settled");
+		assert_eq!(next_launch_text(text), next_launch_text(&out));
+	}
+
+	// A file written new takes the launch's renames: an old name goes under
+	// its new one unless the file has that already, as `colors.focus` beside
+	// `colors.highlight` is the newer setting. A retired one is left for the
+	// launch steps that move or drop it, and isn't counted.
+	// Test ID: dfhga
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_written_new_renames_and_retires_as_a_launch_does() {
+		let open = "notes: ```\nnever closed\n";
+		let both = format!(
+			"colors:\n\tfocus: \"#123456\"\n\thighlight: \"#654321\"\n\
+			scroll:\n\tinview_tau_ms: 300\n\ttau_ms: 5\n\
+			shell:\n\tdefault: \"/usr/bin/zsh -l\"\n{open}"
 		);
+		let Upgrade::Rewritten { text: out, lost } = upgrade(both.as_bytes()) else {
+			panic!("not written new");
+		};
+		assert_eq!(lost, 1, "only the raw block:\n{out}");
+		let next = next_launch_text(&out);
+		let doc = shcl::Document::parse(&next);
+		assert_eq!(doc.get_string("colors.focus").as_deref(), Ok("#123456"));
+		assert_eq!(doc.get_string("colors.highlight").as_deref(), Ok("#654321"));
+		assert_eq!(doc.get_int("scroll.single_screen_tau_ms"), Ok(300), "{next}");
+		for gone in ["scroll.inview_tau_ms", "scroll.tau_ms", "shell.default"] {
+			assert!(!doc.exists(gone), "{gone}:\n{next}");
+		}
+		let shells = read_shells(&doc);
+		assert_eq!(shells.first().map(|s| s.command.as_str()), Some("/usr/bin/zsh -l"), "{next}");
+		let alone = format!("colors:\n\tfocus: \"#123456\"\n{open}");
+		let Upgrade::Rewritten { text: out, lost } = upgrade(alone.as_bytes()) else {
+			panic!("not written new");
+		};
+		assert_eq!(lost, 1);
+		let doc = shcl::Document::parse(&next_launch_text(&out));
+		assert_eq!(doc.get_string("colors.highlight").as_deref(), Ok("#123456"));
+		assert!(!doc.get_string("colors.focus").is_ok_and(|v| v == "#123456"), "{out}");
+	}
+
+	// A file a dogfood build on shcl b10c2009 wrote says Format 3, in that
+	// build's spellings. It is converted where it stands: the comma list goes in
+	// brackets, the doubled backslashes are halved and the monitor key is quoted,
+	// and each still sets what it did. The launch keeps a copy, and the next one
+	// has nothing to do.
+	// Test ID: deysd
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_a_build_before_beta1_stamped_is_converted() {
+		let text = format!(
+			"## mine\nfont:\n\tsize: 13\nwallpaper:\n\timage: \"C:\\\\pics\\\\sea.jpg\"\n\
+			shell:\n\tstartup_directory: \"\\\\\\\\server\\\\share\"\n\
+			themes:\n\tmine:\n\t\tdark:\n\t\t\tansi: \"#000000\", \"#111111\"\n\
+			window:\n\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 120\n\n{SHCL_BANNER}"
+		);
+		let Upgrade::InPlace { text: out, lost } = upgrade(text.as_bytes()) else {
+			panic!("not converted:\n{text}");
+		};
+		assert_eq!(lost, 0);
+		let doc = shcl::Document::parse(&out);
+		assert_eq!(doc.lost_count(), 0, "{out}");
+		assert_eq!(doc.get_string("wallpaper.image").as_deref(), Ok(r"C:\pics\sea.jpg"));
+		assert_eq!(doc.get_string("shell.startup_directory").as_deref(), Ok(r"\\server\share"));
+		assert_eq!(doc.get_string_array("themes.mine.dark.ansi"), Ok(vec!["#000000".to_string(), "#111111".to_string()]));
+		assert_eq!(doc.get_int("window.monitors.\"1920x1080_100pct\".columns"), Ok(120), "{out}");
+		assert!(out.starts_with("## mine\n"), "{out}");
+		assert_eq!(shcl::format_version(&out), Some(shcl::FORMAT_MAJOR));
+		assert!(config_complaints(&out).is_empty(), "{out}");
+		assert_eq!(upgrade(out.as_bytes()), Upgrade::Current, "settled");
+
+		let dir = format_test_dir("fmtcopy_beta");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, &text).unwrap();
+		write_config_atomic(&path, &out).unwrap();
+		let copies = backups_in(&dir, "config");
+		assert_eq!(copies.len(), 1, "a copy is kept");
+		assert_eq!(std::fs::read_to_string(dir.join(&copies[0])).unwrap(), text);
+		write_config_atomic(&path, &out).unwrap();
+		assert_eq!(backups_in(&dir, "config").len(), 1, "and only once");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A beta1 file in error is taken for 2.x only where that changes no line
+	// that reads now. A comma list typed into one beside a path with `\n`,
+	// or a typo shcl can't place, leaves the file as it is.
+	// Test ID: deyse
+	#[test]
+	fn a_beta1_file_in_error_is_not_read_the_old_way() {
+		for text in [format!("wallpaper:\n\timage: \"C:\\new\\sea.jpg\"\nfont:\n\tfamily: Iosevka, Hack\n{SHCL_BANNER}"), format!("wallpaper:\n\timage: \"C:\\x\\\" # mine\n\ttags: a, b\n{SHCL_BANNER}"), format!("font:\n\tsize: 13\n\tbad line here\nwallpaper:\n\timage: \"C:\\new\"\n{SHCL_BANNER}")] {
+			assert!(shcl::Document::parse(&text).error_count() > 0, "{text}");
+			assert_eq!(upgrade(text.as_bytes()), Upgrade::Current, "{text}");
+		}
+	}
+
+	// A config as each shcl release before 3.0 writes it, from v1.0.0-beta1 on.
+	// Releases that write the same bytes share a file. Each was written, and
+	// `reads.tsv` read back, by that release's own crate, and every release read
+	// the same values. After one launch every value reads as it did, nothing is
+	// lost, the old file is kept byte for byte, and the next launch changes
+	// nothing.
+	// Test ID: deyst
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_every_shcl_release_wrote_converts_with_its_values() {
+		const RELEASES: [(&str, &str); 4] = [("v1.0.0-beta1", include_str!("testdata/formats/shcl_v1.0.0-beta1.shcl")), ("v1.0.0-beta2 to v1.0.0", include_str!("testdata/formats/shcl_v1.0.0-beta2_to_v1.0.0.shcl")), ("v1.1.0 to v1.2.0", include_str!("testdata/formats/shcl_v1.1.0_to_v1.2.0.shcl")), ("v2.0.0", include_str!("testdata/formats/shcl_v2.0.0.shcl"))];
+		let unescape = |text: &str| {
+			let mut out = String::new();
+			let mut chars = text.chars();
+			while let Some(c) = chars.next() {
+				if c != '\\' {
+					out.push(c);
+					continue;
+				}
+				match chars.next() {
+					Some('t') => out.push('\t'),
+					Some('n') => out.push('\n'),
+					Some('r') => out.push('\r'),
+					Some(other) => out.push(other),
+					None => out.push('\\'),
+				}
+			}
+			out
+		};
+		let reads = include_str!("testdata/formats/reads.tsv").replace("\r\n", "\n");
+		// a monitor's size moves to the state file at the launch
+		let assert_reads = |text: &str, state: &str, release: &str| {
+			let (doc, state) = (shcl::Document::parse(text), shcl::Document::parse(state));
+			for line in reads.lines() {
+				let mut cells = line.split('\t');
+				let (Some(path), Some(kind)) = (cells.next(), cells.next()) else {
+					panic!("bad row {line:?}");
+				};
+				let want: Vec<String> = cells.map(unescape).collect();
+				let doc = if path.starts_with("window.monitors.") { &state } else { &doc };
+				let got = if kind == "a" { doc.get_string_array(path) } else { doc.get_string(path).map(|value| vec![value]) };
+				assert_eq!(got.as_ref(), Ok(&want), "{path} from {release}:\n{text}");
+			}
+		};
+
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		for (n, (release, old)) in RELEASES.into_iter().enumerate() {
+			let old = old.replace("\r\n", "\n");
+			let _ = take_conversion_loss();
+			let dir = format_test_dir(&format!("release_{n}"));
+			let path = dir.join("config.shcl");
+			std::fs::write(&path, &old).unwrap();
+			set_config_override(path.clone());
+
+			let s = load();
+			assert_eq!(take_conversion_loss(), None, "{release}: nothing lost");
+			let kept = backups_in(&dir, "config");
+			assert_eq!(kept.len(), 1, "{release}: {kept:?}");
+			assert!(is_backup_name(&kept[0], "config", 2), "{kept:?}");
+			assert_eq!(std::fs::read_to_string(dir.join(&kept[0])).unwrap(), old);
+			let now = std::fs::read_to_string(&path).unwrap();
+			assert_eq!(shcl::format_version(&now), Some(shcl::FORMAT_MAJOR), "{release}:\n{now}");
+			assert!(config_complaints(&now).is_empty(), "{release}:\n{now}");
+			let state = std::fs::read_to_string(dir.join("state.shcl")).unwrap_or_default();
+			assert_reads(&now, &state, release);
+			let text = |s: &str| Some(Value::Text(s.to_string()));
+			assert_eq!(crate::fields::get(&s, Key::BgImage), text(r"C:\Users\me\Pictures\sea.jpg"), "{release}");
+			assert_eq!(crate::fields::get(&s, Key::StartupDirectory), text(r"\\server\share\home"), "{release}");
+			assert_eq!(crate::fields::get(&s, Key::FontFamily), text("Iosevka Term"), "{release}");
+
+			let _ = load();
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "{release}: settled");
+			assert_eq!(backups_in(&dir, "config").len(), 1, "{release}");
+			let _ = std::fs::remove_dir_all(&dir);
+		}
+	}
+
+	// A file that isn't UTF-8 can't be read by shcl at all. In an older format
+	// it is kept byte for byte and written new, with the settings that still
+	// read, and the launch says what it couldn't copy, as for any conversion.
+	// The next launch has nothing to do.
+	// Test ID: ddf6e
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_shcl_cannot_read_is_written_new() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("fmtfresh_launch");
+		let path = dir.join("config.shcl");
+		let body: &[u8] = b"font:\n\tsize: 19\n# caf\xe9\nwindow:\n\tcolumns: 103\nwallpaper:\n\timage: /pics/caf\xe9.jpg\n";
+		std::fs::write(&path, body).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		assert!((s.font_size - 19.0).abs() < f32::EPSILON, "{}", s.font_size);
+		// kept for later, since the window opens at the remembered size
+		assert_eq!(own_of(&s, Key::Columns), Some(Value::Int(103)));
+		let kept = backups_in(&dir, "config");
+		assert_eq!(kept.len(), 1, "{kept:?}");
+		assert!(is_backup_name(&kept[0], "config", 2), "{kept:?}");
+		let copy = dir.join(&kept[0]);
+		assert_eq!(std::fs::read(&copy).unwrap(), body);
+		let now = std::fs::read_to_string(&path).expect("UTF-8 now");
+		assert_eq!(shcl::format_version(&now), Some(shcl::FORMAT_MAJOR), "{now}");
+		assert!(!now.contains('\u{fffd}'), "{now}");
+		let loss = take_conversion_loss().expect("a notice is owed");
+		assert_eq!((loss.lost, loss.how), (1, Converted::Rewritten));
+		assert_eq!(loss.backup, Some(copy));
+		assert!(loss.terminal_line().contains("1 setting(s)"), "{}", loss.terminal_line());
+
+		let _ = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
+		assert_eq!(backups_in(&dir, "config").len(), 1);
+		assert_eq!(take_conversion_loss(), None);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Off since a current file that isn't UTF-8 is written again without those
+	// lines (2026100315581313), where it was left alone.
+	// `a_current_file_that_is_not_utf8_drops_only_those_lines` covers `upgrade`.
+	// // A current file that isn't UTF-8 is no upgrade, so it is left as it was.
+	// // Test ID: ddf6f
+	// #[test]
+	// fn a_current_file_shcl_cannot_read_is_left_alone() {
+	// 	let body = [
+	// 		b"font:\n\tsize: 19\n# caf\xe9\n".as_slice(),
+	// 		shcl::FORMAT_LINE.as_bytes(),
+	// 		b"\n",
+	// 	]
+	// 	.concat();
+	// 	assert!(std::str::from_utf8(&body).is_err());
+	// 	assert_eq!(upgrade(&body), Upgrade::Current);
+	// 	assert_eq!(
+	// 		conversion_losses(&body, std::path::Path::new("/c"), None),
+	// 		None
+	// 	);
+	// }
+
+	// A Settings save that finds an old file shcl can't read writes it new and
+	// keeps the old one, and says what it couldn't copy as a launch would.
+	// Test ID: ddf6g
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_save_on_a_file_shcl_cannot_read_writes_it_new() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("fmtfresh_save");
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let orig = Settings::default();
+		let mut edited = orig.clone();
+		let size = f64::from(edited.font_size.round() + 1.0);
+		change(&mut edited, Key::FontSize, Value::Float(size));
+
+		let body: &[u8] = b"window:\n\tcolumns: 103\n\tti\xe9tle: x\n";
+		std::fs::write(&path, body).unwrap();
+		assert!(persist(&orig, &edited));
+		let now = std::fs::read_to_string(&path).expect("UTF-8 now");
+		let doc = shcl::Document::parse(&now);
+		assert_eq!(doc.get_int("window.columns"), Ok(103), "{now}");
+		assert_eq!(doc.get_float("font.size").ok(), Some(f64::from(edited.font_size)), "{now}");
+		let loss = take_conversion_loss().expect("a notice is owed");
+		assert_eq!((loss.lost, loss.how), (1, Converted::Rewritten));
+		let copy = loss.backup.expect("a copy was kept");
+		assert_eq!(std::fs::read(&copy).unwrap(), body);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	fn not_utf8_current_file() -> Vec<u8> {
+		[b"font:\n\tsize: 19\n# caf\xe9\nwindow:\n\tcolumns: 103\n".as_slice(), shcl::FORMAT_LINE.as_bytes(), b"\n"].concat()
+	}
+
+	// Off since a current file that isn't UTF-8 is written again at launch
+	// without those lines, the old bytes kept beside it (2026100315581313), where
+	// it was left as it was and every save refused.
+	// `a_launch_writes_a_current_file_that_is_not_utf8_again` covers it now.
+	// // A current file that isn't UTF-8 used to load as all defaults with no
+	// // word. It is still left as it was, but every line that decodes is read.
+	// // Test ID: ddf75
+	// #[test]
+	// fn a_current_file_that_is_not_utf8_loads_what_reads() {
+	// 	let _guard = test_config_lock();
+	// 	let dir = format_test_dir("notutf8_launch");
+	// 	let path = dir.join("config.shcl");
+	// 	let body = not_utf8_current_file();
+	// 	std::fs::write(&path, &body).unwrap();
+	// 	set_config_override(path.clone());
+	//
+	// 	let s = load();
+	// 	assert!((s.font_size - 19.0).abs() < f32::EPSILON, "{}", s).font_size;
+	// 	assert_eq!(crate::fields::grid(&s, None).0, 103);
+	// 	assert_eq!(std::fs::read(&path).unwrap(), body, "left as it was");
+	// 	assert_eq!(dir_names(&dir), vec!["config.shcl".to_string()]);
+	// 	let said = LAUNCH_SAID.lock().unwrap().clone().expect("said").1;
+	// 	assert!(said.contains(&not_utf8_line(&path, &[3])), "{said:?}");
+	// 	assert_eq!(
+	// 		take_launch_refusal(),
+	// 		Some(Refusal {
+	// 			path: path.clone(),
+	// 			lines: vec![3],
+	// 			lost: 1,
+	// 			why: Unreadable::NotUtf8,
+	// 		})
+	// 	);
+	// 	assert_eq!(take_launch_refusal(), None, "taken once");
+	//
+	// 	let fixed = String::from_utf8_lossy(&body).replace('\u{fffd}', "e");
+	// 	std::fs::write(&path, &fixed).unwrap();
+	// 	let _ = load();
+	// 	assert_eq!(take_launch_refusal(), None, "a fixed file says nothing");
+	// 	let _ = std::fs::remove_dir_all(&dir);
+	// }
+
+	// Off since a save on a current file that isn't UTF-8 writes it again
+	// without those lines and keeps the old bytes (2026100315581313), rather than
+	// refusing. `a_save_on_a_current_file_that_is_not_utf8_writes_it_again` covers
+	// the save and the rating write now.
+	// // A save on that file used to say it saved and write nothing. Writing it
+	// // would drop the line that doesn't decode, so it is refused, and the
+	// // window hears of it as for any refused save.
+	// // Test ID: ddf76
+	// #[test]
+	// fn a_save_on_a_current_file_that_is_not_utf8_is_refused() {
+	// 	let _guard = test_config_lock();
+	// 	let dir = format_test_dir("notutf8_save");
+	// 	let path = dir.join("config.shcl");
+	// 	let body = not_utf8_current_file();
+	// 	std::fs::write(&path, &body).unwrap();
+	// 	set_config_override(path.clone());
+	// 	let orig = Settings::default();
+	// 	let mut edited = orig.clone();
+	// 	change(&mut edited, Key::FontSize, Value::Float(f64::from(edited.font_size.round() + 1.0)));
+	//
+	// 	let _ = take_refusal();
+	// 	assert!(!persist(&orig, &edited), "nothing was written");
+	// 	assert_eq!(
+	// 		take_refusal(),
+	// 		Some(Refusal {
+	// 			path: path.clone(),
+	// 			lines: vec![3],
+	// 			lost: 1,
+	// 			why: Unreadable::NotUtf8,
+	// 		})
+	// 	);
+	// 	assert_eq!(std::fs::read(&path).unwrap(), body);
+	//
+	// 	// the rating's own writer says it could not keep the result
+	// 	let kept = keep_rating(RatingLines {
+	// 		profile: Some("high"),
+	// 		..RatingLines::default()
+	// 	});
+	// 	assert_eq!(kept, Kept::Unreadable);
+	// 	assert_eq!(std::fs::read(&path).unwrap(), body);
+	// 	let _ = std::fs::remove_dir_all(&dir);
+	// }
+
+	fn current_file(lines: &[u8]) -> Vec<u8> {
+		[lines, shcl::FORMAT_LINE.as_bytes(), b"\n"].concat()
+	}
+
+	// A current file with lines that aren't UTF-8 is written again without
+	// them, keeping its own layout, as long as every other line reads as it did.
+	// A heading that doesn't decode would hand its block to the one above, so
+	// that file gets the template with what reads, and so does one where nothing
+	// reads, which is the defaults.
+	// Test ID: ddf93
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_current_file_that_is_not_utf8_drops_only_those_lines() {
+		let body = not_utf8_current_file();
+		let Upgrade::Dropped { text, lost, lines, rewrite } = upgrade(&body) else {
+			panic!("{:?}", upgrade(&body));
+		};
+		assert_eq!(text, format!("font:\n\tsize: 19\nwindow:\n\tcolumns: 103\n{}\n", shcl::FORMAT_LINE));
+		assert_eq!((lost, lines, rewrite), (0, vec![3], Rewrite::Kept));
+		assert_eq!(upgraded_text(text.as_bytes()), None, "settled");
+		let loss = conversion_losses(&body, std::path::Path::new("/c"), None).expect("said");
+		assert_eq!((loss.lost, loss.how, loss.lines), (0, Converted::Dropped(Rewrite::Kept), vec![3]));
+
+		// a setting that doesn't decode is left out and counted
+		let body = current_file(b"font:\n\tsize: 19\n\tfamily: Caf\xe9 Sans\r\nwindow:\n\tcolumns: 103\n");
+		let Upgrade::Dropped { text, lost, rewrite, .. } = upgrade(&body) else {
+			panic!();
+		};
+		assert_eq!((lost, rewrite), (1, Rewrite::Kept));
+		assert!(!text.contains("family"), "{text}");
+
+		// `columns: 7` would read as font.columns without its heading
+		let body = current_file(b"font:\n\tsize: 19\ncaf\xe9:\n\tcolumns: 7\nwindow:\n\tcolumns: 103\n");
+		let Upgrade::Dropped { text, lines, rewrite, .. } = upgrade(&body) else {
+			panic!();
+		};
+		assert_eq!((lines, rewrite), (vec![3], Rewrite::Template));
+		let doc = shcl::Document::parse(&text);
+		assert_eq!(doc.get_float("font.size"), Ok(19.0), "{text}");
+		assert_eq!(doc.get_int("window.columns"), Ok(103), "{text}");
+		assert!(!text.contains("columns: 7"), "{text}");
+		assert!(unreadable_lines(&doc).is_empty(), "{text}");
+		assert_eq!(upgraded_text(text.as_bytes()), None, "settled");
+
+		// nothing left that sets anything
+		let body = current_file(b"## notes\nfont:\n\tsize: 1\xe9\n");
+		let Upgrade::Dropped { text, rewrite, .. } = upgrade(&body) else {
+			panic!();
+		};
+		assert_eq!(rewrite, Rewrite::Template);
+		assert_eq!(text, default_config());
+	}
+
+	// An editor saving in Latin-1 garbles the copyright sign in shcl's footer.
+	// The footer is the program's text, so that line goes back to the default
+	// rather than out, and isn't one of the lines said to be left out. A file
+	// whose only such line is there is written again all the same, since it is
+	// still not UTF-8, and says so on the terminal only.
+	// Test ID: ddf96
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_footer_line_that_is_not_utf8_goes_back_to_the_original() {
+		let latin1 = |text: &str| -> Vec<u8> { text.chars().map(|c| u8::try_from(u32::from(c)).unwrap_or(b'?')).collect() };
+		assert!(default_config().contains('\u{a9}'), "the footer has one");
+		let body = latin1(default_config());
+		let Upgrade::Dropped { text, lost, lines, rewrite } = upgrade(&body) else {
+			panic!("{:?}", upgrade(&body));
+		};
+		assert_eq!((lost, lines.as_slice(), rewrite), (0, &[][..], Rewrite::Kept));
+		let unmangled: String = String::from_utf8_lossy(&body).lines().zip(default_config().lines()).map(|(read, shipped)| if read.contains('\u{fffd}') { shipped } else { read }).collect::<Vec<_>>().join("\n");
+		assert_eq!(text, format!("{unmangled}\n"));
+		assert!(text.ends_with(SHCL_BANNER), "{text}");
+		let loss = conversion_losses(&body, std::path::Path::new("/c"), None).expect("said");
+		assert!(loss.lines.is_empty());
+		assert_eq!(loss.terminal_line(), format!("{APP_NAME}: /c: its SHCL footer wasn't UTF-8 text, so the file was written again with the default footer."));
+
+		// beside a setting that is left out, in a file with CRLF endings
+		let crlf = default_config().replacen("theme_mode:", "theme_mode: caf\u{e9}\ntheme_mode:", 1).replace('\n', "\r\n");
+		let body = latin1(&crlf);
+		let Upgrade::Dropped { text, lines, .. } = upgrade(&body) else {
+			panic!();
+		};
+		assert_eq!(lines.len(), 1, "{lines:?}");
+		assert!(!text.contains("caf"), "{text}");
+		assert!(text.ends_with(&SHCL_BANNER.replace('\n', "\r\n")), "{text}");
+	}
+
+	// The launch that finds such a file writes it again and keeps the old bytes
+	// under the format's backup name. It says which line went, on the terminal
+	// and in the notice, once: the next launch has nothing to do, and a save
+	// after it writes as usual.
+	// Test ID: ddf94
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_launch_writes_a_current_file_that_is_not_utf8_again() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let _ = take_refusal();
+		let dir = format_test_dir("notutf8_rewrite");
+		let path = dir.join("config.shcl");
+		let body = not_utf8_current_file();
+		std::fs::write(&path, &body).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		assert!((s.font_size - 19.0).abs() < f32::EPSILON, "{}", s.font_size);
+		// kept for later, since the window opens at the remembered size
+		assert_eq!(own_of(&s, Key::Columns), Some(Value::Int(103)));
+		let kept = backups_in(&dir, "config");
+		assert_eq!(kept.len(), 1, "{kept:?}");
+		assert!(is_backup_name(&kept[0], "config", shcl::FORMAT_MAJOR), "{kept:?}");
+		let copy = dir.join(&kept[0]);
+		assert_eq!(std::fs::read(&copy).unwrap(), body);
+		let now = std::fs::read_to_string(&path).expect("UTF-8 now");
+		let doc = shcl::Document::parse(&now);
+		assert_eq!(doc.get_float("font.size"), Ok(19.0), "{now}");
+		assert_eq!(doc.get_int("window.columns"), Ok(103), "{now}");
+		assert!(!now.contains("caf"), "{now}");
+		let loss = take_conversion_loss().expect("a notice is owed");
+		assert_eq!((loss.how, loss.lines.clone()), (Converted::Dropped(Rewrite::Kept), vec![3]));
+		assert_eq!(loss.backup, Some(copy.clone()));
+		assert_eq!(loss.terminal_line(), format!("{APP_NAME}: {}: not UTF-8 text at line 3, so the file was written again without it. The old file is at {}.", path.display(), copy.display()));
+
+		let _ = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
+		assert_eq!(backups_in(&dir, "config").len(), 1);
+		assert_eq!(take_conversion_loss(), None, "said once");
+
+		let orig = Settings::default();
+		let mut edited = orig.clone();
+		change(&mut edited, Key::FontSize, Value::Float(21.0));
+		assert!(persist(&orig, &edited));
+		let saved = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(shcl::Document::parse(&saved).get_float("font.size"), Ok(21.0), "{saved}");
+		assert_eq!(take_refusal(), None);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A launch that found the file busy left it as it was, so the first write
+	// after it does what the launch would have: a Settings save, or the rating.
+	// Each keeps the old bytes and says what went, and neither is refused.
+	// Test ID: ddf95
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_save_on_a_current_file_that_is_not_utf8_writes_it_again() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let _ = take_refusal();
+		let dir = format_test_dir("notutf8_saved");
+		let path = dir.join("config.shcl");
+		let body = not_utf8_current_file();
+		std::fs::write(&path, &body).unwrap();
+		set_config_override(path.clone());
+		let orig = Settings::default();
+		let mut edited = orig.clone();
+		let size = f64::from(edited.font_size.round() + 1.0);
+		change(&mut edited, Key::FontSize, Value::Float(size));
+
+		assert!(persist(&orig, &edited));
+		assert_eq!(take_refusal(), None);
+		let now = std::fs::read_to_string(&path).expect("UTF-8 now");
+		let doc = shcl::Document::parse(&now);
+		assert_eq!(doc.get_float("font.size").ok(), Some(f64::from(edited.font_size)), "{now}");
+		assert_eq!(doc.get_int("window.columns"), Ok(103), "{now}");
+		let loss = take_conversion_loss().expect("a notice is owed");
+		assert_eq!(loss.how, Converted::Dropped(Rewrite::Kept));
+		let copy = loss.backup.expect("a copy was kept");
+		assert_eq!(std::fs::read(&copy).unwrap(), body);
+
+		std::fs::write(&path, &body).unwrap();
+		let kept = keep_rating(RatingLines { check_next_run: Some(true) });
+		assert_eq!(kept, Kept::Written);
+		let now = std::fs::read_to_string(&path).expect("UTF-8 now");
+		assert_eq!(shcl::Document::parse(&now).get_bool("performance.check_next_run"), Ok(true), "{now}");
+		let loss = take_conversion_loss().expect("a notice is owed");
+		let copy = loss.backup.expect("a copy was kept");
+		assert_eq!(std::fs::read(&copy).unwrap(), body);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A file with some of everything a save writes, loaded as a launch would.
+	fn settled_config(path: &std::path::Path) -> Settings {
+		std::fs::write(path, "").unwrap();
+		set_config_override(path.to_path_buf());
+		let base = reload_from_disk();
+		let mut own = base.clone();
+		change(&mut own, Key::FontSize, Value::Float(15.0));
+		change(&mut own, Key::ThemeMode, Value::Text("light".into()));
+		own.scrollback = 5000;
+		own.remembered_columns = 101;
+		own.shells = vec![shell_entry("ash", "/bin/ash"), shell_entry("bsh", "/bin/bsh"), shell_entry("csh", "/bin/csh")];
+		own.monitor_sizes.push(MonitorSize { key: "1920x1080_100pct_527x296mm".to_string(), columns: 90, rows: 30, font_zoom: 1 });
+		own.keys = own.keys.with_own(crate::input::Hotkey::ClosePane, Some(Vec::new()));
+		let pal = crate::theme::resolve_in(&[], "SilkTerm", crate::theme::Mode::Dark, true);
+		own.user_themes.push(crate::theme::UserTheme { slug: "mine".to_string(), name: "Mine".to_string(), dark: pal, light: pal, font: crate::theme::ThemeFont::default() });
+		assert!(persist(&base, &own));
+		let loaded = reload_from_disk();
+		assert!(loaded.keys == own.keys && loaded.user_themes.len() == 1);
+		assert_eq!(loaded.monitor_sizes, own.monitor_sizes);
+		assert_eq!((loaded.font_size, loaded.theme_mode), (15.0, crate::theme::Mode::Light));
+		loaded
+	}
+
+	// A save on a file deleted while running wrote nothing and reported that it
+	// saved. Both a Settings OK and a window size save write it new from the
+	// template, with what the file had and the save's own change, and nothing
+	// that only lasts the session.
+	// Test ID: ddg6v
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_save_on_a_deleted_file_writes_it_new() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("deleted_save");
+		let path = dir.join("config.shcl");
+		let loaded = settled_config(&path);
+		// a rotated pick is in the live copy and never in the file. It was in
+		// the image setting too, until the image became an auto setting
+		// (2026100910295903); the picture in use is all it touches now.
+		let mut live = loaded.clone();
+		live.wallpaper = Some(PathBuf::from("/pics/rotated.png"));
+
+		std::fs::remove_file(&path).unwrap();
+		let flipped = Value::Bool(!live.copy_on_select);
+		let mut edited = live.clone();
+		change(&mut edited, Key::CopyOnSelect, flipped.clone());
+		assert!(persist(&live, &edited), "the Settings save");
+		let text = std::fs::read_to_string(&path).expect("the save wrote the file");
+		assert_eq!(text.lines().next(), default_config().lines().next(), "{text}");
+		let mut want = loaded.clone();
+		change(&mut want, Key::CopyOnSelect, flipped);
+		assert!(reload_from_disk() == want, "{text}");
+		assert!(!text.contains("rotated"), "{text}");
+
+		// the window size save, with the whole folder gone this time
+		std::fs::remove_dir_all(&dir).unwrap();
+		let mut sized = want.clone();
+		remember_window(&mut sized, None, Some((120, 40)), None);
+		assert!(persist(&want, &sized), "the window size save");
+		assert!(path.exists(), "the save made the folder and the file");
+		assert!(reload_from_disk() == sized);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A launch writes a shell profile through the settings file's writer, after
+	// it has read the settings file.
+	// Test ID: ddhmt
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_save_on_a_deleted_file_keeps_it_after_a_profile_write() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("deleted_after_profile");
+		let path = dir.join("config.shcl");
+		let loaded = settled_config(&path);
+		write_config_atomic(&dir.join("profile.ps1"), "# a profile\n").unwrap();
+
+		std::fs::remove_file(&path).unwrap();
+		let mut sized = loaded.clone();
+		sized.remembered_columns += 1;
+		// the shown size is read off the remembered one
+		crate::fields::fill(&mut sized, None);
+		assert!(persist(&loaded, &sized));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(reload_from_disk() == sized, "{text}");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The shell list save is three-way against the file (G117), and a deleted
+	// file must not read as another window having removed every entry.
+	// Test ID: ddg6w
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_save_on_a_deleted_file_keeps_the_shell_list() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("deleted_shells");
+		let path = dir.join("config.shcl");
+		let loaded = settled_config(&path);
+		let slugs = |s: &Settings| -> Vec<String> { s.shells.iter().map(|e| e.slug.clone()).collect() };
+		assert_eq!(slugs(&loaded), ["ash", "bsh", "csh"]);
+
+		std::fs::remove_file(&path).unwrap();
+		let mut sized = loaded.clone();
+		sized.remembered_columns += 1;
+		// the shown size is read off the remembered one
+		crate::fields::fill(&mut sized, None);
+		assert!(persist(&loaded, &sized));
+		assert_eq!(slugs(&reload_from_disk()), ["ash", "bsh", "csh"]);
+
+		// a move and a new find, the same as on a file that is there
+		std::fs::remove_file(&path).unwrap();
+		let mut moved = sized.clone();
+		moved.shells.rotate_right(1);
+		moved.shells.push(shell_entry("dsh", "/bin/dsh"));
+		assert!(persist(&sized, &moved));
+		assert_eq!(slugs(&reload_from_disk()), ["csh", "ash", "bsh", "dsh"]);
+
+		// a file this process never read keeps the list the window loaded
+		let unseen = dir.join("unseen.shcl");
+		set_config_override(unseen.clone());
+		let mut edited = moved.clone();
+		let size = f64::from(edited.font_size.round() + 1.0);
+		change(&mut edited, Key::FontSize, Value::Float(size));
+		assert!(persist(&moved, &edited));
+		let doc = shcl::Document::parse(&std::fs::read_to_string(&unseen).unwrap());
+		let kept: Vec<String> = read_shells(&doc).into_iter().map(|e| e.slug).collect();
+		assert_eq!(kept, ["csh", "ash", "bsh", "dsh"]);
+		assert_eq!(doc.get_float("font.size").ok(), Some(f64::from(edited.font_size)));
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// shcl 2.0.0 wrote `# enabled: true` above `# rotate:` and indented under
+	// `opacity`, so the lines read wrong once uncommented. The save is shcl's.
+	// Test ID: dd2f1
+	#[test]
+	fn a_save_keeps_a_commented_block_in_order() {
+		let text = "wallpaper:\n\topacity: 0.2\n\t# rotate:\n\t\t# enabled: true\n\tblur: 3\n";
+		let mut doc = shcl::Document::parse(text);
+		assert_eq!(doc.set_int("wallpaper.blur", 4), shcl::SetStatus::Ok);
+		assert_eq!(doc.to_canonical(), text.replace("blur: 3", "blur: 4"));
+	}
+
+	// Quotes, a space indent and a dotted line nobody changed stay as typed.
+	// Test ID: dd444
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
+	fn a_save_writes_only_the_lines_it_changed() {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_keeplines_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		let body = "font:\n\tfamily: 'Cascadia Mono'\n\tsize: \"12\"\nwindow:\n\tcolumns: 90\ncolors:\n    background: \"#112233\"\nscroll.speed: 3\n";
+		// stamped as a launch leaves it, or the read converts it first
+		let text = &from_shcl2_text(body).unwrap();
+		assert!(text.starts_with(body));
+		std::fs::write(&path, text).unwrap();
+		let mut doc = read_doc(&path).unwrap();
+		assert_eq!(doc.set_int("window.columns", 100), shcl::SetStatus::Ok);
+		assert!(write_doc(&path, &doc));
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), text.replace("columns: 90", "columns: 100"));
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A value set in a file that has only its commented default goes in that
+	// line's place, so no line below it moves, and a revert puts the file back.
+	// shcl's own save adds it as a new line beside the comment.
+	// Test ID: dfhh2
+	#[test]
+	fn a_set_value_fills_its_commented_default_where_it_is() {
+		let text = "performance:\n\t# automatic: true  ## Default\n\t# profile: \"max\"  ## Default\n\t# check_hardware: true  ## Default\n\nwindow:\n\topacity: 1.0\n";
+		let mut doc = parse_kept(text);
+		doc.put_string("performance.profile", "low");
+		assert_eq!(saved_text(&doc), text.replace("\t# profile: \"max\"  ## Default", "\tprofile: low"));
+
+		let template = default_config();
+		let commented = |path: &str| {
+			walk_settings(template)
+				.into_iter()
+				.find_map(|w| match w {
+					WalkLine::Setting { index, path: p, active: false, .. } if p == path => Some(index),
+					_ => None,
+				})
+				.unwrap_or_else(|| panic!("the template has no commented {path}"))
+		};
+		let mut doc = parse_kept(template);
+		doc.put_bool("performance.automatic", false);
+		doc.put_float("font.size", 13.0);
+		doc.put_bool("wallpaper.rotate.enabled", false);
+		let out = saved_text(&doc);
+		let lines: Vec<&str> = out.lines().collect();
+		assert_eq!(lines.len(), template.lines().count(), "{out}");
+		for (path, line) in [("performance.automatic", "\tautomatic: false"), ("font.size", "\tsize: 13"), ("wallpaper.rotate.enabled", "\t\tenabled: false")] {
+			assert_eq!(lines[commented(path)], line, "{path}");
+		}
+		let reread = shcl::Document::parse(&out);
+		assert_eq!(reread.get_bool("performance.automatic"), Ok(false));
+		assert_eq!(reread.get_float("font.size"), Ok(13.0));
+		assert_eq!(reread.get_bool("wallpaper.rotate.enabled"), Ok(false));
+		let keys = ["performance.automatic", "font.size", "wallpaper.rotate.enabled"];
+		assert_eq!(reverted_text(&out, &keys).as_deref(), Some(template));
+	}
+
+	// A line commented out by hand may hold the person's own note, so a value
+	// set beside it is a new line and the comment stays as typed.
+	// Test ID: dfhh3
+	#[test]
+	fn a_set_value_leaves_a_comment_typed_by_hand() {
+		let text = "performance:\n\t# profile: low  ## for the laptop\n\tautomatic: false\n";
+		let mut doc = parse_kept(text);
+		doc.put_string("performance.profile", "high");
+		let out = saved_text(&doc);
+		assert!(out.contains("\t# profile: low  ## for the laptop\n"), "{out}");
+		assert_eq!(out.lines().count(), 4, "{out}");
+		assert_eq!(shcl::Document::parse(&out).get_string("performance.profile").as_deref(), Ok("high"));
 	}
 
 	// #136 convention: explanatory comments use '## '; commented-out (disabled)
 	// settings use a single '# '.
+	// Test ID: d97z1
 	#[test]
 	fn default_config_comment_style() {
-		// The file header (the format blurb, down to the first '##' line) is
-		// verbatim prose in single-'#' form and is exempt from the convention.
-		let body = default_config()
-			.find("\n##")
-			.map_or(default_config(), |i| &default_config()[i..]);
+		// The file header is verbatim prose in single-'#' form and is exempt.
+		let text = default_config();
+		let body = text.find("\n##").map_or(text, |i| &text[i..]);
 		for line in body.lines() {
 			let t = line.trim_start();
 			if !t.starts_with('#') {
 				continue; // active setting / blank
 			}
 			if line_setting_key(line).is_some() {
-				assert!(
-					!t.starts_with("##"),
-					"disabled setting must use a single '# ': {line:?}"
-				);
+				assert!(!t.starts_with("##"), "disabled setting must use a single '# ': {line:?}");
 			} else {
-				assert!(
-					t.starts_with("##"),
-					"explanatory comment must use '## ': {line:?}"
-				);
+				assert!(t.starts_with("##"), "explanatory comment must use '## ': {line:?}");
 			}
 		}
 	}
 
 	// #142: the default values.
+	// Test ID: d97z3
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn changed_defaults() {
 		let d = Settings::default();
 		assert!(d.text_scrim, "text_scrim should default on");
-		assert_eq!(d.text_scrim_radius, 5.0);
+		// both were tuned up when the exponential falloff got twice as steep: a
+		// halo that drops away sooner needs to start further out and heavier
+		assert_eq!(d.text_scrim_radius, 8.0);
 		assert_eq!(d.text_scrim_softness, 0.5);
-		// 15% on the 20%-per-doubling scale, so a shade under one doubling
-		assert_eq!(d.text_scrim_strength, 15.0);
+		// 20% on the 20%-per-doubling scale, so exactly one doubling
+		assert_eq!(d.text_scrim_strength, 20.0);
 		assert_eq!(d.text_outline, 1.0);
-		assert_eq!(d.text_scrim_ramp, "exp");
-		assert_eq!(d.text_scrim_function, "sdf");
+		assert_eq!(d.text_scrim_ramp, crate::scrim::Ramp::Exp);
+		assert_eq!(d.text_scrim_function, crate::scrim::Function::Sdf);
 		assert!(d.text_scrim_regular_weight);
 		assert!(!d.cursor_scrim, "cursor scrim halo defaults off");
 		assert!(d.cursor_outline, "cursor outline defaults on");
 		assert_eq!(d.wallpaper_blur, 10.0);
 		assert_eq!(d.wallpaper_opacity, 0.10);
-		// a block cursor: full height AND full width
+		// a block cursor: full height and full width
 		assert_eq!(d.cursor_size_height, 100.0);
 		assert_eq!(d.cursor_size_width, 100.0);
 		// rotation, when a folder turns up, varies instead of pinning image one
 		assert!(d.wallpaper_rotate_random, "rotation defaults to shuffled");
 		assert_eq!(d.cursor_animation_resume_s, 1.0);
+		assert!(d.minimap, "the minimap defaults on");
+		assert_eq!(d.cursor_animation, crate::pane::CursorAnimation::PulseVertical);
+		// fills the window, ignoring aspect; a file that names no fit gets it too
+		assert_eq!(d.wallpaper_default_fit, Fit::Stretch);
+		let p = std::path::Path::new("test.shcl");
+		assert_eq!(resolve(read_raw("", p).0).wallpaper_default_fit, Fit::Stretch);
+		assert!(d.remember_size);
+		assert_eq!(crate::fields::grid(&d, None), (160, 48));
+		assert_eq!(d.margin, 8.0);
+		assert_eq!(d.bg, [0, 0, 0], "an all-black background");
 	}
 
-	// Scrim function + the five falloff curves resolve; unknown values fall to the
-	// defaults (sdf / exponential). The falloff's two renamed curves keep parsing
+	// Scrim function + the 5 falloff curves resolve; unknown values fall to the
+	// defaults (sdf / exponential). The falloff's 2 renamed curves keep parsing
 	// under their old spellings, so a config written before the rename still reads
 	// as the same curve rather than silently falling back to the default.
+	// Test ID: d9p1c
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn scrim_function_and_ramp_resolve() {
 		let p = std::path::Path::new("test.shcl");
 		for f in ["dilate", "sdf", "dt", "gaussian"] {
-			let s = resolve(read_raw(&format!("text.scrim.function: \"{f}\"\n"), p));
-			assert_eq!(s.text_scrim_function, f);
+			let s = resolve(read_raw(&format!("text.scrim.function: \"{f}\"\n"), p).0);
+			assert_eq!(s.text_scrim_function.key(), f);
 		}
 		for r in ["sigmoid", "half_normal", "linear", "log", "exp"] {
-			let s = resolve(read_raw(&format!("text.scrim.ramp: \"{r}\"\n"), p));
-			assert_eq!(s.text_scrim_ramp, r);
+			let s = resolve(read_raw(&format!("text.scrim.ramp: \"{r}\"\n"), p).0);
+			assert_eq!(s.text_scrim_ramp.key(), r);
 		}
 		for (old, new) in [("s", "sigmoid"), ("gaussian", "half_normal")] {
-			let s = resolve(read_raw(&format!("text.scrim.ramp: \"{old}\"\n"), p));
-			assert_eq!(s.text_scrim_ramp, new, "{old} should still parse");
+			let s = resolve(read_raw(&format!("text.scrim.ramp: \"{old}\"\n"), p).0);
+			assert_eq!(s.text_scrim_ramp.key(), new, "{old} should still parse");
 		}
-		let s = resolve(read_raw("text.scrim.function: \"bogus\"\n", p));
-		assert_eq!(s.text_scrim_function, "sdf", "unknown -> default");
-		let s = resolve(read_raw("text.scrim.ramp: \"bogus\"\n", p));
-		assert_eq!(s.text_scrim_ramp, "exp", "unknown -> default");
+		let s = resolve(read_raw("text.scrim.function: \"bogus\"\n", p).0);
+		assert_eq!(s.text_scrim_function, crate::scrim::Function::Sdf, "unknown -> default");
+		let s = resolve(read_raw("text.scrim.ramp: \"bogus\"\n", p).0);
+		assert_eq!(s.text_scrim_ramp, crate::scrim::Ramp::Exp, "unknown -> default");
+	}
+
+	// The blink rate was half a cycle in milliseconds. A launch renames it to
+	// seconds of a whole cycle, so every old value still blinks exactly as fast,
+	// the template's commented default turns into the new template line, and a
+	// note or a value that isn't a number stays as written.
+	// Test ID: ddq65
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_old_blink_rate_in_ms_becomes_the_same_cycle_in_seconds() {
+		let template = setting_lines(default_config()).into_iter().find(|(name, _)| name == "cursor.blink_rate_s").map(|(_, line)| line).expect("a template line for the rate");
+		for (old, new, cycle) in [("cursor:\n\tblink_rate_ms: 500\n", "cursor:\n\tblink_rate_s: 1.0\n", 1.0), ("cursor:\n\tblink_rate_ms: 300  # mine\n", "cursor:\n\tblink_rate_s: 0.6  # mine\n", 0.6), ("cursor.blink_rate_ms: 530\n", "cursor.blink_rate_s: 1.06\n", 1.06), ("cursor.blink_rate_ms: 333\n", "cursor.blink_rate_s: 0.666\n", 0.666), ("cursor:\n\tblink_rate_ms: fast\n", "cursor:\n\tblink_rate_s: fast\n", 1.0), ("cursor:\n\t# blink_rate_ms: 500  ## Default\n", &format!("cursor:\n{template}\n"), 1.0)] {
+			let out = migrate_config_text(old).unwrap_or_else(|| panic!("{old:?} kept"));
+			assert_eq!(out, new, "{old:?}");
+			assert_eq!(migrate_config_text(&out), None, "{out:?} settles");
+			let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
+			assert!((s.cursor_blink_rate_s - cycle).abs() < 1e-6, "{old:?}");
+		}
+		// the new name already there wins, and the old line is left alone
+		let both = "cursor:\n\tblink_rate_s: 2.0\n\tblink_rate_ms: 500\n";
+		assert_eq!(migrate_config_text(both), None);
+		// a flat file from before nesting gets there too
+		let flat = converted_config_text("cursor_blink_rate_ms: 250\nfont_size: 13\n").unwrap();
+		let s = resolve(read_raw(&loaded_text(&flat), std::path::Path::new("test.shcl")).0);
+		assert!((s.cursor_blink_rate_s - 0.5).abs() < 1e-6, "{flat}");
+	}
+
+	// `cursor.animation: none` was how a file said no blink. A launch turns it
+	// into `blink: false`, and where the file sets the switch itself the word
+	// still reads as off, so no file starts blinking that didn't before.
+	// Test ID: ddq66
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn animation_none_becomes_blink_off() {
+		let p = std::path::Path::new("test.shcl");
+		let read = |text: &str| resolve(read_raw(&loaded_text(text), p).0);
+		for (old, new) in [("cursor:\n\tanimation: none\n", "cursor:\n\tblink: false\n"), ("cursor:\n\tanimation: \"None\"  # quiet\n", "cursor:\n\tblink: false  # quiet\n"), ("cursor.animation: NONE\n", "cursor.blink: false\n")] {
+			assert_eq!(migrate_config_text(old).as_deref(), Some(new), "{old:?}");
+			let s = read(old);
+			assert!(!s.cursor_blink, "{old:?}");
+			assert_eq!(s.cursor_animation, Settings::default().cursor_animation);
+		}
+		// a commented word sets nothing, and a file that sets the switch keeps
+		// its own lines
+		for kept in ["cursor:\n\t# animation: none\n", "cursor:\n\tblink: true\n\tanimation: none\n"] {
+			assert_eq!(migrate_config_text(kept), None, "{kept:?}");
+		}
+		assert!(read("cursor:\n\t# animation: none\n").cursor_blink);
+		assert!(!read("cursor:\n\tblink: true\n\tanimation: none\n").cursor_blink);
+		assert!(read("cursor:\n\tanimation: phase\n").cursor_blink);
+		assert!(!read("cursor:\n\tblink: false\n").cursor_blink);
+	}
+
+	// The 4 check boxes a tab's text used to be made of become one template
+	// that says the same, at the first box's line, and the rest of them go. A
+	// file whose boxes said what the template said gets no line, only the
+	// commented one.
+	// Test ID: de2ze
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_old_tab_check_boxes_become_a_template_that_says_the_same() {
+		use crate::tabtitle::{DEFAULT_TAB_TEXT, Parts, tab_text_for};
+		let template = |parts: Parts| tab_text_for(parts);
+		let no_dir = Parts { directory: false, ..Parts::default() };
+		let migrated = migrate_config_text("window:\n\tmargin: 8.0\n\t# tab_shows_title: true  ## Default\n\ttab_shows_directory: false\n\t# tab_shows_shell: true  ## Default\n").expect("a change");
+		assert!(!migrated.contains("tab_shows"), "{migrated}");
+		assert_eq!(migrated.lines().filter(|l| l.contains("tab_text")).count(), 1);
+		assert!(migrated.starts_with("window:\n\tmargin: 8.0\n\ttab_text: "), "{migrated}");
+		assert_eq!(read_text(&migrated).tab_text, template(no_dir));
+		assert_eq!(migrate_config_text(&migrated), None, "settles in one pass");
+
+		// every mix of them, nested or dotted, says what it did
+		for bits in 0..16u8 {
+			let parts = Parts { title: bits & 1 != 0, shell: bits & 2 != 0, program: bits & 4 != 0, directory: bits & 8 != 0 };
+			let lines = [("title", parts.title), ("shell", parts.shell), ("program", parts.program), ("directory", parts.directory)];
+			let nested: String = std::iter::once("window:\n".to_string()).chain(lines.iter().map(|(leaf, on)| format!("\ttab_shows_{leaf}: {on}\n"))).collect();
+			let dotted = lines.iter().map(|(leaf, on)| format!("window.tab_shows_{leaf}: {on}\n")).collect::<Vec<_>>().concat();
+			for text in [nested, dotted] {
+				let migrated = migrate_config_text(&text).expect("a change");
+				assert!(!migrated.contains("tab_shows"), "{migrated}");
+				let want = if parts == Parts::default() { DEFAULT_TAB_TEXT.to_string() } else { template(parts) };
+				assert_eq!(read_text(&migrated).tab_text, want, "{text}");
+				assert_eq!(migrated.contains("tab_text"), parts != Parts::default(), "{migrated}");
+				assert_eq!(migrate_config_text(&migrated), None, "{text}");
+			}
+		}
+
+		// a template the file already has wins, and the old boxes go
+		let own = "window:\n\ttab_text: \"%SHELL%\"\n\ttab_shows_shell: false\n";
+		let migrated = migrate_config_text(own).expect("a change");
+		assert_eq!(migrated, "window:\n\ttab_text: \"%SHELL%\"\n");
+		// read the way the old build read them: a value that is no yes or no was on
+		let odd = "window:\n\ttab_shows_shell: maybe\n";
+		let migrated = migrate_config_text(odd).expect("a change");
+		assert!(!migrated.contains("tab_text"), "{migrated}");
+		// a commented box isn't a setting
+		assert_eq!(migrate_config_text("window:\n\t# tab_shows_shell: false\n").as_deref(), Some("window:\n"));
+	}
+
+	// A config written by a build with the check boxes, untouched since, becomes
+	// the one this build writes: the paragraph over the boxes gives way to the
+	// one for the template, and the template's commented line comes in.
+	// Test ID: de2zf
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_config_from_before_the_tab_text_template_upgrades_to_the_current_one() {
+		let new_block = setting_groups(default_config()).into_iter().find(|(path, ..)| path == "window.tab_text").expect("the template's line").1.join("\n");
+		let old_block = OLD_TAB_COMMENT
+			.iter()
+			.map(|l| format!("\t{l}"))
+			.chain(OLD_TAB_PARTS.iter().map(|path| {
+				let leaf = path.rsplit('.').next().unwrap_or(path);
+				format!("\t# {leaf}: true  ## Default")
+			}))
+			.collect::<Vec<_>>()
+			.join("\n");
+		assert!(default_config().contains(&new_block));
+		let old = default_config().replacen(&new_block, &old_block, 1);
+		assert_ne!(old, default_config());
+		let migrated = migrate_config_text(&old).expect("a change");
+		let filled = backfilled_text(&migrated).expect("nothing buried").unwrap_or(migrated);
+		assert_eq!(filled, default_config());
+		assert_eq!(migrate_config_text(&filled), None);
+	}
+
+	// A template that can't be read is kept, so what was typed is still there to
+	// fix, and the launch says why the tabs don't follow it.
+	// Test ID: de2zg
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_tab_text_that_cannot_be_read_is_kept_and_said() {
+		let p = std::path::Path::new("test.shcl");
+		let text = "window:\n\ttab_text: \"{ %SHELL%\"\n";
+		let (raw, said) = read_raw(text, p);
+		assert_eq!(resolve(raw).tab_text, "{ %SHELL%");
+		assert!(said.iter().any(|line| line.contains("window.tab_text") && line.contains("no closing }")), "{said:?}");
+		assert_eq!(read_text(text).tab_text, "{ %SHELL%");
+		let (_, said) = read_raw("window:\n\ttab_text: \"%SHELL%\"\n", p);
+		assert!(said.is_empty(), "{said:?}");
+	}
+
+	// Turning the blink on in Settings has to clear a "none" the file still has,
+	// or the next launch reads it as off again.
+	// Test ID: ddq67
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn turning_the_blink_on_replaces_an_old_none() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_blinkon_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		// the blink is a profile row, so Custom's is the file's
+		std::fs::write(&path, "performance:\n\tautomatic: false\n\tprofile: custom\ncursor:\n\tblink: true\n\tanimation: none\n").unwrap();
+		set_config_override(path.clone());
+		let orig = load();
+		assert!(!orig.cursor_blink);
+		let mut edited = orig.clone();
+		change(&mut edited, Key::CursorBlinking, Value::Bool(true));
+		assert!(persist(&orig, &edited));
+		let back = load();
+		assert!(back.cursor_blink, "{}", std::fs::read_to_string(&path).unwrap());
+		assert_eq!(back.cursor_animation, orig.cursor_animation);
+	}
+
+	// The words the file uses, written out here rather than read back from
+	// `key`, so a changed spelling, or a type whose dialog order moved, fails
+	// here and not in somebody's config.
+	// Test ID: ddj7y
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_fixed_choice_reads_and_writes_its_own_word() {
+		use crate::pane::CursorAnimation as C;
+		use crate::scrim::{Function as F, Ramp as R};
+		use crate::theme::Mode as M;
+		fn check<T: Choice>(words: &[(&str, T)]) {
+			assert_eq!(words.len(), T::ALL.len(), "{:?}", T::ALL);
+			for (index, &(word, choice)) in words.iter().enumerate() {
+				assert_eq!(T::ALL[index], choice, "dialog order");
+				assert_eq!(choice.key(), word);
+				assert_eq!(T::parse(word), Some(choice), "{word}");
+				assert_eq!(choice.index(), index);
+				assert_eq!(T::from_index(index), Some(choice));
+			}
+			assert_eq!(T::parse("bogus"), None);
+			assert_eq!(T::from_index(T::ALL.len()), None);
+		}
+		check(&[("exp", R::Exp), ("half_normal", R::HalfNormal), ("log", R::Log), ("sigmoid", R::Sigmoid), ("linear", R::Linear)]);
+		check(&[("sdf", F::Sdf), ("dt", F::Dt), ("dilate", F::Dilate), ("gaussian", F::Gaussian)]);
+		// "none" left with `cursor.blink`, which says it now
+		check(&[("phase", C::Phase), ("pulse_vertical", C::PulseVertical), ("pulse_horizontal", C::PulseHorizontal), ("pulse_both", C::PulseBoth)]);
+		check(&[("dark", M::Dark), ("light", M::Light), ("system", M::System)]);
+		check(&[("auto", Compression::Auto), ("bc1", Compression::Bc1), ("bc7", Compression::Bc7)]);
+		// config file only, so read here rather than through a save
+		let p = std::path::Path::new("test.shcl");
+		let read = |text: &str| resolve(read_raw(text, p).0).wallpaper_compression;
+		assert_eq!(read(""), Compression::Auto);
+		assert_eq!(read("wallpaper:\n\tcompression: \"bc7\"\n"), Compression::Bc7);
+		assert_eq!(read("wallpaper:\n\tcompression: BC1\n"), Compression::Bc1);
+		assert_eq!(read("wallpaper:\n\tcompression: bc6\n"), Compression::Auto);
+		// the ramp's older spellings still read, and no word cares about case
+		assert_eq!(R::parse("s"), Some(R::Sigmoid));
+		assert_eq!(R::parse("Gaussian"), Some(R::HalfNormal));
+		assert_eq!(R::parse("EXP"), Some(R::Exp));
+		assert_eq!(C::parse("Phase"), Some(C::Phase));
+		assert_eq!(F::parse(" SDF"), Some(F::Sdf));
+		assert_eq!(C::parse("phases"), None);
+		assert_eq!(M::parse(" Light "), Some(M::Light));
+		assert_eq!(M::parse("SYSTEM"), Some(M::System));
+		assert!(M::Dark.is_dark(false) && !M::Light.is_dark(true));
+		assert!(M::System.is_dark(true) && !M::System.is_dark(false));
+	}
+
+	// A word in the file is never respelled by a save that didn't change it,
+	// a word it doesn't know is kept as written and read as the default, and a
+	// save that does change one writes the word above.
+	// Test ID: ddj7z
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_config_with_each_fixed_choice_loads_and_saves_byte_identical() {
+		use crate::pane::CursorAnimation;
+		use crate::profile::Profile;
+		use crate::scrim::{Function, Ramp};
+		use crate::theme::Mode;
+		fn writes<T: Choice>(path: &std::path::Path, leaf: &str, key: Key, field: fn(&mut Settings) -> &mut T) {
+			let word = |c: T| Value::Text(c.key().to_string());
+			for (k, &choice) in T::ALL.iter().enumerate() {
+				// a save writes only what changed, so it starts from another value
+				let mut orig = load();
+				change(&mut orig, key, word(T::ALL[(k + 1) % T::ALL.len()]));
+				let mut edited = orig.clone();
+				change(&mut edited, key, word(choice));
+				assert!(persist(&orig, &edited));
+				let text = std::fs::read_to_string(path).unwrap();
+				let want = format!("{leaf}: {}\n", choice.key());
+				assert!(text.contains(&want), "{want:?} in {text}");
+				assert_eq!(*field(&mut load()), choice);
+			}
+		}
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_choices_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let modes = ["dark", "light", "system", "Light", "bogus"];
+		let profiles = ["custom", "max", "high", "low", "standard", "remote", "HIGH", "bogus"];
+		let ramps = ["exp", "half_normal", "log", "sigmoid", "Linear", "s", "gaussian", "bogus"];
+		let functions = ["sdf", "dt", "dilate", "gaussian", "Dilate", "bogus"];
+		// not "none" any more: a launch rewrites that one as `blink: false`
+		let animations = ["Pulse_Both", "Phase", "pulse_vertical", "pulse_horizontal", "pulse_both", "bogus"];
+		let d = Settings::default();
+		for row in 0..8 {
+			let pick = |words: &[&'static str]| words[row % words.len()];
+			let (mode, profile, ramp, function, animation) = (pick(&modes), pick(&profiles), pick(&ramps), pick(&functions), pick(&animations));
+			let lines = [format!("theme_mode: {mode}\n"), format!("\tprofile: {profile}\n"), format!("\t\tramp: {ramp}\n"), format!("\t\tfunction: {function}\n"), format!("\tanimation: {animation}\n")];
+			let file = format!("{}performance:\n\tautomatic: false\n{}font:\n\tsize: 12.5\ntext:\n\tscrim:\n{}{}cursor:\n{}", lines[0], lines[1], lines[2], lines[3], lines[4]);
+			std::fs::write(&path, &file).unwrap();
+			let orig = load();
+			let launched = std::fs::read_to_string(&path).unwrap();
+			for line in &lines {
+				assert!(launched.contains(line.as_str()), "{line:?} in {launched}");
+			}
+			assert_eq!(orig.theme_mode, Mode::parse(mode).unwrap_or(d.theme_mode));
+			// Remote is never stored, so the file's word is no choice at all
+			let picked = match Profile::parse(profile) {
+				Profile::Remote => Profile::Max,
+				picked => picked,
+			};
+			assert_eq!(orig.performance_profile, picked);
+			// the scrim's words are Custom's, whichever profile shows
+			let own = |key: Key| orig.model.values.own.get(key.name()).cloned();
+			let word = |key: Option<&str>| key.map(|k| Value::Text(k.to_string()));
+			assert_eq!(own(Key::ScrimRamp), word(Ramp::parse(ramp).map(Choice::key)));
+			assert_eq!(own(Key::ScrimFunction), word(Function::parse(function).map(Choice::key)));
+			assert_eq!(orig.cursor_animation, CursorAnimation::parse(animation).unwrap_or(d.cursor_animation));
+
+			let mut edited = orig.clone();
+			change(&mut edited, Key::FontSize, Value::Float(13.5));
+			assert!(persist(&orig, &edited));
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), launched.replacen("size: 12.5", "size: 13.5", 1), "row {row}: a save of another setting changed a word");
+		}
+
+		// every value a save writes is the word the table above pins, and reads
+		// back as itself, on the profile whose values are the file's own
+		std::fs::write(&path, "performance:\n\tautomatic: false\n\tprofile: custom\n").unwrap();
+		writes(&path, "theme_mode", Key::ThemeMode, |s| &mut s.theme_mode);
+		writes(&path, "ramp", Key::ScrimRamp, |s| &mut s.text_scrim_ramp);
+		writes(&path, "function", Key::ScrimFunction, |s| &mut s.text_scrim_function);
+		writes(&path, "animation", Key::CursorAnimation, |s| &mut s.cursor_animation);
+		// Remote is for the run only, so no save writes it
+		let kept = Profile::ALL.into_iter().filter(|p| *p != Profile::Remote);
+		let word = |p: Profile| Value::Text(p.key().to_string());
+		for (k, profile) in kept.clone().enumerate() {
+			let others: Vec<Profile> = kept.clone().collect();
+			let mut orig = load();
+			change(&mut orig, Key::PerfProfile, word(others[(k + 1) % others.len()]));
+			let mut edited = orig.clone();
+			change(&mut edited, Key::PerfProfile, word(profile));
+			assert!(persist(&orig, &edited));
+			let text = std::fs::read_to_string(&path).unwrap();
+			assert!(text.contains(&format!("profile: {}\n", profile.key())), "{text}");
+			assert_eq!(load().performance_profile, profile);
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Each zoom step is a pixel on the configured size. Stepping past the floor
+	// banks nothing, so the first step back up leaves it at once. The zoom is
+	// process-wide, hence the store lock.
+	// Test ID: dd5mn
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn font_zoom_steps_a_pixel_and_stops_at_the_floor() {
+		let _store = test_store_lock();
+		let before = settings();
+		let mut s = (*before).clone();
+		change(&mut s, Key::FontSize, Value::Float(12.0));
+		update(s);
+		reset_font_zoom();
+		assert_eq!(effective_font_size(), 12.0);
+		nudge_font_zoom(1);
+		nudge_font_zoom(1);
+		assert_eq!(effective_font_size(), 14.0);
+		for _ in 0..20 {
+			nudge_font_zoom(-1);
+		}
+		assert_eq!(effective_font_size(), 4.0, "held at the floor");
+		nudge_font_zoom(1);
+		assert_eq!(effective_font_size(), 5.0, "no offset banked below it");
+		reset_font_zoom();
+		assert_eq!(effective_font_size(), 12.0);
+		update((*before).clone());
 	}
 
 	// The face/size split's inference for configs predating use_system_font_size:
 	// absent = follow the face toggle, except an explicit font_size (which the old
 	// single toggle silently ignored) reads as intent and turns the size follow off.
+	// A family of its own with no face line turns the face off the same way.
+	// Test ID: da8sg
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn system_font_size_split_inference() {
-		let p = std::path::Path::new("test.shcl");
-		let s = resolve(read_raw("", p));
+		let s = read_text("");
 		assert!(s.use_system_font && s.use_system_font_size, "defaults on");
-		let s = resolve(read_raw("font.use_system_family: false\n", p));
+		let s = read_text("font.use_system_family: false\n");
 		assert!(!s.use_system_font_size, "size follows the face toggle");
-		let s = resolve(read_raw("font.size: 20.0\n", p));
+		let s = read_text("font.size: 20.0\n");
 		assert!(s.use_system_font, "explicit size keeps the system face");
-		assert!(
-			!s.use_system_font_size,
-			"explicit size wins over the OS size"
-		);
-		let s = resolve(read_raw("font.size: 20.0\nfont.use_system_size: true\n", p));
+		assert!(!s.use_system_font_size, "explicit size wins over the OS size");
+		assert_eq!(s.font_size, 20.0);
+		let s = read_text("font.size: 20.0\nfont.use_system_size: true\n");
 		assert!(s.use_system_font_size, "explicit key beats the inference");
+		let s = read_text("font.family: \"Some Mono\"\n");
+		assert!(!s.use_system_font && !s.use_system_font_size);
+		assert_eq!(s.font_family, "Some Mono");
+		// a value set aside under a switch that is on is no reason to turn it off
+		let s = read_text("kept:\n\tset_aside:\n\t\tfont:\n\t\t\tsize: 20.0\n");
+		assert!(s.use_system_font && s.use_system_font_size);
 	}
 
-	// The setting ships as a literal token, so the expander is what makes it name
+	// The setting's default is a literal token, so the expander is what makes it name
 	// a directory at all. Both platforms' spellings everywhere: a config file gets
-	// carried between machines, and a `$HOME` left standing as a literal folder
+	// copied between machines, and a `$HOME` left standing as a literal folder
 	// name on Windows would be a very quiet way to fail.
+	// Test ID: dbg0q
 	#[test]
-	fn a_home_token_expands_however_it_is_spelled() {
+	fn a_home_token_expands_however_it_is_written() {
 		let home = super::home_string();
 		assert!(!home.is_empty(), "this box names no home directory");
-		for spelling in ["~", "$HOME", "${HOME}", "%USERPROFILE%", "%userprofile%"] {
-			assert_eq!(expand_path(spelling), home, "{spelling} did not expand");
+		for spelling in ["~", "$HOME", "${HOME}", "%USERPROFILE%", "%userprofile%", "$env:HOME", "$env:USERPROFILE", "${env:HOME}", "$ENV:home"] {
+			assert_eq!(expand_vars(spelling), home, "{spelling} did not expand");
 		}
-		assert_eq!(expand_path("~/work"), format!("{home}/work"));
-		// a name that is not a variable is left exactly as it stands
-		assert_eq!(expand_path("/srv/~backup"), "/srv/~backup", "~ mid-path");
-		assert_eq!(expand_path("100%"), "100%", "a lone percent");
-		assert_eq!(expand_path("50%% off"), "50%% off", "an empty name");
-		assert_eq!(expand_path("cost $ 5"), "cost $ 5", "a lone dollar");
+		assert_eq!(expand_vars("~/work"), format!("{home}/work"));
+		// a name that isn't a variable is left exactly as it stands
+		assert_eq!(expand_vars("/srv/~backup"), "/srv/~backup", "~ mid-path");
+		assert_eq!(expand_vars("100%"), "100%", "a lone percent");
+		assert_eq!(expand_vars("50%% off"), "50%% off", "an empty name");
+		assert_eq!(expand_vars("cost $ 5"), "cost $ 5", "a lone dollar");
 		// and an unset one expands to nothing, the way a shell does it
-		assert_eq!(expand_path("$SILKTERM_NO_SUCH_VAR/x"), "/x");
+		assert_eq!(expand_vars("$SILKTERM_NO_SUCH_VAR/x"), "/x");
+	}
+
+	// The default is the home variable written the way somebody on this platform
+	// would type it, and the template's commented line has to say the same thing or
+	// the first save rewrites the file just written (G69, G72).
+	// Test ID: dcq0v
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_default_startup_directory_is_this_platforms_home_variable() {
+		let home = super::home_string();
+		assert!(!home.is_empty(), "this box names no home directory");
+		let want = if cfg!(windows) { "%USERPROFILE%" } else { "$HOME" };
+		assert_eq!(HOME_TOKEN, want);
+		assert_eq!(expand_vars(HOME_TOKEN), home, "left standing as a literal");
+		assert_eq!(Settings::default().startup_directory, HOME_TOKEN);
+		let line = format!("startup_directory: \"{HOME_TOKEN}\"  ## Default");
+		assert!(default_config().contains(&line), "template says something else");
+	}
+
+	// The other pairs that mean one thing under 2 spellings. Only the one the
+	// running platform sets is checked against a value; the point is that the
+	// other spelling works too rather than expanding to nothing.
+	// Test ID: dbz8n
+	#[test]
+	fn the_other_platforms_spelling_of_a_name_still_answers() {
+		for (ours, theirs) in [("USER", "USERNAME"), ("TMPDIR", "TEMP")] {
+			let Some(value) = std::env::var_os(ours).or_else(|| std::env::var_os(theirs)).filter(|v| !v.is_empty()) else {
+				continue; // neither is set here; nothing to compare against
+			};
+			let value = value.to_string_lossy().into_owned();
+			assert_eq!(expand_vars(&format!("${ours}")), value);
+			assert_eq!(expand_vars(&format!("%{theirs}%")), value);
+		}
+	}
+
+	// The program name is expanded because nothing else ever would. Everything
+	// after it is left exactly as written, because the program itself is what
+	// reads those words and they mean something to it: a cmd prompt string, a
+	// bash `-c` script, a percent that is just a percent. Splitting happens
+	// first, which keeps a variable with a path with a space in it whole.
+	// Test ID: dcq05
+	#[test]
+	fn a_config_command_expands_the_program_and_nothing_after_it() {
+		let home = super::home_string();
+		assert_eq!(command_argv("$HOME/bin/sh --norc").unwrap(), [format!("{home}/bin/sh"), "--norc".to_string()]);
+		assert_eq!(command_argv(r#""%USERPROFILE%\my app\sh" -l"#).unwrap(), [format!(r"{home}\my app\sh"), "-l".to_string()]);
+		assert_eq!(command_argv("~/bin/sh ~/rc").unwrap(), [format!("{home}/bin/sh"), "~/rc".to_string()], "a ~ in an argument is the program's to resolve");
+		// the arguments that used to arrive mangled
+		assert_eq!(command_argv("cmd /k prompt $P$G").unwrap(), ["cmd", "/k", "prompt", "$P$G"]);
+		assert_eq!(command_argv("bash -c 'echo $FOO'").unwrap(), ["bash", "-c", "echo $FOO"]);
+		assert_eq!(command_argv("cmd /k echo %PATH%").unwrap(), ["cmd", "/k", "echo", "%PATH%"]);
+		assert_eq!(command_argv(r#"pwsh -NoExit -Command "$Host.UI.RawUI.WindowTitle = 'x'""#).unwrap(), ["pwsh", "-NoExit", "-Command", "$Host.UI.RawUI.WindowTitle = 'x'"]);
 	}
 
 	// A directory named on the command line is checked before anything spawns, so
-	// a path that is not there reads as one line naming the flag rather than as a
-	// shell that failed to start - and it expands the same tokens the setting does.
+	// a path that isn't there reads as one line naming the flag rather than as a
+	// shell that failed to start, and it expands the same tokens the setting does.
+	// Test ID: dbh66
 	#[test]
 	fn a_named_directory_is_expanded_and_checked() {
 		let home = super::home_string();
@@ -4110,127 +12384,507 @@ mod tests {
 		assert_eq!(cli_dir("~"), Some(PathBuf::from(&home)));
 		assert_eq!(cli_dir(" $HOME "), Some(PathBuf::from(&home)), "trimmed");
 		assert_eq!(cli_dir("   "), None, "nothing asked for");
-		assert_eq!(
-			cli_dir("$SILKTERM_NO_SUCH_VAR/nowhere"),
-			None,
-			"no such dir"
-		);
+		assert_eq!(cli_dir("$SILKTERM_NO_SUCH_VAR/nowhere"), None, "no such dir");
 	}
 
-	// The bug this fixes shipped in everyone's config: `shell.default` was
-	// routinely a bare name where the scan had already stored the full path to
-	// the same file, so a STRING compare promoted a second copy of the user's
-	// default shell to the top of their own list - where the top is what "default
-	// shell" now means, so the duplicate became the default.
+	// The bug this fixes was in everyone's config: `shell.default` was often a bare
+	// name where the scan had already stored the full path to the same file, so a
+	// string compare put a second copy of the user's default shell at the top of
+	// their own list. The top is what "default shell" means now, so the duplicate
+	// became the default.
+	// Test ID: dbg0r
 	#[test]
 	fn a_default_shell_already_in_the_list_moves_instead_of_doubling() {
-		let entry = |slug: &str, command: &str| crate::shells::ShellEntry {
-			slug: slug.to_string(),
-			title: slug.to_string(),
-			command: command.to_string(),
-			active: true,
-			comment: String::new(),
-			last_seen: String::new(),
-		};
-		let stored = vec![
-			entry("cmd", "cmd.exe"),
-			entry("pwsh", "\"C:\\Program Files\\PowerShell\\7\\pwsh.exe\""),
-		];
+		let entry = |slug: &str, command: &str| crate::shells::ShellEntry { slug: slug.to_string(), title: slug.to_string(), command: command.to_string(), active: true, comment: String::new(), last_seen: String::new() };
+		let stored = vec![entry("cmd", "cmd.exe"), entry("pwsh", "\"C:\\Program Files\\PowerShell\\7\\pwsh.exe\"")];
 		// the stub says what the real resolver says on a box with pwsh installed
 		let same = |a: &str, b: &str| a.contains("pwsh") && b.contains("pwsh");
 		let out = adopt_default_into_with(&stored, "pwsh", &same);
 		assert_eq!(out.len(), 2, "the list grew a duplicate");
-		assert_eq!(
-			out[0].slug, "pwsh",
-			"the default shell did not move to the top"
-		);
-		assert_eq!(
-			out[0].command, stored[1].command,
-			"the stored command was replaced by the bare name"
-		);
-		// a shell the list really does not carry is still added
+		assert_eq!(out[0].slug, "pwsh", "the default shell did not move to the top");
+		assert_eq!(out[0].command, stored[1].command, "the stored command was replaced by the bare name");
+		// a shell the list doesn't have is still added
 		let same_none = |_: &str, _: &str| false;
 		let out = adopt_default_into_with(&stored, "fish", &same_none);
 		assert_eq!(out.len(), 3);
 		assert_eq!(out[0].command, "fish");
 	}
 
+	// Test ID: da9gy
 	#[test]
-	fn copy_on_select_key_parses_and_defaults_off() {
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn copy_on_select_key_parses_and_defaults_on() {
 		let p = std::path::Path::new("test.shcl");
-		assert!(!resolve(read_raw("", p)).copy_on_select, "default off");
-		assert!(resolve(read_raw("shell.copy_on_select: true\n", p)).copy_on_select);
+		assert!(resolve(read_raw("", p).0).copy_on_select, "default on");
+		assert!(!resolve(read_raw("shell.copy_on_select: false\n", p).0).copy_on_select);
 	}
 
+	// Test ID: ddf5r
 	#[test]
-	fn hyperlink_keys_parse_in_their_block() {
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn idle_release_defaults_on() {
 		let p = std::path::Path::new("test.shcl");
-		let d = resolve(read_raw("", p));
+		assert!(Settings::default().idle_release);
+		assert!(resolve(read_raw("", p).0).idle_release, "default on");
+		let template = setting_lines(default_config()).into_iter().find_map(|(name, line)| (name == "window.idle_release").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# idle_release: true  ## Default"));
+		assert!(!resolve(read_raw("window.idle_release: false\n", p).0).idle_release);
+	}
+
+	// Option as Alt is off unless the file names a side, and a word it doesn't
+	// know is off too. The setting is under `keys:`, but it isn't read as a hotkey.
+	// Test ID: dffm5
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn option_as_alt_reads_from_the_file_and_defaults_off() {
+		use crate::input::OptionAlt;
+		let p = std::path::Path::new("test.shcl");
+		assert_eq!(Settings::default().option_as_alt, OptionAlt::Off);
+		let lines: Vec<String> = setting_lines(default_config()).into_iter().filter(|(name, _)| name == "keys.option_as_alt").map(|(_, line)| line).collect();
+		assert_eq!(lines, ["\t# option_as_alt: off  ## Default"]);
+		for (text, want) in [("keys:\n\toption_as_alt: left\n", OptionAlt::Left), ("keys.option_as_alt: Right\n", OptionAlt::Right), ("keys.option_as_alt: both\n", OptionAlt::Both), ("keys.option_as_alt: meta\n", OptionAlt::Off)] {
+			assert_eq!(resolve(read_raw(text, p).0).option_as_alt, want, "{text}");
+			assert_eq!(read_text(text).option_as_alt, want, "{text}");
+			assert!(config_complaints(text).is_empty(), "{text}");
+		}
+	}
+
+	// The tmux settings, off and asking by default, read nested or dotted. A
+	// word or name the file can't use reads as the default.
+	// Test ID: de30p
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_tmux_settings_read_from_the_file_and_default_off() {
+		use crate::tmux::OnClose;
+		let p = std::path::Path::new("test.shcl");
+		let d = Settings::default();
+		assert!(!d.tmux_new_session);
+		assert_eq!(d.tmux_session_name, "%YYYYmmDD%-%HHMMSSNN%");
+		assert_eq!(d.tmux_on_close, OnClose::Prompt);
+		let lines: Vec<(String, String)> = setting_lines(default_config()).into_iter().filter(|(name, _)| name.starts_with("shell.tmux.")).collect();
+		assert_eq!(lines, [("shell.tmux.always_new_session".to_string(), "\t\t# always_new_session: false  ## Default".to_string()), ("shell.tmux.session_name".to_string(), "\t\t# session_name: \"%YYYYmmDD%-%HHMMSSNN%\"  ## Default".to_string()), ("shell.tmux.on_close".to_string(), "\t\t# on_close: prompt  ## Default".to_string()),]);
+		let nested = "shell:\n\ttmux:\n\t\talways_new_session: true\n\t\tsession_name: \"work %HHMMSS%\"\n\t\ton_close: end\n";
+		for text in [nested, "shell.tmux.always_new_session: true\nshell.tmux.session_name: \"work %HHMMSS%\"\nshell.tmux.on_close: END\n"] {
+			let s = resolve(read_raw(text, p).0);
+			assert!(s.tmux_new_session, "{text}");
+			assert_eq!(s.tmux_session_name, "work %HHMMSS%");
+			assert_eq!(s.tmux_on_close, OnClose::End);
+		}
+		// and through the model, the way a launch reads it
+		assert_eq!(read_text(nested).tmux_on_close, OnClose::End);
+		let odd = resolve(read_raw("shell.tmux.on_close: kill\nshell.tmux.session_name: \"  \"\n", p).0);
+		assert_eq!(odd.tmux_on_close, OnClose::Prompt);
+		assert_eq!(odd.tmux_session_name, d.tmux_session_name);
+	}
+
+	// Empty is the pane's xterm-256color; anything else is one word, and a value
+	// with a space in it can't be a TERM, so it reads as the default.
+	// Test ID: de9kp
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn shell_term_reads_one_word_and_defaults_empty() {
+		let p = std::path::Path::new("test.shcl");
+		assert_eq!(Settings::default().term, "");
+		let template = setting_lines(default_config()).into_iter().find_map(|(name, line)| (name == "shell.term").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# term: \"\"  ## Default"));
+		for (text, want) in [("shell:\n\tterm: xterm-256color\n", "xterm-256color"), ("shell.term: \" xterm-256color \"\n", "xterm-256color"), ("shell.term: \"xterm 256color\"\n", ""), ("shell.term: \"\"\n", ""), ("", "")] {
+			assert_eq!(resolve(read_raw(text, p).0).term, want, "{text:?}");
+		}
+		assert_eq!(read_text("shell:\n\tterm: vt220\n").term, "vt220");
+	}
+
+	// Test ID: ddgxg
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn software_rendering_defaults_off() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(!Settings::default().software_rendering);
+		assert!(!resolve(read_raw("", p).0).software_rendering, "default off");
+		let template = setting_lines(default_config()).into_iter().find_map(|(name, line)| (name == "window.software_rendering").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# software_rendering: false  ## Default"));
+		assert!(resolve(read_raw("window.software_rendering: true\n", p).0).software_rendering);
+	}
+
+	// Off since the minimized wait was taken out again (2026100513581813).
+	// `an_existing_config_loses_the_minimized_wait` covers the line now.
+	// // The minimized wait came after the other two, so a file written before
+	// // it has the idle paragraph without it. It goes in beside them, first of
+	// // the waits, and the paragraph isn't written twice.
+	// // Test ID: ddgsg
+	// #[test]
+	// fn an_existing_config_learns_the_minimized_wait() {
+	// 	let p = std::path::Path::new("test.shcl");
+	// 	assert_eq!(resolve(read_raw("", p).0).idle_release_minimized_min, 1);
+	// 	let set = "window.idle_release_minimized_min: 5\n";
+	// 	assert_eq!(resolve(read_raw(set, p).0).idle_release_minimized_min, 5);
+	//
+	// 	let path = crate::testdir::run_dir().join("silkterm_minimized_wait_test.shcl");
+	// 	let before = "window:\n\
+	// 		\t## Let the graphics card's memory go after the window has sat unused, and\n\
+	// 		\t# idle_release: true  ## Default\n\
+	// 		\t# idle_release_hidden_min: 30  ## Default\n\
+	// 		\t# idle_release_min: 240  ## Default\n";
+	// 	std::fs::write(&path, before).unwrap();
+	// 	backfill_config(&mut LaunchFile::read(&path));
+	// 	let out = std::fs::read_to_string(&path).unwrap();
+	// 	let _ = std::fs::remove_file(&path);
+	// 	let at = |line: &str| {
+	// 		out.find(line)
+	// 			.unwrap_or_else(|| panic!("no {line:?} in:\n{out}"))
+	// 	};
+	// 	let minimized = at("\n\t# idle_release_minimized_min: 1  ## Default\n");
+	// 	assert!(
+	// 		at("\t# idle_release: true") < minimized
+	// 			&& minimized < at("\t# idle_release_hidden_min: 30"),
+	// 		"out of order:\n{out}"
+	// 	);
+	// 	assert_eq!(
+	// 		out.matches("Let the graphics card's memory go").count(),
+	// 		1,
+	// 		"{out}"
+	// 	);
+	// }
+
+	// The minimized wait had its own line for about a day. It leaves a file
+	// whether set or not, and the hidden wait's old commented 30 becomes the
+	// new 1. A hidden wait the user set stays as set.
+	// Test ID: ddj4x
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_existing_config_loses_the_minimized_wait() {
+		let p = std::path::Path::new("test.shcl");
+		let d = resolve(read_raw("", p).0);
+		assert_eq!(d.idle_release_hidden_min, 1);
+		assert_eq!(Settings::default().idle_release_hidden_min, 1);
+		let template = setting_lines(default_config()).into_iter().find_map(|(name, line)| (name == "window.idle_release_hidden_min").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# idle_release_hidden_min: 1  ## Default"));
+		assert!(!default_config().contains("minimized_min"));
+
+		let since_minidle = "window:\n\
+			\t# idle_release: true  ## Default\n\
+			\t# idle_release_minimized_min: 1  ## Default\n\
+			\t# idle_release_hidden_min: 30  ## Default\n\
+			\t# idle_release_min: 240  ## Default\n";
+		let out = migrate_config_text(since_minidle).expect("the retired line should go");
+		assert!(!out.contains("minimized_min"), "{out}");
+		assert!(out.contains("\t# idle_release_hidden_min: 1  ## Default\n"), "{out}");
+		assert!(out.contains("\t# idle_release_min: 240  ## Default\n"), "{out}");
+
+		let set = "window:\n\
+			\tidle_release_minimized_min: 5\n\
+			\tidle_release_hidden_min: 30\n";
+		let out = migrate_config_text(set).expect("the retired line should go");
+		assert_eq!(out, "window:\n\tidle_release_hidden_min: 30\n");
+		assert_eq!(resolve(read_raw(&out, p).0).idle_release_hidden_min, 30);
+	}
+
+	// Test ID: ddj4y
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn new_tabs_go_next_to_current_unless_turned_off() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(resolve(read_raw("", p).0).new_tab_beside, "on by default");
+		let template = setting_lines(default_config()).into_iter().find_map(|(name, line)| (name == "window.new_tab_next_to_current").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# new_tab_next_to_current: true  ## Default"));
+		let off = "window:\n\tnew_tab_next_to_current: false\n";
+		assert!(!resolve(read_raw(off, p).0).new_tab_beside);
+	}
+
+	// Test ID: de9n7
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_remote_screen_takes_remote_unless_turned_off() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(resolve(read_raw("", p).0).performance_detect_remote, "on by default");
+		let template = setting_lines(default_config()).into_iter().find_map(|(name, line)| (name == "performance.detect_remote").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# detect_remote: true  ## Default"));
+		let off = "performance:\n\tdetect_remote: false\n";
+		assert!(!resolve(read_raw(off, p).0).performance_detect_remote);
+	}
+
+	// Test ID: de5d3
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_zoom_resizes_the_window_only_when_turned_on() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(!resolve(read_raw("", p).0).resize_on_zoom, "off by default");
+		let template = setting_lines(default_config()).into_iter().find_map(|(name, line)| (name == "window.resize_on_zoom").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# resize_on_zoom: false  ## Default"));
+		let on = "window:\n\tresize_on_zoom: true\n";
+		assert!(resolve(read_raw(on, p).0).resize_on_zoom);
+	}
+
+	// Test ID: ddwkr
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_theme_pick_leaves_the_font_alone_unless_turned_off() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(resolve(read_raw("", p).0).font_ignores_themes, "on by default");
+		let template = setting_lines(default_config()).into_iter().find_map(|(name, line)| (name == "font.ignore_themes").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# ignore_themes: true  ## Default"));
+		assert!(read_text("").font_ignores_themes);
+		assert!(!read_text("font:\n\tignore_themes: false\n").font_ignores_themes);
+	}
+
+	// A saved theme keeps a font beside its colors. One saved before themes had
+	// fonts has no font lines and still loads whole, and picking it changes no
+	// font even with fonts following themes.
+	// Test ID: ddwks
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_saved_theme_keeps_its_font_and_an_old_one_still_loads() {
+		let old = "theme: Mine\n\
+			font:\n\
+			\tignore_themes: false\n\
+			themes:\n\
+			\tmine:\n\
+			\t\tname: Mine\n\
+			\t\tdark:\n\
+			\t\t\tbackground: \"#010203\"\n";
+		let themes = read_user_themes(&shcl::Document::parse(old));
+		assert_eq!(themes.len(), 1);
+		assert_eq!(themes[0].dark.bg, [1, 2, 3]);
+		assert_eq!(themes[0].font, crate::theme::ThemeFont::default());
+		let s = read_text(old);
+		assert_eq!(s.theme, "Mine");
+		assert!(crate::fields::font_changed(&s).is_empty());
+		assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "Mine");
+
+		let mut theme = themes[0].clone();
+		theme.font = crate::theme::ThemeFont { family: Some("Mono One, Mono Two".into()), size: Some(21.0), line_height_scale: Some(1.5) };
+		let mut doc = shcl::Document::parse(default_config());
+		write_user_themes(&mut doc, &themes, std::slice::from_ref(&theme));
+		let text = doc.to_canonical();
+		let back = read_user_themes(&shcl::Document::parse(&text));
+		assert_eq!(back.len(), 1);
+		assert_eq!(back[0].font, theme.font);
+		assert!(config_complaints(&text).is_empty(), "{:?}", config_complaints(&text));
+
+		// a hand-edited theme may set only some, and out of range is clamped
+		let some = "themes:\n\tmine:\n\t\tname: Mine\n\t\tdark:\n\t\t\tbackground: \"#010203\"\n\t\tfont:\n\t\t\tsize: 900\n";
+		let font = &read_user_themes(&shcl::Document::parse(some))[0].font;
+		assert_eq!(font.size, Some(limits::FONT_SIZE.1));
+		assert_eq!((font.family.as_deref(), font.line_height_scale), (None, None));
+	}
+
+	fn test_theme(slug: &str, name: &str, from: &str) -> crate::theme::UserTheme {
+		crate::theme::UserTheme { slug: slug.to_string(), name: name.to_string(), dark: crate::theme::resolve_in(&[], from, crate::theme::Mode::Dark, true), light: crate::theme::resolve_in(&[], from, crate::theme::Mode::Light, true), font: crate::theme::ThemeFont { family: Some("Mono".into()), size: Some(14.0), line_height_scale: None } }
+	}
+
+	// A save or a rename edits a theme's block where it is. Its comments and its
+	// place in the list stay, and only the lines that changed are new.
+	// Test ID: dfjvz
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_theme_save_changes_only_its_changed_lines() {
+		let three = [test_theme("work", "Work", "SilkTerm"), test_theme("home", "Home", "Matrix"), test_theme("night", "Night", "SilkTerm")];
+		let mut doc = parse_kept("");
+		write_user_themes(&mut doc, &[], &three);
+		let written = saved_text(&doc);
+		let at = written.find("\twork:\n").expect("work block");
+		let mut text = written.clone();
+		text.insert_str(at + "\twork:\n".len(), "\t\t# kept for the office\n");
+		text.insert_str(at, "\t# the one I use most\n");
+
+		let mut doc = parse_kept(&text);
+		let orig = read_user_themes(&doc);
+		assert_eq!(orig, three, "the comments read as nothing");
+		let mut now = orig.clone();
+		now[0].name = "Office".into();
+		now[0].dark.bg = [1, 2, 3];
+		write_user_themes(&mut doc, &orig, &now);
+		let after = saved_text(&doc);
+
+		assert!(after.contains("\t# the one I use most\n\twork:\n\t\t# kept for the office\n"), "{after}");
+		let slugs: Vec<String> = read_user_themes(&parse_kept(&after)).into_iter().map(|t| t.slug).collect();
+		assert_eq!(slugs, ["work", "home", "night"], "the list keeps its order");
+		assert_eq!(read_user_themes(&parse_kept(&after)), now);
+		let changed: Vec<(&str, &str)> = text.lines().zip(after.lines()).filter(|(a, b)| a != b).collect();
+		assert_eq!(text.lines().count(), after.lines().count(), "{after}");
+		assert_eq!(changed.len(), 2, "only name and background: {changed:?}");
+		assert!(changed.iter().any(|(_, b)| b.contains("Office")), "{changed:?}");
+		assert!(changed.iter().any(|(_, b)| b.contains("#010203")), "{changed:?}");
+	}
+
+	// What a theme no longer has goes from its block, so a stale color can't
+	// survive under it (G30). A value that reads the same is left as written.
+	// Test ID: dfjw0
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_theme_save_drops_what_the_theme_no_longer_has() {
+		// a slug that isn't a bare name is quoted in the file
+		let mut doc = parse_kept("");
+		let theme = test_theme("80s", "Work", "SilkTerm");
+		write_user_themes(&mut doc, &[], std::slice::from_ref(&theme));
+		let text = saved_text(&doc).replace("\t\tname: Work\n", "\t\tname: 'Work'\n\t\tretired: 1\n").replacen("\t\t\tansi:", "\t\t\told_key: \"#ffffff\"\n\t\t\tansi:", 1);
+		assert!(text.contains("\t\"80s\":\n") && text.contains("old_key") && text.contains("name: 'Work'"), "{text}");
+
+		let mut doc = parse_kept(&text);
+		let orig = read_user_themes(&doc);
+		let mut now = orig.clone();
+		now[0].font.size = None;
+		now[0].dark.fg = [9, 9, 9];
+		write_user_themes(&mut doc, &orig, &now);
+		let after = saved_text(&doc);
+		for gone in ["retired", "old_key", "size:"] {
+			assert!(!after.contains(gone), "{gone} is left: {after}");
+		}
+		assert!(after.contains("name: 'Work'"), "a name that reads the same is kept as written: {after}");
+		assert_eq!(read_user_themes(&parse_kept(&after)), now);
+
+		// a block written twice reads as one, and its second name goes
+		let twice = format!("{text}\t\"80s\":\n\t\tname: Other\n");
+		let mut doc = parse_kept(&twice);
+		write_user_themes(&mut doc, &orig, &now);
+		let after = saved_text(&doc);
+		assert!(!after.contains("Other"), "{after}");
+		assert_eq!(read_user_themes(&parse_kept(&after)), now);
+		write_user_themes(&mut doc, &now, &[]);
+		assert!(doc.children("themes").is_empty(), "a delete finds it too");
+
+		// one shaped so a value can't be set where it is is written again whole
+		let matrix = test_theme("work", "Work", "Matrix");
+		let mut doc = parse_kept("");
+		write_user_themes(&mut doc, &[], std::slice::from_ref(&matrix));
+		let text = saved_text(&doc);
+		let ansi = text.lines().find(|l| l.trim_start().starts_with("ansi:")).unwrap();
+		let block = text.replacen(ansi, "\t\t\tansi:\n\t\t\t\tx: 1", 1);
+		let mut doc = parse_kept(&block);
+		let orig = read_user_themes(&doc);
+		assert_ne!(orig[0].dark.ansi, matrix.dark.ansi, "{block}");
+		write_user_themes(&mut doc, &orig, std::slice::from_ref(&matrix));
+		let after = saved_text(&doc);
+		assert_eq!(read_user_themes(&parse_kept(&after)), [matrix], "{after}");
+	}
+
+	// A new theme takes a key the file doesn't have, so a block this save never
+	// read, such as one another window saved or one that didn't load, stays.
+	// Test ID: dfjw1
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_new_theme_keeps_off_a_block_it_never_read() {
+		let hand = "themes:\n\tsea:\n\t\tname: Sea\n\t\tdark:\n\t\t\tbackground: #102030\n";
+		let mut doc = parse_kept(hand);
+		assert!(read_user_themes(&doc).is_empty(), "an unquoted color doesn't load");
+		let sea = test_theme("sea", "Sea", "SilkTerm");
+		let moved = write_user_themes(&mut doc, &[], std::slice::from_ref(&sea));
+		let after = saved_text(&doc);
+		assert!(after.starts_with(hand), "{after}");
+		assert!(moved, "the theme went under another key");
+		assert_eq!(doc.children("themes"), ["sea", "sea2"]);
+		let back = read_user_themes(&parse_kept(&after));
+		assert_eq!(back.len(), 1);
+		assert_eq!((back[0].slug.as_str(), back[0].name.as_str()), ("sea2", "Sea"));
+
+		// a key free in the file stays the one the dialog gave
+		let mut doc = parse_kept("");
+		assert!(!write_user_themes(&mut doc, &[], std::slice::from_ref(&sea)));
+		assert_eq!(doc.children("themes"), ["sea"]);
+	}
+
+	// Test ID: dattw
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn hyperlink_keys_parse_in_their_block() {
+		let d = read_text("");
 		assert!(d.hyperlinks, "on by default");
-		assert!(
-			d.hyperlink_open_command.is_empty(),
-			"opener is the desktop's"
-		);
-		let s = resolve(read_raw(
-			"hyperlinks:\n\tenabled: false\n\topen_command: \"firefox --new-tab\"\n",
-			p,
-		));
+		assert!(!crate::fields::by_hand(&d, Key::LinkOpenCommand), "opener is the desktop's");
+		let s = read_text("hyperlinks:\n\tenabled: false\n\topen_command: \"firefox --new-tab\"\n");
 		assert!(!s.hyperlinks);
 		assert_eq!(s.hyperlink_open_command, "firefox --new-tab");
 	}
 
 	// An over-range output_ease_lines must clamp: scroll's backlog clamp uses it
 	// as a lower bound and panics (aborts, in release) when it exceeds the cap.
+	// Test ID: d9kcc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn output_ease_lines_clamps_to_backlog_cap() {
-		let raw = read_raw(
-			"scroll.output_ease_lines: 20.0\n",
-			std::path::Path::new("test.shcl"),
-		);
+		let raw = read_raw("scroll.output_ease_lines: 20.0\n", std::path::Path::new("test.shcl")).0;
 		let s = resolve(raw);
 		assert!(s.output_ease_lines < 20.0, "over-range value must clamp");
 		assert!(s.output_ease_lines <= crate::scroll::MAX_BACKLOG);
-		let raw = read_raw(
-			"scroll.output_ease_lines: -3.0\n",
-			std::path::Path::new("test.shcl"),
-		);
+		let raw = read_raw("scroll.output_ease_lines: -3.0\n", std::path::Path::new("test.shcl")).0;
 		assert!(resolve(raw).output_ease_lines >= 0.0);
 	}
 
 	// One syntax-broken line must not sink the valid settings around it.
+	// Test ID: d99pk
 	#[test]
 	fn parse_lenient_drops_only_the_bad_line() {
 		let text = "transparency.opacity: 0.7\ncursor_blink: enable\nwindow.margin: 12.0\n";
-		let raw = read_raw(text, std::path::Path::new("test.shcl"));
+		let raw = read_raw(text, std::path::Path::new("test.shcl")).0;
 		assert_eq!(raw.opacity, Some(0.7)); // before the bad line
 		assert_eq!(raw.margin, Some(12.0)); // after the bad line
 	}
 
+	// Test ID: d9ch6
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn chrome_colors_default_and_override() {
-		// theme provides the chrome; the default matches the shared menu colors
+		// theme sets the chrome colors; the default matches the shared menu colors
 		let d = Settings::default();
 		assert_eq!(d.menu_bg, crate::theme::MENU_BG_DEF);
 		assert_eq!(d.menu_fg, crate::theme::MENU_FG_DEF);
 		// a colors override wins; unspecified chrome stays at the theme default
-		let raw = read_raw(
-			"colors.menu_background: \"#123456\"\ncolors.dialog_foreground: \"#abcdef\"\n",
-			std::path::Path::new("test.shcl"),
-		);
+		let raw = read_raw("colors.menu_background: \"#123456\"\ncolors.dialog_foreground: \"#abcdef\"\n", std::path::Path::new("test.shcl")).0;
 		let s = resolve(raw);
 		assert_eq!(s.menu_bg, [0x12, 0x34, 0x56]);
 		assert_eq!(s.dialog_fg, [0xab, 0xcd, 0xef]);
 		assert_eq!(s.menu_fg, crate::theme::MENU_FG_DEF);
 	}
 
-	// A pre-nesting config converts wholesale: every ACTIVE value lands at its
+	// A pre-nesting config converts wholesale: every active value ends at its
 	// new nested path (oldest alias spellings included), obsolete keys drop,
 	// themes.* user data survives, and the original file is kept as a .bak.
 	// When both an old alias and its newer flat spelling are present, the newer
 	// one wins.
+	// Test ID: dfe7m
 	#[test]
-	fn legacy_config_converts_with_values_carried() {
-		let dir = std::env::temp_dir().join(format!("silkterm_convert_{}", std::process::id()));
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_launch_steps_read_the_settings_file_once() {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_readonce_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let current = super::with_shcl_banner(default_config()).unwrap_or_else(|| default_config().to_string());
+		std::fs::write(&path, &current).unwrap();
+		let mut file = LaunchFile::read(&path);
+		// a step that read the disk again would convert this
+		let legacy = "font_family: \"Iosevka\"\nscrollback: 5000\n";
+		std::fs::write(&path, legacy).unwrap();
+		super::launch_steps(&mut file);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), legacy);
+		assert_eq!(file.text(), Some(current.as_str()));
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Test ID: dfe7n
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn each_launch_step_reads_what_the_one_before_it_wrote() {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_readchain_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "font_family: \"Iosevka\"\nscrollback: 5000\nwheel_lines: 4\n").unwrap();
+		let mut file = LaunchFile::read(&path);
+		super::launch_steps(&mut file);
+		let out = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(file.text(), Some(out.as_str()), "the launch parses the file it left");
+		assert!(out.contains("\tscrollback: 5000"), "converted:\n{out}");
+		// a second launch finds nothing left to do
+		let mut again = LaunchFile::read(&path);
+		super::launch_steps(&mut again);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), out);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Test ID: daq68
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn legacy_config_converts_with_values_kept() {
+		// a conversion that leaves a setting behind leaves word for the window
+		let _guard = test_config_lock();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_convert_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let legacy = "## my own note\n\
@@ -4238,6 +12892,7 @@ mod tests {
 			cursor_size_vertical: 40\n\
 			cursor_shape: \"block\"\n\
 			background_fit: \"zoom\"\n\
+			wallpaper_default: false\n\
 			wallpaper_opacity: 0.4\n\
 			background_opacity: 0.9\n\
 			opacity: 0.8\n\
@@ -4249,254 +12904,1269 @@ mod tests {
 			colors.focus: \"#abcdef\"\n\
 			theme: Matrix\n";
 		std::fs::write(&path, legacy).unwrap();
-		convert_legacy_config(&path);
+		convert_legacy_config(&mut LaunchFile::read(&path));
 		let out = std::fs::read_to_string(&path).unwrap();
 
 		assert!(out.contains("\tscrollback: 5000"), "value carried:\n{out}");
-		assert!(
-			out.contains("\t\theight: 40"),
-			"oldest alias lands at the nested path:\n{out}"
-		);
+		assert!(out.contains("\t\theight: 40"), "oldest alias lands at the nested path:\n{out}");
 		assert!(!out.contains("cursor_shape"), "obsolete key dropped");
-		assert!(
-			out.contains("\tdefault_fit: \"zoom\""),
-			"background_* alias carried:\n{out}"
-		);
-		assert!(
-			out.contains("\topacity: 0.4") && !out.contains("\topacity: 0.9"),
-			"the newer flat spelling wins over its alias:\n{out}"
-		);
-		assert!(
-			out.contains("\topacity: 0.8"),
-			"old bare opacity is the transparency one:\n{out}"
-		);
-		assert!(
-			!out.contains("tau_ms: 120.0"),
-			"a since-retired setting must not resurrect through conversion:\n{out}"
-		);
-		assert!(
-			out.contains("\twheel_lines: 4\n"),
-			"value carried without its stale trailing note:\n{out}"
-		);
-		assert!(
-			out.contains("\tmargin: 8.0"),
-			"a commented old line just leaves the fresh default in place:\n{out}"
-		);
-		assert!(
-			out.contains("\tfamily: \"Iosevka\"") && out.contains("\tuse_system_family: false"),
-			"an explicit font pins the system toggle off, as it always meant:\n{out}"
-		);
-		assert!(
-			out.contains("themes.mine.dark.background: \"#010203\""),
-			"future-feature user data carried:\n{out}"
-		);
-		assert!(
-			out.contains("\tfocus: \"#abcdef\""),
-			"color override carried"
-		);
+		assert!(out.contains("\tdefault_fit: \"zoom\""), "background_* alias carried:\n{out}");
+		assert!(out.contains("\tfallback_builtin: false"), "the builtin switch carried under its new name:\n{out}");
+		assert!(out.contains("\topacity: 0.4") && !out.contains("\topacity: 0.9"), "the newer flat spelling wins over its alias:\n{out}");
+		assert!(out.contains("\topacity: 0.8"), "old bare opacity is the transparency one:\n{out}");
+		assert!(!out.contains("tau_ms: 120.0"), "a since-retired setting must not resurrect through conversion:\n{out}");
+		assert!(out.contains("\twheel_lines: 4\n"), "value carried without its stale trailing note:\n{out}");
+		assert!(out.contains("\tmargin: 8.0"), "a commented old line just leaves the fresh default in place:\n{out}");
+		// A family with no switch line turns the system face off on load.
+		let launched = migrate_config_text(&out).unwrap_or_else(|| out.clone());
+		let s = read_text(&launched);
+		assert!(launched.contains("\tfamily: \"Iosevka\"") && !s.use_system_font && s.font_family == "Iosevka", "an explicit font stays set by hand, as it always meant:\n{launched}");
+		assert!(out.contains("themes.mine.dark.background: \"#010203\""), "future-feature user data carried:\n{out}");
+		// the old file's focus color is the one renamed to highlight
+		assert!(out.contains("\thighlight: \"#abcdef\""), "color override carried");
 		assert!(out.contains("theme: Matrix"), "theme choice carried");
-		assert!(
-			!out.contains("## my own note"),
-			"old comments live in the .bak, not the fresh template"
-		);
+		assert!(!out.contains("## my own note"), "old comments live in the .bak, not the fresh template");
 		let bak = std::fs::read_to_string(dir.join("config.shcl.bak")).unwrap();
 		assert_eq!(bak, legacy, "the original file survives untouched as .bak");
 
 		// the converted file is current-format: converting again is a no-op
-		convert_legacy_config(&path);
+		convert_legacy_config(&mut LaunchFile::read(&path));
 		assert_eq!(out, std::fs::read_to_string(&path).unwrap());
 		let _ = std::fs::remove_file(&path);
 		let _ = std::fs::remove_file(dir.join("config.shcl.bak"));
 	}
 
-	// The shipped template itself must never read as legacy.
+	// The glow settings were renamed to scrim, and the glow border to the text
+	// outline. A flat file from before that keeps every value.
+	// Test ID: dd5mp
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_old_glow_names_convert_to_scrim_and_outline() {
+		let out = converted_config_text("text_glow: false\ntext_glow_radius: 7\ntext_glow_softness: 0.3\ncursor_glow: true\ntext_glow_border: 2.5\ntext_glow_ramp: \"s\"\n").expect("a flat file converts");
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
+		assert!(!s.text_scrim, "{out}");
+		assert_eq!(s.text_scrim_radius, 7.0, "{out}");
+		assert_eq!(s.text_scrim_softness, 0.3, "{out}");
+		assert!(s.cursor_scrim, "{out}");
+		assert_eq!(s.text_outline, 2.5, "{out}");
+		assert_eq!(s.text_scrim_ramp, crate::scrim::Ramp::Sigmoid, "{out}");
+	}
+
+	// shcl drops a line that steps back to a depth nothing uses, so it sets
+	// nothing. Called `margin`, it used to send the whole file to `.bak` as an
+	// old flat one.
+	// Test ID: dd800
+	#[test]
+	fn a_line_that_sets_nothing_never_converts_the_file() {
+		let text = "\t\twindow:\n\t\t\tcolumns: 100\n\tmargin: 4\n";
+		let doc = shcl::Document::parse(text);
+		assert_eq!(doc.lost_count(), 1);
+		assert!(doc.get_string("margin").is_err());
+		assert_eq!(converted_config_text(text), None);
+		// an old name that does read still converts
+		assert!(converted_config_text("margin: 4\nwindow:\n\tcolumns: 100\n").is_some());
+	}
+
+	// The template itself must never read as legacy.
+	// Test ID: daq69
 	#[test]
 	fn a_new_format_config_never_converts() {
-		let dir = std::env::temp_dir().join(format!("silkterm_noconvert_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_noconvert_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, default_config()).unwrap();
-		convert_legacy_config(&path);
+		convert_legacy_config(&mut LaunchFile::read(&path));
 		assert_eq!(std::fs::read_to_string(&path).unwrap(), default_config());
-		assert!(
-			!dir.join("config.shcl.bak").exists(),
-			"no backup for a current-format file"
-		);
+		assert!(!dir.join("config.shcl.bak").exists(), "no backup for a current-format file");
 		let _ = std::fs::remove_file(&path);
+	}
+
+	// A current file with one flat key at the margin still converts, and its shell
+	// list is the user's own: every entry is copied, in order, with all its fields.
+	// Test ID: dcnw4
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_converted_file_keeps_its_shell_list() {
+		let list = vec![crate::shells::ShellEntry { comment: "the one in use".into(), last_seen: "2026-09-01".into(), ..shell_entry("zsh", "/bin/zsh") }, crate::shells::ShellEntry { active: false, title: "Old bash".into(), ..shell_entry("bash", "/bin/bash") }, shell_entry("fish", "/usr/bin/fish")];
+		let mut doc = shcl::Document::parse(default_config());
+		write_shells(&mut doc, &[], &list);
+		let text = format!("{}rows: 40\n", doc.to_canonical());
+		let out = converted_config_text(&text).expect("a flat key at the margin converts");
+		assert!(read_shells(&shcl::Document::parse(&out)) == list, "converted:\n{out}");
+		assert!(!out.lines().any(|l| l == "rows: 40"), "the flat key is gone from the margin:\n{out}");
+		assert_eq!(converted_config_text(&out), None, "converted twice:\n{out}");
+
+		let dir = crate::testdir::run_dir().join(format!("silkterm_convert_shells_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, &text).unwrap();
+		convert_legacy_config(&mut LaunchFile::read(&path));
+		let disk = std::fs::read_to_string(&path).unwrap();
+		assert!(read_shells(&shcl::Document::parse(&disk)) == list, "on disk:\n{disk}");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The `kept` block is the program's own: a theme's changes and the values set
+	// aside under a switch. A file rebuilt from the template keeps it, along with
+	// every other subtree the typo check takes for the program's or the user's
+	// own, whether a flat key at the margin converted it or it was deleted while
+	// the program ran. A setting left behind by a conversion is reported.
+	// Test ID: dfef3
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rebuilt_file_keeps_the_kept_block() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let owned = "kept:\n\tchanges:\n\t\ttheme:\n\t\t\tpreset: \"Matrix\"\n\t\t\tvalues:\n\t\t\t\tcolors:\n\t\t\t\t\tbackground: \"#123456\"\n\tset_aside:\n\t\twindow:\n\t\t\tcolumns: 100\nthemes.mine.colors.background: \"#010203\"\nwindow.monitors.m1.columns: 90\n";
+		let holds = |text: &str| {
+			let doc = shcl::Document::parse(text);
+			doc.get_string("kept.changes.theme.preset").as_deref() == Ok("Matrix") && doc.get_string("kept.changes.theme.values.colors.background").as_deref() == Ok("#123456") && doc.get_int("kept.set_aside.window.columns") == Ok(100) && doc.get_string("themes.mine.colors.background").as_deref() == Ok("#010203")
+		};
+		let has_monitor = |text: &str| shcl::Document::parse(text).get_int("window.monitors.m1.columns") == Ok(90);
+		let current = format!("{}{owned}", default_config());
+		assert!(holds(&current) && has_monitor(&current), "{current}");
+		assert_eq!(config_complaints(&current), Vec::<String>::new());
+
+		let out = converted_config_text(&format!("{current}rows: 40\n")).expect("a flat key at the margin converts");
+		assert!(holds(&out) && has_monitor(&out), "converted:\n{out}");
+		assert_eq!(config_complaints(&out), Vec::<String>::new(), "{out}");
+		assert_eq!(rebuilt_config_text(&current, &[]).1, 0);
+		// a save writes the block again by taking it out whole
+		let mut doc = shcl::Document::parse(&out);
+		doc.remove("kept");
+		let without = doc.to_canonical();
+		assert!(!without.contains("kept."), "{without}");
+
+		let dir = format_test_dir("rebuilt_kept");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, format!("{current}rows: 40\nwindow.colums: 90\n")).unwrap();
+		convert_legacy_config(&mut LaunchFile::read(&path));
+		let disk = std::fs::read_to_string(&path).unwrap();
+		assert!(holds(&disk) && has_monitor(&disk), "on disk:\n{disk}");
+		let loss = take_conversion_loss().expect("the typo is left behind, and said");
+		assert_eq!((loss.lost, loss.how), (1, Converted::Rewritten));
+		assert_eq!(loss.backup, Some(dir.join("config.shcl.bak")));
+		std::fs::write(&path, format!("{current}rows: 40\n")).unwrap();
+		convert_legacy_config(&mut LaunchFile::read(&path));
+		assert_eq!(take_conversion_loss(), None, "nothing was left behind");
+
+		// a block deleted while the program runs is written again from what was
+		// read. The launch moved the monitor size to the state file.
+		std::fs::write(&path, &current).unwrap();
+		set_config_override(path.clone());
+		let loaded = reload_from_disk();
+		std::fs::remove_file(&path).unwrap();
+		let mut sized = loaded.clone();
+		sized.remembered_columns += 1;
+		crate::fields::fill(&mut sized, None);
+		assert!(persist(&loaded, &sized));
+		let regrown = std::fs::read_to_string(&path).unwrap();
+		assert!(holds(&regrown), "regrown:\n{regrown}");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A flat `wallpaper:` had the image. It goes to `wallpaper.image`, never the
+	// block heading, whatever order the copied values are placed in, and a save
+	// from Settings then loads every copied value the same.
+	// Test ID: dcfs8
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_flat_wallpaper_converts_to_the_image_and_survives_a_save() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_flatwp_{}", std::process::id()));
+		let flat = "wallpaper: /home/x/Pictures/a.png\nbackground_opacity: 0.5\nwallpaper_fit: zoom\nwallpaper_blur: 3\nbackground_contrast_mask_auto: 0.8\nfont_size: 13\n";
+		// the copied values are placed in hash order, so one round proves little
+		for round in 0..16 {
+			let text = if round % 2 == 1 { flat.replace('\n', "\r\n") } else { flat.to_string() };
+			let _ = std::fs::remove_dir_all(&dir);
+			std::fs::create_dir_all(&dir).unwrap();
+			let path = dir.join("config.shcl");
+			std::fs::write(&path, &text).unwrap();
+			set_config_override(path.clone());
+			let check = |s: &Settings, when: &str| {
+				assert_eq!(image_of(s).as_deref().unwrap_or_default(), "/home/x/Pictures/a.png", "{when}, round {round}: the image");
+				assert_eq!(s.wallpaper_opacity, 0.5, "{when}, round {round}: opacity");
+				assert!(matches!(s.wallpaper_default_fit, Fit::Zoom), "{when}, round {round}: fit");
+				// a profile row, so the file's value is Custom's
+				assert_eq!(own_of(s, Key::BgBlur), Some(Value::Float(3.0)), "{when}, round {round}: blur");
+				assert_eq!(s.wallpaper_contrast_mask_auto, 0.8, "{when}, round {round}: contrast mask");
+			};
+			let launched = load();
+			check(&launched, "first launch");
+			let mut edited = launched.clone();
+			let size = f64::from(edited.font_size.round() + 1.0);
+			change(&mut edited, Key::FontSize, Value::Float(size));
+			assert!(persist(&launched, &edited));
+			check(&load(), "after a save");
+			let baks = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".bak")).count();
+			assert_eq!(baks, 1, "round {round}: converted once");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	fn active_headings(text: &str) -> Vec<(usize, String)> {
+		walk_settings(text)
+			.into_iter()
+			.filter_map(|w| match w {
+				WalkLine::Setting { index, path, header: true, active: true } => Some((index, path)),
+				_ => None,
+			})
+			.collect()
+	}
+
+	// Every block name, not only `wallpaper`: an old flat line named like a block
+	// is either copied to a setting or dropped, and the block keeps its heading.
+	// Test ID: dcfs9
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_flat_key_named_like_a_block_never_ends_up_on_its_heading() {
+		let _guard = test_config_lock();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_flathead_{}", std::process::id()));
+		let heads = active_headings(default_config());
+		assert!(heads.iter().any(|(_, p)| p == "wallpaper"));
+		for (_, head) in heads.iter().filter(|(_, p)| !p.contains('.')) {
+			let _ = std::fs::remove_dir_all(&dir);
+			std::fs::create_dir_all(&dir).unwrap();
+			let path = dir.join("config.shcl");
+			std::fs::write(&path, format!("{head}: x\nfont_size: 13\n")).unwrap();
+			convert_legacy_config(&mut LaunchFile::read(&path));
+			let out = std::fs::read_to_string(&path).unwrap();
+			assert!(out.contains("\tsize: 13"), "`{head}: x` was not converted:\n{out}");
+			assert_eq!(active_headings(&out), heads, "`{head}: x` changed a block heading:\n{out}");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	fn misplaced_image(text: &str) -> String {
+		let out = text.replacen("\nwallpaper:\n", "\nwallpaper: /home/x/Pictures/a.png\n", 1);
+		assert_ne!(out, text, "the template has no plain wallpaper heading");
+		out + "wallpaper.default_fit: zoom\n"
+	}
+
+	// A file an earlier conversion left with the image on the `wallpaper:` heading
+	// gets it back under `image:`, in place. No backup is taken, so a folder that
+	// already has every backup name is repaired too, and the next launch neither
+	// converts the file nor changes it again.
+	// Test ID: dcfsj
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_image_left_on_the_wallpaper_heading_moves_to_image() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wphead_{}", std::process::id()));
+		let damaged = misplaced_image(default_config());
+		let saved = {
+			let mut doc = shcl::Document::parse(&damaged);
+			assert_eq!(doc.set_float("font.size", 15.5), shcl::SetStatus::Ok);
+			doc.to_canonical()
+		};
+		let (a, b) = ("/home/x/Pictures/a.png", "/home/x/Pictures/b.png");
+		// (what, file, image, every backup name taken, missing settings added first)
+		let cases = [("as converted", damaged.clone(), a, false, false), ("after a save", saved, a, false, false), ("with CRLF", damaged.replace('\n', "\r\n"), a, false, false), ("an image named since", format!("{damaged}wallpaper.image: {b}\n"), b, false, false), ("every backup name taken", damaged.clone(), a, true, false), ("as that launch left it", damaged.clone(), a, false, true)];
+		for (what, text, image, full, backfilled) in cases {
+			let _ = std::fs::remove_dir_all(&dir);
+			std::fs::create_dir_all(&dir).unwrap();
+			let path = dir.join("config.shcl");
+			std::fs::write(&path, &text).unwrap();
+			if full {
+				for n in 1..=BACKUPS_MAX {
+					let name = if n == 1 { "config.shcl.bak".to_string() } else { format!("config.shcl.bak{n}") };
+					std::fs::write(dir.join(name), "old\n").unwrap();
+				}
+			}
+			if backfilled {
+				// the launch that converted it added the settings it then misread,
+				// under the heading, as backfill did before it checked
+				let heading = format!("wallpaper: {a}\n");
+				let added = "\n\t# honor_xmp: true  ## Default\n\t# enabled: true  ## Default\n";
+				let text = text.replacen(&heading, &format!("{heading}{added}"), 1);
+				assert!(text.contains(added), "{what}: nothing was added, so the case proves nothing");
+				std::fs::write(&path, &text).unwrap();
+			}
+			set_config_override(path.clone());
+			let s = load();
+			assert_eq!(image_of(&s).as_deref().unwrap_or_default(), image, "{what}: the image");
+			assert!(matches!(s.wallpaper_default_fit, Fit::Zoom), "{what}: the rest of the block");
+			let once = std::fs::read_to_string(&path).unwrap();
+			let doc = shcl::Document::parse(&once);
+			assert!(doc.get_string("wallpaper").is_err() && doc.count("wallpaper") == 1, "{what}: a heading again:\n{once}");
+			assert_eq!(doc.count("wallpaper.image"), 1, "{what}: one image line");
+			let baks = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".bak")).count();
+			assert_eq!(baks, if full { BACKUPS_MAX as usize } else { 0 }, "{what}: nothing converted");
+			assert_eq!(image_of(&load()).as_deref().unwrap_or_default(), image, "{what}: next launch");
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), once, "{what}: settled");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The repair rewrites a settings file at launch, so every form that isn't
+	// the one an earlier conversion wrote is left alone.
+	// Test ID: dcfsk
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn only_a_heading_holding_a_value_is_repaired() {
+		let damaged = misplaced_image(default_config());
+		let want = default_config().replacen("\nwallpaper:\n", "\nwallpaper:\n\timage: /home/x/Pictures/a.png\n", 1) + "wallpaper.default_fit: zoom\n";
+		assert_eq!(wallpaper_heading_repaired(&damaged).as_deref(), Some(want.as_str()), "one line cleared, one added, nothing else");
+		assert_eq!(wallpaper_heading_repaired(&want), None, "settled");
+		assert_eq!(wallpaper_heading_repaired(&damaged.replace('\n', "\r\n")).as_deref(), Some(want.as_str()), "CRLF");
+		let fence = "notes: ```\nwallpaper: /p/b.png\n\trotate:\n```\n";
+		assert_eq!(wallpaper_heading_repaired(&format!("{damaged}{fence}")), Some(format!("{want}{fence}")), "a fenced value's text is kept");
+		for (text, out) in [("wallpaper: /p/a.png\n\trotate:\n\t\tenabled: true\n", "wallpaper:\n\timage: /p/a.png\n\trotate:\n\t\tenabled: true\n"), ("wallpaper: /p/a.png  # mine\n\n\t# enabled: true\n\t\tcontrast_mask:\n", "wallpaper:\n\t\timage: /p/a.png  # mine\n\n\t# enabled: true\n\t\tcontrast_mask:\n")] {
+			assert_eq!(wallpaper_heading_repaired(text).as_deref(), Some(out), "{text}");
+		}
+		for text in [
+			"wallpaper: /p/a.png\nwallpaper_opacity: 0.4\n".to_string(),
+			"wallpaper: /p/a.png\n".to_string(),
+			"# wallpaper: /p/a.png\n\trotate:\n".to_string(),
+			"wallpaper:\n\trotate:\n\t\tenabled: true\n".to_string(),
+			"wallpaper: /p/a.png\n# note\n\n\t# rotate:\nfont_size: 13\n".to_string(),
+			"\twallpaper: /p/a.png\n\t\trotate:\n".to_string(),
+			format!("{damaged}wallpaper: /p/b.png\n\topacity: 0.4\n"),
+			// an old flat name indented by hand is the conversion's to read
+			"wallpaper: /p/a.png\n\twallpaper_opacity: 0.4\nfont_size: 13\n".to_string(),
+			"wallpaper: /p/a.png\n\twallpaper_opacity: 0.4\n".to_string(),
+			// the old flat `opacity` is also a name inside the block
+			"wallpaper: /p/a.png\nopacity: 0.4\n".to_string(),
+			"wallpaper: /p/a.png\nrotate:\n\tenabled: true\n".to_string(),
+			"wallpaper: /p/a.png\n\t* /p/b.png\n".to_string(),
+			"notes: ```\nwallpaper: /p/a.png\n\trotate:\n```\n".to_string(),
+			"wallpaper: ```\n\trotate:\n```\n".to_string(),
+			"wallpaper:  ## mine\n\trotate:\n".to_string(),
+			"wallpaper:\r\n\trotate:\r\n\t\tenabled: true\r\n".to_string(),
+			"wallpaper: /p/a.png\r\nfont_size: 13\r\n".to_string(),
+			default_config().to_string(),
+		] {
+			assert_eq!(wallpaper_heading_repaired(&text), None, "{text}");
+		}
+	}
+
+	// A launch that finds the settings file open in another program leaves it as it
+	// is, and the next launch that doesn't repairs it.
+	// Test ID: dcfvd
+	#[cfg(target_os = "linux")]
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_busy_launch_defers_the_wallpaper_repair() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wpbusy_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		let damaged = misplaced_image(default_config());
+		std::fs::write(&path, &damaged).unwrap();
+		set_config_override(path.clone());
+		let baks = || std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".bak")).count();
+
+		// a child with the file as its stdin holds it open until it exits
+		let hold = std::fs::File::open(&path).unwrap();
+		let mut child = std::process::Command::new("sleep").arg("30").stdin(std::process::Stdio::from(hold)).spawn().unwrap();
+		let seen = (0..50).any(|_| {
+			if config_open_elsewhere(&path) {
+				return true;
+			}
+			std::thread::sleep(std::time::Duration::from_millis(20));
+			false
+		});
+		let busy = seen.then(|| (image_of(&load()).unwrap_or_default(), std::fs::read_to_string(&path)));
+		let _ = child.kill();
+		let _ = child.wait();
+
+		let (image, text) = busy.expect("the holder was never seen");
+		assert_eq!(image, "", "a busy launch loads no image");
+		assert_eq!(text.unwrap(), damaged, "a busy launch leaves the file alone");
+		assert_eq!(baks(), 0, "a busy launch takes no backup");
+		assert_eq!(image_of(&load()).as_deref().unwrap_or_default(), "/home/x/Pictures/a.png", "the next launch repairs it");
+		let doc = shcl::Document::parse(&std::fs::read_to_string(&path).unwrap());
+		assert_eq!(doc.count("wallpaper.image"), 1, "one image line");
+		assert_eq!(baks(), 0, "the repair takes no backup");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The repair rewrites the settings file at launch, so a linked file stays
+	// linked to the same file, and a private one stays private.
+	// Test ID: dcfve
+	#[cfg(unix)]
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_repair_keeps_a_linked_private_settings_file() {
+		use std::os::unix::fs::PermissionsExt;
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wplink_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let real = dir.join("real.shcl");
+		let damaged = misplaced_image(default_config());
+		std::fs::write(&real, &damaged).unwrap();
+		std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o600)).unwrap();
+		let link = dir.join("config.shcl");
+		std::os::unix::fs::symlink(&real, &link).unwrap();
+
+		repair_wallpaper_heading(&mut LaunchFile::read(&link));
+
+		assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink(), "still a link");
+		assert_eq!(std::fs::read_link(&link).unwrap(), real);
+		assert_eq!(std::fs::read_to_string(&real).unwrap(), wallpaper_heading_repaired(&damaged).unwrap(), "the linked file is repaired");
+		assert_eq!(std::fs::metadata(&real).unwrap().permissions().mode() & 0o777, 0o600, "the file stays private");
+		let names: Vec<String> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+		assert_eq!(names.len(), 2, "no backup and no temp file: {names:?}");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The conversion rewrites the settings file where it is: a link stays a link
+	// to the same file, a private file stays private, its backup is as private,
+	// and a link at a backup name is never written through.
+	// Test ID: dcfsn
+	#[cfg(unix)]
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_conversion_keeps_a_linked_private_settings_file() {
+		use std::os::unix::fs::PermissionsExt;
+		let dir = crate::testdir::run_dir().join(format!("silkterm_convlink_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let real = dir.join("real.shcl");
+		let flat = "font_size: 13\n";
+		std::fs::write(&real, flat).unwrap();
+		std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o600)).unwrap();
+		let link = dir.join("config.shcl");
+		std::os::unix::fs::symlink(&real, &link).unwrap();
+		let victim = dir.join("victim.txt");
+		std::fs::write(&victim, "untouched\n").unwrap();
+		std::os::unix::fs::symlink(&victim, dir.join("config.shcl.bak")).unwrap();
+
+		convert_legacy_config(&mut LaunchFile::read(&link));
+
+		assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink(), "still a link");
+		assert_eq!(std::fs::read_link(&link).unwrap(), real);
+		assert!(std::fs::read_to_string(&real).unwrap().contains("\tsize: 13"), "the linked file is converted");
+		assert_eq!(std::fs::metadata(&real).unwrap().permissions().mode() & 0o777, 0o600);
+		assert_eq!(std::fs::read_to_string(&victim).unwrap(), "untouched\n");
+		let bak = dir.join("config.shcl.bak2");
+		assert!(std::fs::symlink_metadata(&bak).unwrap().file_type().is_file(), "the backup is a plain file");
+		assert_eq!(std::fs::read_to_string(&bak).unwrap(), flat);
+		assert_eq!(std::fs::metadata(&bak).unwrap().permissions().mode() & 0o777, 0o600);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A conversion that can't write leaves the file as it was and keeps no
+	// backup of it, or a file that stays unwritable gains one at every launch.
+	// Test ID: dcfsp
+	#[cfg(unix)]
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_conversion_that_cannot_write_keeps_no_backup() {
+		use std::os::unix::fs::PermissionsExt;
+		let dir = crate::testdir::run_dir().join(format!("silkterm_convfail_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		let locked = dir.join("locked");
+		std::fs::create_dir_all(&locked).unwrap();
+		let real = locked.join("real.shcl");
+		let flat = "font_size: 13\n";
+		std::fs::write(&real, flat).unwrap();
+		std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555)).unwrap();
+		let unlock = || {
+			let _ = std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755));
+			let _ = std::fs::remove_dir_all(&dir);
+		};
+		// a run with the rights to write there anyway has nothing to test
+		if std::fs::write(locked.join("probe"), "").is_ok() {
+			unlock();
+			return;
+		}
+		let link = dir.join("config.shcl");
+		std::os::unix::fs::symlink(&real, &link).unwrap();
+
+		convert_legacy_config(&mut LaunchFile::read(&link));
+
+		let still_link = std::fs::symlink_metadata(&link).is_ok_and(|m| m.file_type().is_symlink());
+		let text = std::fs::read_to_string(&real).unwrap_or_default();
+		let backup = std::fs::symlink_metadata(dir.join("config.shcl.bak")).is_ok();
+		unlock();
+		assert!(still_link, "the settings file is still a link");
+		assert_eq!(text, flat, "the file is as it was");
+		assert!(!backup, "no backup of a file that was not converted");
+	}
+
+	// A failed write isn't proof the file is as it was. ReplaceFile can fail after
+	// the file it replaces is gone, and then the backup is the only copy left. So a
+	// failed conversion drops its backup only when the file reads back whole.
+	// Test ID: dcfvb
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_failed_conversion_keeps_the_backup_unless_the_file_is_whole() {
+		type Write = fn(&std::path::Path, &str) -> anyhow::Result<()>;
+		let refuse: Write = |_, _| anyhow::bail!("refused");
+		let remove: Write = |path, _| {
+			std::fs::remove_file(path)?;
+			anyhow::bail!("replaced file gone")
+		};
+		let cut: Write = |path, _| {
+			std::fs::write(path, "font_")?;
+			anyhow::bail!("cut short")
+		};
+		let dir = crate::testdir::run_dir().join(format!("silkterm_convkeep_{}", std::process::id()));
+		let flat = "font_size: 13\n";
+		// (what, writer, the settings file after, the backup kept)
+		for (what, write, file, kept) in [("the file as it was", refuse, Some(flat), false), ("the file gone", remove, None, true), ("the file changed", cut, Some("font_"), true)] {
+			let _ = std::fs::remove_dir_all(&dir);
+			std::fs::create_dir_all(&dir).unwrap();
+			let path = dir.join("config.shcl");
+			std::fs::write(&path, flat).unwrap();
+
+			convert_legacy_config_with(&mut LaunchFile::read(&path), write);
+
+			assert_eq!(std::fs::read_to_string(&path).ok().as_deref(), file, "{what}: the settings file");
+			assert_eq!(std::fs::read_to_string(dir.join("config.shcl.bak")).ok().as_deref(), kept.then_some(flat), "{what}: the backup");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
 	}
 
 	// A hand-edited config is where a home-relative path gets typed, so `~` has
 	// to expand. `~user` has nothing to resolve against and stays literal.
+	// Test ID: daq1b
 	#[test]
 	fn tilde_expands_to_home_but_only_for_this_user() {
-		// Resolve home the same way expand_tilde does - Windows has no HOME, only USERPROFILE.
-		let home = std::env::var_os("HOME")
-			.or_else(|| std::env::var_os("USERPROFILE"))
-			.expect("HOME or USERPROFILE");
-		assert_eq!(expand_tilde("~/pics"), PathBuf::from(&home).join("pics"));
-		assert_eq!(expand_tilde("~"), PathBuf::from(&home));
+		let home = super::home_string();
+		assert!(!home.is_empty(), "this box names no home directory");
+		assert_eq!(expand_vars("~/pics"), format!("{home}/pics"));
+		assert_eq!(expand_vars("~"), home);
 		for literal in ["~someone/pics", "/abs/pics", "rel/pics", "wallpaper/"] {
-			assert_eq!(
-				expand_tilde(literal),
-				PathBuf::from(literal),
-				"{literal} should stay literal"
-			);
+			assert_eq!(expand_vars(literal), literal, "{literal} should stay literal");
 		}
 	}
 
 	// The first path-level rename since the config went nested. A rename rewrites
 	// the key on its own line and must keep everything else about it: the value,
 	// the active/commented state, and the indentation that says which block it
-	// belongs to. Renames may not cross blocks - the machinery rewrites lines, it
-	// does not move them - so this one stays inside `scroll:`.
+	// belongs to. Renames may not cross blocks, since lines are rewritten and never
+	// moved, so this one stays inside `scroll:`.
+	// Test ID: daqy9
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_renamed_setting_keeps_its_value_and_its_block() {
 		let out = migrate_config_text("scroll:\n\tinview_tau_ms: 45.0\n").expect("should migrate");
 		assert_eq!(out, "scroll:\n\tsingle_screen_tau_ms: 45.0\n");
-		// the value has to survive the trip through the loader, not just the text
-		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")));
+		// the value has to survive the trip through the loader, and not only the text
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
 		assert!((s.scroll_single_screen_tau_ms - 45.0).abs() < f32::EPSILON);
 		// the dotted spelling reads and rewrites the same way
-		assert_eq!(
-			migrate_config_text("scroll.inview_tau_ms: 45.0\n").as_deref(),
-			Some("scroll.single_screen_tau_ms: 45.0\n")
-		);
+		assert_eq!(migrate_config_text("scroll.inview_tau_ms: 45.0\n").as_deref(), Some("scroll.single_screen_tau_ms: 45.0\n"));
 		// a commented line is renamed too, so the file keeps documenting itself
-		assert_eq!(
-			migrate_config_text("scroll:\n\t# inview_tau_ms: 60.0  ## Default\n").as_deref(),
-			Some("scroll:\n\t# single_screen_tau_ms: 60.0  ## Default\n")
-		);
-		// and a config that already carries the new spelling is left alone
+		assert_eq!(migrate_config_text("scroll:\n\t# inview_tau_ms: 60.0  ## Default\n").as_deref(), Some("scroll:\n\t# single_screen_tau_ms: 60.0  ## Default\n"));
+		// and a config that already has the new spelling is left alone
 		assert!(migrate_config_text("scroll:\n\tsingle_screen_tau_ms: 45.0\n").is_none());
 	}
 
-	// A rename can hand its old name to a NEW setting - `colors.focus` became
-	// `colors.highlight` and the freed name now holds the vivid focus color.
-	// Once both spellings are in the file the old line must be left exactly
-	// where it is: it is no longer stale, it is the new setting's own line, and
-	// dropping or re-renaming it would delete a user's color on every launch.
+	// Renames nest: this one is 2 blocks deep, so the machinery has to match
+	// on the whole path rather than the leaf.
+	// Test ID: dc4wb
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_renamed_setting_two_blocks_deep_is_found() {
+		assert_eq!(migrate_config_text("scroll:\n\tminimap:\n\t\t# keep_for: \"less tmux screen\"  ## Default\n").as_deref(), Some("scroll:\n\tminimap:\n\t\t# tui_process_whitelist: \"less tmux screen\"  ## Default\n"));
+		let out = migrate_config_text("scroll:\n\tminimap:\n\t\tkeep_for: \"less vim\"\n").expect("should migrate");
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
+		assert_eq!(s.minimap_tui_whitelist, "less vim");
+	}
+
+	// A key can include part of its path under a heading, such as
+	// `minimap.keep_for` under `scroll:`. The rename swaps only the leaf. It used
+	// to write `scroll.tui_process_whitelist`, which nothing reads.
+	// Test ID: dfef4
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rename_written_partly_dotted_keeps_its_parents() {
+		let out = migrate_config_text("scroll:\n\tminimap.keep_for: \"vim\"\n").expect("should migrate");
+		assert_eq!(out, "scroll:\n\tminimap.tui_process_whitelist: \"vim\"\n");
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
+		assert_eq!(s.minimap_tui_whitelist, "vim");
+		// the same for a converted unit and the cursor's old "none"
+		let out = migrate_config_text("cursor:\n\tblink_rate_ms: 250\n\tanimation: none\n").expect("should migrate");
+		assert_eq!(out, "cursor:\n\tblink_rate_s: 0.5\n\tblink: false\n");
+		assert_eq!(renamed_key("Minimap.keep_for", "scroll.minimap.keep_for", "scroll.minimap.tui_process_whitelist"), "Minimap.tui_process_whitelist");
+		assert_eq!(renamed_key("scroll.minimap.keep_for", "scroll.minimap.keep_for", "scroll.minimap.tui_process_whitelist"), "scroll.minimap.tui_process_whitelist");
+		assert_eq!(renamed_key("focus", "colors.focus", "colors.highlight"), "highlight");
+	}
+
+	// A rename can hand its old name to a new setting: `colors.focus` became
+	// `colors.highlight`, and the freed name is now the vivid focus color.
+	// Once both spellings are in the file the old line must be left where it is.
+	// It's the new setting's own line now, and dropping or re-renaming it would
+	// delete a user's color on every launch.
+	// Test ID: dav9z
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_renamed_key_frees_its_old_name_for_a_new_setting() {
 		// first launch: the one color there is becomes the calm one
 		let once = migrate_config_text("colors:\n\tfocus: \"#abcdef\"\n").expect("should migrate");
 		assert_eq!(once, "colors:\n\thighlight: \"#abcdef\"\n");
-		let s = resolve(read_raw(&once, std::path::Path::new("test.shcl")));
+		let s = resolve(read_raw(&once, std::path::Path::new("test.shcl")).0);
 		assert_eq!(s.highlight, [0xab, 0xcd, 0xef]);
-		assert_eq!(
-			s.focus,
-			Settings::default().focus,
-			"the new one starts fresh"
-		);
+		assert_eq!(s.focus, Settings::default().focus, "the new one starts fresh");
 
 		// after backfill both spellings are present, and every launch after that
-		// is a no-op - the file has reached its resting state
+		// is a no-op, since the file has reached its resting state
 		let both = "colors:\n\thighlight: \"#abcdef\"\n\tfocus: \"#123456\"\n";
 		assert!(migrate_config_text(both).is_none());
-		let s = resolve(read_raw(both, std::path::Path::new("test.shcl")));
+		let s = resolve(read_raw(both, std::path::Path::new("test.shcl")).0);
 		assert_eq!(s.highlight, [0xab, 0xcd, 0xef]);
 		assert_eq!(s.focus, [0x12, 0x34, 0x56]);
 
-		// a stale line carrying the pre-theme default still refreshes, under the
-		// path it lands on rather than the one it was written under
-		let stale = migrate_config_text("colors:\n\t# focus: \"#5580c8\"  ## Default\n")
-			.expect("should refresh");
-		assert!(
-			stale.contains("# highlight: \"#c8a05a\"  ## Default"),
-			"got {stale}"
-		);
+		// a stale line with the pre-theme default still refreshes, under the
+		// path it ends on rather than the one it was written under
+		let stale = migrate_config_text("colors:\n\t# focus: \"#5580c8\"  ## Default\n").expect("should refresh");
+		// The template line has no Default mark since the color became an auto
+		// setting (2026100910295903).
+		assert!(stale.lines().any(|line| line == "\t# highlight: \"#c8a05a\""), "got {stale}");
 	}
 
 	// The retired speed knobs leave existing configs entirely: tau_ms has no
 	// successor, and ease_in changed units (fraction -> milliseconds), so its
-	// old value must not be carried into the new key. Active and stale
+	// old value must not be copied into the new key. Active and stale
 	// commented lines both go; the settings around them stay put.
+	// Test ID: dar9t
 	#[test]
-	fn retired_scroll_knobs_are_removed_not_carried() {
-		let out = migrate_config_text(
-			"scroll:\n\ttau_ms: 120.0\n\tease_in: 0.5\n\tramp_up_ms: 200.0\n\t# tau_ms: 230.0  ## Default\n",
-		)
-		.expect("should migrate");
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn retired_scroll_knobs_are_removed_not_kept() {
+		let out = migrate_config_text("scroll:\n\ttau_ms: 120.0\n\tease_in: 0.5\n\tramp_up_ms: 200.0\n\t# tau_ms: 230.0  ## Default\n").expect("should migrate");
 		assert_eq!(out, "scroll:\n\tramp_up_ms: 200.0\n");
-		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")));
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
 		assert!((s.scroll_ramp_up_ms - 200.0).abs() < f32::EPSILON);
 		// the old fraction never leaks into the new duration
 		assert!((s.scroll_ease_in_ms - Settings::default().scroll_ease_in_ms).abs() < f32::EPSILON);
 	}
 
 	// A config with nothing to migrate is left untouched (no needless rewrite).
+	// Test ID: d9ahq
 	#[test]
 	fn migrate_config_noop_when_current() {
-		assert!(
-			migrate_config_text("transparency.opacity: 0.7\ncursor.animation: \"phase\"\n")
-				.is_none()
-		);
+		assert!(migrate_config_text("transparency.opacity: 0.7\ncursor.animation: \"phase\"\n").is_none());
 		assert!(migrate_config_text(default_config()).is_none());
 	}
 
 	// Backfill only ever adds a missing key, so a config written when an older
 	// stack was the default kept that stack forever. Migration refreshes exactly
-	// the shipped defaults and nothing the user chose themselves - now keyed on
-	// the nested font.family path.
+	// the old defaults and nothing the user chose, now keyed on the nested
+	// font.family path.
+	// Test ID: daf5e
 	#[test]
 	fn migrate_refreshes_a_superseded_default_font_stack() {
 		let stale = SUPERSEDED_FONT_STACKS[0];
-		let out = migrate_config_text(&format!(
-			"font:\n\tuse_system_family: true\n\tfamily: \"{stale}\"\n"
-		))
-		.expect("stale default should be refreshed");
-		assert!(
-			out.contains(&format!("\tfamily: \"{DEFAULT_FONT_STACK}\"")),
-			"{out:?}"
-		);
+		// no follow switch here: one would take the family back to automatic
+		// (2026100907341818), which isn't what this is about
+		let out = migrate_config_text(&format!("font:\n\tfamily: \"{stale}\"\n")).expect("stale default should be refreshed");
+		assert!(out.contains(&format!("\tfamily: \"{DEFAULT_FONT_STACK}\"")), "{out:?}");
 		assert!(!out.contains(stale));
 
 		// the current value is already right, so nothing to do
 		let current = format!("font:\n\tfamily: \"{DEFAULT_FONT_STACK}\"\n");
 		assert!(migrate_config_text(&current).is_none());
-		// a stack the user edited, or one they commented out, is theirs - leave it
+		// a stack the user edited, or one they commented out, is theirs, so leave it
 		let edited = format!("font:\n\tfamily: \"Iosevka, {stale}\"\n");
 		assert!(migrate_config_text(&edited).is_none());
 		assert!(migrate_config_text(&format!("font:\n\t# family: \"{stale}\"\n")).is_none());
 		// a top-level dotted spelling refreshes too
 		assert!(migrate_config_text(&format!("font.family: \"{stale}\"\n")).is_some());
+		// a save before shcl 3.0.0-beta1 swapped single quotes for double, so either
+		// reads as the old default
+		let out = migrate_config_text(&format!("font:\n\tfamily: '{stale}'\n")).expect("a single-quoted stale default should be refreshed");
+		assert!(out.contains(&format!("\tfamily: \"{DEFAULT_FONT_STACK}\"")), "{out:?}");
+		assert!(migrate_config_text(&format!("font.family: '{stale}'\n")).is_some());
+		let crlf = migrate_config_text(&format!("font:\r\n\tfamily: '{stale}'\r\n")).expect("a single-quoted stale default with CRLF endings should be refreshed");
+		assert!(crlf.contains(DEFAULT_FONT_STACK), "{crlf:?}");
+		// a note on the line keeps it the user's
+		assert!(migrate_config_text(&format!("font:\n\tfamily: '{stale}'  # mine\n")).is_none());
+		// shcl reads a bare comma list as another string, so it never matches
+		assert!(migrate_config_text(&format!("font:\n\tfamily: {stale}\n")).is_none());
+	}
+
+	// An active line's path is the one shcl reads, whatever comments are above it.
+	// A save moves a comment to the depth of the setting below it, so a path taken
+	// from the comment changed at the first save.
+	// Test ID: dcfp2
+	#[test]
+	fn an_active_line_takes_no_path_from_a_comment() {
+		let setting = |text: &str, at: usize| {
+			walk_settings(text)
+				.into_iter()
+				.find_map(|w| match w {
+					WalkLine::Setting { index, path, active, .. } if index == at => Some((path, active)),
+					_ => None,
+				})
+				.unwrap_or_else(|| panic!("no setting on line {at} of {text:?}"))
+		};
+		// a commented-out block still names its children
+		for text in ["wallpaper:\n\t# rotate:\n\t\t# enabled: true\n", "wallpaper:\r\n\t# rotate:\r\n\t\t# enabled: true\r\n"] {
+			assert_eq!(setting(text, 2), ("wallpaper.rotate.enabled".to_string(), false), "{text:?}");
+		}
+		let cases = [("colors:\n\t# x:\n\t\tfocus: \"#112233\"\n", 2, "colors.focus"), ("colors:\n\tbackground: \"#000000\"\n# see: below\n\tfocus: \"#112233\"\n", 3, "colors.focus"), ("# old:\n\tfont_family: \"x\"\n", 1, "font_family")];
+		for (lf, at, want) in cases {
+			for text in [lf.to_string(), lf.replace('\n', "\r\n")] {
+				let (path, active) = setting(&text, at);
+				assert!(active, "{text:?}");
+				assert_eq!(path, want, "{text:?}");
+				assert!(shcl::Document::parse(&text).lines(want).contains(&(at + 1)), "shcl reads line {} of {text:?} as {want}", at + 1);
+			}
+		}
+	}
+
+	// Off since `saved_paths` judges by what a save writes. It compared against
+	// `to_canonical()`, which moves the column-0 comment into the block, but a
+	// save that keeps the lines leaves it where it is, so the rename fires
+	// before and after a save alike and `colors.focus` is renamed.
+	// `a_commented_new_name_counts_where_the_save_that_runs_puts_it` covers it.
+	// // Whether a rename's new name is already present is judged where a save puts
+	// // a commented line, or the first save turns the rename on or off.
+	// // Test ID: dcfp5
+	// #[test]
+	// fn a_commented_new_name_counts_where_a_save_puts_it() {
+	// 	let saved = |t: &str| shcl::Document::parse(t).to_canonical();
+	// 	let load = |t: &str| {
+	// 		shcl::Document::parse(&migrate_config_text(t).unwrap_or_else(|| t.to_string()))
+	// 	};
+	// 	let blocked =
+	// 		"colors:\n\tfocus: \"#112233\"\n# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
+	// 	let free = "colors:\n\tbackground: \"#000000\"\n\tfocus: \"#112233\"\n";
+	// 	for ending in ["\n", "\r\n"] {
+	// 		let blocked = blocked.replace('\n', ending);
+	// 		assert!(
+	// 			saved(&blocked).contains("\t# highlight:"),
+	// 			"a save no longer moves this comment, so the case proves nothing"
+	// 		);
+	// 		let (raw, after) = (load(&blocked), load(&saved(&blocked)));
+	// 		for path in ["colors.focus", "colors.highlight"] {
+	// 			assert_eq!(
+	// 				raw.get_string(path),
+	// 				after.get_string(path),
+	// 				"{path} loads the same before and after a save ({ending:?})"
+	// 			);
+	// 		}
+	// 		assert_eq!(raw.get_string("colors.focus").as_deref(), Ok("#112233"));
+	//
+	// 		// nothing blocks the rename here, so it still fires
+	// 		let free = free.replace('\n', ending);
+	// 		for doc in [load(&free), load(&saved(&free))] {
+	// 			assert_eq!(
+	// 				doc.get_string("colors.highlight").as_deref(),
+	// 				Ok("#112233"),
+	// 				"{ending:?}"
+	// 			);
+	// 		}
+	// 	}
+	// }
+
+	// Off since `saved_paths` judges by the canonical form again. It held that a
+	// save keeps a column-0 comment at column 0, but shcl falls back to the
+	// canonical form by what a save changes, and that moves the comment into the
+	// block. `a_commented_new_name_counts_the_same_whichever_save_runs` covers it.
+	// // A rename's new name counts where the save that actually runs leaves a
+	// // commented line. A save that keeps the lines leaves a column-0 comment at
+	// // column 0, so it never blocks the rename, before a save or after one.
+	// // Test ID: ddcf1
+	// #[test]
+	// fn a_commented_new_name_counts_where_the_save_that_runs_puts_it() {
+	// 	let load = |t: &str| {
+	// 		shcl::Document::parse(&migrate_config_text(t).unwrap_or_else(|| t.to_string()))
+	// 	};
+	// 	// what a Settings save of an unrelated value writes
+	// 	let saved = |t: &str| {
+	// 		let mut doc = parse_kept(t);
+	// 		assert_eq!(doc.set_string("colors.background", "#010101"), shcl::SetStatus::Ok);
+	// 		saved_text(&doc)
+	// 	};
+	// 	let column_0 =
+	// 		"colors:\n\tfocus: \"#112233\"\n# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
+	// 	for ending in ["\n", "\r\n"] {
+	// 		let text = column_0.replace('\n', ending);
+	// 		let after = saved(&text);
+	// 		assert!(
+	// 			after.contains(&format!("{ending}# highlight:")),
+	// 			"the save keeps the comment where it is: {after:?}"
+	// 		);
+	// 		for doc in [load(&text), load(&after)] {
+	// 			assert_eq!(
+	// 				doc.get_string("colors.highlight").as_deref(),
+	// 				Ok("#112233"),
+	// 				"{ending:?}"
+	// 			);
+	// 		}
+	// 	}
+	// 	// a commented new name inside the block still blocks it, before and after
+	// 	let blocked = "colors:\n\tfocus: \"#112233\"\n\t# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
+	// 	for doc in [load(blocked), load(&saved(blocked))] {
+	// 		assert_eq!(doc.get_string("colors.focus").as_deref(), Ok("#112233"));
+	// 		assert!(doc.get_string("colors.highlight").is_err());
+	// 	}
+	// }
+
+	// A rename's new name counts the same whichever save runs. shcl keeps the
+	// lines or falls back to the canonical form by what the save changes, so one
+	// file can get either, and the canonical form moves a column-0 comment into
+	// the block. Here a font size save keeps the lines, and a window size save
+	// falls back past the space-indented comment that closes `window:`.
+	// Test ID: ddey8
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_commented_new_name_counts_the_same_whichever_save_runs() {
+		let load = |t: &str| shcl::Document::parse(&next_launch_text(t));
+		let file = "window:\n\trows: 30\n    # x:\ncolors:\n\tfocus: \"#112233\"\n# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
+		for ending in ["\n", "\r\n"] {
+			let text = file.replace('\n', ending);
+			let mut font = parse_kept(&text);
+			assert_eq!(font.set_float("font.size", 15.5), shcl::SetStatus::Ok);
+			let (font, kept) = font.to_text_keep_lines();
+			assert!(kept, "the font size save keeps the lines: {font:?}");
+			let mut size = parse_kept(&text);
+			assert_eq!(size.set_int("window.columns", 100), shcl::SetStatus::Ok);
+			let (size, kept) = size.to_text_keep_lines();
+			assert!(!kept && size.contains("\n\t# highlight:"), "the window size save falls back and moves the comment: {size:?}");
+			let before = load(&text);
+			for after in [load(&font), load(&size)] {
+				for path in ["colors.focus", "colors.highlight"] {
+					assert_eq!(before.get_string(path), after.get_string(path), "{path} {ending:?}");
+				}
+			}
+			// the canonical form has the comment in the block, so it blocks
+			assert_eq!(before.get_string("colors.focus").as_deref(), Ok("#112233"));
+		}
+		// a commented new name inside the block blocks it, before and after
+		let blocked = "colors:\n\tfocus: \"#112233\"\n\t# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
+		let mut doc = parse_kept(blocked);
+		assert_eq!(doc.set_string("colors.background", "#010101"), shcl::SetStatus::Ok);
+		for doc in [load(blocked), load(&saved_text(&doc))] {
+			assert_eq!(doc.get_string("colors.focus").as_deref(), Ok("#112233"));
+			assert!(doc.get_string("colors.highlight").is_err());
+		}
+	}
+
+	// A Settings save may tidy quotes and indentation, and the launch after it
+	// must load every value as the launch before it did. Since shcl 3.0.0-beta1 a
+	// save keeps a font list's single quotes, and the font cases check that it
+	// still does: a save that swaps them again makes the refresh's either-quote
+	// match matter here.
+	// Test ID: dcfp6
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_settings_save_moves_no_value_at_the_next_launch() {
+		type Reader = fn(&Settings) -> String;
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_savemoves_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+
+		let stale = SUPERSEDED_FONT_STACKS[0];
+		let template: Vec<String> = default_config().lines().map(str::to_string).collect();
+		let line_of = |path: &str, active: bool| {
+			walk_settings(default_config())
+				.into_iter()
+				.find_map(|w| match w {
+					WalkLine::Setting { index, path: p, active: a, .. } if p == path && a == active => Some(index),
+					_ => None,
+				})
+				.unwrap_or_else(|| panic!("no {path} (active {active}) in the template"))
+		};
+		let respell = |lines: &mut Vec<String>, path: &str, value: &str| {
+			let at = line_of(path, true);
+			let line = &lines[at];
+			let indent = &line[..line.len() - line.trim_start().len()];
+			let key = line_setting_key(line).unwrap();
+			lines[at] = format!("{indent}{key}: {value}");
+		};
+		let joined = |lines: &[String]| lines.join("\n") + "\n";
+
+		// The template has no active family line and no follow switch since
+		// 2026100907341818, so the old file is put back together by hand: its
+		// list set and the switch off beside it.
+		let mut nested = template.clone();
+		let at = line_of("font.family", false);
+		let indent = nested[at][..nested[at].len() - nested[at].trim_start().len()].to_string();
+		nested[at] = format!("{indent}family: '{stale}'");
+		nested.insert(at, format!("{indent}use_system_family: false"));
+		let _ = respell;
+
+		let font: Reader = |s| format!("{:?}", s.font_family);
+		#[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+		let mut cases: Vec<(&str, String, Reader, bool)> = vec![("an old default font list in single quotes", joined(&nested), font, false), ("a pre-nesting file with that list", format!("font_family: '{stale}'\nuse_system_font: false\n"), font, false)];
+		// the rename reach needs a launch whose writes deferred, and only Linux
+		// can tell that the file is held
+		#[cfg(target_os = "linux")]
+		{
+			let focus = line_of("colors.focus", false);
+			let highlight = line_of("colors.highlight", false);
+			let colors = line_of("colors", true);
+			let mut lines: Vec<String> = template.iter().enumerate().filter(|(at, _)| *at != focus && *at != highlight).map(|(_, line)| line.clone()).collect();
+			let header = lines.iter().position(|line| *line == template[colors]).unwrap();
+			lines.insert(header + 1, "\t# x:".to_string());
+			lines.insert(header + 2, "\t\tfocus: \"#112233\"".to_string());
+			cases.push(("a renamed color under a commented heading", joined(&lines), |s| format!("{:?} {:?}", s.focus, s.highlight), true));
+		}
+
+		// every case runs before the verdict, so a failure names all that moved
+		let mut moved: Vec<String> = Vec::new();
+		for (what, text, reader, held) in cases {
+			let canonical = shcl::Document::parse(&text).to_canonical();
+			if held {
+				assert!(text.contains("\n\t# x:\n\t\tfocus") && !canonical.contains("\n\t# x:\n\t\tfocus"), "{what}: a save no longer respells this line, so the case proves nothing");
+			} else {
+				assert!(text.contains(&format!("'{stale}'")) && canonical.contains(&format!("'{stale}'")), "{what}: a save respells the quotes again, so the case needs another look");
+			}
+
+			std::fs::write(&path, &text).unwrap();
+			let launched = if held {
+				let hold = std::fs::File::open(&path).unwrap();
+				let mut child = std::process::Command::new("sleep").arg("30").stdin(std::process::Stdio::from(hold)).spawn().unwrap();
+				let seen = (0..100).any(|_| {
+					std::thread::sleep(std::time::Duration::from_millis(20));
+					config_open_elsewhere(&path)
+				});
+				let launched = reload_from_disk();
+				let _ = child.kill();
+				let _ = child.wait();
+				assert!(seen, "{what}: the holder never showed up");
+				launched
+			} else {
+				reload_from_disk()
+			};
+			let before = reader(&launched);
+
+			let mut edited = launched.clone();
+			let size = f64::from(edited.font_size.round() + 1.0);
+			change(&mut edited, Key::FontSize, Value::Float(size));
+			assert!(persist(&launched, &edited), "{what}: the save was refused");
+			let after = reader(&reload_from_disk());
+			if after != before {
+				moved.push(format!("{what}: {before} -> {after}"));
+			}
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+		assert!(moved.is_empty(), "loads as it did before the save:\n{}", moved.join("\n"));
 	}
 
 	// A commented line still echoing an outgoing default is brought up to the
 	// template's current one; an active line, or one the user annotated, is theirs.
 	// Every entry refreshes, including a second one for a path whose default has
 	// been retuned twice - the lookup must not stop at the first match.
+	// Test ID: datef
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn migrate_refreshes_a_superseded_commented_default() {
 		// the path's blocks, one indent level each, with the leaf last
 		let nest = |path: &str, line: &str| {
 			let parts: Vec<&str> = path.split('.').collect();
 			let leaf_depth = parts.len() - 1;
-			let mut out: Vec<String> = parts[..leaf_depth]
-				.iter()
-				.enumerate()
-				.map(|(depth, block)| "\t".repeat(depth) + block + ":")
-				.collect();
+			let mut out: Vec<String> = parts[..leaf_depth].iter().enumerate().map(|(depth, block)| "\t".repeat(depth) + block + ":").collect();
 			out.push("\t".repeat(leaf_depth) + line);
 			out.join("\n") + "\n"
 		};
 		for (path, stale) in SUPERSEDED_DEFAULTS {
 			let leaf = path.rsplit('.').next().unwrap();
-			let current = setting_lines(default_config())
-				.into_iter()
-				.find_map(|(name, line)| (name == *path).then_some(line))
-				.unwrap_or_else(|| panic!("{path} has no template line"));
-			let out = migrate_config_text(&nest(path, &format!("# {leaf}: {stale}")))
-				.unwrap_or_else(|| panic!("{path}: stale default should be refreshed"));
+			let current = setting_lines(default_config()).into_iter().find_map(|(name, line)| (name == *path).then_some(line)).unwrap_or_else(|| panic!("{path} has no template line"));
+			// A line under a renamed key's old name, alone, is the old setting
+			// and moves (G71). Beside the new name it is the new setting, as in
+			// any file a launch has backfilled.
+			let beside = CONFIG_RENAMES.iter().find(|(old, _)| old == path).map_or_else(String::new, |(_, new)| {
+				let depth = path.matches('.').count();
+				let new_leaf = new.rsplit('.').next().unwrap();
+				format!("# {new_leaf}: \"#000000\"\n{}", "\t".repeat(depth))
+			});
+			let out = migrate_config_text(&nest(path, &format!("{beside}# {leaf}: {stale}"))).unwrap_or_else(|| panic!("{path}: stale default should be refreshed"));
 			assert!(out.lines().any(|l| l == current), "{path}: {out:?}");
 			// their own choice, either way they made it
-			assert!(migrate_config_text(&nest(path, &format!("{leaf}: {stale}"))).is_none());
-			let noted = nest(path, &format!("# {leaf}: {stale}  ## mine"));
+			assert!(migrate_config_text(&nest(path, &format!("{beside}{leaf}: {stale}"))).is_none());
+			let noted = nest(path, &format!("{beside}# {leaf}: {stale}  ## mine"));
 			assert!(migrate_config_text(&noted).is_none(), "{path}");
 		}
 	}
 
-	// The walker is what gives every line its full nested path - the whole
-	// line-oriented machinery keys on it.
+	// The default folder names the usual place in this platform's spelling, and
+	// the template's commented line has to say the same, or the first save
+	// rewrites the file just written (G69, G72).
+	// Test ID: dd5ga
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_default_wallpaper_folder_is_this_platforms_usual_place() {
+		let want = if cfg!(windows) {
+			r"%LOCALAPPDATA%\silkterm\wallpaper"
+		} else if cfg!(target_os = "macos") {
+			"$HOME/Library/Application Support/silkterm/wallpaper"
+		} else {
+			"$XDG_CONFIG_HOME/silkterm/wallpaper"
+		};
+		assert_eq!(WALLPAPER_DIR_TOKEN, want);
+		assert!(WALLPAPER_DIR_TOKEN.contains(APP_DIR));
+		assert_eq!(Settings::default().wallpaper_folder_raw, WALLPAPER_DIR_TOKEN);
+		let line = format!("folder: \"{WALLPAPER_DIR_TOKEN}\"  ## Default");
+		assert!(default_config().contains(&line), "template says something else");
+		// the Windows spelling keeps its backslashes through a read, whatever
+		// box reads it
+		let doc = shcl::Document::parse("folder: \"%LOCALAPPDATA%\\silkterm\\wallpaper\"\n");
+		assert_eq!(doc.get_string("folder").unwrap(), r"%LOCALAPPDATA%\silkterm\wallpaper");
+	}
+
+	// Where the usual place is: the data dir, which on Windows is Local, since a
+	// pack is bulk and has no business roaming. `--config` and XDG_CONFIG_HOME
+	// keep everything in one tree.
+	// Test ID: dd5gb
+	#[test]
+	fn each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data() {
+		let config = PathBuf::from("/c/silkterm");
+		let local = PathBuf::from("C:/Users/u/AppData/Local");
+		let answer = |layout, one_tree, local: Option<&std::path::Path>| data_dir_for(layout, one_tree, local, Some(config.clone()));
+		assert_eq!(answer(Layout::Windows, false, Some(&local)), Some(local.join(APP_DIR)));
+		assert_eq!(answer(Layout::Windows, true, Some(&local)), Some(config.clone()));
+		assert_eq!(answer(Layout::Windows, false, None), Some(config.clone()));
+		assert_eq!(answer(Layout::MacOs, false, Some(&local)), Some(config.clone()));
+		assert_eq!(answer(Layout::Xdg, false, Some(&local)), Some(config.clone()));
+	}
+
+	// Kept copies go where each platform keeps a cache, never in the roaming
+	// settings. A `--config` keeps them beside that config, and so does an
+	// explicit XDG_CONFIG_HOME unless XDG_CACHE_HOME says otherwise.
+	// Test ID: ddkhb
+	#[test]
+	fn each_platform_keeps_its_cache_where_that_platform_keeps_caches() {
+		let config = PathBuf::from("/c/silkterm");
+		let home = PathBuf::from("/home/u");
+		let local = PathBuf::from("C:/Users/u/AppData/Local");
+		let xdg = PathBuf::from("/x/cache");
+		let answer = |layout, overridden, xdg_cache: Option<&std::path::Path>, xdg_config| cache_dir_for(layout, overridden, xdg_cache, xdg_config, Some(&home), Some(&local), Some(config.clone()));
+		let beside = Some(config.join("cache"));
+		assert_eq!(answer(Layout::Windows, false, None, false), Some(local.join(APP_DIR).join("cache")));
+		assert_eq!(answer(Layout::MacOs, false, None, false), Some(home.join("Library/Caches").join(APP_DIR)));
+		assert_eq!(answer(Layout::Xdg, false, None, false), Some(home.join(".cache").join(APP_DIR)));
+		for layout in [Layout::Windows, Layout::MacOs, Layout::Xdg] {
+			assert_eq!(answer(layout, true, Some(&xdg), true), beside, "{layout:?}");
+			assert_eq!(answer(layout, false, Some(&xdg), true), Some(xdg.join(APP_DIR)), "{layout:?}");
+			assert_eq!(answer(layout, false, None, true), beside, "{layout:?}");
+		}
+		// a missing base falls back rather than leaving no cache
+		assert_eq!(cache_dir_for(Layout::Windows, false, None, false, None, None, Some(config.clone())), beside);
+		assert_eq!(cache_dir_for(Layout::Xdg, false, None, false, None, None, None), None);
+	}
+
+	// The same on this box, end to end. A stocked folder in the usual place is
+	// found with the value at its default, commented, uncommented or emptied, and
+	// under the older names. A named image outranks it, and also a named folder
+	// outranks the image.
+	// Test ID: dd5gc
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_default_wallpaper_folder_is_found_in_the_usual_place() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wpdir_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let write = |text: &str| std::fs::write(&path, text).unwrap();
+		let folder = |text: &str| {
+			let text = text.replace('\\', r"\\");
+			format!("wallpaper:\n\trotate:\n\t\tfolder: \"{text}\"\n")
+		};
+
+		write(default_config());
+		assert_eq!(load().wallpaper_folder, None, "nothing there, nothing found");
+		for spelling in ["wallpaper", "wallpapers", "backgrounds"] {
+			let stocked = dir.join(spelling);
+			std::fs::create_dir_all(&stocked).unwrap();
+			for (how, text) in [("commented", default_config().to_string()), ("uncommented", folder(WALLPAPER_DIR_TOKEN)), ("emptied", folder(""))] {
+				write(&text);
+				let s = load();
+				assert_eq!(s.wallpaper_folder.as_ref(), Some(&stocked), "{spelling}, {how}");
+				assert!(s.wallpaper_folder_auto, "{spelling}, {how}");
+				assert!(!crate::fields::by_hand(&s, Key::BgFolder), "{how}");
+			}
+			if spelling != "backgrounds" {
+				std::fs::remove_dir(&stocked).unwrap();
+			}
+		}
+
+		write("wallpaper:\n\timage: /x.png\n");
+		assert_eq!(load().wallpaper_folder, None, "a named image outranks it");
+		// "/elsewhere" is rooted but not absolute on Windows, which puts it on a drive
+		let elsewhere = if cfg!(windows) { "C:/elsewhere" } else { "/elsewhere" };
+		write(&format!("wallpaper:\n\timage: /x.png\n\trotate:\n\t\tfolder: {elsewhere}\n"));
+		let s = load();
+		assert_eq!(s.wallpaper_folder, Some(PathBuf::from(elsewhere)));
+		assert!(!s.wallpaper_folder_auto);
+		assert_eq!(s.wallpaper_folder_raw, elsewhere);
+		assert!(crate::fields::by_hand(&s, Key::BgFolder));
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// With no image named and nothing rotating, a wallpaper in one of the usual
+	// places is found, the current spelling first. A relative name is taken from
+	// the config's own folder.
+	// Test ID: dd5mt
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_wallpaper_in_the_usual_place_is_found() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wpfile_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(dir.join("backgrounds")).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+
+		assert_eq!(resolve_wallpaper(None), None, "nothing there yet");
+		let older = dir.join("backgrounds").join("background.png");
+		std::fs::write(&older, b"").unwrap();
+		assert_eq!(resolve_wallpaper(None), Some(older.clone()));
+		std::fs::write(&path, "wallpaper:\n\trotate:\n\t\tenabled: false\n").unwrap();
+		assert_eq!(load().wallpaper, Some(older), "found at launch");
+
+		std::fs::create_dir_all(dir.join("wallpaper")).unwrap();
+		let current = dir.join("wallpaper").join("wallpaper.jpg");
+		std::fs::write(&current, b"").unwrap();
+		assert_eq!(resolve_wallpaper(None), Some(current));
+
+		assert_eq!(resolve_wallpaper(Some("x.png")), Some(dir.join("x.png")));
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// --reset-config moves the file aside and never overwrites an earlier
+	// backup; with no file left there is nothing to do.
+	// Test ID: dd5mv
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_reset_keeps_every_earlier_config() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_reset_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let read = |name: &str| std::fs::read_to_string(dir.join(name)).unwrap();
+
+		std::fs::write(&path, "a").unwrap();
+		assert_eq!(reset_config(), Some(dir.join("config.shcl.bak")));
+		assert!(!path.exists(), "the config was moved, not copied");
+		assert_eq!(read("config.shcl.bak"), "a");
+
+		std::fs::write(&path, "b").unwrap();
+		assert_eq!(reset_config(), Some(dir.join("config.shcl.bak2")));
+		assert_eq!(read("config.shcl.bak"), "a", "the first backup kept");
+		assert_eq!(read("config.shcl.bak2"), "b");
+
+		assert_eq!(reset_config(), None);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Hiding a lone tab is off by default and isn't a dialog row, so only the
+	// View menu's save writes it to the file.
+	// Test ID: dd5mw
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn hide_single_tab_is_off_and_survives_a_save() {
+		assert!(!Settings::default().hide_single_tab);
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_hidetab_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, default_config()).unwrap();
+		set_config_override(path.clone());
+
+		let orig = load();
+		assert!(!orig.hide_single_tab);
+		let mut new = orig.clone();
+		new.hide_single_tab = true;
+		assert!(persist(&orig, &new));
+		assert!(load().hide_single_tab);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The menu bar is on by default and isn't a dialog row: the View and
+	// right-click menus save it, and the next window opens with it.
+	// Test ID: ddxj8
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_menu_bar_is_on_and_survives_a_save() {
+		assert!(Settings::default().menu_bar);
+		let template = setting_lines(default_config()).into_iter().find_map(|(name, line)| (name == "window.menu_bar").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# menu_bar: true  ## Default"));
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_menubar_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, default_config()).unwrap();
+		set_config_override(path.clone());
+
+		let orig = load();
+		assert!(orig.menu_bar);
+		let mut new = orig.clone();
+		new.menu_bar = false;
+		assert!(persist(&orig, &new));
+		assert!(!load().menu_bar);
+		let back = load();
+		let mut on = back.clone();
+		on.menu_bar = true;
+		assert!(persist(&back, &on));
+		assert!(load().menu_bar);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// An existing config's commented line names the old empty default, and is
+	// refreshed to the place it meant.
+	// Test ID: dd5gd
+	#[test]
+	fn an_existing_config_learns_where_the_wallpaper_folder_is() {
+		let out = migrate_config_text("wallpaper:\n\trotate:\n\t\t# folder: \"\"  ## Default\n").expect("the outgoing default should be refreshed");
+		assert!(out.contains(&format!("# folder: \"{WALLPAPER_DIR_TOKEN}\"  ## Default")), "{out:?}");
+	}
+
+	// The table above is kept by hand, so nothing can catch an entry that was
+	// never added. This names the one default that changed most recently.
+	// Test ID: ddf5s
+	#[test]
+	fn an_existing_config_learns_that_the_idle_release_defaults_on() {
+		let out = migrate_config_text("window:\n\t# idle_release: false  ## Default\n").expect("the outgoing default should be refreshed");
+		assert!(out.contains("# idle_release: true  ## Default"), "{out:?}");
+		// an active line is their own choice
+		assert!(migrate_config_text("window:\n\tidle_release: false\n").is_none());
+	}
+
+	// Test ID: ddeph
+	#[test]
+	fn an_existing_config_learns_that_copy_on_select_defaults_on() {
+		let out = migrate_config_text("shell:\n\t# copy_on_select: false  ## Default\n").expect("the outgoing default should be refreshed");
+		assert!(out.contains("# copy_on_select: true  ## Default"), "{out:?}");
+	}
+
+	// Test ID: dcx1s
+	#[test]
+	fn an_existing_config_learns_that_wallpaper_text_colors_default_on() {
+		let out = migrate_config_text("colors:\n\t# from_wallpaper: false  ## Default\n").expect("the outgoing default should be refreshed");
+		assert!(out.contains("# from_wallpaper: true  ## Default"), "{out:?}");
+	}
+
+	// The coverage exponent is gone and its number means nothing as an amount,
+	// so the line goes rather than copying a value over. An active one has to
+	// go too: left in place it would read as a setting nothing answers for.
+	// Test ID: dcxyr
+	#[test]
+	fn an_existing_config_loses_the_coverage_exponent() {
+		for line in ["\t# dark_on_light_gamma: 0.65  ## Default\n", "\tdark_on_light_gamma: 0.5\n"] {
+			let out = migrate_config_text(&format!("text:\n{line}\toutline: 1.0\n")).expect("the retired line should go");
+			assert!(!out.contains("dark_on_light_gamma"), "{out:?}");
+			assert!(out.contains("outline: 1.0"), "{out:?}");
+		}
+	}
+
+	// The walker gives every line its full nested path, and all the line-based
+	// code keys on it.
+	// Test ID: daq6a
 	#[test]
 	fn walker_resolves_nested_paths() {
 		let text = "top: 1\nwallpaper:\n\t# enabled: true\n\trotate:\n\t\t# folder: \"x\"\n\t\tinterval_s: 2.0\n\t# opacity: 0.5\ncolors.focus: \"#123456\"\n";
@@ -4507,75 +14177,156 @@ mod tests {
 				_ => None,
 			})
 			.collect();
-		let want = [
-			("top", true),
-			("wallpaper", true),
-			("wallpaper.enabled", false),
-			("wallpaper.rotate", true),
-			("wallpaper.rotate.folder", false),
-			("wallpaper.rotate.interval_s", true),
-			("wallpaper.opacity", false),
-			("colors.focus", true),
-		];
+		let want = [("top", true), ("wallpaper", true), ("wallpaper.enabled", false), ("wallpaper.rotate", true), ("wallpaper.rotate.folder", false), ("wallpaper.rotate.interval_s", true), ("wallpaper.opacity", false), ("colors.focus", true)];
 		let want: Vec<(String, bool)> = want.iter().map(|(p, a)| ((*p).to_string(), *a)).collect();
 		assert_eq!(got, want);
 	}
 
-	// A dialog save on a fresh nested config: the new active value lands inside
+	// A dialog save on a fresh nested config: the new active value goes inside
 	// its block, and everything else in the file is left exactly as it stands.
-	// The whole-file diff is the strong form of that - a save may only ever add
-	// the lines it was asked to add - and the spot checks below say WHICH shapes
-	// are being relied on, so a failure names the one that moved.
+	// The whole-file diff is the strong form of that, since a save may only add the
+	// lines it was asked to add, and the spot checks below say which forms are being
+	// relied on, so a failure names the one that moved.
+	// Test ID: daq6b
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_keeps_nested_comment_layout() {
 		let mut doc = shcl::Document::parse(default_config());
-		doc.set_float("wallpaper.opacity", 0.5);
-		doc.set_bool("text.scrim.enabled", false);
+		assert_eq!(doc.set_float("wallpaper.opacity", 0.5), shcl::SetStatus::Ok);
+		assert_eq!(doc.set_bool("text.scrim.enabled", false), shcl::SetStatus::Ok);
 		let out = doc.to_canonical();
 
-		let added: Vec<&str> = out
-			.lines()
-			.filter(|l| !default_config().lines().any(|d| d == *l))
-			.collect();
-		assert_eq!(
-			added,
-			vec!["\topacity: 0.5", "\t\tenabled: false"],
-			"a save changed lines it was not asked to:\n{out}"
-		);
+		let added: Vec<&str> = out.lines().filter(|l| !default_config().lines().any(|d| d == *l)).collect();
+		assert_eq!(added, vec!["\topacity: 0.5", "\t\tenabled: false"], "a save changed lines it was not asked to:\n{out}");
 
-		assert!(
-			out.contains("\topacity: 0.5"),
-			"new value lands in the wallpaper block:\n{out}"
-		);
-		assert!(
-			out.contains("\t\tenabled: false"),
-			"new value lands in the scrim block:\n{out}"
-		);
-		assert!(
-			out.contains("\t\t# random: true  ## Default"),
-			"commented defaults keep their nesting depth:\n{out}"
-		);
-		assert!(
-			out.contains("\t# blur: 10.0  ## Default"),
-			"comment runs after the change point keep depth too:\n{out}"
-		);
-		assert!(
-			out.contains("\n\n## •"),
-			"blank lines before section rules survive:\n{out}"
-		);
-		assert!(
-			out.contains("\t# dialog_foreground: \"#e2e2ea\"  ## Default"),
-			"the trailing colors block keeps its indentation:\n{out}"
-		);
+		assert!(out.contains("\topacity: 0.5"), "new value lands in the wallpaper block:\n{out}");
+		assert!(out.contains("\t\tenabled: false"), "new value lands in the scrim block:\n{out}");
+		assert!(out.contains("\t\t# random: true  ## Default"), "commented defaults keep their nesting depth:\n{out}");
+		assert!(out.contains("\t# blur: 10.0  ## Default"), "comment runs after the change point keep depth too:\n{out}");
+		assert!(out.contains("\n\n## •"), "blank lines before section rules survive:\n{out}");
+		assert!(out.contains("\t# dialog_foreground: \"#e2e2ea\"\n"), "the trailing colors block keeps its indentation:\n{out}");
 	}
 
-	// A new key added to a group the file already has PART of must land beside
-	// its siblings INSIDE their block, at the right depth, NOT be appended with
-	// a second copy of the group's comment block - that paragraph is already in
-	// the file, attached to the siblings.
+	// A line whose indentation matches no level is dropped by the parse, and a
+	// save would then delete it. The write refuses instead: a hand-written line
+	// is worth more than the one setting the save was writing.
+	// Test ID: dbwa7
 	#[test]
-	fn a_straggler_lands_beside_its_siblings_not_with_a_second_paragraph() {
-		let path = std::env::temp_dir().join("silkterm_backfill_straggler_test.shcl");
+	fn a_save_that_would_drop_a_line_is_refused() {
+		let _guard = super::test_config_lock();
+		let dir = crate::testdir::run_dir().join(format!("silk-lostgate-{}", std::process::id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		let text = "window:\n\t\tmargin: 8.0\n\trows: 40\n";
+		std::fs::write(&path, text).unwrap();
+		let mut doc = shcl::Document::parse(text);
+		assert_eq!(doc.lost_count(), 1, "the line stepping back to no level is the one dropped");
+		doc.put_float("window.margin", 4.0);
+		let _ = write_doc(&path, &doc);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), text, "the file was rewritten despite the dropped line");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The launch names a line it can't read, and the rating then writes a line
+	// above it once the window is up. The last word on the console has to name
+	// the line where the file has it after that. The rating fills in the
+	// commented default where it is, which moves nothing, so here that line is
+	// one typed by hand and the rating's line goes in after it.
+	// Test ID: ddcf0
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_write_restates_the_lines_the_launch_named() {
+		let _guard = super::test_config_lock();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfglines_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "window:\n\t\topacity: 1.0\n\tmargin: 4\n").unwrap();
+		set_config_override(path.clone());
+		let _ = load();
+		let said = || LAUNCH_SAID.lock().unwrap().clone().map(|(_, said)| said).unwrap_or_default();
+		let at = |text: &str| text.lines().position(|l| l == "\tmargin: 4").unwrap() + 1;
+		let before = at(&std::fs::read_to_string(&path).unwrap());
+		assert!(said().iter().any(|m| m.contains(&format!("line {before}:"))), "{:?}", said());
+
+		let launched = std::fs::read_to_string(&path).unwrap();
+		let typed = launched.replacen("\t# check_next_run: false  ## Default\n", "\t# check_next_run: false  ## typed by hand\n", 1);
+		assert_ne!(typed, launched, "the template has no commented check_next_run");
+		std::fs::write(&path, &typed).unwrap();
+
+		let kept = keep_rating(RatingLines { check_next_run: Some(true) });
+		assert_eq!(kept, Kept::Written);
+		let now = at(&std::fs::read_to_string(&path).unwrap());
+		assert!(now > before, "the rating went in above the line");
+		let said = said();
+		for cites in [format!("couldn't be read line {now} "), format!("line {now}: indentation"), format!("`window.opacity` line {} ", now - 1)] {
+			assert!(said.iter().any(|m| m.contains(&cites)), "{cites}: {said:?}");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The rating fills in the template's commented line where it is, so the line
+	// the launch named is still where the file has it.
+	// Test ID: dfhh4
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_write_moves_no_line_the_launch_named() {
+		let _guard = super::test_config_lock();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgfill_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "window:\n\t\topacity: 1.0\n\tmargin: 4\n").unwrap();
+		set_config_override(path.clone());
+		let _ = load();
+		let at = |text: &str| text.lines().position(|l| l == "\tmargin: 4").unwrap() + 1;
+		let launched = std::fs::read_to_string(&path).unwrap();
+		let before = at(&launched);
+		let kept = keep_rating(RatingLines { check_next_run: Some(true) });
+		assert_eq!(kept, Kept::Written);
+		let rated = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(at(&rated), before, "{rated}");
+		assert_eq!(rated.lines().count(), launched.lines().count());
+		assert!(rated.contains("\tcheck_next_run: true\n"), "{rated}");
+		assert!(!rated.contains("# check_next_run:"), "{rated}");
+		let said = LAUNCH_SAID.lock().unwrap().clone().map(|(_, said)| said).unwrap_or_default();
+		assert!(said.iter().any(|m| m.contains(&format!("line {before}:"))), "{said:?}");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A stray indented with spaces used to be dropped too, and every save of
+	// the file refused. shcl 3.0 keeps it as written, so the save goes through
+	// and the line is still there, still reported, and still sets nothing.
+	// Test ID: dd3fc
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
+	fn a_save_keeps_a_space_indented_stray() {
+		let dir = crate::testdir::run_dir().join(format!("silk-keptstray-{}", std::process::id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		let text = "window:\n\tmargin: 8.0\n  rows: 40\n";
+		std::fs::write(&path, text).unwrap();
+		let mut doc = shcl::Document::parse(text);
+		assert_eq!(doc.lost_count(), 0);
+		assert_eq!(unreadable_lines(&doc), vec![3]);
+		doc.put_float("window.margin", 4.0);
+		assert!(write_doc(&path, &doc));
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), "window:\n\tmargin: 4\n  rows: 40\n");
+		let said = config_complaints(text);
+		assert!(said.iter().any(|m| m.contains("line 3") && m.contains("don't set anything")), "{said:?}");
+		assert!(!said.iter().any(|m| m.contains("cannot be saved")), "{said:?}");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A new key added to a group the file already has part of must go beside
+	// its siblings inside their block, at the right depth, rather than being appended
+	// with a second copy of the group's comment block, which is already in the file,
+	// attached to the siblings.
+	// Test ID: daq3c
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_straggler_goes_beside_its_siblings_not_with_a_second_paragraph() {
+		let path = crate::testdir::run_dir().join("silkterm_backfill_straggler_test.shcl");
 		// interval_s is missing from an otherwise-present rotation block
 		let drifted = "wallpaper:\n\
 			\n\
@@ -4586,47 +14337,37 @@ mod tests {
 			\t\t# folder: \"wallpaper/\"  ## Default\n\
 			\t\t# random: true  ## Default\n";
 		std::fs::write(&path, drifted).unwrap();
-		backfill_config(&path);
+		backfill_config(&mut LaunchFile::read(&path));
 		let out = std::fs::read_to_string(&path).unwrap();
 
 		let paragraphs = out.matches("Rotate the wallpaper through a folder").count();
 		assert_eq!(paragraphs, 1, "comment block duplicated:\n{out}");
-		let straggler = out
-			.find("\t\t# interval_s: 0.0")
-			.expect("straggler backfilled at depth");
+		let straggler = out.find("\t\t# interval_s: 0.0").expect("straggler backfilled at depth");
 		let folder = out.find("\t\t# folder:").expect("sibling still there");
 		let random = out.find("\t\t# random:").expect("sibling still there");
-		assert!(
-			folder < straggler && straggler < random,
-			"template order among siblings not kept:\n{out}"
-		);
-		// a group the file has never seen still arrives whole, comments and all
-		assert!(
-			out.contains("## Master switch for the wallpaper image.")
-				&& out.contains("# enabled: true  ## Default"),
-			"new group needs its comments:\n{out}"
-		);
-		// and a wholly-missing top-level section arrives as a block
-		assert!(
-			out.contains("font:") && out.contains("\tuse_system_family: true"),
-			"missing sections backfilled whole:\n{out}"
-		);
+		assert!(folder < straggler && straggler < random, "template order among siblings not kept:\n{out}");
+		// a group the file has never seen is still added whole, comments and all.
+		// Anchored on the structure, not the wording: 2 comment passes have broken
+		// this by rewording the line it used to quote.
+		let fit = out.find("\t# default_fit: \"stretch\"  ## Default").expect("new group backfilled");
+		assert!(out[..fit].lines().next_back().is_some_and(|l| l.trim_start().starts_with("##")), "new group needs its comments:\n{out}");
+		// and a wholly-missing top-level section is added as a block
+		assert!(out.contains("font:") && out.contains("\tline_height_scale: 1.22"), "missing sections backfilled whole:\n{out}");
 
-		backfill_config(&path);
-		assert_eq!(
-			out,
-			std::fs::read_to_string(&path).unwrap(),
-			"backfill not idempotent"
-		);
+		backfill_config(&mut LaunchFile::read(&path));
+		assert_eq!(out, std::fs::read_to_string(&path).unwrap(), "backfill not idempotent");
 		let _ = std::fs::remove_file(&path);
 	}
 
 	// The real on-disk load pipeline (convert -> migrate -> backfill) on a
-	// pre-nesting config: values land at their nested paths, the original file
-	// is kept as .bak, missing keys arrive, and the chain is stable.
+	// pre-nesting config: values end at their nested paths, the original file
+	// is kept as .bak, missing keys are added, and the chain is stable.
+	// Test ID: daq6c
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn pipeline_convert_migrate_backfill_on_disk() {
-		let dir = std::env::temp_dir().join(format!("silkterm_pipeline_{}", std::process::id()));
+		let _guard = test_config_lock();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_pipeline_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let drifted = "scrollback: 5000\n\
@@ -4639,49 +14380,32 @@ mod tests {
 			\n\
 			colors.focus: \"#abcdef\"\n";
 		std::fs::write(&path, drifted).unwrap();
-		convert_legacy_config(&path);
-		migrate_config(&path);
-		backfill_config(&path);
+		convert_legacy_config(&mut LaunchFile::read(&path));
+		migrate_config(&mut LaunchFile::read(&path));
+		backfill_config(&mut LaunchFile::read(&path));
 		let out = std::fs::read_to_string(&path).unwrap();
 
-		assert!(
-			!out.contains("cursor_shape"),
-			"obsolete key dropped:\n{out}"
-		);
-		assert!(
-			out.contains("\t\theight: 40"),
-			"renamed key kept its value:\n{out}"
-		);
-		assert!(
-			out.contains("\tmargin: 12.0") && out.contains("\topacity: 0.8"),
-			"values landed nested:\n{out}"
-		);
+		assert!(!out.contains("cursor_shape"), "obsolete key dropped:\n{out}");
+		assert!(out.contains("\t\theight: 40"), "renamed key kept its value:\n{out}");
+		assert!(out.contains("\tmargin: 12.0") && out.contains("\topacity: 0.8"), "values landed nested:\n{out}");
 		assert!(out.contains("\tscrollback: 5000"), "scrollback value kept");
-		assert!(out.contains("\tfocus: \"#abcdef\""), "color override kept");
-		assert!(
-			out.contains("themes.mine.dark.background"),
-			"unknown key kept"
-		);
-		assert!(
-			out.contains("\tuse_system_family: true"),
-			"missing key present with its default"
-		);
+		// the old file's focus color is the one renamed to highlight
+		assert!(out.contains("\thighlight: \"#abcdef\""), "color override kept");
+		assert!(out.contains("themes.mine.dark.background"), "unknown key kept");
+		assert!(out.contains("\t# size: 17.0"), "missing key present with its default");
 
 		// stable: a second pass changes nothing.
-		convert_legacy_config(&path);
-		migrate_config(&path);
-		backfill_config(&path);
-		assert_eq!(
-			out,
-			std::fs::read_to_string(&path).unwrap(),
-			"pipeline not idempotent"
-		);
+		convert_legacy_config(&mut LaunchFile::read(&path));
+		migrate_config(&mut LaunchFile::read(&path));
+		backfill_config(&mut LaunchFile::read(&path));
+		assert_eq!(out, std::fs::read_to_string(&path).unwrap(), "pipeline not idempotent");
 		let _ = std::fs::remove_file(&path);
 		let _ = std::fs::remove_file(dir.join("config.shcl.bak"));
 	}
 
 	// The scan must not offer the loader a file it can't decode: `image` is built
 	// with only png + jpeg, so a wider list picks a wallpaper that then fails.
+	// Test ID: dapye
 	#[test]
 	fn image_scan_only_accepts_what_the_decoder_has() {
 		use std::path::Path;
@@ -4689,10 +14413,1904 @@ mod tests {
 			assert!(is_image_file(Path::new(ok)), "{ok} should be scanned");
 		}
 		for no in ["a.webp", "a.bmp", "a.gif", "a.tiff", "a.tif", "a.txt", "a"] {
-			assert!(
-				!is_image_file(Path::new(no)),
-				"{no} has no decoder - scanning it picks an unloadable wallpaper"
-			);
+			assert!(!is_image_file(Path::new(no)), "{no} has no decoder - scanning it picks an unloadable wallpaper");
+		}
+	}
+
+	// A grid saved under --font-name was kept in that font, and a launch
+	// without it opened the same columns and rows at the normal font. The
+	// font a grid is kept for is the one a launch without the options has.
+	// Test ID: ddzzs
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_font_a_launch_without_the_font_options_has() {
+		let plain = Settings::default();
+		let mut held = plain.clone();
+		let style = crate::cli::Style { font_name: Some("Iosevka".into()), font_size: Some(30.0), ..Default::default() };
+		crate::cli::fold_window_style(&mut held, &style);
+		assert_eq!(held.font_family, "Iosevka");
+		let want = unheld_font_in(&plain, 2);
+		assert_eq!(unheld_font_in(&held, 2), want);
+		assert_eq!(want.family, plain.font_family);
+		assert!((want.size - (plain.font_size + 2.0)).abs() < 0.01);
+		let named_only = FontPick { size: want.size, family: held.font_family.clone() };
+		assert!(!want.same(&named_only), "another family is another font");
+		assert!(want.same(&unheld_font_in(&plain, 2)));
+	}
+
+	// The config file is the one thing here a person edits by hand, so it can be
+	// however they left it: half-typed, pasted with the wrong indentation, a key
+	// written twice, a value from a config the format used to have. None of that
+	// may take the program down, and saving a file the program itself wrote must
+	// not change it a second time.
+	mod fuzz {
+		use super::super::{CONFIG_CONVERTS, CONFIG_REMOVED, CONFIG_RENAMES, LEGACY_KEYS, LaunchFile, RatingLines, SUPERSEDED_FONT_STACKS, adopt_default_shell, config_complaints, convert_legacy_config, default_config, disabled_text, line_setting_key, migrate_config_text, next_launch_text, parse_kept, read_raw, resolve, reverted_text, saved_text, setting_groups, setting_lines, walk_settings, with_rating_lines, with_shcl_banner};
+		use crate::fuzz;
+
+		// The settings a save case is built from: every renamed and removed path,
+		// the font list, and one ordinary setting beside the renames in each of
+		// their blocks. Read from the tables, so a new rename joins on its own.
+		static SAVE_PATHS: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| {
+			let mut out: Vec<String> = CONFIG_RENAMES.iter().flat_map(|(old, new)| [*old, *new]).chain(CONFIG_CONVERTS.iter().flat_map(|(old, new, _)| [*old, *new])).chain(CONFIG_REMOVED.iter().copied()).chain(["font.family"]).map(str::to_string).collect();
+			let template: Vec<String> = setting_lines(default_config()).into_iter().map(|(path, _)| path).collect();
+			for block in ["colors.", "window.", "scroll.", "shell."] {
+				if let Some(other) = template.iter().find(|p| p.starts_with(block) && !out.contains(p)) {
+					out.push(other.clone());
+				}
+			}
+			out
+		});
+
+		// A comment line above a setting, at any depth, in the forms that have
+		// moved a value: a heading, a setting-like note, plain words, and a
+		// commented rename target.
+		fn save_comment(rng: &mut fuzz::Rng) -> String {
+			const INDENTS: [&str; 5] = ["", "\t", "\t\t", "\t\t\t", "    "];
+			let indent = rng.pick(&INDENTS);
+			let body = match rng.below(4) {
+				0 => "# x:".to_string(),
+				1 => "# see: below".to_string(),
+				2 => "# just words".to_string(),
+				_ => {
+					let (_, new) = rng.pick(CONFIG_RENAMES);
+					let leaf = new.rsplit('.').next().unwrap_or(new);
+					format!("# {leaf}: \"#aabbcc\"")
+				}
+			};
+			format!("{indent}{body}\n")
+		}
+
+		fn save_value(rng: &mut fuzz::Rng, path: &str) -> String {
+			let leaf = path.rsplit('.').next().unwrap_or(path);
+			match leaf {
+				"family" => {
+					let stale = SUPERSEDED_FONT_STACKS[0];
+					// single quotes most: a save before shcl 3.0.0-beta1 respelled them
+					match rng.below(6) {
+						0..=2 => format!("'{stale}'"),
+						3 => format!("\"{stale}\""),
+						4 => stale.to_string(),
+						_ => "\"Iosevka\"".to_string(),
+					}
+				}
+				"default" => "pwsh".to_string(),
+				"startup_directory" => "C:\\Users\\x".to_string(),
+				_ if path.starts_with("colors.") => "\"#112233\"".to_string(),
+				_ => (5 + rng.below(300)).to_string(),
+			}
+		}
+
+		// A file a Settings save could be asked to keep: blocks of renamed, removed
+		// and ordinary settings with comments above them at any depth, and now and
+		// then the pre-nesting font list. A leaf is never deeper than its siblings,
+		// since shcl reads such a line as a child of the setting above it.
+		fn save_case(rng: &mut fuzz::Rng) -> String {
+			use std::fmt::Write;
+			let paths = &*SAVE_PATHS;
+			let mut out = String::new();
+			// Rarer than the rest, with the shell block below: converting a file or
+			// moving the default shell scans every process, and is most of a case's
+			// time.
+			if rng.chance(16) {
+				let _ = writeln!(out, "font_family: '{}'", SUPERSEDED_FONT_STACKS[0]);
+				if rng.chance(2) {
+					out.push_str("use_system_font: false\n");
+				}
+			}
+			for _ in 0..=rng.below(3) {
+				let mut path = rng.pick(paths);
+				if path.starts_with("shell.") && rng.chance(2) {
+					path = rng.pick(paths);
+				}
+				let (parent, _) = path.rsplit_once('.').unwrap_or(("", path));
+				let heads: Vec<&str> = parent.split('.').collect();
+				for (depth, head) in heads.iter().enumerate() {
+					let _ = writeln!(out, "{}{head}:", "\t".repeat(depth));
+				}
+				let siblings: Vec<&String> = paths.iter().filter(|p| p.rsplit_once('.').is_some_and(|(up, _)| up == parent)).collect();
+				let indent = "\t".repeat(heads.len());
+				for _ in 0..=rng.below(4) {
+					let leaf_path = *rng.pick(&siblings);
+					if rng.chance(2) {
+						out.push_str(&save_comment(rng));
+					}
+					let leaf = leaf_path.rsplit('.').next().unwrap_or(leaf_path);
+					let value = save_value(rng, leaf_path);
+					let _ = writeln!(out, "{indent}{leaf}: {value}");
+				}
+				if rng.chance(3) {
+					out.push_str(&save_comment(rng));
+				}
+			}
+			out
+		}
+
+		// What the next launch parses: the conversion and the default-shell move
+		// when the file needs them, then the renames, removals and refreshes.
+		fn next_load(text: &str) -> shcl::Document {
+			use std::sync::atomic::{AtomicU64, Ordering};
+			static CASE: AtomicU64 = AtomicU64::new(0);
+			let flat = text.lines().any(|line| !line.trim_start().starts_with('#') && line_setting_key(line).is_some_and(|key| LEGACY_KEYS.iter().any(|(old, _)| *old == key)));
+			let shell = shcl::Document::parse(text).get_string("shell.default").is_ok();
+			let text = if flat || shell {
+				let dir = crate::testdir::run_dir().join(format!("silkterm_savefuzz_{}_{}", std::process::id(), CASE.fetch_add(1, Ordering::Relaxed)));
+				let _ = std::fs::remove_dir_all(&dir);
+				std::fs::create_dir_all(&dir).unwrap();
+				let path = dir.join("config.shcl");
+				std::fs::write(&path, text).unwrap();
+				convert_legacy_config(&mut LaunchFile::read(&path));
+				adopt_default_shell(&mut LaunchFile::read(&path));
+				let out = std::fs::read_to_string(&path).unwrap();
+				let _ = std::fs::remove_dir_all(&dir);
+				out
+			} else {
+				text.to_string()
+			};
+			shcl::Document::parse(&migrate_config_text(&text).unwrap_or(text))
+		}
+
+		// A save keeps the lines it can and falls back to the canonical form, which
+		// tidies quotes and indentation. After either, the next launch loads every
+		// setting the save didn't write as the launch before it would have. Cases
+		// come from the generator only: a mutated file gets to a line indented under
+		// a key that has a value, which shcl and the walk read differently, and
+		// this doesn't change that.
+		fn save_check(case: &[u8]) {
+			let text = String::from_utf8_lossy(case).into_owned();
+			let raw = parse_kept(&text);
+			if raw.lost_count() > 0 {
+				return;
+			}
+			let mut doc = raw.clone();
+			if doc.set_float("font.size", 15.5) != shcl::SetStatus::Ok {
+				return;
+			}
+			save_check_as(&text, &raw, &doc.to_canonical());
+			save_check_as(&text, &raw, &saved_text(&doc));
+		}
+
+		fn save_check_as(text: &str, raw: &shcl::Document, saved: &str) {
+			let raw_saved = shcl::Document::parse(saved);
+			let (then, now) = (next_load(text), next_load(saved));
+			// a path none of the 4 has reads the same everywhere
+			let mut paths: Vec<String> = Vec::new();
+			for doc in [raw, &raw_saved, &then, &now] {
+				for path in doc.paths() {
+					if !paths.contains(&path) {
+						paths.push(path);
+					}
+				}
+			}
+			for path in paths {
+				if path == "font" || path == "font.size" {
+					continue;
+				}
+				let read = |doc: &shcl::Document| (doc.get_string(&path), doc.count(&path));
+				if read(raw) != read(&raw_saved) {
+					continue;
+				}
+				assert_eq!(read(&then), read(&now), "{path} loads differently at the next launch after a save\nfile:\n{text}\nsaved:\n{saved}");
+			}
+		}
+
+		// Test ID: dcfp7
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn a_settings_save_moves_no_value_at_the_next_launch() {
+			// the next launch adopts a default shell, a save that can be refused
+			let _guard = super::super::test_config_lock();
+			let corpus = fuzz::corpus("config");
+			for case in &corpus {
+				save_check(case);
+			}
+			fuzz::soak("config-save", |seed| {
+				let case = save_case(&mut fuzz::Rng::new(seed));
+				// taken from the seed rather than the generator, so no other case moves
+				let case = if seed % 4 == 3 { case.replace('\n', "\r\n") } else { case };
+				save_check(case.as_bytes());
+			});
+		}
+
+		// A generator that stops making the forms that moved a value passes
+		// forever, so each is looked for by name.
+		// Test ID: dcfp8
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn the_save_generator_reaches_every_shape() {
+			let indent = |line: &str| line.len() - line.trim_start().len();
+			let comment = |line: &str| line.trim_start().starts_with('#');
+			let (mut flat, mut quoted, mut under, mut above) = (false, false, false, false);
+			// Read through shcl and the raw text, never the walk, so the check
+			// doesn't lean on the code it gates.
+			for seed in 0..200 {
+				let text = save_case(&mut fuzz::Rng::new(seed));
+				let doc = shcl::Document::parse(&text);
+				let lines: Vec<&str> = text.lines().collect();
+				quoted |= text.contains(&format!("'{}'", SUPERSEDED_FONT_STACKS[0]));
+				flat |= LEGACY_KEYS.iter().any(|(old, _)| doc.count(old) > 0);
+				// an active old name below a commented heading that is shallower
+				// than it, with no active line between them that closes the block
+				for (old, _) in CONFIG_RENAMES {
+					for at in doc.lines(old).into_iter().filter(|n| *n > 0) {
+						let line = lines[at - 1];
+						for up in lines[..at - 1].iter().rev() {
+							if indent(up) >= indent(line) {
+								continue;
+							}
+							if !comment(up) {
+								break;
+							}
+							if up.trim_end().ends_with(':') {
+								under = true;
+							}
+						}
+					}
+				}
+				// a commented new name shallower than the setting below it
+				for pair in lines.windows(2) {
+					let key = line_setting_key(pair[0]).unwrap_or_default();
+					if comment(pair[0]) && CONFIG_RENAMES.iter().any(|(_, new)| new.rsplit('.').next() == Some(key)) && !comment(pair[1]) && indent(pair[1]) > indent(pair[0]) {
+						above = true;
+					}
+				}
+			}
+			assert!(flat, "no active pre-nesting setting");
+			assert!(quoted, "no old font list in single quotes");
+			assert!(under, "no old name under a commented heading");
+			assert!(above, "no commented new name above a deeper setting");
+		}
+
+		// The keys the template has, read out of it rather
+		// than listed here, so a new setting joins the fuzz on its own. The file
+		// is nested, so these are the leaf names and the block headers.
+		static KEYS: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| {
+			default_config()
+				.lines()
+				.filter_map(|line| {
+					let bare = line.trim_start().trim_start_matches("# ");
+					let key = bare.split(':').next()?.trim();
+					let ok = !key.is_empty() && key.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c == '.');
+					ok.then(|| key.to_string())
+				})
+				.collect()
+		});
+
+		// Values that have broken a reader before, plus the forms a hand-edited
+		// file ends up with: an unclosed quote, a stray tab, a number too big
+		// for any width, a list where a scalar belongs.
+		#[rustfmt::skip]
+		const VALUES: [&str; 22] = [
+			"", " ", "0", "-1", "1e400", "-1e400", "nan", "inf", "99999999999999",
+			"true", "TRUE", "yes", "\"", "\"unclosed", "[1, 2", "{", "#", "null",
+			"0x10", "1_000", "\t", "a: b",
+		];
+
+		// A file, not a line: indentation that changes mid-block, a key written
+		// twice with children under the second, a comment where a value belongs.
+		fn config(rng: &mut fuzz::Rng) -> Vec<u8> {
+			use std::fmt::Write;
+			let keys = &*KEYS;
+			// Pin the wallpaper so resolving a case doesn't go looking around the
+			// filesystem for one. The parse half sees the wallpaper keys anyway.
+			let mut out = String::from("wallpaper:\n\timage: \"/nonexistent/silkfuzz\"\n");
+			for _ in 0..=rng.below(24) {
+				match rng.below(10) {
+					0 => out.push_str("## a comment\n"),
+					1 => out.push('\n'),
+					2 => {
+						out.push_str(&fuzz::text(rng));
+						out.push('\n');
+					}
+					3 => {
+						// A block header, then children under it, sometimes under
+						// one that was already written above.
+						let _ = writeln!(out, "{}:", rng.pick(keys));
+						for _ in 0..=rng.below(3) {
+							// Mixed indentation on purpose: a pasted block arrives
+							// with spaces where the rest of the file has tabs.
+							let indent = if rng.chance(3) { "    " } else { "\t" };
+							let _ = writeln!(out, "{indent}{}: {}", rng.pick(keys), rng.pick(&VALUES));
+						}
+					}
+					_ => {
+						let lead = if rng.chance(5) { "\t" } else { "" };
+						let _ = writeln!(out, "{lead}{}: {}", rng.pick(keys), rng.pick(&VALUES));
+					}
+				}
+			}
+			out.into_bytes()
+		}
+
+		fn check(case: &[u8]) {
+			let text = String::from_utf8_lossy(case).into_owned();
+			let path = std::path::Path::new("fuzz.shcl");
+
+			// Every pure reader over the file's text, in one place: if one of them
+			// can be made to panic, the program dies before it draws anything.
+			let _ = walk_settings(&text);
+			let _ = config_complaints(&text);
+			let _ = setting_lines(&text);
+			let _ = setting_groups(&text);
+			let _ = migrate_config_text(&text);
+			let _ = with_shcl_banner(&text);
+			let _ = reverted_text(&text, &["font.size", "window.rows"]);
+			let _ = disabled_text(&text, &["font.size", "window.rows"]);
+			let _ = resolve(read_raw(&text, path).0);
+
+			// Saving is writing the canonical form of what was read. Doing that
+			// twice must give the same file, or every save walks the config away
+			// from what the person typed.
+			let once = shcl::Document::parse(&text).to_canonical();
+			let twice = shcl::Document::parse(&once).to_canonical();
+			assert_eq!(twice, once, "a second save changed the file");
+		}
+
+		// A generator that quietly stops generating passes forever. This is what
+		// says the template is still being read.
+		// Test ID: dcdj3
+		#[test]
+		fn the_generator_still_finds_the_settings_it_draws_from() {
+			assert!(KEYS.len() > 60, "only {} keys came out of the template", KEYS.len());
+			for want in ["size", "scrollback", "opacity", "wallpaper", "performance"] {
+				assert!(KEYS.iter().any(|k| k == want), "no '{want}' in the template");
+			}
+			let mut rng = fuzz::Rng::new(0);
+			let case = String::from_utf8(config(&mut rng)).expect("utf-8");
+			assert!(case.len() > 60, "the generator produced {case:?}");
+			assert!(!CONFIG_RENAMES.is_empty(), "no renames left, and the migrated shapes pick from them");
+			assert!(!SUPERSEDED_FONT_STACKS.is_empty(), "no superseded font lists left, and the migrated shapes pick from them");
+		}
+
+		// Test ID: dcdj4
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn no_config_file_can_take_the_program_down() {
+			let corpus = fuzz::corpus("config");
+			for case in &corpus {
+				check(case);
+			}
+			fuzz::soak("config", |seed| {
+				let mut rng = fuzz::Rng::new(seed);
+				check(&fuzz::input(&mut rng, &corpus, config));
+			});
+		}
+
+		// Free-form bytes, with no config shape imposed at all. The generator
+		// above never emits a lone `:` at depth 4 or a value that is only a
+		// byte-order mark, and the parser has to hold up under those too.
+		// Test ID: dcdj5
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn arbitrary_bytes_parse_without_panicking() {
+			let corpus = fuzz::corpus("config-bytes");
+			for case in &corpus {
+				let _ = walk_settings(&String::from_utf8_lossy(case));
+			}
+			fuzz::soak("config-bytes", |seed| {
+				let mut rng = fuzz::Rng::new(seed);
+				let case = fuzz::input(&mut rng, &corpus, |rng| (0..rng.below(400)).map(|_| rng.byte()).collect());
+				let text = String::from_utf8_lossy(&case);
+				let _ = walk_settings(&text);
+				let _ = config_complaints(&text);
+				let _ = migrate_config_text(&text);
+				let _ = shcl::Document::parse(&text).to_canonical();
+			});
+		}
+
+		// A flat file of old names, the newest spelling winning, converts with each
+		// value readable at its new path, every block heading still a heading, and
+		// no second conversion.
+		// Test ID: dcfsa
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn a_flat_file_moves_every_value_to_its_path() {
+			use super::super::{CONFIG_CONVERTS, CONFIG_REMOVED, LEGACY_KEYS, converted_config_text};
+			use super::active_headings;
+			use std::fmt::Write;
+			let template = active_headings(default_config());
+			fuzz::soak("config-flat", |seed| {
+				let mut rng = fuzz::Rng::new(seed);
+				let mut text = String::new();
+				let mut want: std::collections::HashMap<&str, (usize, String)> = std::collections::HashMap::new();
+				let mut expect = |rank: usize, value: &str| {
+					// the values here aren't numbers, so a unit change keeps them
+					let new = LEGACY_KEYS[rank].1;
+					let new = CONFIG_CONVERTS.iter().find(|(old, ..)| *old == new).map_or(new, |(_, to, _)| *to);
+					if CONFIG_REMOVED.contains(&new) {
+						return;
+					}
+					let slot = want.entry(new).or_insert((rank, value.to_string()));
+					if rank < slot.0 {
+						*slot = (rank, value.to_string());
+					}
+				};
+				for i in 0..=rng.below(8) {
+					let rank = rng.below(LEGACY_KEYS.len());
+					let value = format!("v{seed}x{i}");
+					let _ = writeln!(text, "{}: {value}", LEGACY_KEYS[rank].0);
+					expect(rank, &value);
+				}
+				if rng.chance(3) {
+					let (_, head) = rng.pick(&template);
+					let value = format!("y{seed}");
+					let _ = writeln!(text, "{head}: {value}");
+					// a block name that is also an old flat name is copied like one
+					if let Some(rank) = LEGACY_KEYS.iter().position(|(old, _)| old == head) {
+						expect(rank, &value);
+					}
+				}
+				// a current shell list rides along on some seeds, and is copied whole
+				let shells: Vec<crate::shells::ShellEntry> = if rng.chance(3) { (0..=rng.below(3)).map(|i| crate::shells::ShellEntry { slug: format!("s{i}"), title: format!("t{seed}x{i}"), command: format!("/bin/c{i}"), active: rng.chance(2), comment: String::new(), last_seen: String::new() }).collect() } else { Vec::new() };
+				if !shells.is_empty() {
+					let mut doc = shcl::Document::parse("");
+					super::super::write_shells(&mut doc, &[], &shells);
+					text.insert_str(0, &doc.to_canonical());
+				}
+				let text = if seed % 4 == 3 { text.replace('\n', "\r\n") } else { text };
+				let out = converted_config_text(&text).expect("a flat file converts");
+				let doc = shcl::Document::parse(&out);
+				assert_eq!(doc.lost_count(), 0, "file:\n{text}\nconverted:\n{out}");
+				assert!(super::super::read_shells(&doc) == shells, "shells\nfile:\n{text}\nconverted:\n{out}");
+				for (new, (_, value)) in &want {
+					assert_eq!(doc.get_string(new).ok().as_deref(), Some(value.as_str()), "{new}\nfile:\n{text}\nconverted:\n{out}");
+				}
+				let headings: Vec<(usize, String)> = active_headings(&out).into_iter().filter(|(_, h)| h != "shells" && !h.starts_with("shells.")).collect();
+				assert_eq!(headings, template, "a heading moved\nfile:\n{text}\nconverted:\n{out}");
+				assert_eq!(converted_config_text(&out), None, "converted twice\nfile:\n{text}");
+			});
+		}
+
+		// Backfill only adds lines, so whatever a file has, every value that
+		// loaded before it loads the same after, or nothing is written. Settings
+		// are re-indented at random here, since a line indented deeper than its
+		// block needs is what an added line can take over.
+		// Test ID: dcfp9
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn backfill_changes_nothing_that_loaded() {
+			use super::super::backfilled_text;
+			fuzz::soak("config-backfill", |seed| {
+				let mut rng = fuzz::Rng::new(seed);
+				let text = String::from_utf8_lossy(&config(&mut rng)).into_owned();
+				let text: String = text.lines().map(|line| if rng.chance(6) && line.starts_with('\t') && !line.trim().is_empty() { format!("\t{line}\n") } else { format!("{line}\n") }).collect();
+				let Ok(Some(out)) = backfilled_text(&text) else {
+					return;
+				};
+				let before = shcl::Document::parse(&text);
+				let after = shcl::Document::parse(&out);
+				assert_eq!(after.lost_count(), before.lost_count(), "a line was lost, or a lost one found a place\nbefore:\n{text}\nafter:\n{out}");
+				for path in before.paths() {
+					if before.get_string(&path).is_ok() {
+						assert_eq!(after.get_string(&path), before.get_string(&path), "{path}\nbefore:\n{text}\nafter:\n{out}");
+					}
+				}
+			});
+		}
+
+		// Whatever backfill adds is where the next launch looks for it, so a
+		// second pass finds nothing missing.
+		// Test ID: dd3q2
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn backfill_settles_in_one_pass() {
+			use super::super::backfilled_text;
+			fuzz::soak("config-backfill-settles", |seed| {
+				let mut rng = fuzz::Rng::new(seed);
+				let text = String::from_utf8_lossy(&config(&mut rng)).into_owned();
+				let Ok(Some(out)) = backfilled_text(&text) else {
+					return;
+				};
+				assert_eq!(backfilled_text(&out), Ok(None), "\nfile:\n{text}\nafter one pass:\n{out}");
+			});
+		}
+
+		// Whatever an old file has, what it converts to is current: the next
+		// launch converts nothing, and a file written new has no line shcl can't
+		// read. Bytes that aren't UTF-8 and a raw block that never closes are the
+		// files shcl's own migration gives up on.
+		// Test ID: ddf6t
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn an_upgrade_settles_in_one_pass() {
+			use super::super::{Rewrite, Upgrade, from_shcl2_text, unreadable_lines, upgrade};
+			fuzz::soak("config-upgrade", |seed| {
+				let mut rng = fuzz::Rng::new(seed);
+				let mut case = config(&mut rng);
+				if rng.chance(3) && !case.is_empty() {
+					let at = rng.below(case.len());
+					case.insert(at, 0xe9);
+				}
+				if rng.chance(3) {
+					case.extend_from_slice(b"notes: ```\nnever closed\n");
+				}
+				let shown = String::from_utf8_lossy(&case).into_owned();
+				match upgrade(&case) {
+					Upgrade::Current => {}
+					Upgrade::InPlace { text, .. } => {
+						assert_eq!(from_shcl2_text(&text), None, "\nfile:\n{shown}\nconverted:\n{text}");
+					}
+					Upgrade::Rewritten { text, .. } | Upgrade::Dropped { text, rewrite: Rewrite::Template, .. } => {
+						assert_eq!(from_shcl2_text(&text), None, "\nfile:\n{shown}\nwritten:\n{text}");
+						let unread = unreadable_lines(&shcl::Document::parse(&text));
+						assert!(unread.is_empty(), "lines {unread:?}\nfile:\n{shown}\nwritten:\n{text}");
+					}
+					// the file's own lines, so any it couldn't read before stay
+					Upgrade::Dropped { text, rewrite: Rewrite::Kept, .. } => {
+						assert_eq!(from_shcl2_text(&text), None, "\nfile:\n{shown}\nwritten:\n{text}");
+					}
+				}
+			});
+		}
+
+		// A current file with bytes that aren't UTF-8 is written again in one pass:
+		// what is written is UTF-8 and current, so the next launch does nothing.
+		// Kept in its own layout it only loses lines, bar the footer going back to
+		// the default, and written from the template it has no line shcl can't read.
+		// Test ID: ddf97
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn a_rewrite_for_lines_that_are_not_utf8_settles() {
+			use super::super::{Rewrite, SHCL_BANNER, Upgrade, format_of, from_a_beta, garbled_indexes, unreadable_lines, upgrade};
+			fuzz::soak("config-dropped", |seed| {
+				let mut rng = fuzz::Rng::new(seed);
+				let mut case = config(&mut rng);
+				for _ in 0..=rng.below(3) {
+					let at = rng.below(case.len() + 1);
+					case.insert(at, *rng.pick(&[0xe9, 0xff, 0xc3]));
+				}
+				case.extend_from_slice(b"\n");
+				let footer = if rng.chance(2) { SHCL_BANNER.replacen('\u{a9}', "\u{fffd}", 1) } else { SHCL_BANNER.to_string() };
+				// the copyright sign as an editor saving in Latin-1 writes it
+				case.extend(footer.replace('\u{fffd}', "\u{1}").bytes().map(|b| if b == 1 { 0xa9 } else { b }));
+				let shown = String::from_utf8_lossy(&case).into_owned();
+				let garbled = garbled_indexes(&case);
+				match upgrade(&case) {
+					Upgrade::Dropped { text, rewrite, .. } => {
+						assert_eq!(upgrade(text.as_bytes()), Upgrade::Current, "\nfile:\n{shown}\nwritten:\n{text}");
+						match rewrite {
+							Rewrite::Kept => {
+								let left: Vec<&str> = shown.split('\n').enumerate().filter(|(index, _)| !garbled.contains(index)).map(|(_, line)| line).collect();
+								// a pre-beta1 spelling among the lines kept is respelled
+								// in place, so a line may also match its respelling
+								let joined = left.join("\n");
+								let respelled_text = from_a_beta(&joined).map(|(t, _)| t).unwrap_or_default();
+								let respelled: Vec<&str> = respelled_text.split('\n').collect();
+								let mut at = 0;
+								for line in text.split('\n') {
+									if SHCL_BANNER.lines().any(|b| b == line.trim_end()) {
+										continue;
+									}
+									let found = (at..left.len()).find(|&i| left[i] == line || respelled.get(i).is_some_and(|r| *r == line));
+									assert!(found.is_some(), "{line:?} is new\nfile:\n{shown}\nwritten:\n{text}");
+									at = found.unwrap_or(at) + 1;
+								}
+							}
+							Rewrite::Template => {
+								let unread = unreadable_lines(&shcl::Document::parse(&text));
+								assert!(unread.is_empty(), "lines {unread:?}\nfile:\n{shown}\nwritten:\n{text}");
+							}
+						}
+					}
+					// an inserted byte that ends up where it completes a character
+					// decodes after all
+					Upgrade::Current => assert!(garbled.is_empty(), "{shown}"),
+					// a raw block that never closes swallows the footer, so the file
+					// isn't a current one; `an_upgrade_settles_in_one_pass` has those
+					Upgrade::InPlace { .. } | Upgrade::Rewritten { .. } => {
+						assert!(format_of(&shown) < shcl::FORMAT_MAJOR, "{shown}");
+					}
+				}
+			});
+		}
+
+		// The launch-time repair of a wallpaper heading, over the forms around it:
+		// it settles in one pass, touches only the heading and the line it adds, and
+		// every other setting loads as before.
+		// Test ID: dcfsm
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn a_wallpaper_repair_changes_nothing_else() {
+			fuzz::soak("config-repair", wallpaper_repair_case);
+		}
+
+		// Seed 107671 writes `wallpaper.rotate` 3 times over 2 blocks, and the
+		// repair folds that to 2. A plain test run's soak stops short of it.
+		// Test ID: dd7zr
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn a_key_written_three_times_survives_the_wallpaper_repair() {
+			wallpaper_repair_case(107_671);
+		}
+
+		fn wallpaper_repair_case(seed: u64) {
+			use super::super::{valued_wallpaper_line, wallpaper_heading_repaired};
+			const IMAGES: [&str; 5] = ["/p/a.png", "\"C:\\\\Users\\\\x\\\\a b.png\"", "/p/a.png  # mine", "''", "'/p/#1.png'"];
+			let mut rng = fuzz::Rng::new(seed);
+			let mut text = default_config().to_string();
+			// valued `wallpaper:` lines above a block the template has
+			let mut valued = 0;
+			if !rng.chance(5) {
+				let image = rng.pick(&IMAGES);
+				text = text.replacen("\nwallpaper:\n", &format!("\nwallpaper: {image}\n"), 1);
+				valued += 1;
+			}
+			// forms the repair must work through
+			if rng.chance(3) {
+				text.push_str("wallpaper.image: /p/b.png\n");
+			}
+			if rng.chance(3) {
+				text.push_str("font_size: 13\n");
+			}
+			if rng.chance(3) {
+				text.push_str("notes: ```\nwallpaper: /p/c.png\n\trotate:\n```\n");
+			}
+			if rng.chance(4) {
+				text = shcl::Document::parse(&text).to_canonical();
+			}
+			// forms that rule it out
+			let mut ruled_out = false;
+			if rng.chance(6) {
+				let flat = if rng.chance(2) { "wallpaper: /p/d.png\n\twallpaper_opacity: 0.4\n" } else { "wallpaper: /p/d.png\nopacity: 0.4\n" };
+				text.insert_str(0, flat);
+				ruled_out = true;
+			}
+			if rng.chance(6) {
+				text.push_str("wallpaper: /p/e.png\n\topacity: 0.4\n");
+				valued += 1;
+			}
+			// any form at all, so no expectation either way
+			let mut unknown = false;
+			if rng.chance(4) {
+				text.push_str(&String::from_utf8_lossy(&config(&mut rng)));
+				unknown = true;
+			}
+			if seed % 4 == 3 {
+				text = text.replace('\n', "\r\n");
+			}
+			let Some(out) = wallpaper_heading_repaired(&text) else {
+				assert!(valued != 1 || ruled_out || unknown, "a damaged heading was not repaired\nfile:\n{text}");
+				return;
+			};
+			assert!(unknown || (valued == 1 && !ruled_out), "repaired a file with {valued} valued headings:\n{text}");
+			assert_eq!(wallpaper_heading_repaired(&out), None, "not settled\nfile:\n{text}\nrepaired:\n{out}");
+
+			// line endings may change (a repair writes LF), line contents may not
+			let old: Vec<&str> = text.lines().map(|l| l.trim_end_matches('\r')).collect();
+			let new: Vec<&str> = out.lines().map(|l| l.trim_end_matches('\r')).collect();
+			let at = old.iter().zip(&new).position(|(a, b)| a != b).expect("the heading line changes");
+			assert!(valued_wallpaper_line(old[at]) && new[at] == "wallpaper:", "line {at} changed\nfile:\n{text}\nrepaired:\n{out}");
+			let added = new.len().checked_sub(old.len()).expect("no line removed");
+			assert!(added <= 1, "{added} lines added\nfile:\n{text}");
+			if added == 1 {
+				assert!(new[at + 1].trim_start().starts_with("image: "), "added {:?}", new[at + 1]);
+			}
+			assert_eq!(old[at + 1..], new[at + 1 + added..], "another line changed\nfile:\n{text}\nrepaired:\n{out}");
+
+			let before = shcl::Document::parse(&text);
+			let after = shcl::Document::parse(&out);
+			let mut paths = before.paths();
+			paths.extend(after.paths());
+			// A heading in 2 `wallpaper:` blocks reads as written twice until the
+			// repair empties the first block and shcl folds the 2. An empty value
+			// loads as the default either way, so only a value is compared.
+			let folded = |p: &str| matches!(after.get_string(p), Err(shcl::Status::Empty)) && matches!(before.get_string(p), Err(shcl::Status::Empty | shcl::Status::Multiple));
+			// A key written more than once loads as a duplicate however many times it
+			// is there, and the same fold can take one of those away.
+			let loads = |doc: &shcl::Document, p: &str| match doc.get_string(p) {
+				Err(shcl::Status::Multiple) => format!("{:?}", doc.get_string(p)),
+				got => format!("{got:?} {}", doc.count(p)),
+			};
+			for path in paths.iter().filter(|p| *p != "wallpaper" && *p != "wallpaper.image" && !folded(p)) {
+				assert_eq!(loads(&before, path), loads(&after, path), "{path} loads differently\nfile:\n{text}\nrepaired:\n{out}");
+			}
+			// the file may have a second `wallpaper` block, so read the line alone
+			let image = if before.count("wallpaper.image") > 0 { before.get_string("wallpaper.image") } else { shcl::Document::parse(old[at]).get_string("wallpaper") };
+			assert_eq!(after.get_string("wallpaper.image"), image, "the image\nfile:\n{text}\nrepaired:\n{out}");
+		}
+
+		// Children for a performance block the way hand edits leave them: mixed
+		// depths, the rating's own key and its neighbors commented, bare, dotted or
+		// with children under them, and values with a comment or a list in them.
+		fn rating_children(rng: &mut fuzz::Rng) -> String {
+			use std::fmt::Write;
+			const INDENTS: [&str; 5] = ["\t", "\t", "    ", "\t\t", "  "];
+			#[rustfmt::skip]
+			const LEAVES: [&str; 6] = [
+				"automatic", "profile", "rated_hardware", "check_next_run", "check_hardware", "other",
+			];
+			#[rustfmt::skip]
+			const VALUES: [&str; 9] = [
+				"true", "false", "high", "\"max\"", "0000000000000000", "\"\"", "[1, 2]",
+				"x  ## note", "\"a # b\"",
+			];
+			let mut out = String::new();
+			for _ in 0..=rng.below(6) {
+				let indent = rng.pick(&INDENTS);
+				let leaf = rng.pick(&LEAVES);
+				let _ = match rng.below(8) {
+					0 | 1 => writeln!(out, "{indent}# {leaf}: \"\"  ## Default"),
+					2 => writeln!(out, "{indent}{leaf}:"),
+					3 => writeln!(out, "{indent}{leaf}:\n{indent}\t- a"),
+					4 => writeln!(out),
+					5 => writeln!(out, "performance.{leaf}: {}", rng.pick(&VALUES)),
+					_ => writeln!(out, "{indent}{leaf}: {}", rng.pick(&VALUES)),
+				};
+			}
+			out
+		}
+
+		// Somewhere a rating has to go: the template with lines typed into its own
+		// performance block, or a hand-written file with one or two blocks spliced in.
+		fn rating_case(rng: &mut fuzz::Rng) -> Vec<u8> {
+			#[rustfmt::skip]
+			const HEADERS: [&str; 4] = [
+				"performance:", "performance:  ## note", "  performance:", "performance: 5",
+			];
+			let mut lines: Vec<String> = if rng.chance(3) { default_config().lines().map(str::to_string).collect() } else { String::from_utf8_lossy(&config(rng)).lines().map(str::to_string).collect() };
+			let pieces = if rng.chance(3) { 0 } else { 1 + rng.below(2) };
+			for _ in 0..pieces {
+				let header = lines.iter().position(|line| line == "performance:");
+				let (at, piece) = match header {
+					Some(h) if rng.chance(2) => {
+						let at = h + 1 + rng.below((lines.len() - h).min(40));
+						(at, rating_children(rng))
+					}
+					_ => {
+						let at = rng.below(lines.len() + 1);
+						let head = rng.pick(&HEADERS).to_string();
+						(at, format!("{head}\n{}", rating_children(rng)))
+					}
+				};
+				for (n, line) in piece.lines().enumerate() {
+					lines.insert(at + n, line.to_string());
+				}
+			}
+			if !rng.chance(2) {
+				let at = rng.below(lines.len() + 1);
+				for (n, line) in migrated_shape(rng).lines().enumerate() {
+					lines.insert(at + n, line.to_string());
+				}
+			}
+			let mut out = lines.join("\n");
+			out.push('\n');
+			out.into_bytes()
+		}
+
+		// Lines the launch's migration reads by how they are written as well as by
+		// value, taken from its own tables so a new rename or stack joins on its own.
+		fn migrated_shape(rng: &mut fuzz::Rng) -> String {
+			let renamed: Vec<&str> = CONFIG_RENAMES.iter().map(|(old, _)| *old).chain(CONFIG_CONVERTS.iter().map(|(old, ..)| *old)).collect();
+			let old = if rng.chance(4) { *rng.pick(CONFIG_REMOVED) } else { *rng.pick(&renamed) };
+			let (block, leaf) = old.rsplit_once('.').unwrap_or(("", old));
+			match rng.below(7) {
+				0 => format!("font:\n\tfamily: '{}'\n", rng.pick(SUPERSEDED_FONT_STACKS)),
+				1 => format!("{block}:\n\t# x:\n\t\t{leaf}: 12\n"),
+				2 => format!("{block}:\n\t\t# x:\n\t{leaf}: 12\n"),
+				3 => format!("{block}:\n    # x:\n\t{leaf}: 12\n"),
+				// the steps before the renames: a file from before the nested
+				// layout, and a default shell still to be moved into the list
+				4 => format!("font_family: '{}'\n", rng.pick(SUPERSEDED_FONT_STACKS)),
+				5 => format!("use_system_font: false\nfont_family: '{}'\nwallpaper_folder: C:\\Users\\x\n", rng.pick(SUPERSEDED_FONT_STACKS)),
+				_ => "shell:\n\tdefault: /bin/sh\nfont:\n\tfamily: 'Some Mono'\n".to_string(),
+			}
+		}
+
+		// A rating writes its own lines and nothing else, so whatever a file has,
+		// an answer it accepts reads each value back, loses no more lines, and loads
+		// every setting it didn't write as before, as a launch reads the file after
+		// its renames and refreshes. The last is read here path by
+		// path over both parses, apart from the writer's own check, though both ask
+		// shcl. Canonical text is no measure of what loads: it keeps a line shcl
+		// skipped, drops one it lost, and moves a stray line with the setting after
+		// it. A file that reads clean is never called unreadable, and wherever
+		// shcl's own setters would keep the rating, the writer keeps it too.
+		fn rating_check(case: &[u8], rng: &mut fuzz::Rng) {
+			let text = String::from_utf8_lossy(case).into_owned();
+			let lines = RatingLines { check_next_run: (!rng.chance(8)).then(|| rng.chance(2)) };
+			let written: Vec<&str> = lines.check_next_run.map(|_| "performance.check_next_run").into_iter().collect();
+			// Each setting the rating doesn't write, as it reads in 2 parses.
+			let reads = |a: &shcl::Document, b: &shcl::Document| {
+				let mut paths = a.paths();
+				for path in b.paths() {
+					if !paths.contains(&path) {
+						paths.push(path);
+					}
+				}
+				paths.retain(|path| !written.iter().any(|key| path == key || path.starts_with(&format!("{key}."))));
+				let read = |doc: &shcl::Document| {
+					paths
+						.iter()
+						// a block the write may have created, with no value of its own
+						.filter(|path| {
+							let holds = written.iter().any(|key| key.starts_with(&format!("{path}.")));
+							!(holds && matches!(doc.get_string(path), Err(shcl::Status::Empty | shcl::Status::NotFound)))
+						})
+						// the quoted flag is left out, since no read sees it; a quote or
+						// indent the migration reads shows in the migrated parse
+						.map(|path| (path.clone(), doc.get_string(path), doc.count(path)))
+						.collect::<Vec<_>>()
+				};
+				(read(a), read(b))
+			};
+			// the parse the next launch makes, where its rewrites change the text
+			let migrated = |t: &str| match next_launch_text(t) {
+				std::borrow::Cow::Owned(t) => Some(shcl::Document::parse(&t)),
+				std::borrow::Cow::Borrowed(_) => None,
+			};
+			let before = shcl::Document::parse(&text);
+			let before_migrated = migrated(&text);
+			let before_loads = before_migrated.as_ref().unwrap_or(&before);
+			let answer = with_rating_lines(&text, lines);
+
+			if before.lost_count() == 0 {
+				assert_ne!(answer, Err(super::super::Kept::Unreadable), "a file that reads clean is called unreadable\nbefore:\n{text}");
+				// what the dialog's save would leave: shcl's setters, then canonical text
+				let mut saved = before.clone();
+				let set = lines.check_next_run.is_none_or(|flag| saved.set_bool("performance.check_next_run", flag) == shcl::SetStatus::Ok);
+				let saved_text = saved.to_canonical();
+				let saved = shcl::Document::parse(&saved_text);
+				let saved_migrated = migrated(&saved_text);
+				// The rating has to be there for the next launch to read. A file
+				// from before the nested layout is written fresh by that launch,
+				// which copies no rating over, so a write into one keeps nothing.
+				let saved_loads = saved_migrated.as_ref().unwrap_or(&saved);
+				let kept_in = |doc: &shcl::Document| lines.check_next_run.is_none_or(|flag| doc.get_bool("performance.check_next_run") == Ok(flag));
+				let kept_by_save = set && saved.lost_count() == 0 && kept_in(&saved) && kept_in(saved_loads) && {
+					let (then, now) = reads(before_loads, saved_migrated.as_ref().unwrap_or(&saved));
+					then == now
+				};
+				if kept_by_save {
+					assert!(answer.is_ok(), "the save keeps this rating and the writer answers {answer:?}\nbefore:\n{text}");
+				}
+			}
+
+			let Ok(out) = answer else {
+				return;
+			};
+			let after = shcl::Document::parse(&out);
+			let after_migrated = migrated(&out);
+			let shown = format!("before:\n{text}\nafter:\n{out}");
+			assert!(after.lost_count() <= before.lost_count(), "a line was lost\n{shown}");
+			if let Some(flag) = lines.check_next_run {
+				assert_eq!(after.get_bool("performance.check_next_run"), Ok(flag), "check_next_run\n{shown}");
+			}
+			let (then, now) = reads(before_loads, after_migrated.as_ref().unwrap_or(&after));
+			assert_eq!(now, then, "another setting loads differently\n{shown}");
+		}
+
+		// Test ID: dcfa6
+		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
+		fn a_rating_changes_nothing_else_in_any_file() {
+			let corpus = fuzz::corpus("config");
+			for case in &corpus {
+				rating_check(case, &mut fuzz::Rng::new(0));
+			}
+			fuzz::soak("config-rating", |seed| {
+				let mut rng = fuzz::Rng::new(seed);
+				let case = fuzz::input(&mut rng, &corpus, rating_case);
+				rating_check(&case, &mut rng);
+			});
+		}
+	}
+
+	// v1.0.0-beta3's config files, as it wrote them through shcl 1.2: its
+	// template on a first launch, and a Settings save that changed every
+	// setting, added a theme and set the shell list.
+	const BETA3_FIRST_LAUNCH: &str = include_str!("testdata/beta3_first_launch.shcl");
+	const BETA3_SAVED: &str = include_str!("testdata/beta3_saved.shcl");
+	// v1.0.0-beta2's, the same way, through the same shcl. It had no shell
+	// list, so the save names the default shell in `shell.default`.
+	const BETA2_FIRST_LAUNCH: &str = include_str!("testdata/beta2_first_launch.shcl");
+	const BETA2_SAVED: &str = include_str!("testdata/beta2_saved.shcl");
+
+	// Each row the beta3 save set, as it reads now. `blink_rate_ms: 400` was half
+	// a cycle, so 0.8 s.
+	fn beta3_rows() -> Vec<(Key, Value)> {
+		use Value::{Bool, Float, Int};
+		let text = |s: &str| Value::Text(s.to_string());
+		vec![(Key::Transparency, Bool(false)), (Key::Opacity, Float(0.8)), (Key::BackdropBlur, Bool(false)), (Key::BgEnabled, Bool(false)), (Key::BgImage, text("mine.jpg")), (Key::BgFolder, text("pics/")), (Key::BgRotate, Bool(false)), (Key::BgOpacity, Float(0.25)), (Key::BgBlur, Float(4.0)), (Key::BgFit, text("zoom")), (Key::BgHonorXmp, Bool(false)), (Key::BgContrastMask, Bool(false)), (Key::BgContrastSize, Float(0.3)), (Key::BgContrastStrength, Float(0.7)), (Key::BgContrastAuto, Float(0.25)), (Key::TextScrim, Bool(false)), (Key::ScrimRadius, Float(3.0)), (Key::ScrimSoftness, Float(0.25)), (Key::ScrimStrength, Float(30.0)), (Key::ScrimFunction, text("dilate")), (Key::ScrimRamp, text("linear")), (Key::Outline, Float(0.5)), (Key::CursorScrim, Bool(true)), (Key::CursorOutline, Bool(false)), (Key::CursorBlinking, Bool(true)), (Key::CursorBlinkRate, Float(0.8)), (Key::CursorHeight, Float(80.0)), (Key::CursorWidth, Float(50.0)), (Key::CursorAnimation, text("phase")), (Key::CursorResume, Float(2.0)), (Key::SystemFont, Bool(false)), (Key::SystemFontSize, Bool(false)), (Key::FontFamily, text("Fira Code")), (Key::FontSize, Float(14.5)), (Key::LineHeight, Float(1.1)), (Key::RememberSize, Bool(false)), (Key::Columns, Int(120)), (Key::Rows, Int(40)), (Key::Margin, Float(4.0)), (Key::TabRegularWidth, Float(10.0)), (Key::TabMaxWidth, Float(30.0)), (Key::StartupDirectory, text("/srv/work")), (Key::ShellIntegration, Bool(false)), (Key::CopyOnSelect, Bool(true)), (Key::Hyperlinks, Bool(false)), (Key::LinkOpenCommand, text("xdg-open")), (Key::SmoothScroll, Bool(false)), (Key::ScrollEaseIn, Float(60.0)), (Key::ScrollRampUp, Float(80.0)), (Key::SingleScreenTau, Float(40.0)), (Key::ScrollRampDown, Float(120.0)), (Key::ScrollEaseOut, Float(180.0)), (Key::SmoothApps, Bool(false)), (Key::WheelLines, Float(5.0)), (Key::Scrollbar, Bool(false)), (Key::ScrollbarThickness, Float(12.0)), (Key::ScrollbarAutoHide, Bool(false)), (Key::Theme, text("Matrix")), (Key::ThemeMode, text("light")), (Key::ColBg, text("#9e3779")), (Key::ColFg, text("#3c6ef3")), (Key::ColCursor, text("#daa66d")), (Key::ColHighlight, text("#78dde6")), (Key::ColFocus, text("#171560")), (Key::ColMenuBg, text("#b54cda")), (Key::ColMenuFg, text("#538453")), (Key::ColDialogBg, text("#f1bbcd")), (Key::ColDialogFg, text("#8ff347")), (Key::ColGutter, text("#2e2ac0")), (Key::ColScrollbarThumb, text("#cc623a")), (Key::ColScrollbarTrough, text("#6a99b4"))]
+	}
+
+	fn assert_beta3_saved_kept(s: &Settings, when: &str) {
+		for (key, want) in beta3_rows() {
+			assert_eq!(crate::fields::get(s, key), Some(want), "{key:?} {when}");
+		}
+		assert_old_save_look_kept(s, when);
+		let shells: Vec<_> = s.shells.iter().map(|e| (e.slug.as_str(), e.command.as_str(), e.active, e.comment.as_str(), e.last_seen.as_str())).collect();
+		assert_eq!(shells, [("bash", "/bin/bash", true, "", "2026-08-20"), ("zsh", "/usr/bin/zsh -l", false, "login shell", ""),], "{when}");
+	}
+
+	// What beta2 had no row for is left out, and its default shell is the top
+	// of the list now.
+	fn assert_beta2_saved_kept(s: &Settings, when: &str) {
+		let beta3_only = [Key::TabRegularWidth, Key::TabMaxWidth, Key::StartupDirectory, Key::ShellIntegration];
+		for (key, want) in beta3_rows() {
+			if !beta3_only.contains(&key) {
+				assert_eq!(crate::fields::get(s, key), Some(want), "{key:?} {when}");
+			}
+		}
+		assert_old_save_look_kept(s, when);
+		let top = s.shells.iter().find(|e| e.active);
+		assert_eq!(top.map(|e| e.command.as_str()), Some("/usr/bin/zsh -l"), "{when}: {:?}", s.shells);
+	}
+
+	// What the beta2 and beta3 saves both set the same way.
+	fn assert_old_save_look_kept(s: &Settings, when: &str) {
+		// a look of its own, so the profile it comes up on is Custom, by hand
+		assert_eq!(crate::profile::current(s), crate::profile::Profile::Custom, "{when}");
+		assert_eq!(crate::fields::get(s, Key::PerfAuto), Some(Value::Bool(false)), "{when}");
+		let near = |a: f32, b: f32| (a - b).abs() < 1e-4;
+		assert_eq!(s.scrollback, 20000, "{when}");
+		assert!(near(s.alt_scroll_lines, 2.0), "{when}");
+		assert!(near(s.output_ease_lines, 2.0), "{when}");
+		assert!(near(s.wallpaper_rotate_interval_s, 300.0), "{when}");
+		assert!(near(s.cursor_animation_idle_stop_s, 30.0), "{when}");
+		let flags = [s.wallpaper_fallback_builtin, s.wallpaper_rotate_random, s.text_scrim_regular_weight, s.color_emoji, s.embolden_inverse];
+		assert_eq!(flags, [false; 5], "{when}");
+		assert!(s.hide_single_tab, "{when}");
+		assert_eq!((s.remembered_columns, s.remembered_rows), (140, 42), "{when}");
+		assert_eq!(s.word_separators, ",; ()", "{when}");
+		assert_eq!(s.selection_pairs, "() []", "{when}");
+		assert_eq!(s.command_line, "--new-tab", "{when}");
+
+		let [theme] = s.user_themes.as_slice() else {
+			panic!("{when}: {:?}", s.user_themes);
+		};
+		assert_eq!((theme.slug.as_str(), theme.name.as_str()), ("mine", "Mine"), "{when}");
+		let hex = |c: &str| parse_hex(c).unwrap();
+		assert_eq!(theme.dark.bg, hex("#cdab89"), "{when}");
+		assert_eq!(theme.light.gutter, hex("#2b4a59"), "{when}");
+		assert_eq!(theme.dark.ansi[0], hex("#08b35b"), "{when}");
+		assert_eq!(theme.dark.ansi[15], hex("#4df37c"), "{when}");
+		assert_eq!(theme.light.ansi[15], hex("#56a6d8"), "{when}");
+	}
+
+	// A file beta3 saved converts with every setting it had: the launch keeps
+	// the old file, loses nothing, and reads each value as beta3 did. A Settings
+	// save after that keeps them all, and the next launch has nothing to do.
+	// Test ID: der3m
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_beta3_saved_keeps_every_setting() {
+		an_old_save_keeps_every_setting(BETA3_SAVED, "beta3_saved", assert_beta3_saved_kept);
+	}
+
+	// The same for a file beta2 saved, whose default shell moves to the top of
+	// the list.
+	// Test ID: deysv
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_beta2_saved_keeps_every_setting() {
+		an_old_save_keeps_every_setting(BETA2_SAVED, "beta2_saved", assert_beta2_saved_kept);
+	}
+
+	fn an_old_save_keeps_every_setting(old: &str, what: &str, assert_kept: fn(&Settings, &str)) {
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir(what);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, old.replace("\r\n", "\n")).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		assert_eq!(take_conversion_loss(), None, "nothing lost");
+		let kept = backups_in(&dir, "config");
+		assert_eq!(kept.len(), 1, "{kept:?}");
+		assert!(is_backup_name(&kept[0], "config", 2), "{kept:?}");
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(shcl::format_version(&now), Some(shcl::FORMAT_MAJOR), "{now}");
+		assert!(config_complaints(&now).is_empty(), "{now}");
+		assert_kept(&s, "after the launch");
+
+		let mut edited = s.clone();
+		change(&mut edited, Key::Minimap, Value::Bool(false));
+		assert!(persist(&s, &edited));
+		let saved = reload_from_disk();
+		assert_kept(&saved, "after a save");
+		assert_eq!(crate::fields::get(&saved, Key::Minimap), Some(Value::Bool(false)));
+
+		let written = std::fs::read_to_string(&path).unwrap();
+		let again = load();
+		assert_kept(&again, "on the next launch");
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), written, "settled");
+		assert_eq!(backups_in(&dir, "config").len(), 1);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The template beta3 wrote on a first launch converts with nothing lost and
+	// nothing set by hand that it didn't set, so the profile stays automatic.
+	// Test ID: der3n
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_beta3_wrote_on_first_launch_stays_automatic() {
+		an_old_template_stays_automatic(BETA3_FIRST_LAUNCH, "beta3_first");
+	}
+
+	// The same for the template beta2 wrote, which set the same lines.
+	// Test ID: deysw
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_beta2_wrote_on_first_launch_stays_automatic() {
+		an_old_template_stays_automatic(BETA2_FIRST_LAUNCH, "beta2_first");
+	}
+
+	fn an_old_template_stays_automatic(old: &str, what: &str) {
+		use Value::{Bool, Float, Int};
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir(what);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, old.replace("\r\n", "\n")).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		assert_eq!(take_conversion_loss(), None, "nothing lost");
+		assert_eq!(backups_in(&dir, "config").len(), 1);
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(shcl::format_version(&now), Some(shcl::FORMAT_MAJOR), "{now}");
+		assert!(config_complaints(&now).is_empty(), "{now}");
+		assert_eq!(crate::fields::get(&s, Key::PerfAuto), Some(Value::Bool(true)));
+		assert!(!crate::fields::by_hand(&s, Key::PerfAuto) && !crate::fields::by_hand(&s, Key::PerfProfile));
+		// the template's own active lines
+		for (key, want) in [(Key::SystemFont, Bool(true)), (Key::LineHeight, Float(1.22)), (Key::Margin, Float(8.0)), (Key::Columns, Int(160)), (Key::Rows, Int(48)), (Key::Opacity, Float(0.95)), (Key::ScrollEaseIn, Float(82.0)), (Key::ScrollRampUp, Float(96.0)), (Key::SingleScreenTau, Float(32.0)), (Key::ScrollRampDown, Float(144.0)), (Key::ScrollEaseOut, Float(212.0)), (Key::WheelLines, Float(3.0)), (Key::Theme, Value::Text("SilkTerm".into())), (Key::ThemeMode, Value::Text("dark".into()))] {
+			assert_eq!(crate::fields::get(&s, key), Some(want), "{key:?}");
+		}
+		assert_eq!(s.scrollback, 10000);
+		assert!((s.alt_scroll_lines - 3.0).abs() < 1e-4);
+		assert!((s.output_ease_lines - 1.0).abs() < 1e-4);
+		let _ = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// What the released v1.0.0-beta3 binary made of beta2's 2 files at its
+	// launch: the shell list from `shell.default`, and beta3's new settings as
+	// comments. A beta2 user who then ran beta3 has one of these.
+	const BETA2_FIRST_LAUNCH_VIA_BETA3: &str = include_str!("testdata/beta2_first_launch_via_beta3.shcl");
+	const BETA2_SAVED_VIA_BETA3: &str = include_str!("testdata/beta2_saved_via_beta3.shcl");
+
+	// A beta2 save that beta3 launched converts as one beta2 left does.
+	// Test ID: dfhf3
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_beta2_file_beta3_launched_keeps_every_setting() {
+		an_old_save_keeps_every_setting(BETA2_SAVED_VIA_BETA3, "beta2_saved_b3", assert_beta2_saved_kept);
+	}
+
+	// The same for beta2's template after a beta3 launch.
+	// Test ID: dfhf4
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_beta2_template_beta3_launched_stays_automatic() {
+		an_old_template_stays_automatic(BETA2_FIRST_LAUNCH_VIA_BETA3, "beta2_first_b3");
+	}
+
+	// The settings a launch reads from `old` and how many it said it lost. The
+	// folder is the same on every call, so paths read from it compare equal. A
+	// second launch must leave the file and the settings as they are.
+	fn upgraded(old: &[u8], what: &str) -> (Settings, Option<usize>) {
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("upgpath");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, old).unwrap();
+		set_config_override(path.clone());
+		let s = load();
+		let lost = take_conversion_loss().map(|loss| loss.lost);
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(shcl::format_version(&now), Some(shcl::FORMAT_MAJOR), "{what}:\n{now}");
+		let again = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "{what}: settled");
+		assert!(again == s, "{what}: the next launch reads it the same");
+		let _ = std::fs::remove_dir_all(&dir);
+		(s, lost)
+	}
+
+	// Where 2 launches read a file differently, setting by setting, then the
+	// rest of `Settings` line by line.
+	fn settings_diff(a: &Settings, b: &Settings) -> Vec<String> {
+		let mut out: Vec<String> = crate::fields::FIELDS
+			.iter()
+			.filter_map(|f| {
+				let (x, y) = ((crate::fields::get(a, f.key), crate::fields::by_hand(a, f.key)), (crate::fields::get(b, f.key), crate::fields::by_hand(b, f.key)));
+				(x != y).then(|| format!("{:?}: {x:?} vs {y:?}", f.key))
+			})
+			.collect();
+		if out.is_empty() && a != b {
+			let (x, y) = (format!("{a:#?}"), format!("{b:#?}"));
+			out.extend(x.lines().zip(y.lines()).filter(|(x, y)| x != y).take(10).map(|(x, y)| format!("{} vs {}", x.trim(), y.trim())));
+			if out.is_empty() {
+				out.push("differ".to_string());
+			}
+		}
+		out
+	}
+
+	// Every config file a release wrote, by its name in testdata.
+	const RELEASE_FILES: [(&str, &str); 6] = [("beta2_first_launch.shcl", BETA2_FIRST_LAUNCH), ("beta2_saved.shcl", BETA2_SAVED), ("beta2_first_launch_via_beta3.shcl", BETA2_FIRST_LAUNCH_VIA_BETA3), ("beta2_saved_via_beta3.shcl", BETA2_SAVED_VIA_BETA3), ("beta3_first_launch.shcl", BETA3_FIRST_LAUNCH), ("beta3_saved.shcl", BETA3_SAVED)];
+
+	// Every route a released file can take to the current format ends on the
+	// same settings. A first launch's template from beta2, from beta3, or from
+	// beta2 and then beta3 reads the same, and so does a beta2 save converted
+	// directly or after a beta3 launch. Each settles and loses nothing, and so
+	// does a beta3 save, which has only the one route. `releases.tsv` lists the
+	// same files, and cicd checks that every release tag has a row there, so a
+	// new release's files have to join a route here.
+	// Test ID: dfhf5
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_route_from_a_release_ends_the_same() {
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let groups: [(&str, &[(&str, &str)]); 3] = [("a first launch", &[("beta2", "beta2_first_launch.shcl"), ("beta3", "beta3_first_launch.shcl"), ("beta2 then beta3", "beta2_first_launch_via_beta3.shcl")]), ("a beta2 save", &[("beta2", "beta2_saved.shcl"), ("beta2 then beta3", "beta2_saved_via_beta3.shcl")]), ("a beta3 save", &[("beta3", "beta3_saved.shcl")])];
+		let listed: std::collections::BTreeSet<&str> = include_str!("testdata/releases.tsv").lines().filter_map(|line| line.split_once('\t')).flat_map(|(_, files)| files.split_whitespace()).collect();
+		let here: std::collections::BTreeSet<&str> = RELEASE_FILES.iter().map(|(name, _)| *name).collect();
+		assert_eq!(listed, here, "releases.tsv and RELEASE_FILES");
+		let routed: std::collections::BTreeSet<&str> = groups.iter().flat_map(|(_, routes)| routes.iter().map(|(_, name)| *name)).collect();
+		assert_eq!(routed, here, "every release file is on a route");
+		for (what, routes) in groups {
+			let mut first: Option<(&str, Settings)> = None;
+			for (route, name) in routes {
+				let label = format!("{what} from {route}");
+				let old = RELEASE_FILES.iter().find(|(file, _)| file == name).map(|(_, text)| *text).unwrap();
+				let (s, lost) = upgraded(old.replace("\r\n", "\n").as_bytes(), &label);
+				assert_eq!(lost, None, "{label}");
+				if let Some((was, before)) = &first {
+					let diff = settings_diff(before, &s);
+					assert!(diff.is_empty(), "{label} against {was}:\n{}", diff.join("\n"));
+				} else {
+					first = Some((route, s));
+				}
+			}
+		}
+	}
+
+	// A value for one setting that differs from its default, of the type the
+	// template's line for it has, for the paths the tables name.
+	fn sample_value(path: &str) -> String {
+		match path {
+			"shell.default" => return "\"/usr/bin/zsh -l\"".to_string(),
+			"window.remembered_columns" => return "140".to_string(),
+			"window.remembered_rows" => return "42".to_string(),
+			"window.remembered_maximized" => return "true".to_string(),
+			"window.remembered_font_zoom" => return "2".to_string(),
+			"performance.rated_hardware" => return "\"gpu 1\"".to_string(),
+			"cursor.blink_rate_ms" => return "400".to_string(),
+			_ if path.starts_with("window.tab_shows_") => return "false".to_string(),
+			_ => {}
+		}
+		let template = default_config();
+		let lines: Vec<&str> = template.lines().collect();
+		let found = walk_settings(template).into_iter().find_map(|w| match w {
+			WalkLine::Setting { index, path: p, header: false, .. } if p == path => line_setting_value(lines[index]).map(strip_trailing_comment),
+			_ => None,
+		});
+		let value = found.unwrap_or("5").trim();
+		// a backslash reads differently in 2.x, and that is a test of its own
+		if value.contains('\\') {
+			return "\"; ()\"".to_string();
+		}
+		let value = value.to_string();
+		if value == "true" {
+			return "false".to_string();
+		}
+		if value == "false" {
+			return "true".to_string();
+		}
+		if value.starts_with("\"#") {
+			return "\"#123456\"".to_string();
+		}
+		if let Ok(n) = value.parse::<i64>() {
+			return (n + 1).to_string();
+		}
+		if let Ok(n) = value.parse::<f64>() {
+			return format!("{:.3}", n * 0.75 + 0.5);
+		}
+		value
+	}
+
+	// Settings under dotted names as nested lines, each block written once.
+	fn nested_lines(settings: &[(String, String)]) -> String {
+		let mut sorted = settings.to_vec();
+		sorted.sort();
+		let mut out = String::new();
+		let mut open: Vec<String> = Vec::new();
+		for (path, value) in &sorted {
+			let parts: Vec<&str> = path.split('.').collect();
+			let same = open.iter().zip(&parts).take_while(|(a, b)| a.as_str() == **b).count();
+			open.truncate(same);
+			for (depth, part) in parts.iter().enumerate().skip(same) {
+				out.push_str(&"\t".repeat(depth));
+				out.push_str(part);
+				out.push(':');
+				if depth + 1 == parts.len() {
+					out.push(' ');
+					out.push_str(value);
+				} else {
+					open.push((*part).to_string());
+				}
+				out.push('\n');
+			}
+		}
+		out
+	}
+
+	// One old setting: its lines under the old name, the name it reads as today,
+	// and whether it is from before the nested layout.
+	struct OldSetting {
+		lines: Vec<(String, String)>,
+		new: String,
+		flat: bool,
+	}
+
+	// Every renamed, converted, retired, and pre-nesting name, read from the
+	// tables, so a new entry joins on its own.
+	fn old_settings() -> Vec<OldSetting> {
+		let one = |old: &str, new: &str, flat| OldSetting { lines: vec![(old.to_string(), sample_value(new))], new: new.to_string(), flat };
+		let mut out = Vec::new();
+		for (old, new) in CONFIG_RENAMES {
+			out.push(one(old, new, false));
+		}
+		for (old, ..) in CONFIG_CONVERTS {
+			out.push(one(old, old, false));
+		}
+		for path in CONFIG_REMOVED {
+			if *path == "window.monitors" {
+				let at = "window.monitors.\"1920x1080_100pct\"";
+				out.push(OldSetting { lines: vec![(format!("{at}.columns"), "100".to_string()), (format!("{at}.rows"), "30".to_string())], new: (*path).to_string(), flat: false });
+			} else {
+				out.push(one(path, path, false));
+			}
+		}
+		for (old, new) in LEGACY_KEYS {
+			out.push(one(old, new, true));
+		}
+		out
+	}
+
+	// The old settings as a few files, so the matrix stays quick. 2 names that
+	// read as one setting go in different files, and so do flat and nested
+	// names, since one flat name makes a whole file pre-nesting. `kept` is what a
+	// launch makes of a theme color in a file from before shcl 3, written as
+	// today's save would.
+	struct OldFile {
+		names: Vec<String>,
+		flat: bool,
+		body: String,
+		today: String,
+		kept: String,
+	}
+
+	fn old_files() -> Vec<OldFile> {
+		use std::fmt::Write;
+		let mut groups: Vec<Vec<OldSetting>> = Vec::new();
+		for setting in old_settings() {
+			let free = groups.iter().position(|group| group[0].flat == setting.flat && group.iter().all(|other| other.new != setting.new));
+			match free {
+				Some(at) => groups[at].push(setting),
+				None => groups.push(vec![setting]),
+			}
+		}
+		groups
+			.into_iter()
+			.map(|group| {
+				let lines: Vec<(String, String)> = group.iter().flat_map(|s| s.lines.iter().cloned()).collect();
+				// A flat name is only ever in a file from before shcl 3, where the
+				// same setting today is under its nested name. A retired one is
+				// left under it, for the launch to move.
+				let (body, today) = if group[0].flat {
+					let new: Vec<(String, String)> = group.iter().map(|s| (s.new.clone(), s.lines[0].1.clone())).collect();
+					let mut body = String::new();
+					for (old, value) in &lines {
+						let _ = writeln!(body, "{old}: {value}");
+					}
+					(body, nested_lines(&new))
+				} else {
+					let body = nested_lines(&lines);
+					(body.clone(), body)
+				};
+				let mut kept: Vec<(String, String)> = group
+					.iter()
+					.filter(|s| s.new.strip_prefix("colors.").is_some_and(|key| crate::theme::PALETTE_KEYS.contains(&key)))
+					.map(|s| {
+						let at = format!("kept.changes.{}.values.{}", crate::fields::THEME, s.new);
+						(at, s.lines[0].1.clone())
+					})
+					.collect();
+				if !kept.is_empty() {
+					let at = format!("kept.changes.{}.preset", crate::fields::THEME);
+					kept.push((at, "SilkTerm".to_string()));
+				}
+				OldFile { names: lines.into_iter().map(|(old, _)| old).collect(), flat: group[0].flat, body, today, kept: nested_lines(&kept) }
+			})
+			.collect()
+	}
+
+	// Each form an old file can take: the footers of every shcl release, no
+	// footer, Windows line ends, the spellings of a 3.0 build from before beta1,
+	// and the 2 that are written new from the template, one shcl can't migrate
+	// and one that isn't UTF-8. Each gives the old file, the same settings
+	// written today, and how many lines it can't copy.
+	struct Era {
+		name: &'static str,
+		old: fn(&str) -> Vec<u8>,
+		now: fn(&str) -> String,
+		before_3: bool,
+		lost: usize,
+	}
+
+	// 3.0 betas wrote a theme's colors as a comma list, which beta1 reads as an
+	// error and turns into a list.
+	const ANSI: [&str; 16] = ["#000000", "#111111", "#222222", "#333333", "#444444", "#555555", "#666666", "#777777", "#888888", "#999999", "#aaaaaa", "#bbbbbb", "#cccccc", "#dddddd", "#eeeeee", "#ffffff"];
+	fn beta_theme(list: &str) -> String {
+		format!("themes:\n\tupgpath:\n\t\tname: Upgrade path\n\t\tdark:\n\t\t\tansi: {list}\n")
+	}
+	fn quoted_ansi() -> Vec<String> {
+		ANSI.iter().map(|c| format!("\"{c}\"")).collect()
+	}
+
+	fn with_footer(body: &str, footer: &str) -> String {
+		if footer.is_empty() { body.to_string() } else { format!("{body}\n{footer}") }
+	}
+
+	const ERAS: [Era; 9] = [
+		Era { name: "the first 3.0 footer", old: |body| with_footer(body, SHCL_BANNER_OLD_V3).into_bytes(), now: str::to_string, before_3: false, lost: 0 },
+		Era {
+			name: "a 3.0 build from before beta1",
+			old: |body| {
+				let list = quoted_ansi().join(", ");
+				with_footer(&format!("{body}{}", beta_theme(&list)), SHCL_BANNER_OLD_V3).into_bytes()
+			},
+			now: |body| {
+				let list = format!("[{}]", quoted_ansi().join(", "));
+				format!("{body}{}", beta_theme(&list))
+			},
+			before_3: false,
+			lost: 0,
+		},
+		Era { name: "shcl 2.x", old: |body| with_footer(body, SHCL_BANNER_OLD_MAIN).into_bytes(), now: str::to_string, before_3: true, lost: 0 },
+		Era { name: "shcl 2.x with Windows line ends", old: |body| with_footer(body, SHCL_BANNER_OLD_MAIN).replace('\n', "\r\n").into_bytes(), now: str::to_string, before_3: true, lost: 0 },
+		Era { name: "shcl before the yottacore move", old: |body| with_footer(body, SHCL_BANNER_OLD_HOME).into_bytes(), now: str::to_string, before_3: true, lost: 0 },
+		Era { name: "shcl 1.x", old: |body| with_footer(body, SHCL_BANNER_OLD).into_bytes(), now: str::to_string, before_3: true, lost: 0 },
+		Era { name: "no footer", old: |body| body.as_bytes().to_vec(), now: str::to_string, before_3: true, lost: 0 },
+		Era {
+			name: "shcl 2.x that shcl can't migrate",
+			old: |body| {
+				let open = "notes: ```\nwritten before the block was closed\n";
+				with_footer(&format!("{body}{open}"), SHCL_BANNER_OLD_MAIN).into_bytes()
+			},
+			now: str::to_string,
+			before_3: true,
+			lost: 1,
+		},
+		Era {
+			name: "shcl 2.x that isn't UTF-8",
+			old: |body| {
+				let mut out = b"## caf\xe9\n".to_vec();
+				out.extend(with_footer(body, SHCL_BANNER_OLD_MAIN).into_bytes());
+				out
+			},
+			now: str::to_string,
+			before_3: true,
+			lost: 0,
+		},
+	];
+
+	// Routes that are known to read a file wrong, as (era, flat names, backlog
+	// ID). Each must still fail, so its entry goes with the fix.
+	const KNOWN_GAPS: [(&str, bool, &str); 6] = [("shcl 2.x", true, "2026111917532694"), ("shcl 2.x with Windows line ends", true, "2026111917532694"), ("shcl before the yottacore move", true, "2026111917532694"), ("shcl 1.x", true, "2026111917532694"), ("no footer", true, "2026111917532694"), ("shcl 2.x that isn't UTF-8", true, "2026111917532694")];
+
+	// Every old setting the tables know, in a file from every format, reads after
+	// one launch as the same setting written today does, loses only what the
+	// format itself can't keep, and settles. A file from before shcl 3 is
+	// compared with today's file as that launch marks it, since it is from
+	// before the profiles: a look set by hand comes up as Custom, and its theme
+	// colors as changes to the theme. Flat names only come in files from before
+	// shcl 3.
+	// Test ID: dfhf6
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_old_setting_upgrades_the_same_from_every_format() {
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let mut failed = Vec::new();
+		let mut gap_seen = [false; KNOWN_GAPS.len()];
+		for (n, file) in old_files().iter().enumerate() {
+			let kind = if file.flat { "flat" } else { "nested" };
+			let case = format!("{kind} file {n}");
+			let mut wrong = Vec::new();
+			for era in ERAS.iter().filter(|era| era.before_3 || !file.flat) {
+				let label = format!("{case} from {}", era.name);
+				let now = (era.now)(&file.today);
+				let now = if era.before_3 {
+					let now = format!("{now}{}", file.kept);
+					with_own_look(&now, now.clone())
+				} else {
+					now
+				};
+				let (want, want_lost) = upgraded(with_footer(&now, SHCL_BANNER).as_bytes(), &format!("{label}, today"));
+				let (got, lost) = upgraded(&(era.old)(&file.body), &label);
+				let mut here = settings_diff(&want, &got);
+				let want_lost = want_lost.unwrap_or(0) + era.lost;
+				if lost.unwrap_or(0) != want_lost {
+					here.push(format!("lost {lost:?}, not {want_lost}"));
+				}
+				if here.is_empty() {
+					continue;
+				}
+				let gap = KNOWN_GAPS.iter().position(|(name, flat, _)| *name == era.name && *flat == file.flat);
+				match gap {
+					Some(at) => gap_seen[at] = true,
+					None => wrong.push(format!("{label}:\n\t{}", here.join("\n\t"))),
+				}
+			}
+			if !wrong.is_empty() {
+				failed.push(format!("{case}: {}", file.names.join(", ")));
+				failed.extend(wrong);
+			}
+		}
+		for ((era, flat, id), seen) in KNOWN_GAPS.iter().zip(gap_seen) {
+			if !seen {
+				let kind = if *flat { "flat" } else { "nested" };
+				failed.push(format!("{kind} names from {era} read right now; drop the gap for {id}"));
+			}
+		}
+		assert!(failed.is_empty(), "{}", failed.join("\n"));
+	}
+
+	// The 3.0 beta era must reach `from_a_beta`, and the 2 written new must be
+	// written new, or the matrix above passes on routes it never took.
+	// Test ID: dfhf7
+	#[test]
+	fn every_era_takes_its_own_route() {
+		let body = "font:\n\tsize: 15\n";
+		let route = |name: &str| {
+			let era = ERAS.iter().find(|e| e.name == name).unwrap();
+			upgrade(&(era.old)(body))
+		};
+		assert!(matches!(route("a 3.0 build from before beta1"), Upgrade::InPlace { .. }));
+		assert!(matches!(route("shcl 2.x that shcl can't migrate"), Upgrade::Rewritten { .. }));
+		assert!(!matches!(route("shcl 2.x that isn't UTF-8"), Upgrade::Current | Upgrade::InPlace { .. }));
+		for name in ["shcl 2.x", "shcl 1.x", "no footer", "shcl before the yottacore move"] {
+			assert!(matches!(route(name), Upgrade::InPlace { .. }), "{name}");
+		}
+		assert_eq!(route("the first 3.0 footer"), Upgrade::Current);
+	}
+
+	const BETA1_SAVED: &str = include_str!("testdata/beta1_saved.toml");
+	const BETA1_FIRST_LAUNCH: &str = include_str!("testdata/beta1_first_launch.toml");
+
+	// The TOML that beta1 wrote reads as its settings, and a line in any other
+	// shape is skipped.
+	// Test ID: df4rw
+	#[test]
+	fn a_beta1_toml_line_reads_as_its_setting() {
+		use TomlValue::{Bool, Float, Int, Text};
+		let text = concat!("# comment\n", "use_system_font = false\n", "font_size = 15.5  ## trailing\n", "opacity = .9\n", "scrollback = 10_000\n", "wallpaper = \"C:\\\\pics\\\\a \\\"b\\\" \\u00e9.png\"\n", "word_separators = ',|\"'\n", "rows = [1, 2]\n", "columns = 80 junk\n", "margin = 1979-05-27\n", "font_size = 9.0\n", "[colors]\n", "focus = \"#ff8800\"  # warmer\n", "[themes.\"My Theme\"]\n", "background = '#202020'\n", "[[shells]]\n", "command = \"zsh\"\n",);
+		assert_eq!(beta1_values(text), vec![("use_system_font".to_string(), Bool(false)), ("font_size".to_string(), Float(15.5)), ("opacity".to_string(), Float(0.9)), ("scrollback".to_string(), Int(10000)), ("wallpaper".to_string(), Text("C:\\pics\\a \"b\" \u{e9}.png".to_string())), ("word_separators".to_string(), Text(",|\"".to_string())), ("colors.focus".to_string(), Text("#ff8800".to_string())), (format!("themes.{}.background", shcl::quote_segment("My Theme")), Text("#202020".to_string())),]);
+	}
+
+	// A launch with no settings file but a beta1 `config.toml` beside it reads
+	// its values, once. The old file is renamed, a setting this build doesn't
+	// have is skipped, and a bad value keeps the default.
+	// Test ID: df4rx
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_beta1_config_is_imported_once() {
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("beta1_saved");
+		let path = dir.join("config.shcl");
+		let toml = dir.join("config.toml");
+		std::fs::write(&toml, BETA1_SAVED).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		assert!(!toml.exists(), "renamed");
+		let names = dir_names(&dir);
+		let kept: Vec<&String> = names.iter().filter(|name| name.starts_with("config_backup_") && name.ends_with("_beta1.toml")).collect();
+		assert_eq!(kept.len(), 1, "{names:?}");
+		assert_eq!(std::fs::read_to_string(dir.join(kept[0])).unwrap(), BETA1_SAVED);
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(shcl::format_version(&now), Some(shcl::FORMAT_MAJOR), "{now}");
+		let doc = shcl::Document::parse(&now);
+		let text = |at: &str| doc.get_string(at).unwrap_or_default();
+		assert_eq!(doc.get_bool("font.use_system_family"), Ok(false), "{now}");
+		assert_eq!(text("font.family"), "JetBrains Mono, Fira Code");
+		assert_eq!(doc.get_float("font.size"), Ok(15.5));
+		assert_eq!(doc.get_int("window.columns"), Ok(132));
+		assert_eq!(doc.get_float("transparency.opacity"), Ok(0.9));
+		assert_eq!(text("wallpaper.image"), "C:\\Users\\me\\Pictures\\sea \"blue\".png");
+		assert_eq!(text("cursor.animation"), "phase");
+		assert_eq!(doc.get_float("cursor.blink_rate_s"), Ok(0.8));
+		assert_eq!(text("theme_mode"), "light");
+		assert_eq!(text("colors.background"), "#101010");
+		// beta1's one attention color is `highlight` now
+		assert_eq!(text("colors.highlight"), "#ff8800");
+		assert!(!now.contains("cursor_animation_input"), "{now}");
+		// the grid shows the remembered size, so the file's own is read
+		let (raw, said) = read_config_text(&now, &path);
+		assert_eq!(raw.columns, Some(132));
+		assert_eq!(raw.rows, None, "a bad value keeps the default");
+		assert!(said.iter().any(|line| line.contains("window.rows")), "{said:?}");
+		assert_eq!(s.scrollback, Settings::default().scrollback);
+		assert_eq!(s.shells.iter().find(|e| e.active).map(|e| e.command.as_str()), Some("bash --norc"), "{:?}", s.shells);
+
+		// a later launch has nothing to read, even with a config.toml back
+		std::fs::write(&toml, "columns = 99\n").unwrap();
+		let again = load();
+		assert!((again.font_size - 15.5).abs() < 1e-4);
+		assert!(toml.exists());
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The template beta1 wrote on a first launch imports with nothing set by
+	// hand that it didn't set, so the profile stays automatic and the file
+	// says nothing at launch.
+	// Test ID: df4ry
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_beta1_first_launch_config_stays_automatic() {
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let dir = format_test_dir("beta1_first");
+		let path = dir.join("config.shcl");
+		std::fs::write(dir.join("config.toml"), BETA1_FIRST_LAUNCH).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert!(config_complaints(&now).is_empty(), "{now}");
+		assert_eq!(crate::fields::get(&s, Key::PerfAuto), Some(Value::Bool(true)));
+		let (raw, _) = read_config_text(&now, &path);
+		assert_eq!((raw.columns, raw.rows), (Some(160), Some(48)));
+		assert_eq!(s.scrollback, 10000);
+		let _ = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A test run moves no pre-layout or beta1 file out of the box's own
+	// folder, which off Linux is ~/.config/silkterm, though its settings go
+	// to a folder of the test's own. A folder of its own stands in for the
+	// box's here.
+	// Test ID: df4we
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_test_run_never_moves_an_old_config_from_the_boxs_folder() {
+		struct PutBack;
+		impl Drop for PutBack {
+			fn drop(&mut self) {
+				*crate::locks::lock(test_native_config()) = None;
+			}
+		}
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let home = format_test_dir("boxlegacy");
+		let own = home.join(APP_DIR);
+		std::fs::create_dir_all(&own).unwrap();
+		let legacy = own.join("config.shcl");
+		let toml = own.join("config.toml");
+		std::fs::write(&legacy, "font:\n\tsize: 12\n").unwrap();
+		std::fs::write(&toml, BETA1_SAVED).unwrap();
+		let new_dir = format_test_dir("boxlegacy_new");
+		let path = new_dir.join("config.shcl");
+		set_config_override(path.clone());
+		let put_back = PutBack;
+		*crate::locks::lock(test_native_config()) = Some(legacy.clone());
+
+		adopt_config_from(&path, &legacy);
+		import_beta1_config_from(&path, vec![path.with_extension("toml"), toml.clone()]);
+		assert_eq!(dir_names(&own), ["config.shcl", "config.toml"]);
+		assert_eq!(std::fs::read_to_string(&toml).unwrap(), BETA1_SAVED);
+		assert!(dir_names(&new_dir).is_empty(), "{:?}", dir_names(&new_dir));
+		// asked only, never written
+		if let Some(home) = home_dir() {
+			let real = home.join(".config").join(APP_DIR);
+			assert!(!may_write(&real.join("config.shcl")));
+			assert!(!may_write(&real.join("config.toml")));
+		}
+
+		// the same files outside the box's folder move
+		drop(put_back);
+		import_beta1_config_from(&path, vec![toml.clone()]);
+		assert!(path.exists() && !toml.exists());
+		std::fs::remove_file(&path).unwrap();
+		adopt_config_from(&path, &legacy);
+		assert!(path.exists() && !legacy.exists());
+		let _ = std::fs::remove_dir_all(&home);
+		let _ = std::fs::remove_dir_all(&new_dir);
+	}
+
+	// A move across volumes copies the old file, under a name of its own first,
+	// and never over a file already at the new place, such as a second launch's.
+	// The old file stays when the copy can't be made. A launch adopts under the
+	// save lock.
+	// Test ID: dfeh1
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_old_config_copied_across_volumes_is_whole_and_replaces_nothing() {
+		fn across(_: &std::path::Path, _: &std::path::Path) -> std::io::Result<()> {
+			Err(std::io::ErrorKind::CrossesDevices.into())
+		}
+		fn raced(_: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+			std::fs::write(to, "font:\n\tsize: 20\n")?;
+			across(to, to)
+		}
+		let _guard = test_config_lock();
+		let dir = format_test_dir("adoptcopy");
+		let legacy = dir.join("old").join("config.shcl");
+		let new_dir = dir.join("new");
+		let native = new_dir.join("config.shcl");
+		std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+		let old = "font:\n\tsize: 12\n";
+		std::fs::write(&legacy, old).unwrap();
+
+		adopt_config_with(&native, &legacy, across);
+		assert_eq!(std::fs::read_to_string(&native).unwrap(), old);
+		assert!(!legacy.exists());
+		assert_eq!(dir_names(&new_dir), ["config.shcl"], "no temp file left");
+
+		std::fs::remove_file(&native).unwrap();
+		std::fs::write(&legacy, old).unwrap();
+		adopt_config_with(&native, &legacy, raced);
+		assert_eq!(std::fs::read_to_string(&native).unwrap(), "font:\n\tsize: 20\n", "the other launch's file isn't copied over");
+		assert_eq!(std::fs::read_to_string(&legacy).unwrap(), old, "the old one stays");
+		assert_eq!(dir_names(&new_dir), ["config.shcl"], "no temp file left");
+
+		// a Windows checkout has CRLF line ends
+		let src = include_str!("config.rs").replace("\r\n", "\n");
+		let body = &src[src.find("\nfn load() -> Settings {").expect("load")..];
+		let locked = body.find("save_lock()").expect("the lock");
+		let adopted = body.find("adopt_legacy_config();").expect("the adopt");
+		assert!(locked < adopted, "load adopts before it takes the save lock");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Only a file from before the profiles, with a look of its own, comes up on
+	// Custom. A later file says what it wants, and an untouched one stays put.
+	// Test ID: der3p
+	#[test]
+	fn only_a_look_set_before_the_profiles_comes_up_custom() {
+		let old = "scroll:\n\tsmooth: false\n";
+		let custom = |text: &str| {
+			let doc = shcl::Document::parse(&next_launch_text(text));
+			(doc.get_string("performance.profile").ok(), doc.get_bool("performance.automatic").ok())
+		};
+		assert_eq!(custom(old), (Some("custom".into()), Some(false)));
+		assert_eq!(custom("scroll:\n\tsmooth: true\n"), (None, None), "Max silk's value");
+		// beta3 wrote a float with no point when it had none
+		assert_eq!(custom("wallpaper:\n\tblur: 10\n"), (None, None), "10 is 10.0");
+		assert_eq!(custom("font:\n\tsize: 12\n"), (None, None), "no profile row");
+		let chose = "scroll:\n\tsmooth: false\nperformance:\n\t# profile: \"max\"  ## Default\n";
+		assert_eq!(custom(chose), (None, None), "a file from after the profiles");
+		let current = next_launch_text(old).into_owned();
+		assert_eq!(next_launch_text(&current), current, "settles");
+	}
+}
+
+// Windows sharing one settings file (peers.rs).
+#[cfg(test)]
+mod peer_tests {
+	use super::*;
+	use crate::ui_spec::Key;
+	use knobs::Value;
+
+	// as a launch reads it
+	fn read_text(text: &str) -> Settings {
+		let p = std::path::Path::new("test.shcl");
+		settled(resolve(read_raw(text, p).0), &shcl::Document::parse(text))
+	}
+
+	fn own(s: &Settings, key: Key) -> Option<Value> {
+		s.model.values.own.get(key.name()).cloned()
+	}
+
+	fn scratch_config(name: &str, text: &str) -> PathBuf {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_{name}_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, text).unwrap();
+		set_config_override(path.clone());
+		let _ = load(); // the launch's own writes, out of the way
+		path
+	}
+
+	// Every window saves what it changed over what it loaded, at the same
+	// moment as the others, and each change is in the file after.
+	// Test ID: ddwnd
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn saves_at_the_same_moment_keep_each_others_change() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let path = scratch_config("peersaves", "performance:\n\tautomatic: false\n");
+		// each in its slider's range for every round
+		let keys = [(Key::Margin, 1.0, 5.0), (Key::WheelLines, 1.0, 1.0), (Key::MinimapWidth, 100.0, 10.0), (Key::ScrollbarThickness, 10.0, 7.0)];
+		for round in 1..=6u32 {
+			let start = std::sync::Arc::new(std::sync::Barrier::new(keys.len()));
+			let windows: Vec<_> = keys
+				.iter()
+				.map(|&(key, base, step)| {
+					let start = start.clone();
+					std::thread::spawn(move || {
+						let loaded = load();
+						let mut edited = loaded.clone();
+						let v = base + step * f64::from(round);
+						crate::fields::set(&mut edited, key, &Value::Float(v), None);
+						start.wait();
+						assert!(persist(&loaded, &edited));
+						v
+					})
+				})
+				.collect();
+			let wanted: Vec<f64> = windows.into_iter().map(|w| w.join().unwrap()).collect();
+			let back = load();
+			for ((key, ..), v) in keys.iter().zip(wanted) {
+				let got = own(&back, *key).map(|got| got.as_f64());
+				assert_eq!(got, Some(v), "round {round}: {key:?} was lost");
+			}
+		}
+		let _ = std::fs::remove_dir_all(path.parent().unwrap());
+	}
+
+	// The others hear of a write to the settings file, and never of the state
+	// file, which has this window's size.
+	// Test ID: ddwne
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn only_a_settings_write_is_news() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let path = scratch_config("peersaid", "");
+		let loaded = load();
+		let before = saves();
+		let mut sized = loaded.clone();
+		sized.remembered_columns += 7;
+		assert!(persist(&loaded, &sized));
+		assert_eq!(saves(), before, "a size is not a setting");
+		let mut edited = sized.clone();
+		crate::fields::set(&mut edited, Key::Minimap, &Value::Bool(!sized.minimap), None);
+		assert!(persist(&sized, &edited));
+		assert_eq!(saves(), before + 1);
+		let _ = std::fs::remove_dir_all(path.parent().unwrap());
+	}
+
+	// What another window's save leaves of this one: its size and the state
+	// file's lines, and the picture rotation chose, until the save names
+	// another picture or folder.
+	// Test ID: ddwnf
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_reload_for_another_window_keeps_this_windows_own() {
+		let folder = |dir: &str| format!("wallpaper:\n\trotate:\n\t\tfolder: \"{dir}\"\n");
+		let mut live = read_text(&folder("/pics/a"));
+		live.remembered_columns = 111;
+		live.remembered_rows = 33;
+		live.remembered_font_zoom = 2;
+		live.rated_hardware = "this box".into();
+		live.wallpaper = Some(PathBuf::from("/pics/a/3.png"));
+
+		let mut same = read_text(&format!("{}font:\n\tsize: 20\n", folder("/pics/a")));
+		keep_window_state(&live, &mut same);
+		assert_eq!((same.remembered_columns, same.remembered_rows), (111, 33));
+		assert_eq!(same.remembered_font_zoom, 2);
+		assert_eq!(same.rated_hardware, "this box");
+		assert_eq!(same.wallpaper, live.wallpaper, "the pick stays");
+
+		let mut moved = read_text(&folder("/pics/b"));
+		keep_window_state(&live, &mut moved);
+		assert_eq!(moved.wallpaper, None, "another folder picks again");
+
+		let mut named = read_text(&format!("{}\timage: \"/pics/one.png\"\n", folder("/pics/a")));
+		keep_window_state(&live, &mut named);
+		// Windows puts the config dir's drive on a path with none
+		assert_eq!(named.wallpaper, resolve_wallpaper(Some("/pics/one.png")));
+		assert_ne!(named.wallpaper, live.wallpaper);
+	}
+
+	// Another window's save of a view switch is for new windows. This one
+	// keeps what it shows, both ways, and still takes the rest of the save.
+	// Test ID: ddxj7
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn another_windows_save_leaves_this_windows_view() {
+		let off = "shell:\n\tcopy_on_select: false\nscroll:\n\tminimap:\n\t\tenabled: false\n\
+			window:\n\thide_single_tab: true\n\tmenu_bar: false\n";
+		let lean = read_text(off);
+		let stock = read_text("");
+		assert!(stock.copy_on_select && stock.minimap && !stock.hide_single_tab && stock.menu_bar);
+
+		let mut fresh = read_text("window:\n\tmargin: 21\n");
+		keep_window_view(&lean, &mut fresh);
+		assert!(!fresh.copy_on_select);
+		assert!(!fresh.minimap);
+		assert!(fresh.hide_single_tab);
+		assert!(!fresh.menu_bar);
+		assert_eq!(fresh.margin, 21.0, "the rest of the save");
+
+		let mut fresh = read_text(&format!("{off}\tmargin: 22\n"));
+		keep_window_view(&stock, &mut fresh);
+		assert!(fresh.copy_on_select);
+		assert!(fresh.minimap);
+		assert!(!fresh.hide_single_tab);
+		assert!(fresh.menu_bar);
+		assert_eq!(own(&fresh, Key::Minimap), own(&stock, Key::Minimap));
+		assert_eq!(fresh.margin, 22.0);
+	}
+
+	// Test ID: debfb
+	#[test]
+	fn a_release_build_shows_the_number_alone() {
+		let label = build_label_for("3x7k2", true, 0, |_| panic!("a release has no date"));
+		assert_eq!(label, "3x7k2");
+	}
+
+	// Test ID: debfc
+	#[test]
+	fn a_non_release_build_shows_the_local_date_after_the_number() {
+		let label = build_label_for("3x7k2", false, 1_000, |at| format!("date-of-{at}"));
+		assert_eq!(label, "3x7k2 (date-of-1000)");
+		// the real thing: ASCII digits, dashed, and the baked-in instant
+		let shown = local_date(env!("SILK_BUILD_UNIX").parse().unwrap());
+		let parts: Vec<&str> = shown.split('-').collect();
+		assert_eq!(parts.len(), 3, "{shown}");
+		assert_eq!([parts[0].len(), parts[1].len(), parts[2].len()], [4, 2, 2]);
+		assert!(shown.bytes().all(|b| b.is_ascii_digit() || b == b'-'));
+	}
+
+	// Test ID: debfd
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't reread the time zone")]
+	fn the_build_date_follows_the_viewers_zone() {
+		// Noon UTC on 2026-06-15, read through TZ the way localtime_r does. Far
+		// enough east it is already the 16th.
+		#[cfg(unix)]
+		{
+			unsafe extern "C" {
+				fn tzset();
+			}
+			let noon = 1_781_524_800;
+			let read = |zone: Option<&str>| {
+				// SAFETY: no other test touches TZ, and tzset only rereads it.
+				unsafe {
+					match zone {
+						Some(zone) => std::env::set_var("TZ", zone),
+						None => std::env::remove_var("TZ"),
+					}
+					tzset();
+				}
+				local_date(noon)
+			};
+			assert_eq!(read(Some("UTC")), "2026-06-15");
+			assert_eq!(read(Some("Pacific/Kiritimati")), "2026-06-16");
+			assert_eq!(read(Some("Etc/GMT+12")), "2026-06-15");
+			read(None);
 		}
 	}
 }

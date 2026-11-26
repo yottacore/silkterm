@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Copyright © 2026 Jim Collier
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! Command-line parsing -> a window/tab/pane layout plan. See
-//! project/design.md "Command-line options". Startup-only (not a hot path).
+//! Command-line parsing into a plan for the window's tabs and panes. See
+//! design.md, "Command-line options".
 //!
-//! Model: window-level options come first, then a hierarchy of tabs and panes
-//! built with the create/select verbs (`--new-tab`/`--tab=`, `--new-pane`/`--pane=`).
-//! Style options (shell, colors, font, ...) attach to the current scope and
-//! cascade window -> tab -> pane (resolved at apply time).
+//! Window options come first, then tabs and panes made or picked with
+//! `--new-tab`, `--tab=`, `--new-pane`, and `--pane=`. Style options such as the
+//! shell, colors, and font go to the current scope, and cascade window -> tab ->
+//! pane when they're applied.
 
 use std::path::PathBuf;
 
 use crate::config::{self, Fit};
 
-// Direction a new pane goes relative to the pane it splits.
+/// Direction a new pane goes relative to the pane it splits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dir4 {
 	Down,
@@ -22,19 +22,22 @@ pub enum Dir4 {
 	Right,
 }
 
-// New-pane size within the split, in the split direction.
+/// New-pane size within the split, in the split direction.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Size {
 	Cells(u32),
 	Percent(f32),
 }
 
-// Cascading look/behavior options; each level fills what it sets, the rest
-// inherit. `wallpaper_img: Some(None)` means "explicitly no image".
+/// Options for look and behavior that cascade. Each level fills what it sets
+/// and inherits the rest. `wallpaper_img: Some(None)` means "explicitly no image".
 #[derive(Debug, Default, Clone)]
 pub struct Style {
 	pub shell: Option<Vec<String>>, // argv (already shell-word-split)
-	pub directory: Option<String>,  // where that shell starts (unexpanded)
+	/// `shell` is the file `--open` runs, which only the pane it was given to
+	/// runs. A pane made from that one starts the default shell.
+	pub opened_file: bool,
+	pub directory: Option<String>, // where that shell starts (unexpanded)
 	pub keep_open: Option<bool>,
 	pub font_name: Option<String>,
 	pub font_size: Option<f32>,
@@ -43,9 +46,12 @@ pub struct Style {
 	pub wallpaper_img: Option<Option<String>>,
 	pub wallpaper_default_fit: Option<Fit>,
 	pub wallpaper_opacity: Option<f32>,
+	/// window scope only, which the parser enforces; here so a reload folds it
+	/// back in with the rest
+	pub software_rendering: Option<bool>,
 }
 
-// Options that apply to the whole window (only valid before any tab/pane marker).
+/// Options for the whole window, which have to come before any tab or pane flag.
 #[derive(Debug, Default, Clone)]
 pub struct WindowOpts {
 	pub columns: Option<usize>,
@@ -56,6 +62,8 @@ pub struct WindowOpts {
 	pub hide_frame: Option<bool>,
 	pub hide_menu: Option<bool>,
 	pub fullscreen: Option<bool>,
+	/// save the size as usual, though the size or the font came from here
+	pub persist: Option<bool>,
 	pub title: Option<String>,
 	pub style: Style,
 }
@@ -73,15 +81,7 @@ pub struct PaneSpec {
 
 impl PaneSpec {
 	fn new(id: Option<String>, first: bool) -> Self {
-		Self {
-			id,
-			splits: None,
-			dir: None,
-			size: None,
-			title: None,
-			style: Style::default(),
-			first,
-		}
+		Self { id, splits: None, dir: None, size: None, title: None, style: Style::default(), first }
 	}
 }
 
@@ -91,40 +91,43 @@ pub struct TabSpec {
 	pub title: Option<String>,
 	pub style: Style,
 	pub panes: Vec<PaneSpec>,
+	/// the tab that was current when this one was made, as an index into
+	/// `Cli::tabs`, which stays in the order they were made (see `tab_order`)
+	pub opened_from: usize,
 }
 
 impl TabSpec {
 	fn new(id: Option<String>) -> Self {
 		// every tab starts with an implicit first pane (id "main")
-		Self {
-			id,
-			title: None,
-			style: Style::default(),
-			panes: vec![PaneSpec::new(None, true)],
-		}
+		Self { id, title: None, style: Style::default(), panes: vec![PaneSpec::new(None, true)], opened_from: 0 }
 	}
+}
+
+/// A CLI-only flag: print something and exit, never open a window. Given more
+/// than one, the earliest here wins.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Info {
+	Help,
+	Syntax,
+	About,
+	Donate,
+	Version,
 }
 
 #[derive(Debug, Default)]
 pub struct Cli {
-	// CLI-only flags: print something and exit, never open a window.
-	pub help: bool,
-	pub version: bool,
-	pub syntax: bool,
-	pub about: bool,
-	pub donate: bool,
+	pub info: Option<Info>,
 	pub config: Option<PathBuf>,
 	pub reset_config: bool,
-	// control commands for an already-running window (talk, then exit):
-	// `Some(None)` clears the wallpaper, `Some(Some(p))` sets it.
+	/// a command for the running window, sent before exiting. `Some(None)`
+	/// clears the wallpaper, and `Some(Some(p))` sets it.
 	pub wallpaper: Option<Option<String>>,
 	pub reload: bool,
 	pub win: WindowOpts,
 	pub tabs: Vec<TabSpec>, // empty -> no hierarchical options given (use defaults)
-	pub hierarchical: bool, // any tab/pane/structure flag was seen
 }
 
-// An id refers to the implicit first tab/pane.
+// Whether an id names the implicit first tab or pane.
 fn is_first_id(id: &str) -> bool {
 	matches!(id, "0" | "main")
 }
@@ -137,11 +140,12 @@ fn parse_bool(s: &str) -> Option<bool> {
 	}
 }
 
-// Minimal POSIX-ish word split honouring single/double quotes and backslash, so
-// `git log --oneline`, `bash --norc`, and `sh -c "a | b"` all argv-split right.
-// Outside quotes a backslash only escapes whitespace and quotes, so Windows paths
-// can be written plainly; inside double quotes the usual POSIX escapes apply.
-pub fn shell_split(s: &str) -> Result<Vec<String>, String> {
+/// A small POSIX-like word split that honors single and double quotes and
+/// backslash, so `git log --oneline`, `bash --norc`, and `sh -c "a | b"` split
+/// right. Outside quotes a backslash escapes only whitespace and quotes, so
+/// Windows paths can be written plainly. Inside double quotes the usual POSIX
+/// escapes apply.
+pub fn shell_split(s: &str) -> anyhow::Result<Vec<String>> {
 	let mut out = Vec::new();
 	let mut word = String::new();
 	let mut chars = s.chars().peekable();
@@ -169,12 +173,12 @@ pub fn shell_split(s: &str) -> Result<Vec<String>, String> {
 					match q {
 						'"' => break,
 						'\\' => {
-							if let Some(&next) = chars.peek() {
-								if next == '"' || next == '\\' || next == '$' || next == '`' {
-									chars.next();
-									word.push(next);
-									continue;
-								}
+							if let Some(&next) = chars.peek()
+								&& matches!(next, '"' | '\\' | '$' | '`')
+							{
+								chars.next();
+								word.push(next);
+								continue;
 							}
 							word.push('\\');
 						}
@@ -183,8 +187,8 @@ pub fn shell_split(s: &str) -> Result<Vec<String>, String> {
 				}
 			}
 			// Only whitespace and quotes are worth escaping outside quotes. A backslash
-			// before anything else stays put, so a Windows path survives unquoted -
-			// consuming it turned `C:\windows\system32\cmd.exe` into
+			// before anything else stays put, so a Windows path survives unquoted.
+			// Dropping it turned `C:\windows\system32\cmd.exe` into
 			// `C:windowssystem32cmd.exe`, and `\\host\share` into `\host\share`.
 			'\\' => {
 				in_word = true;
@@ -206,7 +210,7 @@ pub fn shell_split(s: &str) -> Result<Vec<String>, String> {
 		out.push(word);
 	}
 	if out.is_empty() {
-		return Err("empty command".into());
+		anyhow::bail!("empty command");
 	}
 	Ok(out)
 }
@@ -214,97 +218,113 @@ pub fn shell_split(s: &str) -> Result<Vec<String>, String> {
 // Where a value flag's value comes from: `--opt=v`, `--opt v`, or `-o v`.
 struct Args {
 	items: Vec<String>,
-	i: usize,
+	pos: usize,
 }
 impl Args {
 	fn next_token(&mut self) -> Option<String> {
-		let token = self.items.get(self.i).cloned();
+		let token = self.items.get(self.pos).cloned();
 		if token.is_some() {
-			self.i += 1;
+			self.pos += 1;
 		}
 		token
 	}
-	// value for a flag whose `=value` (if any) is `inline`; else the next token.
-	fn value(&mut self, flag: &str, inline: Option<String>) -> Result<String, String> {
+	// the flag's value: `inline` if there was an `=value`, else the next token
+	fn value(&mut self, flag: &str, inline: Option<String>) -> anyhow::Result<String> {
 		if let Some(v) = inline {
 			return Ok(v);
 		}
-		self.next_token()
-			.ok_or_else(|| format!("{flag} needs a value"))
+		self.next_token().ok_or_else(|| anyhow::anyhow!("{flag} needs a value"))
 	}
-	// value-optional flag: inline `=value`, else the next token only when it isn't
-	// another option - so a bare flag reads as "no value" instead of eating the
-	// following `--option` as its value.
+	// a flag whose value is optional: inline `=value`, else the next token only
+	// when it isn't another option, so a bare flag reads as no value rather than
+	// taking the next `--option`
 	fn optional_value(&mut self, inline: Option<String>) -> Option<String> {
 		if inline.is_some() {
 			return inline.filter(|s| !s.is_empty());
 		}
-		match self.items.get(self.i) {
+		match self.items.get(self.pos) {
 			Some(token) if !token.starts_with("--") => self.next_token(),
 			_ => None,
 		}
 	}
 	// optional-bool flag: inline, else a following bool literal, else true.
-	fn bool_value(&mut self, flag: &str, inline: Option<String>) -> Result<bool, String> {
+	fn bool_value(&mut self, flag: &str, inline: Option<String>) -> anyhow::Result<bool> {
 		if let Some(v) = inline {
-			return parse_bool(&v).ok_or_else(|| format!("{flag}: not a bool: {v}"));
+			return parse_bool(&v).ok_or_else(|| anyhow::anyhow!("{flag}: not a bool: {v}"));
 		}
-		if let Some(token) = self.items.get(self.i) {
-			if let Some(b) = parse_bool(token) {
-				self.i += 1;
-				return Ok(b);
-			}
+		if let Some(token) = self.items.get(self.pos)
+			&& let Some(b) = parse_bool(token)
+		{
+			self.pos += 1;
+			return Ok(b);
 		}
 		Ok(true)
 	}
 }
 
-fn parse_hex(flag: &str, v: &str) -> Result<[u8; 3], String> {
-	config::parse_hex(v).ok_or_else(|| format!("{flag}: not a #rrggbb color: {v}"))
+fn parse_hex(flag: &str, v: &str) -> anyhow::Result<[u8; 3]> {
+	config::parse_hex(v).ok_or_else(|| anyhow::anyhow!("{flag}: not a #rrggbb color: {v}"))
 }
 
-fn parse_f32(flag: &str, v: &str) -> Result<f32, String> {
-	v.parse().map_err(|_| format!("{flag}: not a number: {v}"))
-}
-
-fn parse_size(v: &str) -> Result<Size, String> {
-	if let Some(percent) = v.strip_suffix('%') {
-		Ok(Size::Percent(
-			percent
-				.trim()
-				.parse()
-				.map_err(|_| format!("--size: bad percent: {v}"))?,
-		))
-	} else {
-		Ok(Size::Cells(
-			v.trim()
-				.parse()
-				.map_err(|_| format!("--size: bad cell count: {v}"))?,
-		))
+fn parse_f32(flag: &str, v: &str) -> anyhow::Result<f32> {
+	match v.parse::<f32>() {
+		Ok(n) if n.is_finite() => Ok(n),
+		// nan and inf parse fine and then survive every clamp. One that gets into a
+		// setting is written over the user's own value at the session's first save,
+		// because a NaN compares unequal to the value it replaced.
+		Ok(_) => Err(anyhow::anyhow!("{flag}: not a finite number: {v}")),
+		Err(_) => Err(anyhow::anyhow!("{flag}: not a number: {v}")),
 	}
 }
 
-pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
-	let mut a = Args {
-		items: args.into_iter().collect(),
-		i: 0,
-	};
+// A number standing for a setting is held to that setting's own range, the way
+// the config file's is. The command line can't ask for a value the file
+// couldn't hold.
+fn parse_f32_in(flag: &str, v: &str, (lo, hi): (f32, f32)) -> anyhow::Result<f32> {
+	Ok(parse_f32(flag, v)?.clamp(lo, hi))
+}
+
+// The command line is held to the same grid ceiling the config file is. A grid
+// no graphics card can draw used to end the launch in create_texture.
+fn grid_cells(v: usize) -> usize {
+	v.clamp(config::limits::GRID.0, config::limits::GRID.1)
+}
+
+// Both opacities are a fraction of full.
+const OPACITY: (f32, f32) = (0.0, 1.0);
+
+// Both panes of a split have to stay usable, so a share is held well inside 0
+// and 100, and a cell count to at least one column or row.
+const SPLIT_PCT: (f32, f32) = (5.0, 95.0);
+
+fn parse_size(v: &str) -> anyhow::Result<Size> {
+	if let Some(percent) = v.strip_suffix('%') { Ok(Size::Percent(parse_f32_in("--size", percent.trim(), SPLIT_PCT)?)) } else { Ok(Size::Cells(v.trim().parse::<u32>().map_err(|_| anyhow::anyhow!("--size: bad cell count: {v}"))?.max(1))) }
+}
+
+/// The launch arguments as text. An argument that isn't Unicode is a parse error
+/// rather than a panic.
+pub fn utf8_args<I: IntoIterator<Item = std::ffi::OsString>>(args: I) -> anyhow::Result<Vec<String>> {
+	args.into_iter().map(|a| a.into_string().map_err(|a| anyhow::anyhow!("argument isn't valid Unicode: {}", a.to_string_lossy()))).collect()
+}
+
+pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
+	let mut tokens = Args { items: args.into_iter().collect(), pos: 0 };
 	let mut cli = Cli::default();
-	// current scope: which tab / pane subsequent options attach to. None -> window.
+	// current scope: the tab that later options go to. None is the window.
 	let mut cur_tab: Option<usize> = None;
 	let mut cur_pane: usize = 0;
 
-	while let Some(token) = a.next_token() {
+	while let Some(token) = tokens.next_token() {
 		if token == "-h" {
-			cli.help = true;
+			cli.ask(Info::Help);
 			continue;
 		}
 		if token == "-v" {
-			cli.version = true;
+			cli.ask(Info::Version);
 			continue;
 		}
 		let Some(body) = token.strip_prefix("--") else {
-			return Err(format!("unexpected argument: {token}"));
+			anyhow::bail!("unexpected argument: {token}");
 		};
 		let (name, inline) = match body.split_once('=') {
 			Some((n, v)) => (n, Some(v.to_string())),
@@ -312,84 +332,70 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 		};
 
 		// CLI-only flags: main.rs prints and exits on these, so no window and no
-		// layout is ever built. Taken in ANY position on purpose - asking for the
-		// help should never be answered with a complaint about where it was put.
-		match name {
-			"help" => {
-				cli.help = true;
-				continue;
-			}
-			"syntax" => {
-				cli.syntax = true;
-				continue;
-			}
-			"about" => {
-				cli.about = true;
-				continue;
-			}
-			"donate" => {
-				cli.donate = true;
-				continue;
-			}
-			"version" | "ver" => {
-				cli.version = true;
-				continue;
-			}
-			_ => {}
+		// layout is built. They're taken in any position, so asking for help never
+		// gets a complaint about where the flag was put.
+		let info = match name {
+			"help" => Some(Info::Help),
+			"syntax" => Some(Info::Syntax),
+			"about" => Some(Info::About),
+			"donate" => Some(Info::Donate),
+			"version" | "ver" => Some(Info::Version),
+			_ => None,
+		};
+		if let Some(info) = info {
+			cli.ask(info);
+			continue;
 		}
 
-		// markers (enter/select a scope)
+		// flags that make or pick a scope
 		match name {
 			"new-tab" => {
-				// optional handle comes only from `=value` (never eats the next flag)
+				// an optional handle comes only from `=value`, never the next flag
 				ensure_first_tab(&mut cli); // implicit first tab always exists
 				let id = inline.filter(|s| !s.is_empty());
-				cli.tabs.push(TabSpec::new(id));
+				let mut tab = TabSpec::new(id);
+				tab.opened_from = cur_tab.unwrap_or(0);
+				cli.tabs.push(tab);
 				cur_tab = Some(cli.tabs.len() - 1);
 				cur_pane = 0;
-				cli.hierarchical = true;
 				continue;
 			}
 			"tab" => {
 				ensure_first_tab(&mut cli);
-				let id = a.value("--tab", inline)?;
-				let idx = find_tab(&cli, &id).ok_or_else(|| format!("--tab: no such tab: {id}"))?;
+				let id = tokens.value("--tab", inline)?;
+				let idx = find_tab(&cli, &id).ok_or_else(|| anyhow::anyhow!("--tab: no such tab: {id}"))?;
 				cur_tab = Some(idx);
 				cur_pane = 0;
-				cli.hierarchical = true;
 				continue;
 			}
 			"new-pane" => {
 				ensure_first_tab(&mut cli);
 				let tab_idx = cur_tab.unwrap_or(0);
-				// optional handle comes only from `=value` (never eats the next flag)
+				// an optional handle comes only from `=value`, never the next flag
 				let id = inline.filter(|s| !s.is_empty());
 				cli.tabs[tab_idx].panes.push(PaneSpec::new(id, false));
 				cur_pane = cli.tabs[tab_idx].panes.len() - 1;
 				cur_tab = Some(tab_idx);
-				cli.hierarchical = true;
 				continue;
 			}
 			"pane" => {
 				ensure_first_tab(&mut cli);
 				let tab_idx = cur_tab.unwrap_or(0);
-				let id = a.value("--pane", inline)?;
-				let pane_idx = find_pane(&cli.tabs[tab_idx], &id)
-					.ok_or_else(|| format!("--pane: no such pane: {id}"))?;
+				let id = tokens.value("--pane", inline)?;
+				let pane_idx = find_pane(&cli.tabs[tab_idx], &id).ok_or_else(|| anyhow::anyhow!("--pane: no such pane: {id}"))?;
 				cur_pane = pane_idx;
 				cur_tab = Some(tab_idx);
-				cli.hierarchical = true;
 				continue;
 			}
 			_ => {}
 		}
 
-		// control commands (act on the running window this shell is inside,
-		// then exit - see ctl.rs; main.rs short-circuits before any layout)
+		// control commands act on the window this shell runs in, then exit. See
+		// ctl.rs. main.rs handles them before any layout is built.
 		match name {
 			"wallpaper" => {
 				// value = new image path; bare flag = clear (mirrors --wallpaper-file)
-				cli.wallpaper = Some(a.optional_value(inline));
+				cli.wallpaper = Some(tokens.optional_value(inline));
 				continue;
 			}
 			"reload-settings" => {
@@ -399,82 +405,56 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 			_ => {}
 		}
 
-		// window-level options (illegal once a tab/pane marker was seen)
-		let window_only = matches!(
-			name,
-			"columns"
-				| "rows" | "pixel-width"
-				| "pixel-height"
-				| "background-opacity"
-				| "hide-windowframe"
-				| "hide-menu"
-				| "fullscreen"
-				| "config" | "reset-config"
-		);
+		// window options, refused once a tab or pane flag was seen
+		let window_only = matches!(name, "columns" | "rows" | "pixel-width" | "pixel-height" | "background-opacity" | "hide-windowframe" | "hide-menu" | "fullscreen" | "persist" | "config" | "reset-config" | "software-rendering");
 		if window_only {
 			if cur_tab.is_some() {
-				return Err(format!(
-					"--{name} is a window option; put it before --new-tab/--tab/--new-pane/--pane"
-				));
+				anyhow::bail!("--{name} is a window option; put it before --new-tab/--tab/--new-pane/--pane");
 			}
 			match name {
 				"columns" => {
-					cli.win.columns = Some(
-						a.value(name, inline)?
-							.parse()
-							.map_err(|_| "bad --columns")?,
-					);
+					cli.win.columns = Some(grid_cells(tokens.value(name, inline)?.parse().map_err(|_| anyhow::anyhow!("bad --columns"))?));
 				}
 				"rows" => {
-					cli.win.rows = Some(a.value(name, inline)?.parse().map_err(|_| "bad --rows")?);
+					cli.win.rows = Some(grid_cells(tokens.value(name, inline)?.parse().map_err(|_| anyhow::anyhow!("bad --rows"))?));
 				}
 				"pixel-width" => {
-					cli.win.pixel_width = Some(
-						a.value(name, inline)?
-							.parse()
-							.map_err(|_| "bad --pixel-width")?,
-					);
+					cli.win.pixel_width = Some(tokens.value(name, inline)?.parse().map_err(|_| anyhow::anyhow!("bad --pixel-width"))?);
 				}
 				"pixel-height" => {
-					cli.win.pixel_height = Some(
-						a.value(name, inline)?
-							.parse()
-							.map_err(|_| "bad --pixel-height")?,
-					);
+					cli.win.pixel_height = Some(tokens.value(name, inline)?.parse().map_err(|_| anyhow::anyhow!("bad --pixel-height"))?);
 				}
 				"background-opacity" => {
-					cli.win.opacity = Some(parse_f32(name, &a.value(name, inline)?)?);
+					cli.win.opacity = Some(parse_f32_in(name, &tokens.value(name, inline)?, OPACITY)?);
 				}
-				"hide-windowframe" => cli.win.hide_frame = Some(a.bool_value(name, inline)?),
-				"hide-menu" => cli.win.hide_menu = Some(a.bool_value(name, inline)?),
-				"fullscreen" => cli.win.fullscreen = Some(a.bool_value(name, inline)?),
-				"config" => cli.config = Some(PathBuf::from(a.value(name, inline)?)),
+				"hide-windowframe" => cli.win.hide_frame = Some(tokens.bool_value(name, inline)?),
+				"hide-menu" => cli.win.hide_menu = Some(tokens.bool_value(name, inline)?),
+				"fullscreen" => cli.win.fullscreen = Some(tokens.bool_value(name, inline)?),
+				"persist" => cli.win.persist = Some(tokens.bool_value(name, inline)?),
+				"config" => cli.config = Some(PathBuf::from(tokens.value(name, inline)?)),
 				"reset-config" => cli.reset_config = true,
+				"software-rendering" => {
+					cli.win.style.software_rendering = Some(tokens.bool_value(name, inline)?);
+				}
 				_ => unreachable!("name in the matches! set above"),
 			}
 			continue;
 		}
 
 		// structural pane options
-		if matches!(
-			name,
-			"splits" | "splits-pane" | "down" | "up" | "left" | "right" | "size"
-		) {
-			let tab_idx =
-				cur_tab.ok_or_else(|| format!("--{name} only applies to a --new-pane"))?;
+		if matches!(name, "splits" | "splits-pane" | "down" | "up" | "left" | "right" | "size") {
+			let tab_idx = cur_tab.ok_or_else(|| anyhow::anyhow!("--{name} only applies to a --new-pane"))?;
 			let pane = &mut cli.tabs[tab_idx].panes[cur_pane];
 			if pane.first {
-				return Err(format!(
-					"--{name} can't apply to the first pane (main); use --new-pane"
-				));
+				anyhow::bail!("--{name} can't apply to the first pane (main); use --new-pane");
 			}
 			match name {
-				"splits" | "splits-pane" => pane.splits = Some(a.value(name, inline)?),
-				"down" => set_dir(pane, Dir4::Down, a.bool_value(name, inline)?, name)?,
-				"up" => set_dir(pane, Dir4::Up, a.bool_value(name, inline)?, name)?,
-				"left" => set_dir(pane, Dir4::Left, a.bool_value(name, inline)?, name)?,
-				"right" => set_dir(pane, Dir4::Right, a.bool_value(name, inline)?, name)?,
-				"size" => pane.size = Some(parse_size(&a.value(name, inline)?)?),
+				"splits" | "splits-pane" => pane.splits = Some(tokens.value(name, inline)?),
+				"down" => set_dir(pane, Dir4::Down, tokens.bool_value(name, inline)?, name)?,
+				"up" => set_dir(pane, Dir4::Up, tokens.bool_value(name, inline)?, name)?,
+				"left" => set_dir(pane, Dir4::Left, tokens.bool_value(name, inline)?, name)?,
+				"right" => set_dir(pane, Dir4::Right, tokens.bool_value(name, inline)?, name)?,
+				"size" => pane.size = Some(parse_size(&tokens.value(name, inline)?)?),
 				_ => unreachable!("name in the matches! set above"),
 			}
 			continue;
@@ -482,7 +462,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 
 		// title (window / tab / pane by scope)
 		if name == "title" {
-			let title = a.value(name, inline)?;
+			let title = tokens.value(name, inline)?;
 			match cur_tab {
 				None => cli.win.title = Some(title),
 				Some(tab_idx) => {
@@ -496,7 +476,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 			continue;
 		}
 
-		// cascading style options (route to the current scope)
+		// cascading style options go to the current scope
 		let style = match cur_tab {
 			None => &mut cli.win.style,
 			Some(tab_idx) => {
@@ -508,99 +488,118 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 			}
 		};
 		match name {
-			"shell" => style.shell = Some(shell_split(&a.value(name, inline)?)?),
+			"shell" => {
+				style.shell = Some(shell_split(&tokens.value(name, inline)?)?);
+				style.opened_file = false;
+			}
 			// Kept unexpanded: `~` and the env-var spellings are resolved at spawn
-			// time by config::spawn_dir, the same way the config setting is.
-			"directory" | "dir" => style.directory = Some(a.value(name, inline)?),
-			"keep-open" => style.keep_open = Some(a.bool_value(name, inline)?),
-			"font-name" => style.font_name = Some(a.value(name, inline)?),
-			"font-size" => style.font_size = Some(parse_f32(name, &a.value(name, inline)?)?),
-			"background-color" => style.bg_color = Some(parse_hex(name, &a.value(name, inline)?)?),
-			"foreground-color" => style.fg_color = Some(parse_hex(name, &a.value(name, inline)?)?),
+			// time by config::cli_dir, the same way the config setting is.
+			"directory" | "dir" => style.directory = Some(tokens.value(name, inline)?),
+			"keep-open" => style.keep_open = Some(tokens.bool_value(name, inline)?),
+			// A file opened from Explorer. Everything after it is the file's own
+			// arguments, so it comes last, and it starts in the file's folder.
+			"open" => {
+				let file = tokens.value(name, inline)?;
+				let args: Vec<String> = tokens.items.drain(tokens.pos..).collect();
+				style.shell = Some(crate::fileassoc::open_argv(&file, &args, cfg!(windows), &|| crate::shells::which("pwsh").is_some()));
+				style.opened_file = true;
+				if style.directory.is_none() {
+					style.directory = std::path::Path::new(&file).parent().filter(|dir| !dir.as_os_str().is_empty()).map(|dir| dir.display().to_string());
+				}
+			}
+			"font-name" => style.font_name = Some(tokens.value(name, inline)?),
+			"font-size" => {
+				style.font_size = Some(parse_f32_in(name, &tokens.value(name, inline)?, config::limits::FONT_SIZE)?);
+			}
+			"background-color" => {
+				style.bg_color = Some(parse_hex(name, &tokens.value(name, inline)?)?);
+			}
+			"foreground-color" => {
+				style.fg_color = Some(parse_hex(name, &tokens.value(name, inline)?)?);
+			}
 			// --background-image* are kept as aliases for the --wallpaper* names.
 			"wallpaper-file" | "background-image" => {
 				// value present -> that path; no value -> explicitly none. A bare
-				// flag followed by another option must not eat that option as a path.
-				style.wallpaper_img = Some(a.optional_value(inline));
+				// flag followed by another option doesn't take that option as a path.
+				style.wallpaper_img = Some(tokens.optional_value(inline));
 			}
 			"wallpaper-stretch" | "background-image-stretch" => {
-				if a.bool_value(name, inline)? {
+				if tokens.bool_value(name, inline)? {
 					style.wallpaper_default_fit = Some(Fit::Stretch);
 				}
 			}
 			"wallpaper-zoom" | "background-image-zoom" => {
-				if a.bool_value(name, inline)? {
+				if tokens.bool_value(name, inline)? {
 					style.wallpaper_default_fit = Some(Fit::Zoom);
 				}
 			}
 			"wallpaper-opacity" | "background-image-opacity" => {
-				style.wallpaper_opacity = Some(parse_f32(name, &a.value(name, inline)?)?);
+				style.wallpaper_opacity = Some(parse_f32_in(name, &tokens.value(name, inline)?, OPACITY)?);
 			}
-			_ => return Err(format!("unknown option: --{name}")),
+			_ => anyhow::bail!("unknown option: --{name}"),
 		}
 	}
 
 	Ok(cli)
 }
 
-fn set_dir(pane: &mut PaneSpec, dir: Dir4, on: bool, flag: &str) -> Result<(), String> {
+fn set_dir(pane: &mut PaneSpec, dir: Dir4, on: bool, flag: &str) -> anyhow::Result<()> {
 	if !on {
 		return Ok(()); // --right=false etc. is a no-op (leaves default/inherit)
 	}
-	if let Some(prev) = pane.dir {
-		if prev != dir {
-			return Err(format!(
-				"--{flag} conflicts with an earlier direction on this pane"
-			));
-		}
+	if let Some(prev) = pane.dir
+		&& prev != dir
+	{
+		anyhow::bail!("--{flag} conflicts with an earlier direction on this pane");
 	}
 	pane.dir = Some(dir);
 	Ok(())
 }
 
-// Fold window-level CLI style options into `settings` (pure). Window-scoped only:
-// per-pane visual style is deferred (it needs a per-pane renderer the single
-// shared TextCtx doesn't have). `--shell` is handled separately (build_layout).
+/// Fold the window's style options into `settings`. Only the window's are used,
+/// since a style per pane would need a renderer per pane, and there's one shared
+/// `TextCtx`. `build_layout` handles `--shell`.
 pub fn fold_window_style(settings: &mut config::Settings, style: &Style) {
+	use crate::ui_spec::Key;
+	use knobs::Value;
+	// held for the run, so a save never writes them
+	let model = &mut settings.model;
 	if let Some(font) = &style.font_name {
-		settings.font_family = Some(font.clone());
+		model.hold(Key::FontFamily.name(), &Value::Text(font.clone()));
 	}
 	if let Some(size) = style.font_size {
-		settings.font_size = size;
+		model.hold(Key::FontSize.name(), &Value::Float(f64::from(size)));
 	}
 	if let Some(color) = style.bg_color {
-		settings.bg = color;
+		model.hold(Key::ColBg.name(), &Value::Text(config::format_hex(color)));
 	}
 	if let Some(color) = style.fg_color {
-		settings.fg = color;
-	}
-	if let Some(img) = &style.wallpaper_img {
-		settings.wallpaper_raw = img.clone().unwrap_or_default();
-		settings.wallpaper = img.as_ref().map(PathBuf::from);
-		// naming one is a deliberate choice for this run; don't let a config that
-		// has wallpaper switched off swallow it
-		settings.wallpaper_enabled |= img.is_some();
+		model.hold(Key::ColFg.name(), &Value::Text(config::format_hex(color)));
 	}
 	if let Some(fit) = style.wallpaper_default_fit {
-		settings.wallpaper_default_fit = fit;
+		let word = if fit == Fit::Zoom { "zoom" } else { "stretch" };
+		model.hold(Key::BgFit.name(), &Value::Text(word.into()));
 	}
 	if let Some(opacity) = style.wallpaper_opacity {
-		settings.wallpaper_opacity = opacity;
+		model.hold(Key::BgOpacity.name(), &Value::Float(f64::from(opacity)));
+	}
+	// no row on macOS, so the hold finds nothing to hold there
+	if let Some(on) = style.software_rendering {
+		model.hold(Key::SoftwareRendering.name(), &Value::Bool(on));
+	}
+	crate::fields::fill(settings, None);
+	if let Some(img) = &style.wallpaper_img {
+		config::name_wallpaper(settings, img.as_ref().map(PathBuf::from));
 	}
 }
 
 impl WindowOpts {
-	// Apply this window's CLI style to the live settings at startup (no-op if none
-	// set). Call after the theme/OS palette settles so colors aren't clobbered.
+	/// Apply this window's command-line style to the live settings at startup.
+	/// Call it after the theme and system palette are settled, or they'd
+	/// overwrite the colors.
 	pub fn apply_style(&self) {
 		let style = &self.style;
-		let any = style.font_name.is_some()
-			|| style.font_size.is_some()
-			|| style.bg_color.is_some()
-			|| style.fg_color.is_some()
-			|| style.wallpaper_img.is_some()
-			|| style.wallpaper_default_fit.is_some()
-			|| style.wallpaper_opacity.is_some();
+		let any = style.font_name.is_some() || style.font_size.is_some() || style.bg_color.is_some() || style.fg_color.is_some() || style.wallpaper_img.is_some() || style.wallpaper_default_fit.is_some() || style.wallpaper_opacity.is_some() || style.software_rendering.is_some();
 		if !any {
 			return;
 		}
@@ -608,11 +607,27 @@ impl WindowOpts {
 		fold_window_style(&mut settings, style);
 		config::update(settings);
 	}
+
+	/// --software-rendering goes on ahead of the rest of the style, since the
+	/// first device has to see it and the colors have to wait for the window.
+	pub fn apply_renderer(&self) {
+		let Some(on) = self.style.software_rendering else {
+			return;
+		};
+		if on && !crate::gfx::SOFTWARE_POSSIBLE {
+			eprintln!("{}: --software-rendering: macOS has no software renderer; using the graphics card", config::APP_NAME);
+			return;
+		}
+		let only = Style { software_rendering: Some(on), ..Style::default() };
+		let mut settings = config::settings().as_ref().clone();
+		fold_window_style(&mut settings, &only);
+		config::update(settings);
+	}
 }
 
-// True when the arguments amount to "no layout given": empty, or only --config
-// (which picks WHICH config file, not a layout) - the config's own command_line
-// should still apply in that case.
+/// True when the arguments give no layout: none at all, or only --config, which
+/// picks the file rather than a layout. The file's own `command_line` still
+/// applies then.
 pub fn only_config_args<I: IntoIterator<Item = String>>(args: I) -> bool {
 	let mut it = args.into_iter();
 	while let Some(arg) = it.next() {
@@ -625,6 +640,30 @@ pub fn only_config_args<I: IntoIterator<Item = String>>(args: I) -> bool {
 	true
 }
 
+impl Cli {
+	fn ask(&mut self, info: Info) {
+		self.info = Some(self.info.map_or(info, |had| had.min(info)));
+	}
+
+	/// Any tab, pane, or structure flag was seen. The first one makes the
+	/// implicit first tab, so there is always one then.
+	pub fn hierarchical(&self) -> bool {
+		!self.tabs.is_empty()
+	}
+
+	/// The strip, as indexes into `tabs`. A `--new-tab` goes where a new tab
+	/// made in the window would: just right of the current tab with `beside`,
+	/// else at the end. They differ only after a `--tab=` picked an earlier one.
+	pub fn tab_order(&self, beside: bool) -> Vec<usize> {
+		let mut order: Vec<usize> = Vec::with_capacity(self.tabs.len());
+		for (index, tab) in self.tabs.iter().enumerate() {
+			let at = order.iter().position(|&made| made == tab.opened_from).filter(|_| beside && index > 0).map_or(order.len(), |from| from + 1);
+			order.insert(at, index);
+		}
+		order
+	}
+}
+
 fn ensure_first_tab(cli: &mut Cli) {
 	if cli.tabs.is_empty() {
 		cli.tabs.push(TabSpec::new(None));
@@ -635,61 +674,57 @@ fn find_tab(cli: &Cli, id: &str) -> Option<usize> {
 	if is_first_id(id) {
 		return (!cli.tabs.is_empty()).then_some(0);
 	}
-	cli.tabs
-		.iter()
-		.position(|tab| tab.id.as_deref() == Some(id))
+	cli.tabs.iter().position(|tab| tab.id.as_deref() == Some(id))
 }
 
 fn find_pane(tab: &TabSpec, id: &str) -> Option<usize> {
 	if is_first_id(id) {
 		return Some(0);
 	}
-	tab.panes
-		.iter()
-		.position(|pane| pane.id.as_deref() == Some(id))
+	tab.panes.iter().position(|pane| pane.id.as_deref() == Some(id))
 }
 
-// Program name and version, as --version prints it.
+/// Program name, version, and build, as --version prints it, and nothing else.
+/// The build number is last so a script reading the second field still gets the
+/// version.
 pub fn version_line() -> String {
-	format!("{} {}", config::APP_NAME, env!("CARGO_PKG_VERSION"))
+	format!("{} v{} build {}", config::APP_NAME, env!("CARGO_PKG_VERSION"), config::build_label())
 }
 
-// A CLI-only flag's output with a blank line above and below, so the block sits
-// clear of the shell prompts either side of it. Print with `print!` - the
-// trailing blank line is part of the string. --version is deliberately NOT run
-// through this: it exists to be captured by a script.
+/// The line under the version line in --version and --about.
+pub const COPYRIGHT: &str = "Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]";
+
+/// What --version prints: the version line, then the copyright line. Still flush,
+/// so a script can take the first line.
+pub fn version_text() -> String {
+	format!("{}\n{COPYRIGHT}", version_line())
+}
+
+/// A CLI-only flag's output with a blank line above and below, so the block sits
+/// clear of the shell prompts either side of it. Print it with `print!`, since
+/// the trailing blank line is part of the string. --version isn't padded, since
+/// scripts capture it.
 pub fn padded(body: &str) -> String {
 	format!("\n{}\n\n", body.trim_end_matches('\n'))
 }
 
-// What --about prints: enough to identify a build in a bug report. `info` is
-// None when no GPU adapter could be probed - the version and build still are
-// worth having, so that reads as three missing lines rather than a failure.
+/// What --about prints: enough to identify a build in a bug report. `info` is
+/// None when no GPU adapter could be probed. The version and build are still
+/// useful, so that leaves out 3 lines rather than failing.
 pub fn about(info: Option<&wgpu::AdapterInfo>) -> String {
-	let mut lines = vec![
-		format!("About {}", config::APP_NAME),
-		format!("version {}", env!("CARGO_PKG_VERSION")),
-		"Copyright © 2026 Jim Collier".to_string(),
-		format!("License: {}", env!("CARGO_PKG_LICENSE")),
-		String::new(),
-		"Info".to_string(),
-		format!("  Build:  {}", config::build_target()),
-	];
+	let mut lines = vec![format!("About {}", config::APP_NAME), version_line(), COPYRIGHT.to_string(), format!("License: {}", env!("CARGO_PKG_LICENSE")), String::new(), "Info".to_string(), format!("  Build:  {}  {}", config::build_label(), config::build_target())];
 	if let Some(info) = info {
 		lines.push(format!("  Renderer:  {}", info.name));
 		lines.push(format!("  Backend:  {:?}", info.backend));
-		lines.push(format!(
-			"  Acceleration:  {}",
-			crate::gfx::acceleration(info.device_type)
-		));
+		lines.push(format!("  Acceleration:  {}", crate::gfx::acceleration(info)));
 	}
 	lines.push(String::new());
 	lines.push(env!("CARGO_PKG_REPOSITORY").to_string());
 	lines.join("\n")
 }
 
-// What --donate prints. The short version of DONATE.md - someone who reached
-// for this from a shell wants the address, not the essay.
+/// What --donate prints, a short form of DONATE.md, since someone asking from a
+/// shell wants the address.
 pub fn donate() -> String {
 	format!(
 		"\
@@ -700,17 +735,19 @@ you use it often, or it saves you time, sponsoring it keeps it moving.
 Even a few dollars a month is meaningful.
 
   Sponsor:  {sponsor}
+  Ko-fi:    {kofi}
   Details:  {details}
 
 It helps just as much to star the repo, file good bug reports, and tell
 other terminal nerds it exists.",
 		app = config::APP_NAME,
 		sponsor = config::SPONSOR_URL,
+		kofi = config::KOFI_URL,
 		details = config::DONATE_URL,
 	)
 }
 
-// One-line-per-option usage text (shared by --help and --syntax).
+/// Usage text with one line per option, for --help and --syntax.
 pub fn usage() -> &'static str {
 	"\
 Usage: silkterm [WINDOW OPTIONS] [--new-tab|--tab=ID [TAB OPTIONS]] [--new-pane|--pane=ID [PANE OPTIONS]] ...
@@ -721,7 +758,7 @@ Information (prints and exits; no window opens, position doesn't matter):
   --syntax                    the option list on its own
   --about                     version, build and renderer details
   --donate                    how to support SilkTerm
-  --version, --ver, -v        program name + version, unpadded for scripts
+  --version, --ver, -v        program name, version and build, unpadded for scripts
 
 Window options (must precede any tab/pane):
   --columns N                 initial width in cells
@@ -730,29 +767,32 @@ Window options (must precede any tab/pane):
   --pixel-height N            initial height in pixels (alternate)
   --background-opacity F      window see-through opacity 0..1
   --hide-windowframe[=BOOL]   start without WM decorations
-  --hide-menu[=BOOL]          start with the menu bar hidden
+  --hide-menu[=BOOL]          start with the menu bar hidden (ignored on macOS)
   --fullscreen[=BOOL]         start fullscreen
+  --persist[=BOOL]            remember size changes despite a size or font option
   --config PATH               use an alternate config file
   --reset-config              rename the config aside and start from defaults
+  --software-rendering[=BOOL] draw on the CPU for this run, not the graphics card (not on macOS)
 
 Control (run from a shell inside a window; acts on that window, then exits):
   --wallpaper [PATH]          change the wallpaper live (no value = none)
   --reload-settings           re-read the config file and apply it
 
-Layout:
-  --new-tab[=HANDLE]          create a tab (becomes current)
-  --tab=ID                    select an existing tab (0/main or a handle)
+Layout (a window opens on its first tab and pane):
+  --new-tab[=HANDLE]          create a tab; later options go to it
+  --tab=ID                    go back to a tab already made (0/main or a handle)
   --new-pane[=HANDLE]         create a pane by splitting the current/--splits pane
-  --pane=ID                   select an existing pane (0/main or a handle)
+  --pane=ID                   go back to a pane already made (0/main or a handle)
   --splits=ID                 (with --new-pane) which pane to split
   --down|--up|--left|--right  where the new pane goes
   --size=N | --size=N%        new pane size in the split direction
 
 Per-scope (window/tab/pane; cascades, most-specific wins):
-  --title \"...\"               window/tab title (pane-level: not wired up yet)
+  --title \"...\"               window/tab title (pane-level: reserved, not used yet)
   --shell \"...\"               command to run (argv; e.g. fish, 'bash --norc')
   --directory \"...\"           where that shell starts (alias --dir; ~ and $VARs ok)
-  --keep-open[=BOOL]          keep the pane after the command exits (not implemented yet)
+  --keep-open[=BOOL]          keep the pane after the command exits, showing its status
+  --open FILE [ARGS...]       run FILE, from its folder; the rest of the line is its arguments
   --font-name \"...\"           font family
   --font-size N               font size
   --background-color #rrggbb
@@ -771,6 +811,7 @@ mod tests {
 		parse(s.split_whitespace().map(String::from)).unwrap()
 	}
 
+	// Test ID: d913y
 	#[test]
 	fn window_opts() {
 		let c = p("--columns 100 --rows 40 --fullscreen --hide-menu=no");
@@ -778,90 +819,235 @@ mod tests {
 		assert_eq!(c.win.rows, Some(40));
 		assert_eq!(c.win.fullscreen, Some(true));
 		assert_eq!(c.win.hide_menu, Some(false));
-		assert!(!c.hierarchical);
+		assert!(!c.hierarchical());
+		assert_eq!(c.win.persist, None);
+		assert_eq!(p("--persist").win.persist, Some(true));
+		assert_eq!(p("--persist=no").win.persist, Some(false));
+		assert!(parse(["--new-tab".into(), "--persist".into()]).is_err());
 	}
 
+	// Test ID: dbz42
+	#[test]
+	fn keep_open_is_read_at_every_level() {
+		let c = p("--keep-open --new-tab --new-pane --keep-open=no");
+		assert_eq!(c.win.style.keep_open, Some(true));
+		assert_eq!(c.tabs[1].panes[1].style.keep_open, Some(false));
+		// unset anywhere it wasn't written, so the cascade can see through it
+		assert_eq!(c.tabs[1].panes[0].style.keep_open, None);
+	}
+
+	// Test ID: db7ea
 	#[test]
 	fn cli_only_flags_are_taken_anywhere() {
-		// They print and exit, so where they sit can't matter - and answering
-		// "--new-tab --help" with a placement complaint would be absurd.
-		assert!(p("--help").help);
-		assert!(p("-h").help);
-		assert!(p("--new-tab --new-pane --help").help);
-		assert!(p("--about").about);
-		assert!(p("--new-tab --about").about);
-		assert!(p("--donate").donate);
-		assert!(p("--syntax").syntax);
-		assert!(p("--new-pane --donate").donate);
+		// They print and exit, so where they are doesn't matter, and
+		// "--new-tab --help" doesn't get a complaint about placement.
+		assert_eq!(p("--help").info, Some(Info::Help));
+		assert_eq!(p("-h").info, Some(Info::Help));
+		assert_eq!(p("--new-tab --new-pane --help").info, Some(Info::Help));
+		assert_eq!(p("--about").info, Some(Info::About));
+		assert_eq!(p("--new-tab --about").info, Some(Info::About));
+		assert_eq!(p("--donate").info, Some(Info::Donate));
+		assert_eq!(p("--syntax").info, Some(Info::Syntax));
+		assert_eq!(p("--new-pane --donate").info, Some(Info::Donate));
 	}
 
+	// Several print-and-exit flags are one answer: the first of help, syntax,
+	// about, donate, and version, whatever order they came in.
+	// Test ID: ddj84
+	#[test]
+	fn print_and_exit_flags_are_one_choice_and_help_wins() {
+		assert_eq!(p("--version --help").info, Some(Info::Help));
+		assert_eq!(p("--donate --about").info, Some(Info::About));
+		assert_eq!(p("-v --syntax --donate").info, Some(Info::Syntax));
+		assert_eq!(p("--version --donate").info, Some(Info::Donate));
+		assert_eq!(p("-v --ver").info, Some(Info::Version));
+	}
+
+	// The first tab or pane flag makes the implicit first tab, so the tab list
+	// is the whole answer.
+	// Test ID: ddj85
+	#[test]
+	fn a_launch_is_hierarchical_exactly_when_a_flag_made_a_tab() {
+		for (line, want) in [("", false), ("--columns 80 --title T --shell sh", false), ("--help", false), ("--new-tab", true), ("--tab=main", true), ("--new-pane", true), ("--pane=main", true), ("--new-tab --about", true)] {
+			let c = p(line);
+			assert_eq!(c.hierarchical(), want, "{line:?}");
+			assert_eq!(c.tabs.is_empty(), !want, "{line:?}");
+		}
+	}
+
+	// Test ID: db7eb
 	#[test]
 	fn the_three_version_spellings_are_one_flag() {
-		assert!(p("--version").version);
-		assert!(p("--ver").version);
-		assert!(p("-v").version);
-		assert!(!p("--columns 80").version);
+		assert_eq!(p("--version").info, Some(Info::Version));
+		assert_eq!(p("--ver").info, Some(Info::Version));
+		assert_eq!(p("-v").info, Some(Info::Version));
+		assert_eq!(p("--columns 80").info, None);
 	}
 
+	// Test ID: db7ec
 	#[test]
 	fn padding_puts_one_blank_line_either_side() {
-		// A body's own trailing newlines must not stack up into extra blanks -
-		// usage() ends with one, the built texts don't.
+		// A body's own trailing newlines don't stack up into extra blanks.
+		// usage() ends with one and the built texts don't.
 		assert_eq!(padded("a\nb"), "\na\nb\n\n");
 		assert_eq!(padded("a\nb\n"), "\na\nb\n\n");
 		assert_eq!(padded("a\nb\n\n\n"), "\na\nb\n\n");
 	}
 
+	// Test ID: db7ed
 	#[test]
 	fn about_survives_having_no_adapter() {
 		// A box with no usable GPU still has a version and a build worth
-		// reporting; only the three renderer lines go missing.
+		// reporting; only the 3 renderer lines go missing.
 		let text = about(None);
 		assert!(text.contains(env!("CARGO_PKG_VERSION")));
 		assert!(text.contains(env!("CARGO_PKG_REPOSITORY")));
+		assert!(text.contains(config::BUILD_ID));
 		assert!(text.contains(&config::build_target()));
 		assert!(!text.contains("Renderer:"));
 		assert!(!text.contains("Acceleration:"));
 	}
 
+	// With an adapter the Info block names it, indented under the heading, and
+	// says whether it's a GPU or a software renderer.
+	// Test ID: dd5n6
+	#[test]
+	fn about_names_the_renderer_and_whether_it_is_accelerated() {
+		let info = crate::gfx::test_adapter("X", wgpu::DeviceType::Cpu);
+		let text = about(Some(&info));
+		let lines: Vec<&str> = text.lines().collect();
+		let at = lines.iter().position(|l| *l == "Info").expect("an Info heading");
+		let under = &lines[at + 1..];
+		assert!(under.contains(&"  Renderer:  X"), "{text}");
+		assert!(under.contains(&"  Backend:  Vulkan"), "{text}");
+		assert!(under.contains(&"  Acceleration:  Software (CPU)"), "{text}");
+		let gpu = crate::gfx::test_adapter("Y", wgpu::DeviceType::DiscreteGpu);
+		assert!(about(Some(&gpu)).contains("  Acceleration:  Hardware (discrete GPU)"));
+	}
+
+	// Test ID: dbsdk
+	#[test]
+	fn version_names_the_build_as_well_as_the_release() {
+		// A release version can't tell 2 builds apart, which is why the build
+		// number exists, so --version shows both.
+		let line = version_line();
+		assert!(line.starts_with(config::APP_NAME));
+		assert!(line.contains(env!("CARGO_PKG_VERSION")));
+		assert!(line.contains(config::BUILD_ID));
+		// One flush line: it exists to be captured by a script.
+		assert!(!line.contains('\n'));
+		// A script reading the second field still gets the version, not the build.
+		// Retired 2026-09-24: the version now has a leading "v", as release
+		// tags do, so the second field is "v<version>". The assertion below replaces it.
+		// assert_eq!(line.split(' ').nth(1), Some(env!("CARGO_PKG_VERSION")));
+		assert_eq!(line, format!("{} v{} build {}", config::APP_NAME, env!("CARGO_PKG_VERSION"), config::build_label()));
+	}
+
+	// --version opens with the version line and the copyright line under it,
+	// per the CICD rules. --about has the same 2 lines under its heading.
+	// Test ID: defn7
+	#[test]
+	fn version_and_about_put_the_copyright_under_the_version_line() {
+		let text = version_text();
+		let lines: Vec<&str> = text.lines().collect();
+		assert_eq!(lines, [version_line().as_str(), COPYRIGHT]);
+		assert!(COPYRIGHT.starts_with("Copyright © "));
+		for info in [None, Some(crate::gfx::test_adapter("X", wgpu::DeviceType::Cpu))] {
+			let about = about(info.as_ref());
+			let heading = format!("About {}", config::APP_NAME);
+			assert!(about.starts_with(&format!("{heading}\n{text}\n")), "{about}");
+		}
+	}
+
+	// Test ID: dbsdm
+	#[test]
+	fn the_build_number_is_lowercase_crockford() {
+		// Baked in by build.rs, so this is the one place the built value itself
+		// gets checked rather than the generator that made it.
+		assert!(!config::BUILD_ID.is_empty());
+		for ch in config::BUILD_ID.chars() {
+			assert!("0123456789abcdefghjkmnpqrstvwxyz".contains(ch), "{ch} is not a lowercase Crockford digit");
+		}
+	}
+
+	// Test ID: db7ee
 	#[test]
 	fn donate_names_the_address() {
 		let text = donate();
 		assert!(text.contains(config::SPONSOR_URL));
+		assert!(text.contains(config::KOFI_URL));
 		assert!(text.contains(config::DONATE_URL));
 	}
 
+	// Test ID: db7ef
 	#[test]
 	fn usage_lists_every_cli_only_flag() {
 		// The flags exist to be found; one added without its line is a flag
 		// nobody can discover.
 		let text = usage();
-		for flag in [
-			"--help",
-			"--syntax",
-			"--about",
-			"--donate",
-			"--version",
-			"--ver",
-			"-v",
-			"-h",
-		] {
+		for flag in ["--help", "--syntax", "--about", "--donate", "--version", "--ver", "-v", "-h"] {
 			assert!(text.contains(flag), "usage() never mentions {flag}");
 		}
 	}
 
-	#[test]
-	fn window_opt_after_tab_errors() {
-		assert!(
-			parse(
-				"--new-tab --columns 80"
-					.split_whitespace()
-					.map(String::from)
-			)
-			.is_err()
-		);
+	/// usage.md's "Command line" section, up to the next section.
+	fn usage_md_section() -> String {
+		let doc = include_str!("../../usage.md").replace("\r\n", "\n");
+		let from = doc.find("\n## Command line\n").expect("usage.md has no Command line section");
+		let rest = &doc[from + 1..];
+		let to = rest[1..].find("\n## ").map_or(rest.len(), |i| i + 1);
+		rest[..to].to_string()
 	}
 
+	/// Every flag `--help` lists, aliases included.
+	fn usage_flags() -> Vec<String> {
+		let is_flag_char = |c: char| c.is_ascii_alphanumeric() || c == '-';
+		let mut flags = Vec::new();
+		for line in usage().lines().filter(|l| l.starts_with("  -")) {
+			let line = line.trim_start();
+			let (opts, said) = line.split_once("  ").unwrap_or((line, ""));
+			let aliases = said.split("alias ").skip(1).filter_map(|s| s.split(|c: char| !is_flag_char(c)).next());
+			for word in opts.split(|c: char| !is_flag_char(c)).chain(aliases) {
+				if word.len() > 1 && word.starts_with('-') && !flags.iter().any(|f| f == word) {
+					flags.push(word.to_string());
+				}
+			}
+		}
+		flags
+	}
+
+	// usage.md is where a person reads about the options, so one added to
+	// --help has to be written up there too.
+	// Test ID: ddzx3
+	#[test]
+	fn usage_md_names_every_option_in_help() {
+		let section = usage_md_section();
+		let flags = usage_flags();
+		assert!(flags.len() > 40, "only found {flags:?} in usage()");
+		let edge = |c: Option<char>| c.is_none_or(|c| !(c.is_ascii_alphanumeric() || c == '-'));
+		let missing: Vec<&String> = flags.iter().filter(|flag| !section.match_indices(flag.as_str()).any(|(at, _)| edge(section[..at].chars().next_back()) && edge(section[at + flag.len()..].chars().next()))).collect();
+		assert!(missing.is_empty(), "usage.md's Command line section never names {missing:?}");
+	}
+
+	// Test ID: ddzx4
+	#[test]
+	fn usage_md_examples_parse() {
+		let section = usage_md_section();
+		let examples: Vec<&str> = section.lines().filter_map(|l| l.trim_start().strip_prefix("silkterm ")).collect();
+		assert!(!examples.is_empty(), "no examples found in usage.md");
+		for line in examples {
+			let got = parse(line.split_whitespace().map(String::from));
+			assert!(got.is_ok(), "usage.md example `silkterm {line}`: {:#}", got.unwrap_err());
+		}
+	}
+
+	// Test ID: d913z
+	#[test]
+	fn window_opt_after_tab_errors() {
+		assert!(parse("--new-tab --columns 80".split_whitespace().map(String::from)).is_err());
+	}
+
+	// Test ID: d9140
 	#[test]
 	fn tabs_and_panes() {
 		let c = p("--new-tab --new-pane --right --new-pane --down --splits=main");
@@ -874,93 +1060,95 @@ mod tests {
 		assert_eq!(t.panes[2].splits.as_deref(), Some("main"));
 	}
 
+	// Test ID: d9141
 	#[test]
 	fn first_pane_rejects_split() {
 		assert!(parse("--pane=main --right".split_whitespace().map(String::from)).is_err());
 	}
 
+	// Test ID: d9142
 	#[test]
 	fn select_unknown_tab_errors() {
 		assert!(parse("--tab=nope".split_whitespace().map(String::from)).is_err());
 	}
 
+	// Test ID: d9143
 	#[test]
 	fn shell_splitting() {
-		let c = parse(
-			["--new-pane", "--shell=git log --oneline"]
-				.into_iter()
-				.map(String::from),
-		)
-		.unwrap();
+		let c = parse(["--new-pane", "--shell=git log --oneline"].into_iter().map(String::from)).unwrap();
 		let sh = c.tabs[0].panes[1].style.shell.as_ref().unwrap();
 		assert_eq!(sh, &["git", "log", "--oneline"]);
 	}
 
+	// Test ID: d9144
 	#[test]
 	fn shell_quotes() {
-		assert_eq!(
-			shell_split(r#"bash -c "a | b""#).unwrap(),
-			["bash", "-c", "a | b"]
-		);
+		assert_eq!(shell_split(r#"bash -c "a | b""#).unwrap(), ["bash", "-c", "a | b"]);
 		assert_eq!(shell_split("'a b' c").unwrap(), ["a b", "c"]);
 	}
 
+	// Test ID: dact6
 	#[test]
 	fn shell_keeps_unquoted_backslashes() {
 		// A Windows path written plainly must arrive intact, quoted or not.
-		assert_eq!(
-			shell_split(r"C:\windows\system32\cmd.exe").unwrap(),
-			[r"C:\windows\system32\cmd.exe"]
-		);
-		assert_eq!(
-			shell_split(r"\\host\share\app.exe -x").unwrap(),
-			[r"\\host\share\app.exe", "-x"]
-		);
-		assert_eq!(
-			shell_split(r#""C:\windows\system32\cmd.exe""#).unwrap(),
-			[r"C:\windows\system32\cmd.exe"]
-		);
+		assert_eq!(shell_split(r"C:\windows\system32\cmd.exe").unwrap(), [r"C:\windows\system32\cmd.exe"]);
+		assert_eq!(shell_split(r"\\host\share\app.exe -x").unwrap(), [r"\\host\share\app.exe", "-x"]);
+		assert_eq!(shell_split(r#""C:\windows\system32\cmd.exe""#).unwrap(), [r"C:\windows\system32\cmd.exe"]);
 	}
 
+	// Test ID: dact7
 	#[test]
 	fn shell_still_escapes_whitespace_and_quotes() {
 		assert_eq!(shell_split(r"/opt/my\ app/sh").unwrap(), ["/opt/my app/sh"]);
 		assert_eq!(shell_split(r"it\'s fine").unwrap(), ["it's", "fine"]);
 	}
 
+	// Test ID: d9145
 	#[test]
 	fn style_cascade_scope() {
 		let c = p("--shell=fish --new-tab --shell=zsh --new-pane --shell=htop");
-		assert_eq!(
-			c.win.style.shell.as_deref(),
-			Some(&["fish".to_string()][..])
-		);
-		assert_eq!(
-			c.tabs[1].style.shell.as_deref(),
-			Some(&["zsh".to_string()][..])
-		);
-		assert_eq!(
-			c.tabs[1].panes[1].style.shell.as_deref(),
-			Some(&["htop".to_string()][..])
-		);
+		assert_eq!(c.win.style.shell.as_deref(), Some(&["fish".to_string()][..]));
+		assert_eq!(c.tabs[1].style.shell.as_deref(), Some(&["zsh".to_string()][..]));
+		assert_eq!(c.tabs[1].panes[1].style.shell.as_deref(), Some(&["htop".to_string()][..]));
 	}
 
-	// A directory rides the same cascade as the shell it starts, in both
+	// What a double-click in Explorer runs: the file's own arguments are passed
+	// along even when they look like options, and it starts beside the file
+	// unless told otherwise.
+	// Test ID: ddamp
+	#[test]
+	fn open_takes_the_rest_of_the_line() {
+		let argv = |s: &[&str]| s.iter().map(ToString::to_string).collect::<Vec<_>>();
+		let c = parse(argv(&["--keep-open", "--open", "/s/go.bat", "--new-tab", "x y"])).unwrap();
+		let shell = c.win.style.shell.unwrap();
+		assert_eq!(shell.last().map(String::as_str), Some("x y"));
+		assert!(shell.iter().any(|a| a == "--new-tab"));
+		assert!(c.tabs.is_empty(), "an argument is not a tab");
+		assert_eq!(c.win.style.keep_open, Some(true));
+		assert_eq!(c.win.style.directory.as_deref(), Some("/s"));
+		let c = parse(argv(&["--dir=/w", "--open", "/s/go.bat"])).unwrap();
+		assert_eq!(c.win.style.directory.as_deref(), Some("/w"));
+		assert!(parse(argv(&["--open"])).is_err());
+	}
+
+	// A directory follows the same cascade as the shell it starts, in both
 	// spellings and both value forms. It is kept exactly as written: `~` and
 	// `%VAR%` mean nothing until spawn time, and expanding at parse would bake
-	// this process's environment into a value the config file can also carry.
+	// this process's environment into a value the config file can also have.
+	// Test ID: dbh65
 	#[test]
 	fn a_directory_cascades_the_way_a_shell_does() {
 		let c = p("--directory=/w --new-tab --dir /t --new-pane --directory=~/p");
 		assert_eq!(c.win.style.directory.as_deref(), Some("/w"));
 		assert_eq!(c.tabs[1].style.directory.as_deref(), Some("/t"));
 		assert_eq!(c.tabs[1].panes[1].style.directory.as_deref(), Some("~/p"));
-		// nothing said = nothing set, so the config's own setting still decides
+		// nothing said = nothing set, so the config's own setting still applies
 		assert_eq!(p("--shell=fish").win.style.directory, None);
-		// and it needs a value - a bare flag must not swallow the next option
+		// and it needs a value, so a bare flag doesn't take the next option
 		assert!(parse(["--directory".to_string()]).is_err());
 	}
 
+	// Test ID: da708
 	#[test]
 	fn wallpaper_never_eats_the_next_option() {
 		// bare flag followed by another option = explicitly none; the option survives
@@ -977,6 +1165,7 @@ mod tests {
 		assert_eq!(c.win.style.wallpaper_img, Some(None));
 	}
 
+	// Test ID: d9t5s
 	#[test]
 	fn control_flags() {
 		let c = p("--wallpaper /x.png");
@@ -992,6 +1181,7 @@ mod tests {
 		assert_eq!(c.wallpaper, None);
 	}
 
+	// Test ID: d9kcb
 	#[test]
 	fn only_config_args_detects_layoutless_launches() {
 		let v = |s: &str| -> Vec<String> { s.split_whitespace().map(String::from).collect() };
@@ -1002,6 +1192,7 @@ mod tests {
 		assert!(!only_config_args(v("--new-tab")));
 	}
 
+	// Test ID: d9146
 	#[test]
 	fn size_and_colors() {
 		let c = p("--new-pane --size=30% --background-color=#102030");
@@ -1009,25 +1200,28 @@ mod tests {
 		assert_eq!(c.tabs[0].panes[1].style.bg_color, Some([0x10, 0x20, 0x30]));
 	}
 
+	// Test ID: d974f
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn window_style_folds_into_settings() {
-		let c = p(
-			"--font-name=Iosevka --font-size=20 --background-color=#102030 \
+		let c = p("--font-name=Iosevka --font-size=20 --background-color=#102030 \
 			--foreground-color=#abcdef --background-image=/x.png --background-image-zoom \
-			--background-image-opacity=0.5",
-		);
+			--background-image-opacity=0.5");
 		let mut s = config::Settings::default();
 		fold_window_style(&mut s, &c.win.style);
-		assert_eq!(s.font_family.as_deref(), Some("Iosevka"));
+		assert_eq!(s.font_family, "Iosevka");
 		assert_eq!(s.font_size, 20.0);
 		assert_eq!(s.bg, [0x10, 0x20, 0x30]);
+		assert!(crate::fields::lines_of(&s).is_empty(), "held for the run, so nothing to save");
 		assert_eq!(s.fg, [0xab, 0xcd, 0xef]);
 		assert_eq!(s.wallpaper, Some(PathBuf::from("/x.png")));
 		assert_eq!(s.wallpaper_default_fit, config::Fit::Zoom);
 		assert_eq!(s.wallpaper_opacity, 0.5);
 	}
 
+	// Test ID: d974g
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn window_style_noop_leaves_defaults() {
 		// no style flags -> settings untouched
 		let c = p("--columns 80");
@@ -1035,5 +1229,210 @@ mod tests {
 		let before = (s.font_size, s.bg, s.fg);
 		fold_window_style(&mut s, &c.win.style);
 		assert_eq!((s.font_size, s.bg, s.fg), before);
+	}
+
+	// A launch can ask for software rendering for that run only, beside the
+	// setting, and a save never writes it.
+	// Test ID: de9m0
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn software_rendering_flag_holds_the_setting_for_the_run() {
+		assert_eq!(p("--software-rendering").win.style.software_rendering, Some(true));
+		assert_eq!(p("--software-rendering=no").win.style.software_rendering, Some(false));
+		assert_eq!(p("--columns 80").win.style.software_rendering, None);
+		let under_tab = parse(["--new-tab", "--software-rendering"].map(String::from));
+		assert!(under_tab.is_err(), "a window option");
+		// macOS has no row to hold
+		if !crate::gfx::SOFTWARE_POSSIBLE {
+			return;
+		}
+
+		let mut s = config::Settings::default();
+		fold_window_style(&mut s, &p("--software-rendering").win.style);
+		assert!(s.software_rendering);
+		assert!(crate::fields::lines_of(&s).is_empty(), "held for the run, so nothing to save");
+		// a setting that is on stays on without the flag, and =no turns it off
+		let mut on = crate::fields::owning(config::Settings::default(), &[(crate::ui_spec::Key::SoftwareRendering, knobs::Value::Bool(true))]);
+		fold_window_style(&mut on, &p("--columns 80").win.style);
+		assert!(on.software_rendering);
+		fold_window_style(&mut on, &p("--software-rendering=no").win.style);
+		assert!(!on.software_rendering);
+	}
+
+	// nan parsed fine and went into the live settings. The session's first save
+	// then found it unequal to the value it stood for, since NaN is unequal even
+	// to itself, and wrote NaN over the user's own value.
+	// Test ID: dcq6s
+	#[test]
+	fn a_non_finite_number_is_refused() {
+		let bad = |s: &str| parse(s.split_whitespace().map(String::from)).is_err();
+		assert!(bad("--font-size nan"));
+		assert!(bad("--font-size inf"));
+		assert!(bad("--wallpaper-opacity nan"));
+		assert!(bad("--background-opacity -inf"));
+		assert!(bad("--new-pane --size=nan%"));
+		assert!(!bad("--font-size 20"));
+	}
+
+	// Every number stands for a setting, so it is held to that setting's range:
+	// the command line may not ask for a value the config file couldn't hold.
+	// Test ID: dcq6t
+	#[test]
+	fn a_number_is_held_to_its_settings_range() {
+		assert_eq!(p("--font-size 4000").win.style.font_size, Some(400.0));
+		assert_eq!(p("--font-size 0.5").win.style.font_size, Some(4.0));
+		assert_eq!(p("--wallpaper-opacity 5").win.style.wallpaper_opacity, Some(1.0));
+		assert_eq!(p("--background-opacity -1").win.opacity, Some(0.0));
+		// a grid no graphics card can draw ended the launch in create_texture
+		assert_eq!(p("--rows 100000 --columns 100000").win.rows, Some(1_000));
+		assert_eq!(p("--columns 0").win.columns, Some(1));
+		// both panes of a split stay usable
+		assert_eq!(p("--new-pane --size=0%").tabs[0].panes[1].size, Some(Size::Percent(5.0)));
+		assert_eq!(p("--new-pane --size=0").tabs[0].panes[1].size, Some(Size::Cells(1)));
+	}
+
+	fn bad(s: &str) -> bool {
+		parse(s.split_whitespace().map(String::from)).is_err()
+	}
+
+	// Test ID: dd5n7
+	#[test]
+	fn config_names_the_file_in_either_form_and_only_for_the_window() {
+		assert_eq!(p("--config /tmp/a.shcl").config, Some(PathBuf::from("/tmp/a.shcl")));
+		assert_eq!(p("--config=/tmp/a.shcl").config, Some(PathBuf::from("/tmp/a.shcl")));
+		assert_eq!(p("--columns 80").config, None);
+		assert!(bad("--new-tab --config x"));
+		assert!(bad("--config"));
+	}
+
+	// Test ID: dd5n8
+	#[test]
+	fn pixel_width_and_height_take_a_whole_number_before_any_tab() {
+		let c = p("--pixel-width 800 --pixel-height=600");
+		assert_eq!(c.win.pixel_width, Some(800));
+		assert_eq!(c.win.pixel_height, Some(600));
+		assert_eq!(p("--columns 80").win.pixel_width, None);
+		assert!(bad("--pixel-width abc"));
+		assert!(bad("--pixel-height -5"));
+		assert!(bad("--new-tab --pixel-width 800"));
+		assert!(bad("--new-pane --pixel-height=600"));
+	}
+
+	// Test ID: dd5n9
+	#[test]
+	fn hide_windowframe_is_a_window_bool() {
+		assert_eq!(p("--hide-windowframe").win.hide_frame, Some(true));
+		assert_eq!(p("--hide-windowframe=no").win.hide_frame, Some(false));
+		assert_eq!(p("--hide-windowframe yes").win.hide_frame, Some(true));
+		assert_eq!(p("--columns 80").win.hide_frame, None);
+		assert!(bad("--hide-windowframe=maybe"));
+		assert!(bad("--new-tab --hide-windowframe"));
+	}
+
+	// Test ID: dd5na
+	#[test]
+	fn tab_selects_by_handle_or_first_and_later_options_go_there() {
+		let c = p("--new-tab=a --new-tab --tab=a --title A --tab main --title M");
+		assert_eq!(c.tabs.len(), 3);
+		assert_eq!(c.tabs[1].title.as_deref(), Some("A"));
+		assert_eq!(c.tabs[0].title.as_deref(), Some("M"));
+		assert_eq!(c.tabs[2].title, None);
+		// a pane added after selecting goes to that tab
+		let c = p("--new-tab=a --new-tab --tab a --new-pane");
+		assert_eq!(c.tabs[1].panes.len(), 2);
+		assert_eq!(c.tabs[2].panes.len(), 1);
+		// "0" is the first tab too, and selecting is a hierarchical launch
+		assert!(p("--tab=0").hierarchical());
+		assert!(bad("--tab"));
+		assert!(bad("--new-tab=a --tab=b"));
+	}
+
+	// Test ID: ddj54
+	#[test]
+	fn a_new_tab_after_a_tab_selection_goes_next_to_it() {
+		let c = p("--new-tab=a --new-tab=b --tab=main --new-tab=c --tab=a --new-tab=d");
+		let ids = |order: Vec<usize>| -> Vec<String> { order.into_iter().map(|i| c.tabs[i].id.clone().unwrap_or_else(|| "main".into())).collect() };
+		assert_eq!(ids(c.tab_order(true)), ["main", "c", "a", "d", "b"]);
+		assert_eq!(ids(c.tab_order(false)), ["main", "a", "b", "c", "d"]);
+		// one after another is the same order either way
+		let c = p("--new-tab=a --new-tab=b --new-tab=c");
+		assert_eq!(c.tab_order(true), c.tab_order(false));
+		assert_eq!(p("--title T").tab_order(true), Vec::<usize>::new());
+		assert_eq!(p("--tab=main").tab_order(true), [0]);
+	}
+
+	// The window opens on the strip's first tab (`active: 0` in app.rs), so the
+	// first tab has to lead it however the line ends, and the help says so.
+	// Test ID: dett5
+	#[test]
+	fn a_launch_opens_on_its_first_tab_and_the_help_says_so() {
+		for line in ["--new-tab=logs --directory /var/log", "--new-tab=a --new-tab=b --tab=b --new-tab=c", "--new-tab=a --tab=a --new-pane"] {
+			for beside in [true, false] {
+				assert_eq!(p(line).tab_order(beside)[0], 0, "{line}, beside {beside}");
+			}
+		}
+		assert!(usage().contains("a window opens on its first tab"));
+		assert!(!usage().contains("becomes current"));
+	}
+
+	// Test ID: dd5nb
+	#[test]
+	fn pane_selects_by_handle_and_a_split_can_name_it() {
+		let c = p("--new-pane=a --new-pane --pane=a --new-pane --splits=a");
+		let panes = &c.tabs[0].panes;
+		assert_eq!(panes.len(), 4);
+		assert_eq!(panes[1].id.as_deref(), Some("a"));
+		assert_eq!(panes[3].splits.as_deref(), Some("a"));
+		// selecting a pane makes it the one later options attach to
+		let c = p("--new-pane=a --new-pane --pane=a --shell=fish");
+		assert!(c.tabs[0].panes[1].style.shell.is_some());
+		assert!(c.tabs[0].panes[2].style.shell.is_none());
+		assert!(bad("--new-pane=a --pane=nope"));
+		assert!(bad("--pane"));
+		// a handle belongs to its own tab
+		assert!(bad("--new-pane=a --new-tab --pane=a"));
+	}
+
+	// A title goes to whatever scope it follows. After a pane marker it is kept
+	// on the pane and goes to neither the tab nor the window.
+	// Test ID: dd5nc
+	#[test]
+	fn a_title_names_the_window_or_the_tab_it_follows() {
+		let c = p("--title W --new-tab --title T --new-pane --title P");
+		assert_eq!(c.win.title.as_deref(), Some("W"));
+		assert_eq!(c.tabs[1].title.as_deref(), Some("T"));
+		assert_eq!(c.tabs[0].title, None);
+		assert_eq!(c.tabs[1].panes[1].title.as_deref(), Some("P"));
+		let c = p("--new-tab --new-pane --title P");
+		assert_eq!(c.tabs[1].title, None);
+		assert_eq!(c.win.title, None);
+	}
+
+	// Test ID: dd5nd
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn stretch_is_taken_in_both_spellings_and_reaches_the_settings() {
+		for flag in ["--background-image-stretch", "--wallpaper-stretch"] {
+			let c = p(flag);
+			assert_eq!(c.win.style.wallpaper_default_fit, Some(Fit::Stretch), "{flag}");
+			assert_eq!(p(&format!("{flag}=no")).win.style.wallpaper_default_fit, None);
+			let mut s = config::Settings { wallpaper_default_fit: Fit::Zoom, ..config::Settings::default() };
+			fold_window_style(&mut s, &c.win.style);
+			assert_eq!(s.wallpaper_default_fit, Fit::Stretch, "{flag}");
+		}
+	}
+
+	// Test ID: dffkj
+	#[test]
+	fn a_non_unicode_argument_is_an_error_not_a_panic() {
+		use std::ffi::OsString;
+		assert_eq!(utf8_args([OsString::from("--rows"), OsString::from("5")]).unwrap(), ["--rows", "5"]);
+		#[cfg(unix)]
+		{
+			use std::os::unix::ffi::OsStringExt;
+			let bad = OsString::from_vec(b"/data/caf\xe9".to_vec());
+			let e = utf8_args([OsString::from("--directory"), bad]).unwrap_err();
+			assert!(e.to_string().contains("isn't valid Unicode"), "{e}");
+		}
 	}
 }

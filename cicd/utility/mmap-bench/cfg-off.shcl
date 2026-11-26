@@ -1,0 +1,18 @@
+## SilkTerm with every optional effect off, for the "plain" row of the shootout table.
+## Only the overrides are listed - the loader backfills every other key from its own
+## defaults, so this file can't go stale as new settings are added.
+
+performance.automatic: false
+performance.profile: custom
+wallpaper.fallback_builtin: false
+text.scrim.enabled: false
+text.outline: 0.0
+cursor.scrim: false
+cursor.outline: false
+cursor.animation: none
+scroll.smooth_apps: false
+transparency.enabled: false
+text.color_emoji: false
+scroll.minimap.enabled: false
+window.rows: 42
+window.columns: 160

@@ -1,10 +1,22 @@
 # Virtual workspace: the crate lives in source/ (Cargo.toml + src/ + diagnostics/).
 # Build/test/run from this root as before; Cargo.lock and target/ stay here.
 [workspace]
-members = ["source"]
+members = ["source", "knobs"]
+# Crates that live here but aren't part of the build. `forks/` holds working
+# clones of the patched dependencies, and the clipboard reproducer is run by
+# hand. The sanitizer canary leaks on purpose, so it's built only by the
+# sanitizer step. Without this, cargo takes any package under this directory for
+# a member it wasn't told about and refuses to build it on its own.
+exclude = ["forks", "cicd/tests/clipboard-race", "cicd/tests/sanitizer-canary", "cicd/utility/gpu-stress", "knobs/demo"]
 resolver = "3"
 
-# TEMPORARY - remove once a released alacritty_terminal carries the fix.
+# Five changes over the released 0.26.0, on one branch. At each new release,
+# move them onto a new branch named for it, and leave this one standing so an
+# older lock still resolves.
+#
+# The scroll ledger: the engine records every region scroll (count, region,
+# and the rows that left the screen) so the alt-screen slide can ease off an
+# exact record instead of a guess. That is what lets tmux scroll smoothly.
 #
 # On Windows the terminal froze for good on any large burst of output: the
 # engine's reader thread fills a one-megabyte staging buffer and waits for room,
@@ -14,13 +26,62 @@ resolver = "3"
 # needs only enough output to fill the buffer, so it was reachable by ordinary
 # use and nothing about our own code was involved.
 #
-# This pins the released 0.26.0 plus that one change. Submitted upstream as
-# alacritty/alacritty#9026; the branch is cut from the v0.17.0 tag rather than
-# master purely so the version still reads 0.26.0 - cargo silently ignores a
-# patch whose version does not satisfy the dependency requirement, and master
-# carries a pre-release version that does not.
+# That one went upstream as alacritty/alacritty#9026 and was closed unmerged.
+# The branch is cut from the v0.17.0 tag rather than master purely so the
+# version still reads 0.26.0 - cargo silently ignores a patch whose version does
+# not satisfy the dependency requirement, and master has a pre-release
+# version that doesn't.
+#
+# The cap of nine combining marks per cell is upstream's own fix (ede2ac144d),
+# here until a release has it. The last three are ours. On Linux, a program that
+# closes its terminal and keeps running no longer spins the reader thread at a
+# whole core; the PTY is left out of the poll for a tenth of a second at a time.
+# A title is cut to 2 KiB, so the title stack can't be made to hold gigabytes.
+# And on Windows a pane gives back its process, thread and pipe handles when it
+# closes, and a program path with a space is quoted, so a planted program
+# earlier in that path can't run in its place.
 [patch.crates-io]
-alacritty_terminal = { git = "https://github.com/jim-collier/alacritty", branch = "pty-deadlock-fix-0.26.0" }
+alacritty_terminal = { git = "https://github.com/jim-collier/alacritty", branch = "scroll-ledger-0.26.0" }
+
+# x11-clipboard 0.9.3 drops the copied text on ANY SelectionClear, without
+# checking when that clear was generated. One left over from an earlier
+# hand-over arrives after the next copy has already taken the selection back,
+# and wipes the text that copy just stored - so the selection stays ours with
+# nothing behind it, and a program asking to paste gets no reply at all. Our
+# branch keeps the value; it is never served while another program owns the
+# selection, and the next copy overwrites it. The branch is the published
+# 0.9.3 plus that one change and a test for it.
+x11-clipboard = { git = "https://github.com/jim-collier/x11-clipboard", branch = "keep-value-on-clear-0.9.3" }
+
+# glyphon blends glyph coverage into whatever the target is, and ours is linear
+# light. A half covered pixel then reads at about three quarters brightness
+# either way, which is strong on a dark background and nearly nothing on a light
+# one - so light themes lose the thin parts of every letter and read thin and
+# pale. Our branch adds the text color, its background and a blend amount in
+# the params uniform, and bends coverage so the finished pixel ends up where an
+# sRGB blend of that pair would have put it. That is the weight the font was
+# drawn for and what almost every other program paints; the output stays linear,
+# so the target is still encoded once. A blend of 0 leaves coverage alone. A
+# contrast amount lifts the partly covered pixels ahead of that, since even an
+# sRGB blend looks thinner than light text on dark, and a glyph lighter than the
+# pair's midpoint is left alone. The branch is the published 0.11.0 plus those
+# changes and their tests.
+#
+# `coverage-gamma-0.11.0` is the same work as an exponent, which was the wrong
+# curve: it smudged the faintest pixels and still left the stems pale. Left
+# standing so an older lock resolves.
+glyphon = { git = "https://github.com/jim-collier/glyphon", branch = "text-srgb-blend-0.11.0" }
+
+# vte 0.15.0 clears its OSC buffer when a sequence ends but keeps the memory,
+# so one long OSC left a pane holding up to 2 MiB until it closed. Our branch
+# is the published 0.15.0 plus a 2 MiB cap on that buffer, and a shrink back to
+# 4 KiB once a long sequence ends, with a test for both.
+vte = { git = "https://github.com/jim-collier/vte", branch = "osc-buffer-0.15.0" }
+
+# silk_asan and silk_tsan are set by the sanitizer runs (cicd/config.bash), for
+# the few tests that can't mean anything under them.
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(silk_asan)", "cfg(silk_tsan)"] }
 
 # Clippy gate (cicd lints stage runs -D warnings). pedantic is on; the allows
 # below are deliberate house style, not suppressed problems.
@@ -48,7 +109,7 @@ float_cmp = "allow"
 # would scatter tightly-coupled state.
 too_many_lines = "allow"
 
-# Config/Settings-style structs legitimately carry many independent toggles.
+# Config/Settings-style structs legitimately have many independent toggles.
 struct_excessive_bools = "allow"
 
 # `..Default::default()` in struct-update reads better than naming the type.
@@ -66,6 +127,16 @@ many_single_char_names = "allow"
 # CLI optional-value args are a genuine tri-state: absent / present-empty /
 # present-with-value. Option<Option<T>> models that directly.
 option_option = "allow"
+
+# Errors are values. An unwrap or expect outside the tests says why it can't
+# fail, in the reason of an allow at that site. Tests are exempt (clippy.toml).
+unwrap_used = "warn"
+expect_used = "warn"
+# Every unsafe block says what it relies on, in a `// SAFETY:` line above it.
+undocumented_unsafe_blocks = "warn"
+# A forgotten value never drops, so whatever it owns leaks. Where that's the
+# point, an allow at the site gives the reason.
+mem_forget = "warn"
 
 # Profiles only take effect in the workspace root manifest, so they live here,
 # not in source/Cargo.toml.

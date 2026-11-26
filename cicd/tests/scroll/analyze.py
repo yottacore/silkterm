@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 """Analyze a SILK_SCROLLDBG trace for one scroll scenario.
 
 Reads the per-frame trace on stdin (the `SCROLLDBG ...` lines SilkTerm writes to
@@ -12,10 +18,42 @@ supposed to hold:
   --mode hardcut  : the app has a static top band (nano/muffer) so the slide is
                     deliberately disabled - the shift is still detected but app_off
                     must stay 0 across every frame (a plain page redraw).
+  --mode pinned   : output easing on the normal screen under a live block redrawn
+                    in place (muffer's shape). The block must be held still:
+                    most easing frames have ob == --expect-sb, and none more.
+  --mode still    : the alt screen took over while plain output was still easing.
+                    There is no scrollback behind it, so the view must be at rest
+                    on the spot: frac stays 0 on every frame. A leftover ease shows
+                    up as the fraction wrapping through a whole cell once per line
+                    (the nano wobble). One frame is enough - a still screen builds
+                    only when something changes. The output must be seen easing
+                    before the swap, or there was nothing to stop and the check
+                    tested nothing. The scene waits for that before it swaps, so
+                    no ease is a skip when its --note says the wait ran out, and
+                    a failure otherwise.
+  --mode instant  : screen clears on the normal screen, between an alt-screen trip
+                    that scrolls down a line at a time and one that scrolls down
+                    9 lines at once. A clear shows at
+                    once, so no normal-screen frame between them has a
+                    fraction. Output must be seen easing before the first trip,
+                    or the check tested nothing.
+  --mode wipe     : clears inside tmux, which tmux draws on the alt screen as
+                    its pane scrolled away whole, between a region scroll of 3
+                    and one of 5. A burst before them scrolls the pane away
+                    whole too and has to slide, or the check tested nothing.
+                    Between the marks no frame takes a step that big, and no
+                    slide goes past the 3 rows of the first mark. The scene
+                    waits for each slide to come to rest, so a slide past
+                    that is a skip when its --note says the wait ran out.
+  --mode popin    : content growing down into blank rows on a half-empty screen
+                    (an input box taking a paste). That is room, not a scroll, so
+                    a step down must never slide: app_off never goes below 0.
+                    Steps back up may slide. No step down at all is a skip.
 
 Exit codes: 0 pass, 1 real regression (a genuine violation with data), 2 skip
 (not enough trace / the scene never scrolled - an environment/timing miss, not a
-code regression). The runner treats 2 as non-fatal unless --strict.
+code regression). The runner treats 2 as non-fatal unless --strict. A slide scene
+that scrolled but never slid is a regression, not a skip.
 
 The bounce metric reconstructs a reference line's screen position as
 `app_off - cumulative_shift`: while easing, app_off shrinks with the grid held, so
@@ -26,19 +64,35 @@ app_off, so the position stays continuous across steps. Any reversal is a bounce
 import argparse
 import re
 import sys
+from pathlib import Path
 
 TRACE = re.compile(
     r"SCROLLDBG f=(\d+) pane=(\d+) sh=(-?\d+) app_off=(-?[\d.]+) "
     r"slide_sh=(-?[\d.]+) st=(\d+) sb=(\d+) frac=([\d.]+)"
+    r"(?: alt=(\d))?(?: ob=(\d+))?"
 )
+
+
+def read_note(path: str) -> str:
+    if not path:
+        return ""
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ""
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", required=True, choices=["slide", "hardcut"])
+    ap.add_argument("--mode", required=True, choices=["slide", "hardcut", "still", "pinned", "popin", "instant", "wipe"])
     ap.add_argument("--expect-st", type=int, default=-1)
+    ap.add_argument("--expect-sb", type=int, default=-1)
     ap.add_argument("--label", default="scene")
     ap.add_argument("--eps", type=float, default=0.02)
+    # frames traced before the scene's loop began, which the check must not judge
+    ap.add_argument("--skip-frames", type=int, default=0)
+    # what the scene wrote when it gave up waiting on its trace
+    ap.add_argument("--note", default="")
     a = ap.parse_args()
 
     frames = []
@@ -51,11 +105,108 @@ def main() -> int:
                     "app_off": float(m.group(4)),
                     "st": int(m.group(6)),
                     "sb": int(m.group(7)),
+                    "frac": float(m.group(8)),
+                    "alt": int(m.group(9)) if m.group(9) is not None else 1,
+                    "ob": int(m.group(10) or 0),
                 }
             )
 
-    def out(tag, msg):
+    frames = frames[a.skip_frames:]
+
+    def out(tag: str, msg: str) -> None:
         print(f"[ {tag} {a.label}: {msg} ]")
+
+    if a.mode == "pinned":
+        easing = [f for f in frames if f["alt"] == 0 and f["frac"] > a.eps]
+        if len(easing) < 10:
+            # The opening burst eased, so the renderer is up and the loop's lines cut.
+            if a.skip_frames >= 10:
+                out("FAIL", f"only {len(easing)} easing frames in the loop, after "
+                           f"{a.skip_frames} before it: the output is not easing")
+                return 1
+            out("SKIP", f"only {len(easing)} easing frames (GL warmup / timing?)")
+            return 2
+        over = [f for f in easing if f["ob"] > a.expect_sb]
+        if over:
+            out("FAIL", f"band wider than the block on {len(over)} frame(s) "
+                       f"(ob={over[0]['ob']}, block {a.expect_sb}): output was held")
+            return 1
+        held = sum(1 for f in easing if f["ob"] == a.expect_sb)
+        if held * 5 < len(easing) * 4:
+            out("FAIL", f"block held on only {held} of {len(easing)} easing frames")
+            return 1
+        out("PASS", f"block held still on {held} of {len(easing)} easing frames")
+        return 0
+
+    if a.mode == "instant":
+        start = next((i for i, f in enumerate(frames) if f["alt"] == 1 and f["sh"] < 0), None)
+        if start is None:
+            out("SKIP", "the opening alt-screen scroll never showed (GL warmup / timing?)")
+            return 2
+        end = next((i for i in range(start, len(frames)) if frames[i]["alt"] == 1 and frames[i]["sh"] <= -5), None)
+        if end is None:
+            out("SKIP", "the closing alt-screen scroll never showed (timing?)")
+            return 2
+        if not any(f["alt"] == 0 and f["frac"] > a.eps for f in frames[:start]):
+            out("FAIL", "no output eased before the clears, so nothing was tested")
+            return 1
+        moving = [f for f in frames[start:end] if f["alt"] == 0 and f["frac"] > a.eps]
+        if moving:
+            worst = max(f["frac"] for f in moving)
+            out("FAIL", f"a clear eased: {len(moving)} frame(s) have a fraction (max {worst:.3f})")
+            return 1
+        out("PASS", "every clear showed at once")
+        return 0
+
+    if a.mode == "wipe":
+        alt = [f for f in frames if f["alt"] == 1]
+        start = next((i for i, f in enumerate(alt) if f["sh"] == 3), None)
+        if start is None:
+            out("SKIP", "the opening mark never showed (GL warmup / timing?)")
+            return 2
+        end = next((i for i in range(start, len(alt)) if alt[i]["sh"] == 5), None)
+        if end is None:
+            out("SKIP", "the closing mark never showed (timing?)")
+            return 2
+        if not any(f["sh"] >= 8 and f["app_off"] > 4 for f in alt[:start]):
+            out("FAIL", "no burst slid before the clears, so nothing was tested")
+            return 1
+        slid = [f for f in alt[start + 1:end] if f["sh"] >= 8 or f["app_off"] > 4]
+        if slid:
+            # a clear while a big slide still runs slides by design
+            note = read_note(a.note)
+            if note:
+                out("SKIP", f"the scene saw {note} (busy box?), so a clear came mid-slide")
+                return 2
+            worst = max(f["app_off"] for f in slid)
+            out("FAIL", f"a clear slid: {len(slid)} frame(s), sh up to "
+                       f"{max(f['sh'] for f in slid)} (app_off up to {worst:.3f})")
+            return 1
+        out("PASS", "every clear showed at once, and the bursts slid")
+        return 0
+
+    if a.mode == "still":
+        swap = next((i for i, f in enumerate(frames) if f["alt"] == 1), None)
+        if swap is None:
+            out("SKIP", "no trace frames (GL warmup / timing?)")
+            return 2
+        # the trace only prints a normal-screen frame that has a fraction
+        if not any(f["alt"] == 0 and f["frac"] > a.eps for f in frames[:swap]):
+            note = read_note(a.note)
+            if note:
+                out("SKIP", f"the scene saw {note} (busy box?), so nothing was tested")
+                return 2
+            out("FAIL", "no output was easing when the alt screen took over, so nothing was tested")
+            return 1
+        frames = [f for f in frames if f["alt"] == 1]
+        moving = [f for f in frames if f["frac"] > a.eps]
+        if moving:
+            worst = max(f["frac"] for f in moving)
+            out("FAIL", f"view still easing on the alt screen: {len(moving)} of "
+                       f"{len(frames)} frame(s) have a fraction (max {worst:.3f})")
+            return 1
+        out("PASS", f"landed at rest: frac 0 across {len(frames)} frame(s)")
+        return 0
 
     if len(frames) < 5:
         out("SKIP", f"only {len(frames)} trace frames (GL warmup / timing?)")
@@ -65,6 +216,20 @@ def main() -> int:
         return 2
 
     engaged = [f for f in frames if abs(f["app_off"]) > a.eps]
+
+    if a.mode == "popin":
+        down = [f for f in frames if f["sh"] < 0]
+        if not down:
+            out("SKIP", f"no step down across {len(frames)} frames")
+            return 2
+        slid = [f for f in frames if f["app_off"] < -a.eps]
+        if slid:
+            worst = min(f["app_off"] for f in slid)
+            out("FAIL", f"slid down into empty rows on {len(slid)} frame(s) "
+                       f"(app_off {worst:.3f})")
+            return 1
+        out("PASS", f"popped in: {len(down)} steps down, none slid")
+        return 0
 
     if a.mode == "hardcut":
         if engaged:
@@ -77,12 +242,17 @@ def main() -> int:
 
     # slide mode
     if not engaged:
-        out("SKIP", "slide never engaged (app_off stayed 0) - GL/timing miss")
-        return 2
+        out("FAIL", f"scrolled but never slid (app_off stayed 0 across {len(frames)} frames)")
+        return 1
     if a.expect_st >= 0:
         bad = [f for f in engaged if f["st"] != a.expect_st]
         if bad:
             out("FAIL", f"expected st={a.expect_st} while sliding but saw st={bad[0]['st']}")
+            return 1
+    if a.expect_sb >= 0:
+        bad = [f for f in engaged if f["sb"] != a.expect_sb]
+        if bad:
+            out("FAIL", f"expected sb={a.expect_sb} while sliding but saw sb={bad[0]['sb']}")
             return 1
 
     # bounce: pos = app_off - cumulative shift; check it never reverses direction
@@ -114,3 +284,9 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+##	History:
+##		- 20260706 JC: Created.
+##		- 20261013 JC: --note, so altenter's wait running out is a skip.
+##		- 20261016 JC: wipe mode, for a clear inside tmux.
+##		- 20261106: wipe reads --note, so a scene that never saw the slide at rest is a skip.

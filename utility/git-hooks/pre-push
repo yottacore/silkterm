@@ -1,12 +1,16 @@
 #!/bin/sh
-# Local merge gate: before any push that updates main or dev, run the fast
-# verify pass (cicd.bash --gate: fmt --check + clippy -D warnings + tests).
-# Feature-branch pushes are not gated (they get verified at merge time).
+# shellcheck disable=2254  ## no-gate-paths holds patterns, so they match as globs
+# Local merge gate: before any push that updates main, run cicd.bash
+# --merge-gate, every check of the default run, against the commit being
+# pushed, in a throwaway worktree. A push that changes only docs and art, the
+# paths in no-gate-paths, skips it and the version guard.
+# dev and feature branches aren't gated. A branch is tested before it merges
+# into dev, and running the whole pass again on the merge only cost time.
 # Bypass for an emergency: git push --no-verify, or SKIP_GATE=1 git push.
 #
 # Activate once per clone:  git config core.hooksPath utility/git-hooks
 
-##	Copyright © 2026 Bubbles (ID: XଌฅრX۳ᛟԃლፀƅꓩหδლც)
+##	Copyright (c) 2026 Bubbles
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
@@ -16,33 +20,66 @@ set -eu
 
 # stdin: "<local_ref> <local_sha> <remote_ref> <remote_sha>" per ref being pushed.
 gated=0
-main_local=""
-main_remote=""
-while read -r local_ref local_sha remote_ref remote_sha; do
-	case "$remote_ref" in
-		refs/heads/main|refs/heads/dev)
+mainLocal=""
+mainRemote=""
+while read -r _ localSha remoteRef remoteSha; do
+	case "${remoteRef}" in
+		refs/heads/main)
 			# deleting the branch pushes the zero sha - nothing to verify
-			case "$local_sha" in *[!0]*) gated=1 ;; esac
+			case "${localSha}" in *[!0]*) gated=1 ;; esac
 			;;
 	esac
 	# main is release-only: remember its shas for the version-bump check below
-	case "$remote_ref" in
+	case "${remoteRef}" in
 		refs/heads/main)
-			case "$local_sha" in *[!0]*) main_local="$local_sha"; main_remote="$remote_sha" ;; esac
+			case "${localSha}" in *[!0]*) mainLocal="${localSha}"; mainRemote="${remoteSha}" ;; esac
 			;;
 	esac
 done
 
-# Release guard: a push to main must strictly INCREASE the version. main is where
-# releases are cut, so shipping the same-or-lower version is a mistake - block it
-# here (before the slower gate) so a forgotten Cargo.toml bump can't reach main.
-if [ -n "$main_local" ]; then
+# fNeedsGate <path>: true unless the last line of skipList matching it skips it.
+# The caller sets IFS to a newline and globbing off.
+fNeedsGate() {
+	needs=1
+	for pat in ${skipList}; do
+		case "${pat}" in
+			'#'*) ;;
+			'!'*) case "${1}" in ${pat#!}) needs=1 ;; esac ;;
+			*) case "${1}" in ${pat}) needs=0 ;; esac ;;
+		esac
+	done
+	[ "${needs}" = 1 ]
+}
+# fDocsOnly: true when main is already there and every path the push changes is
+# in no-gate-paths, as the pushed commit has it.
+fDocsOnly() {
+	case "${mainRemote}" in *[!0]*) ;; *) return 1 ;; esac
+	git cat-file -e "${mainRemote}^{commit}" 2>/dev/null || return 1
+	skipList="$(git show "${mainLocal}:utility/git-hooks/no-gate-paths" 2>/dev/null)" || return 1
+	changed="$(git diff --name-only --no-renames "${mainRemote}" "${mainLocal}")" || return 1
+	[ -n "${changed}" ] || return 1
+	set -f; oldIfs="${IFS}"; IFS='
+'
+	rc=0
+	for f in ${changed}; do
+		if fNeedsGate "${f}"; then rc=1; break; fi
+	done
+	IFS="${oldIfs}"; set +f
+	return "${rc}"
+}
+docsOnly=0
+if [ "${gated}" = "1" ] && fDocsOnly; then docsOnly=1; fi
+
+# Release guard: a push to main must raise the version, since releases are cut from
+# main. It runs before the slower gate, so a forgotten Cargo.toml bump is blocked
+# early.
+if [ -n "${mainLocal}" ] && [ "${docsOnly}" = "0" ]; then
 	manifest=source/Cargo.toml
-	read_ver() { git show "$1:$manifest" 2>/dev/null | sed -n 's/^version *= *"\(.*\)".*/\1/p' | head -1; }
-	# ver_gt A B: exit 0 iff A > B by semver precedence (numeric core fields;
+	fReadVer() { git show "${1}:${manifest}" 2>/dev/null | sed -n 's/^version *= *"\(.*\)".*/\1/p' | head -1; }
+	# fVerGt A B: exit 0 iff A > B by semver precedence (numeric core fields;
 	# a prerelease ranks below its release; numeric ids below alphanumeric; ASCII).
-	ver_gt() {
-		LC_ALL=C awk -v a="$1" -v b="$2" '
+	fVerGt() {
+		LC_ALL=C awk -v a="${1}" -v b="${2}" '
 		function cmp(a, b,   ca, cb, pa, pb, xa, xb, ia, ib, na, nb, m, i, va, vb, x, y, xn, yn) {
 			sub(/\+.*/, "", a); sub(/\+.*/, "", b)
 			ca = a; pa = ""; if (index(a, "-")) { ca = substr(a, 1, index(a,"-")-1); pa = substr(a, index(a,"-")+1) }
@@ -70,27 +107,65 @@ if [ -n "$main_local" ]; then
 		BEGIN { exit (cmp(a, b) > 0) ? 0 : 1 }
 		'
 	}
-	newv=$(read_ver "$main_local")
-	[ -n "$newv" ] || { echo "pre-push: cannot read version from $manifest on the pushed commit" >&2; exit 1; }
-	# zero remote sha = main does not exist yet (first push), nothing to compare
-	case "$main_remote" in
+	newv=$(fReadVer "${mainLocal}")
+	[ -n "${newv}" ] || { echo "pre-push: cannot read version from ${manifest} on the pushed commit" >&2; exit 1; }
+	# zero remote sha = main doesn't exist yet (first push), nothing to compare
+	case "${mainRemote}" in
 		*[!0]*)
-			oldv=$(read_ver "$main_remote")
-			if [ -n "$oldv" ] && ! ver_gt "$newv" "$oldv"; then
-				echo "pre-push: version $newv must be greater than $oldv on main - bump $manifest (and the README Release badge) before releasing. (SKIP_GATE=1 or --no-verify to override)" >&2
+			oldv=$(fReadVer "${mainRemote}")
+			if [ -n "${oldv}" ] && ! fVerGt "${newv}" "${oldv}"; then
+				echo "pre-push: version ${newv} must be greater than ${oldv} on main - bump ${manifest} (and the README Release badge) before releasing. (SKIP_GATE=1 or --no-verify to override)" >&2
 				exit 1
 			fi
 			;;
 	esac
 	# README release badge must match the pushed version (shields escapes '-' as '--').
-	badge_ver=$(printf '%s' "$newv" | sed 's/-/--/g')
-	if ! git show "$main_local:README.md" 2>/dev/null | grep -qF "Release-${badge_ver}-"; then
-		echo "pre-push: README Release badge does not match version $newv - update it on dev before the release merge. (SKIP_GATE=1 or --no-verify to override)" >&2
+	badgeVer=$(printf '%s' "${newv}" | sed 's/-/--/g')
+	if ! git show "${mainLocal}:README.md" 2>/dev/null | grep -qF "Release-${badgeVer}-"; then
+		echo "pre-push: README Release badge does not match version ${newv} - update it on dev before the release merge. (SKIP_GATE=1 or --no-verify to override)" >&2
 		exit 1
 	fi
 fi
 
-[ "$gated" = "1" ] || exit 0
+top="$(git rev-parse --show-toplevel)"
 
-echo "pre-push: gating push to main/dev (cicd.bash --gate; --no-verify skips)" >&2
-exec "$(git rev-parse --show-toplevel)/cicd/cicd.bash" --gate
+# Private content scrub, on every push, when this machine has the private tree.
+# A clone without it pushes as before.
+scrub="${top}/../private/hooks/scrub.bash"
+if [ -x "${scrub}" ]; then
+	"${scrub}" "${top}" || { echo "pre-push: content scrub failed" >&2; exit 1; }
+fi
+
+[ "${gated}" = "1" ] || exit 0
+if [ "${docsOnly}" = "1" ]; then
+	echo "pre-push: only paths in utility/git-hooks/no-gate-paths changed, so no merge gate" >&2
+	exit 0
+fi
+
+echo "pre-push: gating push to main (cicd.bash --merge-gate; --no-verify skips)" >&2
+# Gate the commit being pushed, not whatever the working tree has. The two are
+# often different here, and a fix that was still unstaged once let the gate pass
+# on the tree while main got the version without it. A detached worktree is the
+# cheap way to test the commit. Cargo's output goes to the usual place, so only
+# this crate is rebuilt, not its dependencies.
+gatedir="$(mktemp -d "${TMPDIR:-/tmp}/silk-gate.XXXXXX")"
+tree="${gatedir}/tree"
+fCleanup() {
+	git -C "${top}" worktree remove --force "${tree}" >/dev/null 2>&1 || :
+	rm -rf "${gatedir}"
+}
+trap fCleanup EXIT INT TERM
+git -C "${top}" worktree add --detach -q "${tree}" "${mainLocal}" \
+	|| { echo "pre-push: cannot check out ${mainLocal} to gate it" >&2; exit 1; }
+# With docker here the run builds in the container, into a target dir of its
+# own, as a run from the checkout does.
+if [ -z "${CARGO_TARGET_DIR:-}" ]; then
+	CARGO_TARGET_DIR="${top}/target"
+	if command -v "${SILK_DOCKER:-docker}" >/dev/null 2>&1; then CARGO_TARGET_DIR="${top}/target/container"; fi
+fi
+export CARGO_TARGET_DIR
+"${tree}/cicd/cicd.bash" --merge-gate
+
+##	History:
+##		- 20261028: --merge-gate, and docs and art go without it.
+##		- 20260711: Created.

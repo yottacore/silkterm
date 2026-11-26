@@ -1,0 +1,4 @@
+see https://example.com/a_(b)/c#frag and http://192.0.2.1:8080/x?y=1 .
+mail me at mailto:someone@example.org, or ftp://files.example/pub/ok
+not a link: xhttps://nope javascript:alert(1) data:text/html,<b>
+in brackets [https://example.com/z] and quoted "https://example.com/q"

@@ -1,31 +1,27 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Copyright © 2026 Jim Collier
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! Background-image "contrast mask": flatten the image's contrast toward a local
-//! mean so it stops competing with terminal text. Applied uniformly across the
-//! whole image at load, in linear light (baked into the texture, like the blur).
+//! The wallpaper's contrast mask. It flattens the image's contrast toward a local
+//! mean, so the picture stops competing with terminal text. It's applied to the
+//! whole image at load, in linear light, and baked into the texture like the blur.
 //!
-//! Three knobs (all 0..1):
-//! - `size`: the flatten scale - the localMean blur radius. 1.0 = half the
-//!   longest pixel dimension (localMean ~ the global average, so the whole image
-//!   collapses toward one tone); small = a tight neighborhood, so only fine busy
-//!   detail flattens. 0 = off.
-//! - `strength`: how far each pixel is pulled toward that local mean. 0 = none,
-//!   1 = fully flat.
-//! - `auto`: blend the two manual knobs with values derived from the image's own
-//!   busyness (a busy image gets flattened more). 1.0 = full auto override, 0.0 =
-//!   manual only, 0.5 = average of the two.
+//! The settings, all 0..1:
+//! - `size`: the blur radius of the local mean. 1.0 is half the longest side,
+//!   where the whole image collapses toward one tone. A small size flattens only
+//!   fine detail. 0 is off.
+//! - `strength`: how far each pixel is pulled toward the local mean. 0 is none,
+//!   1 is flat.
+//! - `auto`: blends the 2 manual settings with values picked from how busy the
+//!   image is. 1.0 is all auto, 0.0 is manual only, and 0.5 is halfway.
 
+use crate::config::LUMA;
 use image::{ImageBuffer, Rgba};
 use std::array::from_fn;
 
 type Linear = ImageBuffer<Rgba<f32>, Vec<f32>>;
 
-// Rec.709 luma weights (the buffer is linear-light).
-const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
-
-// Busyness -> auto knob endpoints (feel-tunable). A smooth image needs little;
-// a busy one wants fine detail knocked down: smaller scale, more strength.
+// Busyness -> auto endpoints, tuned by eye. A smooth image needs little, and a
+// busy one needs fine detail knocked down with a smaller scale and more strength.
 const AUTO_SIZE_SMOOTH: f32 = 0.6;
 const AUTO_SIZE_BUSY: f32 = 0.2;
 const AUTO_STRENGTH_SMOOTH: f32 = 0.2;
@@ -49,8 +45,10 @@ fn size_to_radius(size: f32, max_dim: u32) -> u32 {
 }
 
 // Mean |luma gradient| over the image, mapped to a saturating 0..1 busyness.
-// Flat image -> 0; lots of high-frequency detail -> toward 1.
-fn busyness(px: &[[f32; 3]], w: usize, h: usize) -> f32 {
+// Flat image -> 0; lots of high-frequency detail -> toward 1. `scale` is the
+// image's size against the one BUSY_K was tuned on: a pixel of an image shown
+// smaller spans more of the picture, so its steps are bigger.
+fn busyness(px: &[[f32; 3]], w: usize, h: usize, scale: f32) -> f32 {
 	if w < 2 || h < 2 {
 		return 0.0;
 	}
@@ -73,21 +71,18 @@ fn busyness(px: &[[f32; 3]], w: usize, h: usize) -> f32 {
 	if n == 0 {
 		return 0.0;
 	}
-	let g = (sum / n as f64) as f32;
+	let g = (sum / n as f64) as f32 * scale;
 	1.0 - (-BUSY_K * g).exp()
 }
 
 // Auto (size, strength) picked from image busyness.
 fn auto_params(busy: f32) -> (f32, f32) {
 	let b = busy.clamp(0.0, 1.0);
-	(
-		lerp(AUTO_SIZE_SMOOTH, AUTO_SIZE_BUSY, b),
-		lerp(AUTO_STRENGTH_SMOOTH, AUTO_STRENGTH_BUSY, b),
-	)
+	(lerp(AUTO_SIZE_SMOOTH, AUTO_SIZE_BUSY, b), lerp(AUTO_STRENGTH_SMOOTH, AUTO_STRENGTH_BUSY, b))
 }
 
 // Separable box mean (radius r) via per-row/col prefix sums, edge-clamped and
-// count-normalized so borders average only the samples they actually have.
+// count-normalized so borders average only the samples they have.
 // O(pixels) regardless of radius. f64 accumulation avoids large-sum drift.
 fn box_mean(src: &[[f32; 3]], w: usize, h: usize, r: usize) -> Vec<[f32; 3]> {
 	if r == 0 {
@@ -125,17 +120,19 @@ fn box_mean(src: &[[f32; 3]], w: usize, h: usize, r: usize) -> Vec<[f32; 3]> {
 	out
 }
 
-// Flatten the image's contrast in place. `img` is linear-light RGBA f32; alpha
-// is left untouched. No-op when the effective strength or size lands at zero.
-pub fn apply(img: &mut Linear, size: f32, strength: f32, auto: f32) {
+/// Flatten the image's contrast in place. `img` is linear-light RGBA f32; alpha
+/// is left untouched. No-op when the effective strength or size comes out at zero.
+/// `scale` is the wallpaper's drawn size against its full size, so a smaller
+/// copy of the same picture reads as busy as the whole one.
+pub fn apply(img: &mut Linear, size: f32, strength: f32, auto: f32, scale: f32) {
 	let (w, h) = (img.width() as usize, img.height() as usize);
 	if w == 0 || h == 0 {
 		return;
 	}
-	let mut rgb: Vec<[f32; 3]> = img.pixels().map(|p| [p[0], p[1], p[2]]).collect();
+	let rgb: Vec<[f32; 3]> = img.pixels().map(|p| [p[0], p[1], p[2]]).collect();
 
 	let (eff_size, eff_strength) = if auto > 0.0 {
-		let (a_size, a_strength) = auto_params(busyness(&rgb, w, h));
+		let (a_size, a_strength) = auto_params(busyness(&rgb, w, h, scale));
 		(blend(size, a_size, auto), blend(strength, a_strength, auto))
 	} else {
 		(size.clamp(0.0, 1.0), strength.clamp(0.0, 1.0))
@@ -148,15 +145,10 @@ pub fn apply(img: &mut Linear, size: f32, strength: f32, auto: f32) {
 		return; // localMean == pixel -> nothing to flatten
 	}
 	let mean = box_mean(&rgb, w, h, r);
-	for (p, m) in rgb.iter_mut().zip(mean.iter()) {
-		for (pc, mc) in p.iter_mut().zip(m.iter()) {
-			*pc = lerp(*pc, *mc, eff_strength);
+	for ((dst, src), m) in img.pixels_mut().zip(&rgb).zip(&mean) {
+		for c in 0..3 {
+			dst[c] = lerp(src[c], m[c], eff_strength);
 		}
-	}
-	for (dst, src) in img.pixels_mut().zip(rgb.iter()) {
-		dst[0] = src[0];
-		dst[1] = src[1];
-		dst[2] = src[2];
 	}
 }
 
@@ -203,6 +195,7 @@ mod tests {
 		c
 	}
 
+	// Test ID: d9x0d
 	#[test]
 	fn size_maps_to_half_the_longest_side() {
 		assert_eq!(size_to_radius(1.0, 100), 50);
@@ -210,6 +203,7 @@ mod tests {
 		assert_eq!(size_to_radius(0.0, 100), 0);
 	}
 
+	// Test ID: d9x0e
 	#[test]
 	fn blend_is_manual_at_zero_auto_at_one() {
 		assert_eq!(blend(0.2, 0.8, 0.0), 0.2);
@@ -217,13 +211,15 @@ mod tests {
 		assert!((blend(0.2, 0.8, 0.5) - 0.5).abs() < 1e-6);
 	}
 
+	// Test ID: d9x0f
 	#[test]
 	fn flat_image_has_zero_busyness_checkerboard_high() {
 		let flat = vec![[0.5, 0.5, 0.5]; 64];
-		assert_eq!(busyness(&flat, 8, 8), 0.0);
-		assert!(busyness(&checker8(), 8, 8) > 0.5);
+		assert_eq!(busyness(&flat, 8, 8, 1.0), 0.0);
+		assert!(busyness(&checker8(), 8, 8, 1.0) > 0.5);
 	}
 
+	// Test ID: d9x0g
 	#[test]
 	fn auto_flattens_busy_more_than_smooth() {
 		let (ss, sst) = auto_params(0.0);
@@ -232,12 +228,14 @@ mod tests {
 		assert!(bst > sst); // busy -> more strength
 	}
 
+	// Test ID: d9x0h
 	#[test]
 	fn box_mean_radius_zero_is_identity() {
 		let src = vec![[0.1, 0.2, 0.3], [0.9, 0.8, 0.7]];
 		assert_eq!(box_mean(&src, 2, 1, 0), src);
 	}
 
+	// Test ID: d9x0j
 	#[test]
 	fn box_mean_large_radius_approaches_global_average() {
 		let src = vec![[0.0; 3], [0.0; 3], [1.0; 3], [1.0; 3]];
@@ -249,26 +247,23 @@ mod tests {
 		}
 	}
 
+	// Test ID: d9x0k
 	#[test]
 	fn full_strength_large_size_collapses_variance() {
 		let checker = checker8();
 		let before = variance(&checker);
 		let mut img = buf(&checker, 8, 8);
-		apply(&mut img, 1.0, 1.0, 0.0); // manual only, full flatten
+		apply(&mut img, 1.0, 1.0, 0.0, 1.0); // manual only, full flatten
 		let after_px: Vec<[f32; 3]> = img.pixels().map(|p| [p[0], p[1], p[2]]).collect();
 		assert!(variance(&after_px) < before * 0.05);
 	}
 
+	// Test ID: d9x0m
 	#[test]
 	fn zero_strength_is_a_noop() {
-		let src = vec![
-			[0.1, 0.2, 0.3],
-			[0.9, 0.8, 0.7],
-			[0.4, 0.5, 0.6],
-			[0.2, 0.1, 0.0],
-		];
+		let src = vec![[0.1, 0.2, 0.3], [0.9, 0.8, 0.7], [0.4, 0.5, 0.6], [0.2, 0.1, 0.0]];
 		let mut img = buf(&src, 2, 2);
-		apply(&mut img, 1.0, 0.0, 0.0);
+		apply(&mut img, 1.0, 0.0, 0.0, 1.0);
 		let out: Vec<[f32; 3]> = img.pixels().map(|p| [p[0], p[1], p[2]]).collect();
 		assert_eq!(out, src);
 	}

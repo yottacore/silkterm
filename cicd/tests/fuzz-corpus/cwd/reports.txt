@@ -1,0 +1,5 @@
+7;file://box/home/u/two%20words
+7;file:///srv/log
+7;file://localhost/C:/Users/u
+9;9;C:\Users\u\work
+9;9;"/srv/quoted"

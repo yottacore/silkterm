@@ -26,7 +26,7 @@
 ##		  PATH so the rustup toolchain (cross targets, edition 2024) wins over system rust.
 ##	History: At bottom of script.
 
-##	Copyright © 2026 Jim Collier (CryptogID: ѳ6ᴚ℈𐀘𐇦ɛ𐊁¥Mﾏb϶Δ𐌞)
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
@@ -34,7 +34,7 @@
 
 ## Check if sourced
 declare -i isSourced_t6wqf=0; [[ "${BASH_SOURCE[0]}" == "${0}" ]] || isSourced_t6wqf=1
-((isSourced_t6wqf)) || { echo -e "\nError in $(basename "${BASH_SOURCE[0]}"): This script is meant to be 'sourced' from within another script.\n"; exit ${ERRNUM_MSG_ALREADY_SHOWN}; }
+((isSourced_t6wqf)) || { echo -e "\nError in $(basename "${BASH_SOURCE[0]}"): This script is meant to be 'sourced' from within another script.\n" >&2; exit 1; }
 
 
 ## Identity
@@ -44,20 +44,29 @@ EXE_NAME="silkterm"
 ## Stage 1: format the source in place before anything is compiled or tested.
 ## Empty it (FMT_CMD=()) when reusing the pipeline in a non-Rust project.
 FMT_CMD=(cargo fmt)
-## Non-mutating variant for the --gate mode (fails on drift instead of rewriting).
+## Non-mutating variant for --backlog-run-quick, --fmt-check, and the full runs
+## (fails on drift instead of rewriting).
 FMT_CHECK_CMD=(cargo fmt --check)
+## The files the formatter may rewrite, as git pathspecs. Publish commits the
+## ones it changed that matched HEAD before it ran, and nothing else of the tree.
+FMT_PATHS=('*.rs')
 
-## Pinned versions of the cargo-installed helpers the pipeline probes for; the
-## engine warns (non-gating) when an installed tool has drifted from its pin, so
-## a box update can't silently change results. Format: "name|version|command...".
-## The rustc/clippy toolchain itself is pinned by rust-toolchain.toml at repo root.
-TOOL_PINS=(
-	"cargo-deny|0.19.9|cargo deny --version"
-	"cargo-zigbuild|0.23.0|cargo-zigbuild --version"
-	"cargo-deb|3.7.0|cargo-deb --version"
-	"cargo-generate-rpm|0.21.0|cargo-generate-rpm --version"
-	"makensis|3.11|makensis -VERSION"
-)
+## Pinned helper tools, "name|version|command..." each. The list is in
+## tool-pins.txt beside this file, which cicd-win.ps1 reads too; the engine warns
+## (non-gating) when an installed tool has drifted from its pin.
+TOOL_PINS=()
+while IFS='|' read -r pinName pinVer pinWhere pinCmd; do
+	[[ -n "${pinName}" && "${pinName}" != \#* && "${pinWhere}" != "windows" ]] || continue
+	TOOL_PINS+=("${pinName}|${pinVer}|${pinCmd}")
+done < "$(dirname "${BASH_SOURCE[0]}")/tool-pins.txt"
+unset pinName pinVer pinWhere pinCmd
+
+## Where cargo writes build output. CARGO_TARGET_DIR moves it, and a run driven
+## from another host does that. cicd-win.ps1 -Wsl builds this tree with the
+## target dir on its own filesystem, so that way the 2 platforms' objects don't evict each
+## other. Nothing below may assume target/, since a stage that does still builds,
+## then looks for its binary where it was never put.
+TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 
 ## Stage 2: debug build (fast compile sanity)
 DEBUG_BUILD_CMD=(cargo build)
@@ -65,39 +74,156 @@ DEBUG_BUILD_CMD=(cargo build)
 ## Stage 3: regression tests
 TEST_CMD=(cargo test)
 
-## Stage 3 (after tests): lints. Gating; house allows live in the workspace
-## Cargo.toml [workspace.lints.clippy]. PROBE decides tool availability -
-## a failed probe skips the step with a warning instead of aborting.
-## rust-toolchain.toml pins one toolchain for every rustup-routed cargo, but a
-## shell where system cargo wins PATH can still populate target/ with the other
-## rustc (E0514: artifacts from a different compiler), so lint pins the rustup
-## PATH and keeps its own target dir as insurance.
+## Stage 3 (after tests): lints, which fail the run. The house allows are in the
+## workspace Cargo.toml [workspace.lints.clippy]. A failed probe skips the step
+## with a warning instead of aborting.
+## rust-toolchain.toml pins one toolchain for every cargo that rustup runs, but a
+## shell where system cargo comes first on PATH can still fill target/ from the
+## other rustc (E0514), so the lint step puts the rustup PATH first and keeps its
+## own target dir. That dir is under CARGO_TARGET_DIR when one is set, so a run
+## driven from elsewhere, such as a Windows box running the Linux half through
+## WSL, keeps its build output with the rest of it rather than in the source tree.
 LINT_PROBE=(env "PATH=${HOME}/.cargo/bin:${PATH}" cargo clippy --version)
-LINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" CARGO_TARGET_DIR=target/lint cargo clippy --workspace --all-targets -- -D warnings)
+LINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" "CARGO_TARGET_DIR=${TARGET_DIR}/lint" cargo clippy --workspace --all-targets -- -D warnings)
 
-## Stage 3 (after lints): dependency police (licenses/advisories/duplicates,
-## policy in deny.toml). Non-gating for now; tighten once the report is tuned.
+## Stage 3 (after lints): the same lints again for Windows. The cross builds build
+## the binary only, and the lints above run for this box, so neither one checks
+## Windows-only code. A cfg-gated item used by an ungated test broke the suite
+## there, and 2 lint findings went unseen in code this box never compiles. Both
+## took a Windows box to find, and this step finds them in under a minute. Empty
+## () to disable.
+XLINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" "CARGO_TARGET_DIR=${TARGET_DIR}/lint" cargo clippy --workspace --all-targets --target x86_64-pc-windows-gnu -- -D warnings)
+## Stage 3: and for macOS, which nothing here builds. The Mac build is on another
+## box and only runs on a full run, so macOS-only unsafe code went unlinted unless
+## somebody ran this by hand. Needs the x86_64-apple-darwin target in
+## rust-toolchain.toml. Empty () to disable.
+MACLINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" "CARGO_TARGET_DIR=${TARGET_DIR}/lint" cargo clippy --workspace --all-targets --target x86_64-apple-darwin -- -D warnings)
+
+## Stage 3 (after tests): the fuzz soak. The targets are ordinary tests, so the
+## run above already ran them for a fraction of a second each, and this gives
+## every one a real budget. Seconds per target, and they run in parallel, so the
+## wall time is about this plus the build. 0 disables; --quick sets it to 0.
+FUZZ_SECS=20
+FUZZ_CMD=(cargo test fuzz::)
+
+## Stage 3 (after lints): cargo-deny's license, duplicate, and source checks, with
+## the policy in deny.toml. They only warn for now, until the report is tuned.
 DENY_PROBE=(cargo deny --version)
-DENY_CMD=(cargo deny check)
+DENY_CMD=(cargo deny check licenses bans sources)
+## Known advisories against the locked dependencies a release binary is built
+## from (deny.toml's [graph] has the targets), on every full run. Gating:
+## any report fails it, a warning too (a yanked crate, an ignore that no longer
+## matches anything). A fix that has to wait goes in deny.toml's ignore list with
+## its backlog item's ID. No cargo-deny fails the run as well, since a scan that
+## can't run has found nothing.
+ADVISORY_CMD=(cargo deny check advisories -D warnings)
+## Run just before it. cargo-deny reads yanks from cargo's cached index entries
+## and never refreshes them, so a crate yanked since a box last resolved looks
+## fine there (2026102518563500). A dry-run update revalidates the entry of every
+## locked crate and writes nothing to the lock. Gating: offline means a yank can't
+## be seen, so it fails, and net.offline=false stops CARGO_NET_OFFLINE from
+## turning it into a quiet pass.
+INDEX_REFRESH_CMD=(cargo update --dry-run --quiet --config net.offline=false)
 
-## Stage 3 (last): headless scroll regression harness. Slow (a private Xvfb + GL
-## per scene), so it is skipped under --quick; non-fatal on an environment miss,
-## but a measured scroll regression aborts. Empty () to disable.
+## Stage 3: the test suite again under AddressSanitizer and LeakSanitizer, on every
+## full run. Sanitizers need a nightly, dated in rust-toolchain.toml, and only the
+## container image has it, so a run on the host does this one step in the image.
+## -Zbuild-std instruments std too, and the explicit --target keeps the flags off
+## build scripts and proc macros. Its build dir is named for the nightly, so the
+## cleanup takes the old one after a bump. Skipped under --quick and --no-asan;
+## empty () disables it.
+SANITIZER_TOOLCHAIN="$(sed -n 's/^# *nightly *= *"\([^"]*\)".*/\1/p' "$(dirname "${BASH_SOURCE[0]}")/../rust-toolchain.toml")"
+ASAN_DIR="asan-${SANITIZER_TOOLCHAIN#nightly-}"
+ASAN_CMD=(env "CARGO_TARGET_DIR=${TARGET_DIR}/${ASAN_DIR}" "RUSTFLAGS=-Zsanitizer=address -Cforce-frame-pointers=yes --cfg silk_asan" cargo "+${SANITIZER_TOOLCHAIN}" test -Zbuild-std --target x86_64-unknown-linux-gnu --tests --no-fail-fast)
+## Leaks LSan lets through, each with the backlog item that fixes it.
+LSAN_SUPPRESSIONS="cicd/lsan-suppressions.txt"
+## Stage 3: the same again under ThreadSanitizer, since the program starts
+## threads. Same nightly and the same reasons for -Zbuild-std and --target, which
+## matter more here: an uninstrumented std makes TSan report races that aren't.
+## ASan and TSan can't share a build, so it has a build dir of its own. Runs under
+## --long only, and --no-tsan skips it there; empty () disables it.
+TSAN_DIR="tsan-${SANITIZER_TOOLCHAIN#nightly-}"
+TSAN_CMD=(env "CARGO_TARGET_DIR=${TARGET_DIR}/${TSAN_DIR}" "RUSTFLAGS=-Zsanitizer=thread -Cforce-frame-pointers=yes --cfg silk_tsan" cargo "+${SANITIZER_TOOLCHAIN}" test -Zbuild-std --target x86_64-unknown-linux-gnu --tests --no-fail-fast)
+## Races TSan lets through, each with the backlog item that fixes it.
+TSAN_SUPPRESSIONS="cicd/tsan-suppressions.txt"
+## Stage 3: the test suite under Miri, for undefined behavior in unsafe code, ours
+## and the dependencies', and memory still allocated at exit. The same nightly,
+## with the miri component, which only the image has. A test that takes over 60 s
+## of CPU under Miri is ignored there as too slow, and still the rest takes hours,
+## so it runs only under --leakcheck or --long, and --no-miri skips it there;
+## empty () disables it. Isolation is off, since the tests read the clock and the
+## test folder. cargo miri builds into miri/ under the target dir, and Miri's
+## sysroot goes in there too, so one dir named for the nightly contains both.
+## The sysroot's path is absolute, since cargo runs each test binary from its
+## crate's dir.
+MIRI_DIR="miri-${SANITIZER_TOOLCHAIN#nightly-}"
+MIRI_SYSROOT_DIR="${TARGET_DIR}/${MIRI_DIR}/miri/sysroot"
+[[ "${MIRI_SYSROOT_DIR}" == /* ]] || MIRI_SYSROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/${MIRI_SYSROOT_DIR}"
+MIRI_ENV=("CARGO_TARGET_DIR=${TARGET_DIR}/${MIRI_DIR}" "MIRI_SYSROOT=${MIRI_SYSROOT_DIR}" "MIRIFLAGS=-Zmiri-disable-isolation")
+MIRI_CMD=(env "${MIRI_ENV[@]}" cargo "+${SANITIZER_TOOLCHAIN}" miri test --tests --no-fail-fast)
+
+## Stage 3: the leak checks, after the ASan run. On by default, --quick too, and
+## --no-leakcheck drops them. Any report fails the run.
+##  - The heap-growth test (source/src/heap_growth.rs): the main actions in
+##    rounds, in-process with dhat as the allocator, and the heap at round 2N
+##    against round N. The dhat-heap feature only changes the silkterm crate, so
+##    it builds in the debug dir beside the plain tests. One test thread and the
+##    module as the filter, since dhat counts every thread.
+## Reports go to LEAKCHECK_OUT_DIR (gitignored), rotated like the flamegraphs.
+LEAKCHECK_DHAT_CMD=(cargo test --features dhat-heap --bin "${EXE_NAME}" heap_growth:: -- --test-threads=1)
+LEAKCHECK_OUT_DIR="cicd/artifacts/leakcheck"
+##  - The soak test (cicd/tests/soak/run.bash): the program's main actions in
+##    rounds on a private Xvfb, under heaptrack, and the live heap at round 2N
+##    against round N. Runs the debug build, in the image, which has heaptrack
+##    pinned. About 2.5 minutes, so --quick leaves it out unless --leakcheck
+##    asks. Its heaptrack data and summary go to LEAKCHECK_OUT_DIR as soak_<stamp>.
+##    Empty disables it.
+LEAKCHECK_SOAK="cicd/tests/soak/run.bash"
+##  - CodeQL's Rust queries (cicd/utility/codeql.bash) over our crates and the
+##    vendored crates a release binary links, in the image, which has the bundle
+##    pinned. security-and-quality, since these checks are for correctness bugs
+##    as well as security ones (2026101714015789). A result the backlog already
+##    has goes in CODEQL_SUPPRESSIONS with its item's ID. Off unless --codeql,
+##    --leakcheck or --long.
+CODEQL_SUITE="codeql/rust-queries:codeql-suites/rust-security-and-quality.qls"
+CODEQL_SUPPRESSIONS="cicd/codeql-suppressions.txt"
+
+## Stage 3: per-monitor window size on random layouts and steps
+## (cicd/tests/dpirand/run.py), as seconds of cases. A case is about 30 s on the
+## debug build, and seeds start from the clock, so each run tries new ones. Skipped
+## under --quick; 0 skips it too. A value of 150 runs about 5 cases.
+DPIRAND_SECS=150
+
+## Stage 3 (last): headless scroll regression harness. It's slow, with a private
+## Xvfb and GL per scene, so --quick skips it. A missing tool only skips it, but a
+## measured scroll regression aborts. Empty () to disable.
 SCROLL_HARNESS=(cicd/tests/scroll/run.bash)
+
+## Stage 3: graphical scenarios against a real Windows desktop, over ssh. Slow, so
+## it is skipped under --quick. A box that's off, or whose session is locked, is a
+## skip, since both boxes are people's own machines rather than build hardware.
+## Each scenario runs once, on the first box free for it, and one that needs a
+## real card only on a box tagged gpu (run.bash's header has the rule).
+## Empty () to disable. Extra scenario names may be listed after run.bash.
+WINGUI_HARNESS=(cicd/tests/wingui/run.bash smoke injchar settingsdlg perfladder pathannounce consolemsg savenotice openwith softrender newwin gbtitle conmap cmdgui conload quiettab wpremote)
+
+## Stage 3: what the dogfood launcher does to files it didn't create. Needs pwsh;
+## skipped with a warning where it's missing. Empty () to disable.
+LAUNCHER_HARNESS=(cicd/tests/launcher/run.ps1)
 
 ## Also run the harness a second time under a headless Wayland compositor (cage), to
 ## prove the Wayland backend renders + scrolls the same as X11. Self-skips (non-fatal)
-## where cage is not installed. 0/unset to disable.
+## where cage isn't installed. 0/unset to disable.
 SCROLL_HARNESS_WAYLAND=1
 
 ## Stages 4 + 5: how many times a fat-LTO build may be attempted before the pipeline
 ## calls it a failure. rustc crashes inside LLVM here every so often and compiles the
 ## same source clean on the next try; 1 disables retrying.
-BUILD_ATTEMPTS=3
+BUILD_ATTEMPTS=5
 
 ## Stage 5: native release build + its artifact (this is what gets dogfooded)
 RELEASE_NATIVE_CMD=(cargo build --release)
-RELEASE_NATIVE_BIN="target/release/${EXE_NAME}"
+RELEASE_NATIVE_BIN="${TARGET_DIR}/release/${EXE_NAME}"
 RELEASE_NATIVE_OSARCH="linux-x86_64"
 
 ## Stage 5: cross-release targets. One per line: "label|os-arch|artifact|command...".
@@ -105,9 +231,9 @@ RELEASE_NATIVE_OSARCH="linux-x86_64"
 ## Set BUILD_CROSS=0 to skip them for a quick local run.
 BUILD_CROSS=1
 CROSS_TARGETS=(
-	"Windows x86_64 (mingw)|windows-x86_64|target/x86_64-pc-windows-gnu/release/${EXE_NAME}.exe|cargo build --release --target x86_64-pc-windows-gnu"
-	"Linux ARM64 (zig)|linux-arm64|target/aarch64-unknown-linux-gnu/release/${EXE_NAME}|cargo zigbuild --release --target aarch64-unknown-linux-gnu"
-	"Windows ARM64 (zig)|windows-arm64|target/aarch64-pc-windows-gnullvm/release/${EXE_NAME}.exe|cargo zigbuild --release --target aarch64-pc-windows-gnullvm"
+	"Windows x86_64 (mingw)|windows-x86_64|${TARGET_DIR}/x86_64-pc-windows-gnu/release/${EXE_NAME}.exe|cargo build --release --target x86_64-pc-windows-gnu"
+	"Linux ARM64 (zig)|linux-arm64|${TARGET_DIR}/aarch64-unknown-linux-gnu/release/${EXE_NAME}|cargo zigbuild --release --target aarch64-unknown-linux-gnu"
+	"Windows ARM64 (zig)|windows-arm64|${TARGET_DIR}/aarch64-pc-windows-gnullvm/release/${EXE_NAME}.exe|cargo zigbuild --release --target aarch64-pc-windows-gnullvm"
 )
 
 ## Stage 5 (after builds): collect the built binaries under versioned names plus
@@ -120,15 +246,24 @@ RELEASE_ARTIFACT_DIR="cicd/artifacts/release"   # relative to repo root; gitigno
 VERSION_MANIFEST="source/Cargo.toml"            # the single version source
 
 ## Stage 6: distributable packages, built from the stage-5 release binaries (never
-## rebuilt) when --quick is NOT passed. Linux -> .deb + .rpm (cargo-deb /
+## rebuilt), except under --quick. Linux -> .deb + .rpm (cargo-deb /
 ## cargo-generate-rpm, metadata in source/Cargo.toml). Windows -> a single self-
 ## contained NSIS installer .exe per arch (makensis), which upgrades an existing
-## install in place. macOS (.dmg) and BSD are deferred: this box has no Apple SDK
-## / FreeBSD sysroot to cross-build their binaries. ARM64 packages follow the same
-## --no-arm gate as the ARM release builds. Packages land in RELEASE_ARTIFACT_DIR
-## and fold into the sha256sums. Set PACKAGE_ENABLE=0 (or --no-package) to skip.
+## install in place. macOS is built on a Mac by the private runner below. BSD is
+## deferred: this box has no FreeBSD sysroot to cross-build for. ARM64 packages
+## follow the same --no-arm gate as the ARM release builds. Packages go in
+## RELEASE_ARTIFACT_DIR and fold into the sha256sums. Set PACKAGE_ENABLE=0 (or
+## --no-package) to skip.
 PACKAGE_ENABLE=1
 NSIS_TEMPLATE="cicd/packaging/windows/installer.nsi.in"
+
+## Stage 6, after the packages, is off unless --with-private asks for it. It runs
+## the runner of a private repo, which takes --public <this repo>, does its own
+## waiting on its boxes, and exits 0 when it built or skipped and 1 when a job
+## failed. --with-private looks for it beside this repo, under PRIVATE_DIR, unless
+## SILK_PRIVATE_RUNNER names it. A plain run never looks.
+PRIVATE_DIR="silkterm-private"
+PRIVATE_RUNNER="${SILK_PRIVATE_RUNNER:-}"
 
 ## Stage 4: profiler (non-gating artifact, not a pass/fail test). Builds an
 ## optimized+symbols binary (cargo --profile $PROFILE_PROFILE --features
@@ -139,58 +274,148 @@ PROFILE_ENABLE=1
 PROFILE_SECS=8
 PROFILE_FEATURE="profiling"
 PROFILE_PROFILE="profiling"
-PROFILE_BIN="target/profiling/${EXE_NAME}"
+PROFILE_BIN="${TARGET_DIR}/profiling/${EXE_NAME}"
 PROFILE_WORKLOAD_SCRIPT="cicd/utility/n8output-random-unicode.py"
 PROFILE_WORKLOAD_ARGS="600 0"          # <duration_s> <delay_s>; duration >> PROFILE_SECS, no delay = max output
 PROFILE_OUT_DIR="cicd/artifacts/profiling"  # relative to repo root; created if missing (gitignored)
 PROFILE_STRICT=0                        # 1 = any profiler failure aborts the pipeline
 
-## Demo video re-record (cicd/utility/demo-video/demo-video.py). Off by default -
-## only worth re-recording after major visual/feature changes; flip to 1 or pass
-## --demo for one run. Also skipped under --quick. Video GFS-rotates into
-## ../private/demo-video/; the README highlight gif lands in assets/demo.gif.
-DEMO_ENABLE=0
+## Demo video re-record (cicd/utility/demo-video/demo-video.py). On by default, so
+## a run with no options does everything. --no-demo skips it, and so does --quick
+## unless --demo is given too. Video GFS-rotates into ../private/demo-video/; the
+## README highlight gif goes in assets/demo.gif.
+DEMO_ENABLE=1
+## The tracked files the demo may rewrite, as git pathspecs, read the same way.
+DEMO_PATHS=(assets/demo.gif)
 
 ## Full run output is tee'd here (gitignored) so warnings from any stage can be
 ## reviewed after the fact. Kept rotated like the flamegraphs.
 LINT_LOG_DIR="cicd/artifacts/lint"      # relative to repo root; created if missing (gitignored)
 
+## Cleanup at the start of a full run (cicd/utility/include/sweep.bash). The gate
+## does none of it. Only what a run made and wrote down, or what cargo made in the
+## dirs named here, goes:
+##  - a run folder in HOST_TEMP/silkterm older than CLEANUP_STALE_DAYS, once no
+##    process from its run.pid is left, and what the old ledgers still name
+##  - the build dirs below once the toolchain changes, since cargo rebuilds all of
+##    it then anyway, and one a run built into that the list no longer names
+##  - an incremental cache not used for CLEANUP_INCREMENTAL_DAYS before the newest
+##    one in its profile
+## The build dirs are under TARGET_DIR, and each cross target's release dir is
+## added from CROSS_TARGETS. Scratch dirs made by hand under target/ are never on
+## the list.
+CLEANUP_STALE_DAYS=2
+CLEANUP_INCREMENTAL_DAYS=7
+CLEANUP_BUILD_DIRS=(debug release "${PROFILE_PROFILE}" lint)
+## The same for the dirs the pinned nightly builds into, which only a nightly bump
+## makes stale.
+CLEANUP_NIGHTLY_DIRS=("${ASAN_DIR}" "${TSAN_DIR}" "${MIRI_DIR}/miri")
+## At the end of a run a cache over this many MB is emptied whole: the container's
+## cache volumes, and a Zig cache in the tree. A Zig cache is also emptied when
+## another Zig version filled it. Zig's global cache on this box is never touched.
+CLEANUP_CACHE_CAP_MB=2048
+
 ## Old SVGs are pruned by gfs_rotate (cicd/utility/include/gfs-rotate.bash): keeps
 ## ~30 - first + newest-per-hour/day/week/month/year + last 10. Tune with the
 ## GFS_KEEP_* env vars (GFS_KEEP_FREQUENT, GFS_KEEP_DAILY, ...) if needed.
 
-## Stage 6: dogfood the native release two ways. Empty either list to skip it.
-## Fixed: overwrite EXE_NAME in the first existing dir here (the stable path you run).
-DOGFOOD_FIXED_DESTS=(
-	"${HOME}/synced/0-0/common/exec/util/linux/bin"
-	"/usr/local/sbin"
+## Stage 7: dogfood. Every build this run made is installed under a fixed name in
+## the synced app dir for the platform it targets, so a box that can't build for
+## itself still gets a current binary over Dropbox. The runterm launcher on each
+## box keeps the dated copies, in its own rotated versions folder.
+## One line per flavor: "<os-arch>|<name at dest>|<dir>[|<dir>...]", where os-arch
+## names a CROSS_TARGETS row or RELEASE_NATIVE_OSARCH. The first writable dir wins;
+## none writable fails the run, and a target not built this run is passed over.
+## The copy keeps its mtime, which is the build date the launcher reads.
+DOGFOOD_DESTS=(
+	"linux-x86_64|${EXE_NAME}|${HOME}/synced/0-0/common/exec/app/linux"
+	"windows-x86_64|${EXE_NAME}.exe|${HOME}/synced/0-0/common/exec/app/mswin"
+	## ARM64 builds are released but not dogfooded: an app dir is per-OS, so only
+	## one binary can have the name, and both boxes here are x86_64.
+	## The Mac build comes back from the private runner as one universal binary.
+	"macos-universal|${EXE_NAME}|${HOME}/synced/0-0/common/exec/app/macos"
 )
-## Rotating: also drop a dated copy "<DOGFOOD_PREFIX>_<YYYYmmDD-HHMMSS>_<tag>" here
-## (created if missing), so builds coexist under unique paths - an automated test
-## killing one can't hit an unrelated version - pruning older copies that aren't
-## running. Launch the newest via utility/n8runterm.bash. Set DOGFOOD_PREFIX empty to
-## disable the rotating copy.
-DOGFOOD_ROTATING_DESTS=(
-	"${HOME}/.local/bin"
-)
-DOGFOOD_PREFIX="slktrmdf"
+## Dropped beside each installed binary. The icon is what a .desktop entry points
+## at, by way of the launcher's symlink dir. Empty either to skip it.
+DOGFOOD_ICON="source/assets/logo.png"
 ## Which build a copy holds: "<toolchain: gnu|msvc><built on: l|m|b|w><target: l|m|b|w><arch: i|a>"
-## - so a pool of copies from several hosts stays readable (n8runterm.ps1 keeps three
-## on Windows). Left unset it's derived from this host; set it to pin, empty to drop.
+## - so a pool of copies from several hosts stays readable. It goes in a "<name>.tag"
+## sidecar, because a cross-build says nothing about the box that later reads it.
+## Left unset it is derived per dest from this host plus the target; set it to pin
+## every dest to one value, empty to drop the sidecar.
 # DOGFOOD_TAG="gnulli"
+
+## Signing the release. A checksum file fetched from the same place as the
+## artifact it covers proves the download wasn't corrupted in transit, which TLS
+## already gave; a signature is what says the release came from here.
+##
+## The private key never goes in the repo. To set one up once:
+##   ssh-keygen -t ed25519 -C releases@silkterm -f ~/.ssh/silkterm-release
+## then put the text of ~/.ssh/silkterm-release.pub into releaseSignPubkey
+## in install.bash and install.ps1, and point this at the private half. Empty
+## means the release goes out unsigned, and release.bash says so.
+RELEASE_SIGN_KEY="${SILKTERM_RELEASE_KEY:-}"
+RELEASE_SIGN_IDENTITY="releases@silkterm"
+RELEASE_SIGN_NAMESPACE="silkterm-release"
 
 ## Stage 7: backup + publish to git (runs from repo root).
 GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 
-## Extra backup excludes for this project. cicd/artifacts is per-run scratch: the
-## release binaries there are copies of ones already kept from target/, and the
-## rest is logs and staging. Excluding it is also load-bearing, not just tidy -
-## the wine staging tree holds a wineprefix whose dosdevices map Z: to '/' (plus
-## raw /dev nodes), so a backup that walks in climbs out of the repo and into the
-## whole filesystem. Exclude the dir as well as its contents, or rar still
-## descends to test each entry. Quoted so eval hands rar the glob, not a match.
-## private/source is bulk working material that never ships, same treatment.
-export GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES="-x'*/cicd/artifacts' -x'*/cicd/artifacts/*' -x'*/private/source' -x'*/private/source/*'"
+## Extra backup excludes for this project, on top of the publisher's own. Those
+## already exclude cicd/artifacts scratch (logs, profiling, GUI captures, the
+## size-comparison downloads), a wineprefix's dosdevices and drive_c, which map
+## Z: to '/', private/source, and every 0_archive. cicd/artifacts/release stays
+## in: the packages and installers there exist nowhere else. A pattern naming a
+## dir skips it whole, without rar going in, so one line per dir is enough.
+##
+## forks/ holds working clones of the patched dependencies. Each has its own
+## remote, so the archive would otherwise include 50 MB of a copy of something
+## already kept elsewhere, and more as each one gets built. The cost is that work
+## committed in a clone and not pushed isn't in the backup either, which is
+## already true of this repo, since its .git is excluded the same way.
+##
+## target/mmap-bench is the minimap rig's scratch: a 32 MiB flood file it makes
+## on demand, plus one log per run.
+##
+## Everything else under target/ that isn't a final build is scratch too: the
+## before and after builds kept for a comparison, their captures, and a docs
+## backup from the 09-15 history rewrite. source/target and the clipboard-race
+## test crate's target are stray lint and test builds, and target/darwin is a
+## macOS type check. target/container is what a --container run builds, a second
+## copy of all of it, and target/asan-*, target/tsan-* and target/miri-* the test
+## builds under the sanitizers and Miri. A new scratch dir under target/ needs a
+## line here.
+##
+## The wallpaper originals (about 350 MB) and duplicates (80 MB) are behind the
+## private/wallpaper/source symlink, which rar follows. The originals are the
+## full-size sources the released pack is made from, and both are kept in their
+## own tree outside this project.
+##
+## One rar pattern per line, no '-x' prefix and no shell quoting: the publish
+## script adds the flag and passes each line through as one argument.
+export GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES='*/forks
+*/target/mmap-bench
+*/target/gpu-stress
+*/target/gpuctl
+*/target/darwin
+*/target/container
+*/target/asan-*
+*/target/tsan-*
+*/target/miri-*
+*/target/lightnew
+*/target/lightold
+*/target/mapopt
+*/target/wpmix
+*/target/memdbg
+*/target/scrimexp
+*/target/knobs-demo
+*/target/rewrite-20260915.docs-backup
+*/target/repro.*
+*/target/mypy
+*/source/target
+*/clipboard-race/target
+*/wallpaper/source/010_origs
+*/wallpaper/source/0_dupes'
 
 ## Set a non-empty commit message to publish hands-off (suppresses the script's
 ## prompt and supplies the message so `git commit` won't open an editor). Left

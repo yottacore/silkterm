@@ -13,7 +13,9 @@ A clear and concise description of what the bug is.
 **Steps to reproduce**
 
 - Go to ... 
+
 - Do ...
+
 - See error ...
 
 **Expected behavior**
@@ -22,7 +24,8 @@ A clear and concise description of what the bug is.
 
 **Desktop (please complete the following information):**
 
- - OS: 
-- Architecture: 
+- OS:
+
+- Architecture:
 
 **Additional context**

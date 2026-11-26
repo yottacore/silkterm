@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+
+##	- Purpose:
+##		The startup gates record the newest run log and flamegraph as seen. A look
+##		taken while a run was still writing them recorded the part written so far,
+##		and every later look said SEEN. This runs cicd.bash's own logging block
+##		and checks the gates only ever see a finished file.
+##	- Test ID: dcry4
+##	- History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
+set -euo pipefail
+meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=cicd/tests/_testdir.bash
+source "${meDir}/../_testdir.bash"; fTestDir_Use
+cicd="$(cd "${meDir}/../.." && pwd)"
+lintGate="${cicd}/utility/lint-report.bash"
+flameGate="${cicd}/utility/flame-report.py"
+
+failures=0
+fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
+
+work="$(mktemp -d "${TMPDIR:-/tmp}/silk-gates.XXXXXX")"
+trap 'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"' EXIT
+
+## A run: cicd.bash's logging block lifted out as it stands, then two warnings
+## with a pause between them that the test controls. What the block calls from
+## the rest of cicd.bash is stubbed, or its exit trap stops at the missing one
+## and never finishes the log.
+lifted="$(sed -n '/^fFinishLog(){/,/^fi$/p' "${cicd}/cicd.bash")"
+stubs=(gfs_rotate fTestDir_End fContainerEnd fRunEnd)
+unstubbed=""
+while read -r name; do
+	grep -qE "^${name}\(\)" <<<"${lifted}" && continue
+	[[ " ${stubs[*]} " == *" ${name} "* ]] || unstubbed+=" ${name}"
+done < <(grep -oE 'f[A-Z][A-Za-z_]*' <<<"${lifted}" | sort -u)
+fCheck "the lifted block calls nothing left unstubbed${unstubbed:+ (${unstubbed# })}" test -z "${unstubbed}"
+fMakeRun(){  ## fMakeRun <dir> <exit code>
+	local -r dir="${1}" rc="${2}"
+	mkdir -p "${dir}"
+	{
+		echo 'set -Eeuo pipefail'
+		echo "root='${dir}'; LINT_LOG_DIR=lint; stamp=20260101-000000; _letterbox='****'"
+		printf '%s(){ :; }; ' "${stubs[@]}"; echo
+		echo "${lifted}"
+		echo 'echo "warning: unused variable one"'
+		echo "touch '${dir}/ready'"
+		echo "while [[ ! -e '${dir}/go' ]]; do sleep 0.05; done"
+		echo 'echo "warning: unused variable two"'
+		echo "exit ${rc}"
+	} >"${dir}/run.bash"
+}
+fWait(){ local _; for _ in {1..100}; do [[ -e "${1}" ]] && return 0; sleep 0.05; done; return 1; }
+
+for rc in 0 1; do
+	dir="${work}/run${rc}"
+	fMakeRun "${dir}" "${rc}"
+	## The block writes no log inside the container, and this is a test of the log.
+	env -u SILK_CICD_IN_CONTAINER bash "${dir}/run.bash" >/dev/null 2>&1 &
+	pid=$!
+	fWait "${dir}/ready" || { echo "  FAIL the lifted run never started"; failures=$((failures + 1)); kill "${pid}" 2>/dev/null || true; continue; }
+	sleep 0.2
+	mid="$("${lintGate}" --check --dir "${dir}/lint" 2>&1 || true)"
+	fCheck "exit ${rc}: a look during the run records nothing" bash -c '[[ "$1" != NEW* && "$1" != CLEAN* ]]' _ "${mid}"
+	touch "${dir}/go"
+	wait "${pid}" || true
+	after="$("${lintGate}" --check --dir "${dir}/lint" 2>&1 || true)"
+	fCheck "exit ${rc}: the look after it reports the whole run" grep -q '^NEW.*2 warning' <<<"${after}"
+	fCheck "exit ${rc}: and no part file is left" bash -c '! compgen -G "$1/lint/*.part" >/dev/null' _ "${dir}"
+done
+
+## The flamegraph: a graph still being written sits under a name the gate skips.
+fCheck "the profiler writes to the part name" grep -q 'SILK_PROFILE_OUT="${part}"' "${cicd}/cicd.bash"
+fdir="${work}/flame"; mkdir -p "${fdir}"
+printf '<svg total_samples="10"' >"${fdir}/flame_20260101-000000_frequent.svg.part"
+out="$(python3 "${flameGate}" --check --dir "${fdir}" 2>&1 || true)"
+fCheck "the flame gate does not read a part file" bash -c '[[ "$1" != NEW* ]]' _ "${out}"
+fCheck "and records nothing" test ! -e "${fdir}/.flame-seen"
+
+## Test result lines aren't warnings, whatever the test is named (ddf08).
+ldir="${work}/names"; mkdir -p "${ldir}"
+{
+	echo 'PASS ddeqk ui_spec::tests::a_warning_needs_a_label_of_its_own'
+	echo 'FAIL ----- ui_spec::tests::warning_two'
+	echo 'SKIP ddeqk ui_spec::tests::warning_three, slow'
+	echo 'PASS dcry4 warning gate'
+	echo 'SKIP ddp9p yanked crate check, no warnings to read'
+	echo 'test ui_spec::tests::warning_four ... ok'
+	echo 'warning: unused variable x'
+	echo 'PASS warning: a word, not an ID'
+	echo '[ OK: warning gate (dcry4) ]'
+} >"${ldir}/run_20260101-000000.log"
+out="$("${lintGate}" --dir "${ldir}" 2>&1 || true)"
+fCheck "a test named for a warning is not one, a real warning is (ddf08)" grep -q '^FLAG.*(3 warning' <<<"${out}"
+fCheck "and the real ones are the three not in a test's line" bash -c '[[ "$(grep -c "^[0-9]*:" <<<"$1")" == 3 && "$1" == *"warning: unused variable x"* && "$1" == *"PASS warning: a word"* && "$1" == *"[ OK: warning gate (dcry4) ]"* ]]' _ "${out}"
+fCheck "and a plain look records nothing" test ! -e "${ldir}/.lint-seen"
+
+if ((failures)); then echo "${failures} failed"; exit 1; fi
+echo "all passed"
+
+##	History:
+##		- 20260917 JC: Created.
+##		- 20261003: Test names that contain "warning" (ddf08).
+##		- 20261025: Stubs fContainerEnd, and fails by name on a call left unstubbed.
+##		- 20261028: Test lines as PASS, FAIL, or SKIP, ID and name.

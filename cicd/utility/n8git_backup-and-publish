@@ -23,7 +23,7 @@
 ##	Purpose: See fAbout() below.
 ##	History: At bottom of script.
 
-##	Copyright © 2026 Bubbles (ID: XଌฅრX۳ᛟԃლፀƅꓩหδლც)
+##	Copyright (c) 2026 Bubbles
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
@@ -72,6 +72,7 @@ fSyntax(){  { ((doQuietly)) || ((wasShown_Syntax)); } && return; wasShown_Syntax
 	fEcho_Clean "Arguments:"
 	fEcho_Clean "  --message, -m <msg> [also --msg, and -m=<msg>]: Commit message; skips the editor."
 	fEcho_Clean "  --quiet, -q [optional]: Be less verbose, and don't prompt user to continue."
+	fEcho_Clean "  --no-prompt [optional]: Don't prompt user to continue; everything else as normal."
 	fEcho_Clean "  --help, --version [or -h, -v]"
 	fEcho_Clean ""
 	fEcho_Clean "Environment variables (all optional):"
@@ -79,7 +80,11 @@ fSyntax(){  { ((doQuietly)) || ((wasShown_Syntax)); } && return; wasShown_Syntax
 	fEcho_Clean "  GIT_BACKUP_AND_PUBLISH_NOBACKUP=1     skip the rar backup, publish only"
 	fEcho_Clean "  GIT_BACKUP_AND_PUBLISH_MESSAGE        same as --message"
 	fEcho_Clean "  GIT_AUTO_MESSAGE                      same as --message (cicd convention)"
-	fEcho_Clean "  GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES   extra rar -x'...' patterns, space-joined"
+	fEcho_Clean "  GIT_BACKUP_AND_PUBLISH_PATHS          commit only these tracked files, one per line"
+	fEcho_Clean "  GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES   extra rar patterns, one per line"
+	fEcho_Clean "  CPU_CAP                               rar thread cap (-mt)"
+	fEcho_Clean ""
+	fEcho_Clean "Extra rar patterns can also go in 'cicd/rar-excludes.conf', one per line."
 	fEcho_Clean ""
 	fEcho_Clean "Expected folder structure - something like:"
 	fEcho_Clean "    project-name              [REQUIRED, any name, parent folder]"
@@ -96,19 +101,28 @@ fSyntax(){  { ((doQuietly)) || ((wasShown_Syntax)); } && return; wasShown_Syntax
 fMain(){
 
 	## Settings. Symlinks are deliberately followed (no '-ol'): '../private' is itself
-	## a link in most projects, and its contents are the point of the backup. Big
-	## linked-in trees are dropped by name below instead.
+	## a link in most projects, and its contents are the point of the backup. Dir
+	## links inside the repo, and links back into the project, are dropped below.
 	local -a baseCmdArgs=(a -r0 -ep1 -rr -m3)
+	## The cicd engines export their core cap; honor it the way every other stage does.
+	[[ "${CPU_CAP:-}" =~ ^[0-9]+$ ]] && baseCmdArgs+=("-mt${CPU_CAP}")
 
 	## Generic variables
 	local -i wasShown_Copyright=0; local -i wasShown_About=0; wasShown_Syntax=0
 
-	## Check for need to show help
+	## Check for need to show help. Whole arguments only, and never the value of
+	## an option that takes one: matching the joined string took
+	## `--message "pass -v through to rar"` as a request for the version.
 	{ ((atLeastOneArgRequired)) && [[ -z "${1:-}${2:-}${3:-}${4:-}" ]]; } && { fCopyright; fAbout; fSyntax; return 1; }
-	case " ${*,,} " in
-		*" -h "*|*" --help "*)                 fCopyright; fAbout; fSyntax; return 0; ;;
-		*" -v "*|*" --ver "*|*" --version "*)  fCopyright;                  return 0; ;;
-	esac
+	local helpArg=""; local -i skipNext=0
+	for helpArg in "${@}"; do
+		if ((skipNext)); then skipNext=0; continue; fi
+		case "${helpArg,,}" in
+			-h|--help)            fCopyright; fAbout; fSyntax; return 0; ;;
+			-v|--ver|--version)   fCopyright;                  return 0; ;;
+			-m|--msg|--message)   skipNext=1 ;;
+		esac
+	done
 
 	## Validate dependencies
 	fMustBeInPath rar
@@ -126,45 +140,102 @@ fMain(){
 	local -r dirPath_Rar="${dirPath_Top}/versions"
 	local -r filePath_Rar="${dirPath_Rar}/${dirName_Top}_${serialDT}.rar"
 
-	## Backup excludes, generic first: intermediates and dev builds that a build
+	## Validate. Before the excludes, which walk '..' for links.
+	[[ -f "${dirPath_GitProj}/.git/HEAD" ]]  ||  { fSyntax; fThrowError "Not in git project base directory."; }
+
+	## Backup excludes. Keep what would hurt to lose, drop what a command
 	## regenerates. Release builds, installers, packages, source, project docs, and
-	## the repo's own assets/ (the README demo gif) all stay in.
-	baseCmdArgs+=("-x*/.git/*" "-x*/versions/*")
-	## Rust: keep the final release binaries, drop debug profiles and every
-	## intermediate. rar's '*' spans '/', so the '*/target/*/' forms also cover
-	## per-target cross-compile trees.
-	baseCmdArgs+=("-x*/target/debug/*" "-x*/target/*/debug/*" "-x*/target/lint/*" "-x*/target/profiling/*")
-	baseCmdArgs+=("-x*/target/*/deps/*" "-x*/target/*/build/*" "-x*/target/*/incremental/*" "-x*/target/*/.fingerprint/*" "-x*/target/*/examples/*")
+	## the repo's own assets/ (the README demo gif) all stay in. Every rule here
+	## applies to every project, so a name that might be real source elsewhere
+	## belongs in that project's own list instead (see the end of this block).
+	## How rar 7 matches, as tested:
+	##   - A plain dir pattern like '*/foo' drops foo and all it holds, and rar
+	##     never walks in. So no 'foo/*' twin; that alone leaves an empty dir.
+	##   - '*' spans '/', so '*/target/*/deps' also covers cross-compile trees.
+	##   - A wildcard in the last part matches files only. Ending it in '/'
+	##     makes it match dirs only.
+	##   - 'name.*' also matches a bare 'name', and there are no [...] classes.
+	##     That rules out a 'core.*' rule for crash dumps, since it takes core.go
+	##     and core.zig with it. An unreadable dump is handled after rar runs.
+	##   - Case counts.
+	baseCmdArgs+=("-x*/.git" "-x*/versions")
+	## Rust: keep the final release binaries, drop debug profiles, lint and doc
+	## builds, and every intermediate.
+	baseCmdArgs+=("-x*/target/debug" "-x*/target/*/debug" "-x*/target/lint" "-x*/target/clippy" "-x*/target/profiling")
+	baseCmdArgs+=("-x*/target/doc")
+	baseCmdArgs+=("-x*/target/*/deps" "-x*/target/*/build" "-x*/target/*/incremental" "-x*/target/*/.fingerprint" "-x*/target/*/examples")
+	## Cargo's bookkeeping beside the binaries: dep-info, rlibs, locks, toolchain probe.
+	baseCmdArgs+=("-x*/target/*.d" "-x*/target/*.rlib" "-x*/target/.*" "-x*/target/*/.cargo-lock" "-x*/CACHEDIR.TAG" "-x*.rs.bk")
+	## cargo package unpacks each crate into a versioned dir to test it. The .crate
+	## files themselves sit beside those dirs and stay in.
+	baseCmdArgs+=("-x*/target/package/*.*.*/")
+	## Extra cargo target dirs (pre-push gate, migration checks, benchmark
+	## runs) hold debug and test builds only. Dirs only, so a file is never hit.
+	baseCmdArgs+=("-x*/target-*/")
 	## Python and Node: fetched or regenerated wholesale. 'dist' is deliberately
 	## absent - that's where the release packages land.
-	baseCmdArgs+=("-x*/__pycache__/*" "-x*/.venv/*" "-x*/.mypy_cache/*" "-x*/.pytest_cache/*" "-x*/.ruff_cache/*" "-x*/node_modules/*")
+	baseCmdArgs+=("-x*/__pycache__" "-x*.pyc" "-x*/.venv" "-x*/.mypy_cache" "-x*/.pytest_cache" "-x*/.ruff_cache" "-x*/.hypothesis")
+	baseCmdArgs+=("-x*/.tox" "-x*/.nox" "-x*.egg-info/" "-x*/node_modules")
+	## Other compiler and build caches, all regenerated on demand.
+	baseCmdArgs+=("-x*/.zig-cache" "-x*/zig-cache" "-x*/.ccache" "-x*/.ccls-cache" "-x*/CMakeFiles" "-x*.o" "-x*.gch")
+	## Zig dependencies that a fetch step downloads again.
+	baseCmdArgs+=("-x*/zig/vendor")
+	baseCmdArgs+=("-x*/.cache" "-x*/.gradle" "-x*/.dart_tool" "-x*/.stack-work")
+	baseCmdArgs+=("-x*/.next" "-x*/.turbo" "-x*/.parcel-cache" "-x*/.sass-cache")
+	## Unreal: build intermediates, shader cache, plugin builds, and cooked and
+	## staged copies of the game. The packaged build stays in.
+	baseCmdArgs+=("-x*/Intermediate" "-x*/DerivedDataCache" "-x*/Plugins/*/Binaries" "-x*/Saved/Cooked" "-x*/Saved/StagedBuilds")
+	## goreleaser leaves each platform's raw binary in its own dir beside the
+	## archives and packages that already carry it.
+	baseCmdArgs+=("-x*/dist/*_*_amd64_v?/" "-x*/dist/*_*_arm64_v8.?/")
+	## Debug builds kept beside the release ones, and profiler dumps.
+	baseCmdArgs+=("-x*/bin/*-debug" "-x*/bin/*-debug.exe" "-x*.profraw" "-x*/perf.data*")
 	## Wine: a wineprefix is regenerated by wineboot, and its dosdevices map Z: to
 	## '/' plus further drives to raw /dev nodes, as symlinks - so following them
-	## climbs out of the project and walks the whole filesystem. Exclude the dirs
-	## as well as their contents, or rar still descends to test each entry.
-	baseCmdArgs+=("-x*/dosdevices" "-x*/dosdevices/*" "-x*/drive_c" "-x*/drive_c/*")
-	## Wallpaper-sized source stills that never ship.
-	baseCmdArgs+=("-x*/private/backgrounds/*")
+	## climbs out of the project and walks the whole filesystem.
+	baseCmdArgs+=("-x*/dosdevices" "-x*/drive_c")
+	## cicd run output that the next run rewrites: tool logs, profiler output and
+	## corpus, GUI probes and captures, throwaway and fuzz builds, a staged
+	## Windows runtime, and third-party binaries fetched for size comparison.
+	baseCmdArgs+=("-x*/cicd/.profile" "-x*/cicd/artifacts/lint" "-x*/cicd/artifacts/profiling" "-x*/cicd/artifacts/probe")
+	baseCmdArgs+=("-x*/cicd/artifacts/wingui" "-x*/cicd/artifacts/runbuilds" "-x*/cicd/artifacts/crosscheck" "-x*/cicd/artifacts/fuzz/build")
+	baseCmdArgs+=("-x*/cicd/artifacts/win-run" "-x*/cicd/artifacts/sizebench")
+	## Code review snapshots (crMMDD) and gate worktrees. Each is a full copy of
+	## the repo, builds included.
+	baseCmdArgs+=("-x*/cr0???/" "-x*/cr1???/" "-x*/gatewt-*/")
+	## Anything named to stay out of backups, file or dir. The bare pattern takes
+	## files only, so each has a '/' twin for dirs.
+	baseCmdArgs+=("-x*_dupes" "-x*_dupes/" "-x*_no-backup" "-x*_no-backup/")
+	## Older backups, wherever a versions dir sits. Overlaps '*/versions' above.
+	baseCmdArgs+=("-x*/versions/*.rar")
 	## The linked-in vault of external resources (GBs of game assets and the like).
-	## Excluding the dir too, not just its contents, stops rar walking into it.
-	baseCmdArgs+=("-x*/assets-vault" "-x*/assets-vault/*")
+	baseCmdArgs+=("-x*/assets-vault")
+	## Archived material, tmp dirs, and asset zips already imported into the game.
+	baseCmdArgs+=("-x*/0_archive" "-x*/tmp" "-x*/.tmp" "-x*/Content/_staging/*/_done")
+	## Hand-made backup copies, merge and editor leftovers, and one-off probe
+	## scripts. Not '*.orig': vendored crates ship a Cargo.toml.orig. Not '*.rar'
+	## either: a project may keep a real archive on purpose.
+	baseCmdArgs+=("-x*.bak" "-x*.bak-*" "-x*.rej" "-x*~" "-x*.swp" "-x*.tmp" "-x*/.probe-*")
 	## GFS-rotated history (demo gifs/videos, logs). Matching the timestamp+role
 	## shape that gfs-rotate.bash writes keeps this to its own output, and the
 	## newest of each set is named '_latest', which is deliberately not listed.
 	local gfsRole=""
 	for gfsRole in first frequent hour day week month year; do baseCmdArgs+=("-x*_????????-??????_${gfsRole}.*"); done
-	## Project-specific excludes from the caller (space-joined -x'...' patterns), for
-	## big regenerable trees only this project knows about. Set by its cicd config.
-	if [[ -n "${GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES:-}" ]]; then
-		local -a extraExcludes=()
-		eval "extraExcludes=( ${GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES} )"
-		((${#extraExcludes[@]})) && baseCmdArgs+=("${extraExcludes[@]}")
-	fi
+	## Project-specific excludes, for big regenerable trees only this project knows
+	## about. Two sources, both optional and additive:
+	##   - cicd/rar-excludes.conf, read from disk so it applies however this
+	##     script is entered: via the pipeline, or run standalone.
+	##   - GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES, set by the cicd config.
+	local -r filePath_Excludes="${dirPath_GitProj}/cicd/rar-excludes.conf"
+	if [[ -r "${filePath_Excludes}" ]]; then fAddRarExcludes < "${filePath_Excludes}" || return 1; fi
+	if [[ -n "${GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES:-}" ]]; then fAddRarExcludes <<< "${GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES}" || return 1; fi
+	## A dir link inside the repo brings in outside data, such as asset packs
+	## linked into a game's Content, which git doesn't hold either. A link back
+	## into the project would archive the same files twice. Links beside the repo
+	## that point out of the project, like '../private', are still followed.
+	fAddLinkExcludes "${dirPath_Top}" "${dirName_GitProj}" || return 1
 	local -a cmd_Rar=(rar "${baseCmdArgs[@]}" "${filePath_Rar}" "../.")
 	local -r cmd_Rar_display="rar ${baseCmdArgs[*]}  '${filePath_Rar}'  '../.'"
-
-	## Validate
-	[[ -f "${dirPath_GitProj}/.git/HEAD" ]]  ||  { fSyntax; fThrowError "Not in git project base directory."; }
 
 	## Prompt to continue
 	if ((! doQuietly)); then
@@ -185,8 +256,10 @@ fMain(){
 		git branch --show-current
 		fEcho_Clean
 		fEcho_Clean "git user info:"
-		git config user.name
-		git config user.email
+		## Unset is a plain answer here, not a fatal error: git config exits 1 on
+		## a missing key, and set -e would end the run before anything happened.
+		git config user.name  || echo "(user.name not set)"
+		git config user.email || echo "(user.email not set)"
 		fEcho_Clean
 		fEcho_Clean "SSH key being used"
 		## Test the repo's actual remote host, not a hardcoded one, so the
@@ -195,7 +268,7 @@ fMain(){
 		## Handle every remote form: ssh:// scheme, scp-style git@host:path,
 		## and a bare alias:path with no user@ (the ssh-config Host supplies
 		## it) - the old '.*@' pattern silently failed on that last one.
-		local sshHost; sshHost="$(git remote get-url origin 2>/dev/null | sed -E 's|^[a-z][a-z0-9+.-]*://||; s|^[^@/]*@||; s|[:/].*$||')"
+		local sshHost; sshHost="$(git remote get-url origin 2>/dev/null | sed -E 's|^[a-z][a-z0-9+.-]*://||; s|^[^@/]*@||; s|[:/].*$||' || true)"
 		ssh -nTv git@${sshHost:-github.com} 2>&1 | grep -iE "offering|successfully authenticated" | sed 's/debug1: //' || true  ## -n: don't read stdin, else it eats the next prompt's input
 		fIntroPromptToContinue  ""
 		fEcho_Clean
@@ -206,7 +279,18 @@ fMain(){
 		[[ -d "${dirPath_Rar}" ]]  ||  mkdir -p "${dirPath_Rar}"
 
 		fEcho "Creating version backup '${filePath_Rar}' ..."
-		"${cmd_Rar[@]}"
+		## Exit 6 means rar could not open some files, and it archived the rest.
+		## That's usually a dangling symlink, or a crash dump from a container or a
+		## root process, which is root-owned and mode 0600. It shouldn't stop a
+		## publish, so say so loudly and carry on. Any other failure stops here.
+		local -i rarRc=0
+		"${cmd_Rar[@]}" || rarRc=$?
+		if ((rarRc == 6)) && [[ -s "${filePath_Rar}" ]]; then
+			fEcho_Force "WARNING: rar could not read the files it named above, and left them out of the backup."
+		elif ((rarRc)); then
+			fThrowError "rar failed with exit ${rarRc}. Nothing was committed or pushed."
+			return 1
+		fi
 
 		## Prune old backups (GFS): keep ~30 - first + newest-per-
 		## hour/day/week/month/year + the last 10. Also conforms pre-existing
@@ -220,13 +304,24 @@ fMain(){
 		fi
 	fi
 
+	## A stash left by a run that stopped between its stash and its pop holds
+	## uncommitted work. Publishing past it prints "Done." with the work still
+	## stashed, and the next stash buries it deeper.
+	if grep -qE ': auto-stash$' <<< "$(git stash list)"; then
+		fThrowError "an 'auto-stash' from an earlier run is still in 'git stash list'. Pop or drop it, then re-run. Nothing was committed or pushed."
+		return 1
+	fi
+
 	## Variables for git actions
 	local -i didStash=0
 	local -i preCount
 	local -i postCount
 
-	## Stash
-	if ! git diff --quiet || ! git diff --cached --quiet; then
+	## Stash. Untracked counts too - the stash includes them, and a pull that
+	## brings in a file already sitting here untracked aborts otherwise, after the
+	## backup has already run.
+	if ! git diff --quiet || ! git diff --cached --quiet || \
+	   [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
 		fEcho; fEcho "git stash push --include-untracked..."
 		preCount=$(git stash list | wc -l)
 		git stash push --include-untracked -m "auto-stash"
@@ -239,18 +334,28 @@ fMain(){
 	if git rev-parse --abbrev-ref @{u} >/dev/null 2>&1; then
 		fEcho; fEcho "git pull --ff-only ..."
 		## ff-only per the house rule: a divergent upstream stops here loudly
-		## instead of auto-merging behind the publish.
-		git pull --ff-only
+		## instead of auto-merging behind the publish. A failed pull puts the
+		## stash back first: left there, the next run finds a clean tree and
+		## publishes without the work.
+		if ! fGitRemote pull --ff-only; then
+			if ((didStash)) && ! git stash pop; then
+				fStashPopFailed "git pull --ff-only failed, and putting the stashed work back failed too"
+				return 1
+			fi
+			fThrowError "git pull --ff-only failed. The working tree is as it was. Nothing was committed or pushed."
+			return 1
+		fi
 	fi
 
 	## Stash pop. A conflict here leaves the tree with markers and keeps the
 	## stash entry; set -e treats git's exit 1 as a clean exit, so left alone it
-	## silently strands a half-merged tree. Catch it, say what to do, and stop
-	## before anything gets staged, committed, or pushed.
+	## silently strands a half-merged tree. A pulled file in the way of an
+	## untracked one fails it too, with that file only in the stash. Catch it,
+	## say what to do, and stop before anything gets staged, committed, or pushed.
 	if ((didStash)); then
 		fEcho; fEcho "git stash pop ..."
 		if ! git stash pop; then
-			fThrowError "stash pop conflicted after pull. Resolve the conflicts, then 'git stash drop', and re-run. Nothing was committed or pushed."
+			fStashPopFailed "stash pop failed after pull"
 			return 1
 		fi
 	fi
@@ -262,33 +367,146 @@ fMain(){
 		return 1
 	fi
 
-	# Stage everything tracked/new (still honors .gitignore).
-	fEcho; fEcho "git add --all ..."
-	git add --all
+	## With GIT_BACKUP_AND_PUBLISH_PATHS set, only the tracked files it names are
+	## committed, and anything else already staged stays staged. The cicd engines
+	## set it to what the run itself changed, since the rest of the tree can hold
+	## another session's edits. Unset, everything is staged, as by hand.
+	local -a onlyPaths=() specs=()
+	if [[ -v GIT_BACKUP_AND_PUBLISH_PATHS ]]; then
+		local line=""
+		while IFS= read -r line; do [[ -n "${line}" ]] && specs+=(":(top,literal)${line}"); done <<< "${GIT_BACKUP_AND_PUBLISH_PATHS}"
+		## A path git doesn't track would fail the add, so keep only the tracked ones.
+		((${#specs[@]})) && mapfile -t onlyPaths < <(git ls-files --full-name -- "${specs[@]}")
+		specs=(); for line in "${onlyPaths[@]}"; do specs+=(":(top,literal)${line}"); done
+		fEcho; fEcho "git add, only what the run changed (${#specs[@]} file(s)) ..."
+		((${#specs[@]})) && git add -- "${specs[@]}"
+	else
+		fEcho; fEcho "git add --all ..."
+		git add --all
+	fi
 
-	if ! git diff --cached --quiet; then
+	local -i staged=0
+	if [[ -v GIT_BACKUP_AND_PUBLISH_PATHS ]]; then
+		((${#specs[@]})) && ! git diff --cached --quiet -- "${specs[@]}" && staged=1
+	else
+		git diff --cached --quiet || staged=1
+	fi
+	if ((staged)); then
 		fEcho; fEcho "git commit ..."
 		## Message precedence: --message (or either message env) wins; otherwise when
 		## quiet, auto-generate one so an unattended run never blocks on an editor;
-		## otherwise open the editor as usual.
-		if   [[ -n "${commitMessage}" ]]; then git commit -m "${commitMessage}"
-		elif ((doQuietly));               then git commit -m "${dirName_Top} ${serialDT}"
-		else                                   git commit
+		## otherwise open the editor as usual. A path list commits those paths only.
+		local -a msgArgs=()
+		if   [[ -n "${commitMessage}" ]]; then msgArgs=(-m "${commitMessage}")
+		elif ((doQuietly));               then msgArgs=(-m "$(fAutoMessage "${dirName_Top} ${serialDT}")")
 		fi
+		git commit "${msgArgs[@]}" ${specs[@]+-- "${specs[@]}"}
 	fi
 
 	# Push only if we're ahead of the remote
 	if ! git rev-parse --abbrev-ref @{u} >/dev/null 2>&1; then
 		fEcho; fEcho "git push -u origin HEAD ..."
-		git push -u origin HEAD
+		fGitRemote push -u origin HEAD
 	elif [[ -n "$(git log @{u}.. 2>/dev/null)" ]]; then
 		fEcho; fEcho "git push origin ..."
-		git push origin
+		fGitRemote push origin
 	fi
 
 	## Done
 	if ((! doQuietly)); then fEcho_Force; fEcho "${meName}: Done."; fi
 :;}
+
+## Reads extra rar excludes on stdin and adds them to baseCmdArgs. Two forms:
+##   - One bare pattern per line, taken as is. Blank lines and lines starting
+##     with '#' are skipped.
+##   - The older quoted list, e.g. "-x'*/a' '-x*/b'", on one or more lines. A
+##     line starting with -x, or a quote then -x, is split by xargs, which drops
+##     the quotes but runs nothing. The value comes from the caller's
+##     environment, and this script goes on to commit and push.
+fAddRarExcludes(){
+	local line="" split="" word=""; local -a words=()
+	while IFS= read -r line || [[ -n "${line}" ]]; do
+		line="${line#"${line%%[![:space:]]*}"}"; line="${line%"${line##*[![:space:]]}"}"
+		[[ -z "${line}" || "${line}" == \#* ]] && continue
+		if [[ "${line}" == -x* || "${line}" == [\'\"]-x* ]]; then
+			split="$(xargs -r printf '%s\n' <<< "${line}")" || { fThrowError "Can't split rar exclude line: ${line}"; return 1; }
+			mapfile -t words <<< "${split}"
+			for word in "${words[@]}"; do [[ -n "${word}" ]] && baseCmdArgs+=("-x${word#-x}"); done
+		else
+			baseCmdArgs+=("-x${line}")
+		fi
+	done
+:;}
+
+## Adds an exact rar exclude for each dir link under the archive root ($1) that
+## sits inside the repo (named $2) or resolves back into the root. rar matches a
+## pattern with no wildcard from the top of the archive, so 'github/a/b' leaves
+## out that one link and nothing else of the same name.
+fAddLinkExcludes(){
+	local -r dirPath_Root="$1"
+	local -r dirName_Repo="$2"
+	local rootReal=""; rootReal="$(readlink -f "${dirPath_Root}")" || { fThrowError "Can't resolve ${dirPath_Root}"; return 1; }
+	local -a linkPaths=() targetPaths=()
+	mapfile -d '' linkPaths < <(find "${dirPath_Root}/" \( -name .git -o -name versions \) -prune -o -type l -xtype d -print0)
+	((${#linkPaths[@]})) || return 0
+	mapfile -d '' targetPaths < <(realpath -z -- "${linkPaths[@]}")
+	((${#targetPaths[@]} == ${#linkPaths[@]})) || { fThrowError "Can't resolve the dir links under ${dirPath_Root}"; return 1; }
+	local -i i=0; local relPath=""
+	for ((i = 0; i < ${#linkPaths[@]}; i++)); do
+		relPath="${linkPaths[i]#"${dirPath_Root}/"}"
+		if [[ "${relPath}" == "${dirName_Repo}/"* || "${targetPaths[i]}/" == "${rootReal}/"* ]]; then baseCmdArgs+=("-x${relPath}"); fi
+	done
+:;}
+
+## The message an unattended commit lands under. A sibling git-auto-msg.bash that
+## knows '--suggest' writes it, so the pipeline and this script can't drift apart.
+## Older copies of that helper don't, so they get the fallback in $1.
+## Git that talks to the remote goes through gitsby where it is installed, so the
+## pull and push use the key and account the repo belongs to. Plain git without it.
+fGitRemote(){ if command -v gitsby >/dev/null 2>&1; then gitsby raw git "$@"; else git "$@"; fi; }
+
+## The untracked files in the newest stash that aren't back in the tree as
+## stashed, one per line. A pop that finds a pulled file in the way of one
+## leaves it out, and the stash is then its only copy.
+fStashLeftBehind(){
+	git rev-parse -q --verify 'stash@{0}^3' >/dev/null 2>&1 || return 0
+	(
+		cd "$(git rev-parse --show-toplevel)" || exit 0
+		local entry='' meta='' path='' want='' have=''
+		local -a paths=() wants=() haves=()
+		while IFS= read -r -d '' entry; do
+			meta="${entry%%$'\t'*}"; path="${entry#*$'\t'}"; want="${meta##* }"
+			if [[ "${meta}" == 120000* ]]; then
+				[[ -L "${path}" ]] && have="$(printf '%s' "$(readlink -- "${path}")" | git hash-object --stdin)" || have=''
+				[[ "${have}" == "${want}" ]] || printf '%s\n' "${path}"
+			elif [[ -f "${path}" && ! -L "${path}" && "${path}" != *$'\n'* ]]; then
+				paths+=("${path}"); wants+=("${want}")
+			else
+				printf '%s\n' "${path}"
+			fi
+		done < <(git ls-tree -r -z 'stash@{0}^3')
+		((${#paths[@]})) || exit 0
+		mapfile -t haves < <(printf '%s\n' "${paths[@]}" | git hash-object --stdin-paths)
+		for i in "${!paths[@]}"; do [[ "${haves[i]:-}" == "${wants[i]}" ]] || printf '%s\n' "${paths[i]}"; done
+	)
+}
+
+## After a failed 'git stash pop'. Dropping the stash is the advice only when
+## nothing in it is left out of the tree.
+fStashPopFailed(){
+	local -r what="${1}" left="$(fStashLeftBehind || true)"
+	if [[ -n "${left}" ]]; then
+		fThrowError "${what}: these untracked files weren't put back, since files of the same names are in the way:\n  ${left//$'\n'/$'\n'"  "}\nThey are still in 'stash@{0}' (auto-stash), which is now their only copy, so keep it. Copy each one out with 'git show \"stash@{0}^3:PATH\" > OTHERPATH', settle any conflicts in tracked files, and re-run. Nothing was committed or pushed."
+		return 1
+	fi
+	fThrowError "${what}: resolve the conflicts, then 'git stash drop', and re-run. Nothing was committed or pushed."
+}
+
+fAutoMessage(){
+	local -r helper="${meDir}/git-auto-msg.bash"
+	if [[ -x "${helper}" ]] && grep -qF -- '--suggest' "${helper}"; then bash "${helper}" --suggest
+	else                                                             echo "${1:-Updated}"
+	fi ;}
 
 #••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 fCleanup(){
@@ -317,7 +535,6 @@ fParseArgs(){
 	local thisStr=""
 	for ((i=1; i<=totalArgCount; i++)); do
 		thisStr="${!i}"
-		thisStr="${thisStr//\"/″}"; thisStr="${thisStr//\'/′}"
 		allArgsArr+=("${thisStr}")
 	done
 
@@ -333,7 +550,7 @@ fParseArgs(){
 		#fEcho_Clean "Debug: currentArg ........: '${currentArg}'"
 
 		## Test if an option switch or not
-		if [[ -n "$(echo "${currentArg}" | grep -P "^\-(\-?)[^\ \-]" 2>/dev/null || true)" ]]; then
+		if [[ "${currentArg}" == -[!-\ ]* || "${currentArg}" == --[!-\ ]* ]]; then
 			## It's an option (either unary or long-option, we don't know yet)
 			#fEcho_Clean "Debug: option ............: '${currentArg}'"
 
@@ -363,6 +580,7 @@ fParseArgs(){
 
 				## ✶✶✶✶✶✶✶✶ PUT CUSTOM UNARY SWITCH TESTS AND PARENT BOOLEAN VARIABLE ASSIGNMENTS HERE
 				"q"|"quiet")  doQuietly=1  ;;
+				"no-prompt")  doPromptToContinue=0  ;;
 
 				## ✶✶✶✶✶✶✶✶ PUT TESTS FOR CUSTOM LONG-OPTION LOGIC THAT EXPECTS AN ARGUMENT TO FOLLOW, HERE
 				"m"|"msg"|"message")  if ((hasInlineOptVal)); then commitMessage="${inlineOptVal}"; else expectingSwitchParamForNextArg=1; fi  ;;
@@ -416,11 +634,6 @@ fDoesDirHaveContents(){
 	[[ ! -d "${1}" ]]                                     && return 1
 	[[   -z "$(ls -1A "${1%%/}/" 2>/dev/null || true)" ]] && return 1
 	return 0; }
-fBuildQuotedParams(){
-	local -n varName_1mtkp9p=$1 ; shift || true
-	local -i maxIdx=0
-	for i in {1..32}; do [[ -n "${!i}" ]] && maxIdx=$i; done
-	for i in $(seq 1 $maxIdx); do ((i > 1)) && varName_1mtkp9p="${varName_1mtkp9p}  "; varName_1mtkp9p="${varName_1mtkp9p}\"${!i}\""; done; }
 fMustBeInPath(){
 	##	Unit tests passed on: 20250704.
 	local -r programToCheckForInPath="${1:-}"
@@ -583,3 +796,43 @@ fMain  "${@}"
 ##			  rather than blocking on the editor.
 ##			- A stray positional argument now throws instead of being ignored.
 ##			- Missing include/gfs-rotate.bash warns instead of aborting.
+##		- 20260915:
+##			- A failed pull puts the stashed work back before stopping, and a run
+##			  refuses to start while an earlier run's 'auto-stash' is still stashed.
+##		- 20260917:
+##			- A commit message is committed as given; quote marks were swapped for
+##			  look-alikes.
+##			- Only a whole '-h' or '-v' argument asks for help or the version.
+##		- 20260917: Backup excludes now cover compiler and build caches: .zig-cache,
+##		  ccache, CMakeFiles, .cache and the JS/Haskell/Python ones, dir and contents
+##		  both. Also audit scratch trees, which each hold a whole build.
+##		- 20260922:
+##			- Merged the changes each project had made to its own copy, so all
+##			  copies are one file again.
+##			- Backup excludes: one plain pattern per dir, which drops the dir
+##			  without rar walking in, so no 'dir/*' twins. Rules gathered from every
+##			  project's cicd and made general: Rust lint, doc and gate builds,
+##			  Unreal, goreleaser, Wine, cicd run output, review and gate copies,
+##			  Panoplia scratch, private screenshots and third-party source, and
+##			  backup and editor leftovers. The audit-* rule matched files only, so
+##			  it dropped audit-* reports too, and rar still walked every tree.
+##			- Project excludes also from cicd/rar-excludes.conf. The env list takes
+##			  one pattern per line or the older quoted -x list, and is no longer
+##			  run as shell code.
+##			- rar exit 6 (files it could not open) warns instead of aborting.
+##			- '--no-prompt', CPU_CAP for rar threads, untracked files trigger the
+##			  stash, and an unset git user no longer ends the run.
+##			- Also excludes every 0_archive and tmp dir, fetched zig/vendor, and
+##			  imported Unreal asset zips under Content/_staging/*/_done.
+##		- 20260923: Backup excludes: dropped the Panoplia scratch and private tree
+##		  rules, so both are archived again. Added '*_dupes', '*_no-backup' (files
+##		  and dirs) and '*/versions/*.rar'.
+##		- 20260925: Pull and push go through 'gitsby raw git' when gitsby is
+##		  installed.
+##		- 20261004: Dir links inside the repo, and links back into the project, are
+##		  left out of the backup. Linked asset packs had grown one to 72 GB.
+##		- 20261107: A failed stash pop names the untracked files it couldn't put
+##		  back and says to keep the stash, rather than advising a drop that
+##		  deletes their only copy.
+##		- 20261119: GIT_BACKUP_AND_PUBLISH_PATHS commits only the tracked files it
+##		  names, so a cicd run leaves other edits in the tree alone.

@@ -1,0 +1,276 @@
+#!/usr/bin/env bash
+
+##	- Purpose:
+##		Counts the heap allocations the window thread makes per frame, with
+##		the program at rest, during a drag select, and with a tip up, and
+##		fails past a limit.
+##		The window has 2 tabs, a split pane, and the halo on, so the tab
+##		strip, both panes, and the scrim are all in every frame.
+##			- At rest: the cursor pulse redraws and nothing else changes.
+##			- Drag: the pointer held down, taken down a pane's rows, then moved
+##			  along the last one.
+##			- Tips: a tab's tip held up, then a menu row's, each counted over
+##			  the frame at rest.
+##		Neither the rest nor the drag composes the minimap, since the minimap
+##		shows no selection and nothing was printed.
+##	- Syntax: run.bash [--bin PATH] [--report]   (default: the debug build)
+##		--report prints the figures and checks no limit.
+##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no debug binary,
+##	  display, window manager, or xdotool).
+##	- Test ID: ddkre
+##	- History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
+set -euo pipefail
+meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "${meDir}/../../.." && pwd)"
+headless="${root}/cicd/utility/gui-headless.bash"
+
+## Mean allocations per frame, for the whole window thread, so the graphics
+## driver's share is in it, about 130 on llvmpipe. A driver update can move
+## the floor, so read the figures with --report before moving a limit.
+## In the drag, what comes between frames is limited per pointer move rather
+## than per frame, because a slow box folds more moves into each frame.
+## Each row the selection newly covers costs about 17, so the drag jumps down
+## to cover the rows first and is only counted while it moves along one row.
+## Under heavy load the shell scan can be folded in 20 s or more after launch,
+## about 87000 allocations in one go. So the count at rest waits for the scan
+## and a few frames drawn for the cursor alone, and runs until it has enough
+## frames rather than for a fixed time.
+idleLimit="${ALLOCS_IDLE_LIMIT:-178}"
+dragLimit="${ALLOCS_DRAG_LIMIT:-360}"
+moveLimit="${ALLOCS_MOVE_LIMIT:-6}"
+## Limits for a frame with a tip up, over the frame at rest. Each tip pays for
+## a second render pass. Copying the tab tip's lines out for each frame cost 6
+## more, and wrapping and measuring the menu tip cost 11 more.
+tabTipLimit="${ALLOCS_TAB_TIP_LIMIT:-43}"
+menuTipLimit="${ALLOCS_MENU_TIP_LIMIT:-28}"
+## Where to hover: a tab's middle, and the File menu's first row, which has a
+## tip. Both are below the menu bar, at 1x.
+tabTipY=40
+menuTipY=45
+restWait="${ALLOCS_REST_WAIT:-60}"
+restRun=5
+idleWant=20
+
+bin=""; report=0
+while (($#)); do case "${1}" in
+	--bin) bin="${2-}"; shift 2 ;;
+	--report) report=1; shift ;;
+	-h|--help) sed -n '/^##	- Purpose:/,/^##	- History:/p' "${BASH_SOURCE[0]}" | sed 's/^##	\{0,1\}//'; exit 0 ;;
+	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
+esac; done
+## Only a debug build counts; a release build reads 0 everywhere.
+if [[ -z "${bin}" ]]; then
+	targetDir="${CARGO_TARGET_DIR:-target}"
+	[[ "${targetDir}" == /* ]] || targetDir="${root}/${targetDir}"
+	bin="${targetDir}/debug/silkterm"
+fi
+if [[ ! -x "${bin}" ]]; then echo "  skip: no debug SilkTerm binary (build it first, or pass --bin)"; exit 3; fi
+echo "  binary: ${bin}"
+for tool in Xvfb xdotool xprop; do
+	if ! command -v "${tool}" >/dev/null 2>&1; then echo "  skip: no ${tool}"; exit 3; fi
+done
+if [[ ! -x "${headless}" ]]; then echo "  skip: no gui-headless.bash"; exit 3; fi
+
+# shellcheck source=cicd/tests/_testdir.bash
+source "${meDir}/../_testdir.bash"; fTestDir_Use
+
+failures=0
+fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
+
+work="$(mktemp -d "${SILKTERM_TEST_DIR}/allocs.XXXXXX")"
+appPid=""; startedDisplay=0
+fCleanup(){
+	local -r rc="${1}"
+	if [[ -n "${appPid}" ]]; then fStopOurs "${appPid}"; fi
+	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; fi
+	if [[ "${rc}" == 0 ]]; then fTestDir_Rm "${work}" || true; fi
+	fTestDir_End "${rc}"
+}
+trap 'fCleanup $?' EXIT
+
+## Only the process launched here, and only while it is still this binary.
+fStopOurs(){
+	local -r pid="${1}"
+	local want exe
+	want="$(realpath -e "${bin}" 2>/dev/null || true)"
+	exe="$(realpath -e "/proc/${pid}/exe" 2>/dev/null || true)"
+	if [[ -z "${want}" || "${exe}" != "${want}" ]]; then return 0; fi
+	kill "${pid}" 2>/dev/null || true
+	local _
+	for _ in {1..20}; do kill -0 "${pid}" 2>/dev/null || return 0; sleep 0.1; done
+	kill -9 "${pid}" 2>/dev/null || true
+}
+
+## Focus drives the cursor pulse, and xfwm4 gives it.
+export CICD_HEADLESS_DISPLAY="${CICD_HEADLESS_DISPLAY:-:98}"
+display="${CICD_HEADLESS_DISPLAY}"
+auth="/tmp/cicd-gui-headless-${USER:-$(id -un)}/Xauthority-${display#:}"
+status="$("${headless}" status 2>/dev/null || true)"
+if [[ "${status}" == *"no Xvfb"* ]]; then
+	if ! "${headless}" start --wm >/dev/null 2>&1; then echo "  skip: the display on ${display} did not start"; exit 3; fi
+	startedDisplay=1
+fi
+fX(){ DISPLAY="${display}" XAUTHORITY="${auth}" "${@}"; }
+if ! fX xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -qF 'window id'; then
+	echo "  skip: no window manager on ${display}"; exit 3
+fi
+
+said="${work}/said.txt"
+mkdir -p "${work}/home"
+printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' 'window:' $'\tremember_per_monitor: false' $'\tidle_release: false' \
+	'wallpaper:' $'\tenabled: false' $'\tfallback_builtin: false' 'text:' $'\tscrim:' $'\t\tenabled: true' >"${work}/config.shcl"
+## Rows with colored backgrounds, so every frame has cell quads to copy.
+cat >"${work}/fill.sh" <<'FILL'
+i=0
+while [ "${i}" -lt 400 ]; do
+	printf '\033[4%dm row %d \033[0m plain text after it\n' $((i % 8)) "${i}"
+	i=$((i + 1))
+done
+exec sleep 600
+FILL
+shellCmd="/bin/sh ${work}/fill.sh"
+DISPLAY="${display}" XAUTHORITY="${auth}" env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u SESSION_MANAGER LIBGL_ALWAYS_SOFTWARE=1 \
+	SILK_ALLOCS=1 \
+	HOME="${work}/home" XDG_CONFIG_HOME="${work}/home/.config" XDG_DATA_HOME="${work}/home/.local/share" \
+	XDG_CACHE_HOME="${work}/home/.cache" XDG_RUNTIME_DIR="${work}/home" \
+	"${bin}" --config "${work}/config.shcl" --pixel-width 900 --pixel-height 600 \
+	--shell "${shellCmd}" --new-pane --right --shell "${shellCmd}" --new-tab --shell "${shellCmd}" \
+	>/dev/null 2>"${said}" &
+appPid=$!
+window="$(fX timeout 30 xdotool search --sync --onlyvisible --pid "${appPid}" 2>/dev/null | head -n 1 || true)"
+fCheck "a window came up" test -n "${window}"
+if [[ -z "${window}" ]]; then echo "${failures} failed"; exit 1; fi
+
+## Over the lines after line $1 up to line $2: frames, the mean frame, the
+## mean of frame plus between, and the between total. Each line ends with what
+## the frame was drawn for.
+fMean(){
+	sed -n "$((${1} + 1)),${2}p" "${said}" | awk '
+		/^\[allocs\] frame [0-9]+ between [0-9]+ for / { n++; f += $3; b += $5; t += $3 + $5 }
+		END { if (n) printf "%d %.0f %.0f %d\n", n, f / n, t / n, b; else print "0 0 0 0" }'
+}
+fLines(){ wc -l <"${said}"; }
+## Minimap composes over the same lines.
+fComposes(){ sed -n "$((${1} + 1)),${2}p" "${said}" | grep -cxF '[allocs] map composed' || true; }
+## The notes over the same lines, each compose with what its frame was drawn
+## for. A compose nobody wanted is one of these, and the run's folder may be
+## gone by the time anyone looks.
+fNotes(){
+	sed -n "$((${1} + 1)),${2}p" "${said}" | awk '
+		/^\[allocs\] frame / { if (open) { print "      in a frame for " $NF; open = 0 } next }
+		/^\[allocs\] / { sub(/^\[allocs\] /, ""); print "      " $0; open = ($0 == "map composed") }' | head -n 20 || true
+}
+## The shell scan has been folded in, and the last few frames since were drawn
+## for the cursor pulse and nothing else.
+fAtRest(){
+	local -i n
+	grep -qxF '[allocs] shell scan folded in' "${said}" || return 1
+	n="$(sed -n '/^\[allocs\] shell scan folded in$/,$p' "${said}" | grep -F '[allocs] frame ' | tail -n "${restRun}" | grep -c ' for cursor$' || true)"
+	((n == restRun))
+}
+
+## The pointer rests over the left pane's text for the whole run, so hover
+## settles before anything is counted.
+fX xdotool windowactivate --sync "${window}" 2>/dev/null || true
+fX xdotool mousemove --window "${window}" 120 200
+sleep 6
+restBy=$((SECONDS + restWait))
+until fAtRest || ((SECONDS >= restBy)); do sleep 0.25; done
+if ((report)); then fAtRest || echo "    not at rest after ${restWait} s"
+else fCheck "came to rest within ${restWait} s" fAtRest; fi
+from="$(fLines)"; countFrom="${SECONDS}"; sleep 4
+while (($(fMean "${from}" "$(fLines)" | cut -d' ' -f1) < idleWant && SECONDS - countFrom < 20)); do sleep 0.5; done
+to="$(fLines)"
+read -r idleFrames idleFrame idleTotal _ < <(fMean "${from}" "${to}")
+idleMaps="$(fComposes "${from}" "${to}")"; idleFrom="${from}"; idleTo="${to}"
+echo "    at rest: ${idleFrames} frames, ${idleFrame} allocations drawing each, ${idleTotal} with what came before, ${idleMaps} map composes"
+
+moves=80
+fX xdotool mousedown 1
+fX xdotool mousemove --window "${window}" 60 456
+sleep 1
+from="$(fLines)"
+for step in $(seq 1 "${moves}"); do
+	fX xdotool mousemove --window "${window}" $((60 + step * 4)) 456
+	sleep 0.03
+done
+## Counted before the release, whose frame redraws the whole window and
+## composes the map. Read after it, that frame got into the count now and then.
+to="$(fLines)"
+fX xdotool mouseup 1
+read -r dragFrames dragFrame dragTotal dragBetween < <(fMean "${from}" "${to}")
+dragPerMove="$(awk -v b="${dragBetween}" -v m="${moves}" 'BEGIN { printf "%.1f", b / m }')"
+dragMaps="$(fComposes "${from}" "${to}")"; dragFrom="${from}"; dragTo="${to}"
+echo "    drag: ${dragFrames} frames, ${dragFrame} allocations drawing each, ${dragTotal} with what came before, ${dragPerMove} per pointer move between frames, ${dragMaps} map composes"
+
+## A tip held up: a tab's, then a menu row's. Each is counted over the frame at
+## rest, which takes out the graphics driver's floor. The tip's own frames cost
+## more than that, since they add a render pass. The window prints a note when
+## a tip comes up, which shows the hover found one. Prints the frames, the mean
+## frame, and how many notes came.
+fTipFrames(){
+	local -r note="${1}" mark="${2}"
+	local from up n f
+	sleep 2
+	up="$(sed -n "$((mark + 1)),\$p" "${said}" | grep -cxF "[allocs] ${note}" || true)"
+	from="$(fLines)"; sleep 3
+	read -r n f _ _ < <(fMean "${from}" "$(fLines)")
+	echo "${n} ${f} ${up}"
+}
+fX xdotool mousemove --window "${window}" 120 200
+sleep 1
+mark="$(fLines)"
+fX xdotool mousemove --window "${window}" 60 "${tabTipY}"
+read -r tabTipFrames tabTipFrame tabTipUp < <(fTipFrames "tab tip up" "${mark}")
+tabTipOver=$((tabTipFrame - idleFrame))
+echo "    tab tip: ${tabTipFrames} frames, ${tabTipFrame} allocations drawing each, ${tabTipOver} over the frame at rest"
+fX xdotool mousemove --window "${window}" 120 200
+sleep 1
+fX xdotool mousemove --window "${window}" 18 10 click 1
+sleep 0.5
+mark="$(fLines)"
+fX xdotool mousemove --window "${window}" 40 "${menuTipY}"
+read -r menuTipFrames menuTipFrame menuTipUp < <(fTipFrames "menu tip up" "${mark}")
+fX xdotool key Escape
+menuTipOver=$((menuTipFrame - idleFrame))
+echo "    menu tip: ${menuTipFrames} frames, ${menuTipFrame} allocations drawing each, ${menuTipOver} over the frame at rest"
+
+if ((idleFrames > 0 && idleTotal == 0)); then echo "  skip: this build counts no allocations (a release build?)"; exit 3; fi
+if ((!report)); then
+	fCheck "frames counted at rest" test "${idleFrames}" -gt 5
+	fCheck "frames counted in the drag" test "${dragFrames}" -gt 5
+	fCheck "at rest: ${idleTotal} per frame, limit ${idleLimit}" test "${idleTotal}" -le "${idleLimit}"
+	fCheck "drag: ${dragFrame} per frame, limit ${dragLimit}" test "${dragFrame}" -le "${dragLimit}"
+	fCheck "drag: ${dragPerMove} per move between frames, limit ${moveLimit}" \
+		awk -v a="${dragPerMove}" -v l="${moveLimit}" 'BEGIN { exit !(a <= l) }'
+	fCheck "a tab tip came up" test "${tabTipUp}" -ge 1
+	fCheck "frames counted with the tab tip up" test "${tabTipFrames}" -gt 5
+	fCheck "tab tip: ${tabTipOver} per frame over rest, limit ${tabTipLimit}" test "${tabTipOver}" -le "${tabTipLimit}"
+	fCheck "a menu tip came up" test "${menuTipUp}" -ge 1
+	fCheck "frames counted with the menu tip up" test "${menuTipFrames}" -gt 5
+	fCheck "menu tip: ${menuTipOver} per frame over rest, limit ${menuTipLimit}" test "${menuTipOver}" -le "${menuTipLimit}"
+	fCheck "at rest: the map composed ${idleMaps} times, none wanted" test "${idleMaps}" -eq 0
+	fCheck "drag: the map composed ${dragMaps} times, none wanted" test "${dragMaps}" -eq 0
+	if ((idleMaps)); then echo "    at rest, what came before each compose:"; fNotes "${idleFrom}" "${idleTo}"; fi
+	if ((dragMaps)); then echo "    in the drag, what came before each compose:"; fNotes "${dragFrom}" "${dragTo}"; fi
+fi
+
+if ((failures)); then
+	grep -v '^\[allocs\]' "${said}" | sed 's/^/    /' | tail -n 20 || true
+	echo "${failures} failed"; exit 1
+fi
+echo "all passed"
+
+##	History:
+##		- 20261006 JC: Created.
+##		- 20261010 JC: The drag frame and its pointer moves get limits of their own.
+##		- 20261024 JC: The counted drag moves along one row.
+##		- 20261024 JC: The count at rest waits for frames drawn for the cursor alone.
+##		- 20261105 JC: Neither the rest nor the drag may compose the minimap.
+##		- 20261107 JC: A compose nobody wanted prints the notes before it.
+##		- 20261108 JC: The drag is counted up to the release, not past it.
+##		- 20261117 JC: A tab tip and a menu tip held up, each with a limit.

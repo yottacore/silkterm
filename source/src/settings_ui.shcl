@@ -3,13 +3,13 @@
 ## This file IS the dialog: which rows exist, in what order, under which
 ## heading, on which tab, what each one edits, and when each is grayed out.
 ## It is compiled into the binary, so an edit needs a rebuild - and the tests
-## fail if a row names a setting the code does not know, or leaves one out.
+## fail if a row names a setting the code doesn't know, or leaves one out.
 ##
 ## Measurements are DIP: a CSS pixel, 1/96 inch. The layout is solved in that
 ## space and multiplied by the display's scale factor on the way to the
 ## screen, so these numbers mean the same physical size at any DPI.
 ##
-## What is NOT here: how a value is read, written or formatted. Those go
+## What isn't here: how a value is read, written, or formatted. Those go
 ## through typed fields with transforms (a stored millisecond becomes a 1..100
 ## slider, a fraction becomes a percent), which is code, not data.
 
@@ -17,8 +17,14 @@
 ## Tabs
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-## Left to right along the top. Every heading below names one of these.
-tabs: "Background", "Text", "Cursor", "Movement", "Themes", "Window", "Shell"
+## In order. "A/B" is tab B under tab A; a tab with tabs under it has no
+## rows of its own, and a heading below names the tab it is on by that path.
+tabs: ["Silk", "Appearance", "Appearance/Themes", "Appearance/Background", "Appearance/Text", "Appearance/Cursor", "Movement", "Window", "Program", "Shell", "Keys"]
+
+## top: a row of tabs across the top, where a tab's sub-tabs show in a second
+## row only while it is the current one. left: a list down the left side with
+## every tab in it, sub-tabs indented under their parent.
+tabs_side: left
 
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Layout
@@ -27,43 +33,48 @@ tabs: "Background", "Text", "Cursor", "Movement", "Themes", "Window", "Shell"
 ## Nearly every measurement here is a FLOOR, not a fixed size: content that
 ## needs more room gets it (a wide label pushes the panel wider, a tall UI font
 ## makes rows taller). So a value set too small loses to the content and one
-## set too large just gives a roomier dialog - neither can break the layout.
+## set too large gives a roomier dialog - neither can break the layout.
 
 layout:
 
 	## Panel
-	width: 540                 ## floor; the widest label, button row or tab strip wins
-	pad: 18                    ## margin inside all four panel edges
+	width: 540                 ## floor; the widest label, button row or top tab strip wins
+	pad: 18                    ## margin inside all 4 panel edges
 	tabs_gap: 10               ## tab strip -> first row
-	buttons_gap: 14            ## last row -> footer buttons
+	buttons_gap: 18            ## the footer's top line -> footer buttons
+	search_gap: 18             ## search box -> the line under it
+	rows_pad: 10               ## inside the scrolling rows, over the first and under the last
 
 	## Rows
 	row_height: 32             ## floor for an ordinary row
-	row_pad: 8                 ## row grows to the UI line height plus this
+	row_pad: 12                ## row grows to the UI line height plus this
 	header_height: 36          ## floor for a section heading (its rule sits at the bottom)
 	header_pad: 14             ## heading grows to the UI line height plus this
 	header_gap: 24             ## extra space above a heading that follows a section
 	subgroup_gap: 8            ## extra space above a row that leads a sub-group
-	indent: 16                 ## label offset per sub-group level (controls do not move)
+	indent: 16                 ## label offset per sub-group level (controls don't move)
 	label_width: 168           ## floor for the label column
 	label_gap: 14              ## clear space after the longest label
-	revert_width: 22           ## right-edge revert-to-default icon column
+	revert_width: 22           ## floor; the revert-to-default column grows to its arrow
 
 	## Controls
 	slider_width: 220
-	swatch: 20                 ## color chip, and the height of every boxed control
+	swatch: 20                 ## floor for a checkbox; past it, it grows with the radio box
 	hex_width: 92              ## "#rrggbb" field beside a color chip
-	value_width: 56            ## numeric field beside a slider
-	radio_box: 16              ## radio indicator square
+	value_width: 56            ## floor; every slider's field grows to the longest number one shows
+	radio_box: 16              ## radio indicator square; grows with the UI line from base_line_height
 	radio_pitch: 96            ## per radio option: box + label + gap
-	dual_pitch: 118            ## per checkbox + label pair on a two-part row
+	dual_pitch: 118            ## per checkbox + label pair on a 2-part row
 	dropdown_width: 208        ## collapsed dropdown box (fits its longest option)
+	dropdown_pair_width: 150   ## floor for each half of a two-dropdown row
 	dropdown_item_pad: 8       ## popup row grows to the UI line height plus this
 	dropdown_item_min: 24
-	base_line_height: 19       ## the UI line height the four pitches above were drawn for
+	base_line_height: 19       ## the UI line height the 4 pitches above were drawn for
 
 	## Editable fields
-	field_pad: 6               ## text inset inside a field
+	field_height: 26           ## floor; a field grows to the UI line height plus field_pad_v twice
+	field_pad: 8               ## text inset from the left and right outlines
+	field_pad_v: 4             ## clear space above and below the text line
 	caret_pad: 6               ## kept clear right of the caret at end-of-text
 	view_ahead: 28             ## characters kept visible ahead of a travelling caret
 	edit_menu_width: 132       ## the field's right-click menu
@@ -71,10 +82,11 @@ layout:
 	## Shells grid (the Shell tab: one line per stored shell). The columns are
 	## floors and the command takes whatever width is left over, so a wider panel
 	## goes to the one value that is routinely too long to read at a glance.
+	## The name and the gap grow with a UI line taller than the 11 pt default's.
 	shell_name_width: 128
 	shell_command_width: 190
-	shell_seen_width: 78       ## the read-only "Last seen" date
-	shell_active_width: 44     ## wide enough for the column title, not the checkbox
+	shell_seen_width: 78       ## floor; grows to its title, a date or "never"
+	shell_active_width: 44     ## floor; grows to its title or the checkbox
 	shell_col_gap: 8
 	shell_grip: 16             ## the drag handle that reorders a line
 	shell_button: 18           ## the remove icon box
@@ -87,19 +99,35 @@ layout:
 	button_width: 76           ## floor
 	button_gap: 10
 
-	## Tabs. They sit on the gutter strip at the top of the panel, standing on
-	## the line that separates it from the rows below - so they are shorter than
-	## a footer button and start a little below the panel's own edge.
+	## Tabs. Across the top they sit on the gutter strip, standing on the line
+	## that separates it from the rows below - so they are shorter than a footer
+	## button and start a little below the panel's own edge. Down the left they
+	## are a list on the same strip, each as wide as the list, and the list's
+	## width goes on top of the panel's.
 	tab_pad: 22                ## clear space either side of a tab's title
 	tab_height: 24             ## floor
 	tab_pad_v: 6               ## tab grows to the UI line height plus this
-	tab_top: 5                 ## panel edge -> top of the tabs
+	tab_top: 5                 ## panel edge -> top of the tabs; between tab rows too
 	tab_gap: 4                 ## between tab buttons
+	tab_indent: 16             ## a sub-tab's step in, per level, in the left list
 
 	## Scrollbar (shown only when a tab is taller than the panel)
 	scrollbar_width: 8
-	scrollbar_inset: 9         ## gap between the bar and the panel edge
+	scrollbar_inset: 5         ## gap between the bar and the panel edge. The bar
+	                           ## uses the panel's own padding, so this has to
+	                           ## leave room between it and content that fills that
+	                           ## padding - the Shell tab's last column does.
 	scrollbar_thumb_min: 24
+
+	## Color picker (the box a color chip opens). Every one of these is a floor:
+	## the square gives way first on a narrow panel, since it is the one piece
+	## with no text in it.
+	pick_gap: 12               ## between the square, the strip and the value column
+	pick_strip: 22             ## width of the hue strip
+	pick_label_width: 96       ## the "Saturation %" column, grows to the longest label
+	pick_field_width: 58       ## the value boxes, grow to "#rrggbb"
+	pick_min_square: 80
+	pick_marker: 13            ## the ring on the square
 
 ## Flyover help for the footer buttons. Every other tip is the `help:` line on
 ## the row it belongs to.
@@ -113,299 +141,689 @@ icons:
 	dropdown_arrow: "▾"   ## in the collapsed box
 	dropdown_check: "✓"   ## marks the current value in the open list
 	revert: "↺"           ## revert-to-default, one per row
+	search_sep: "⏵"       ## between tab, heading and row in a search result
 
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Rows
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 ## In screen order. A row's NAME is the setting it edits, spelled as the code
-## spells it; `kind: heading` starts a GROUP and says which tab it lands on,
+## spells it; `kind: heading` starts a GROUP and says which tab it goes on,
 ## and every row after it belongs to that group.
 ##
-## A SUB-GROUP is not declared. It is a row followed by rows at a greater
+## A SUB-GROUP isn't declared. It is a row followed by rows at a greater
 ## `indent:` - the leader's own label stays put and its members' labels step
 ## right, so the run reads as belonging to it. Only labels move; every control
 ## keeps its column. A row back at the shallower depth ends the sub-group.
 ##
-## kind:      heading | toggle | slider | color | text | radio | dropdown | pair
+## kind:      heading | toggle | slider | color | text | radio | dropdown |
+##            pair | buttons | shells | hotkey
 ## label:     what the row is called on screen
 ## setting:   the config.shcl path the revert arrow comments out
 ## range:     slider low, high
 ## whole:     slider steps in whole numbers
-## indent:    sub-group depth of the label (default 0)
+## scale:     log for a slider whose range spans orders of magnitude, so each
+##            doubling gets the same travel. Linear when left out.
+## typed_max: how far a value typed in the number box may go past the
+##            slider's end. Only for a setting with no % and no real limit of
+##            its own. The handle sits at the end and the box shows the number.
+##            The config has to read the same value back, which a test checks.
+## indent:    sub-group depth of the label. Left out, it is worked out from
+##            `gate:` and `auto:`, else 0.
+## beside:    draw this row on the line above rather than under it. A line's
+##            rows split the control column evenly; the first keeps the label
+##            column, and its label has to name the whole line unless each
+##            row after it names itself. Only a toggle may do that, with its
+##            label before its box. A line of nothing but toggles packs at its
+##            own width; in a group with other rows its first box keeps the
+##            control column.
 ## options:   the choices, in order, for radio / dropdown / pair
-## parts:     the two settings a `pair` row carries, one per option
-## key:       only when the row's name cannot be the setting's - because a
+## parts:     the 2 settings a `pair` row edits, one per option
+## key:       only when the row's name can't be the setting's - because a
 ##            heading already took that name, or because the row edits no
 ##            single setting of its own (`key: none`)
-## help:      flyover text, for a control whose label does not explain it
+## gate:      the checkbox this row only counts under. The row never grays,
+##            and changing it turns the checkbox on.
+## auto:      the checkbox that makes this row automatic, with `rule:` for
+##            where the value then comes from, which the code works out. A value
+##            set by hand is kept for when the checkbox goes off again.
+## rule:      with no `auto:`, the rule gives the default instead.
+## group:     the profile or theme this row belongs to, from `groups:` at the
+##            end. While a preset is in force the row shows its value, and a
+##            change to it is kept apart from the person's own, as a "*" one.
+## help:      flyover text, for a control whose label doesn't explain it
+## revert_help: flyover for the revert arrow, where it does more than put the
+##            default back
+## windows:   true for a row that exists only on Windows. On a heading it takes
+##            the whole group, and every row in it has to say so as well.
+## macos:     true for a row that exists only on macOS. It works the same way
+##            as `windows:`.
+## not_macos: true for a row the macOS build can never use, left out there.
+## warning:   draws a warning mark after the label, for a row that may not
+##            work on every desktop. The text goes on the end of `help:`, and
+##            that one tip shows over the label, the mark and the control
+## windows_warning: the same in the Windows build, in place of `warning:`. A
+##            mark that applies only there has only this one.
+## aliases:   other words the search box finds the row by, after the ones in
+##            its label. Only a row with a label can have them, since that is
+##            what a result shows.
 
 rows:
 
-	## ---------------------------------------------------------------- Background
+	## ---------------------------------------------------------------------- Silk
+
+	## The profile sets rows in the 2 sections below and on the Background
+	## and Cursor tabs (`group: profile`). While a preset is in force they show
+	## its values, and changing one shows the profile as "High *" and leaves
+	## the Custom values alone.
+	Performance:
+		kind: heading
+		label: Performance
+		aliases: ["speed", "fps"]
+		tab: Silk
+
+	PerfAuto:
+		label: Choose automatically
+		aliases: ["benchmark", "hardware test"]
+		kind: toggle
+		setting: performance.automatic
+		help: "Test how fast this computer draws, and pick the profile it can run smoothly. If drawing still falls behind, SilkTerm drops to the next profile down until it restarts, but never below Low."
+
+	PerfProfile:
+		label: Profile
+		aliases: ["quality", "preset", "effects"]
+		kind: dropdown
+		setting: performance.profile
+		auto: PerfAuto
+		rule: machine_profile
+		help: "Which effects to use, from Max silk with all of them to Standard terminal with none. Picking one turns off Choose automatically. Picking Remote (temporary) doesn't, and that profile only lasts until SilkTerm restarts."
+
+	## The label stays short because the widest one on any tab sets the panel's
+	## width, and the flyover has what it leaves out.
+	PerfCheckHardware:
+		label: Check for hardware change
+		kind: toggle
+		setting: performance.check_hardware
+		gate: PerfAuto
+		help: "Test the machine again when its processor, graphics card, or memory changes. The test takes a few seconds. This is only used when Choose automatically is on."
+
+	PerfCheckNext:
+		label: Re-test next run
+		kind: toggle
+		beside: true
+		setting: performance.check_next_run
+		gate: PerfAuto
+		help: "Test the machine again at the next launch, even if nothing changed. This turns itself off once the test is done."
+
+	## Not under Choose automatically: Remote comes on at launch either way.
+	PerfDetectRemote:
+		label: Use remote mode when detected
+		aliases: ["automatic remote mode", "remote desktop", "rdp", "vnc", "x forwarding"]
+		kind: toggle
+		setting: performance.detect_remote
+		help: "Switch to the Remote (temporary) profile when SilkTerm starts on a remote screen, such as over Remote Desktop, VNC, or X forwarding. With this off, Temporary remote display mode on the View menu still switches to it by hand."
+
+	TextReadability:
+		kind: heading
+		label: Text readability
+		aliases: "legibility"
+		tab: Silk
+
+	TextScrim:
+		label: Text scrim
+		aliases: ["halo", "glow", "text shadow"]
+		kind: toggle
+		setting: text.scrim.enabled
+		group: profile
+		help: "A soft blur of the background color behind the text, so it stays readable over a busy wallpaper."
+
+	ScrimStrength:
+		## percent, where each 20% is one doubling of the finished halo's opacity
+		label: Strength %
+		kind: slider
+		range: [0, 100]
+		whole: true
+		setting: text.scrim.strength
+		gate: TextScrim
+		group: profile
+		help: "How solid the scrim is. High values fill in the gaps between letters. Light mode uses less, since a scrim shows up more on a light background."
+
+	ScrimRadius:
+		label: Scrim radius px
+		kind: slider
+		range: [0, 20]
+		whole: true
+		setting: text.scrim.radius
+		gate: TextScrim
+		group: profile
+		help: "How far the scrim reaches out from the text."
+
+	ScrimSoftness:
+		label: Softness %
+		kind: slider
+		range: [0, 100]
+		whole: true
+		setting: text.scrim.softness
+		gate: TextScrim
+		group: profile
+		help: "How gradually the scrim fades at its edge."
+
+	## The 2 together describe one curve, so they share a line. The label names
+	## both; each box says which of them it is by what it shows.
+	ScrimFunction:
+		label: "Function, falloff"
+		kind: dropdown
+		options: ["Distance field", "Distance transform", "Dilate + feather", "Gaussian [ugly]"]
+		setting: text.scrim.function
+		gate: TextScrim
+		group: profile
+		help: "How the scrim's outline is traced around the letters."
+
+	ScrimRamp:
+		label: ""
+		kind: dropdown
+		options: ["Exponential", "Half-normal", "Logarithmic", "Sigmoid", "Linear"]
+		beside: true
+		setting: text.scrim.ramp
+		gate: TextScrim
+		help: "The curve the scrim fades along."
+
+	MinContrast:
+		## percent of the lightness range, not a WCAG ratio - see palette::readable
+		label: Minimum contrast %
+		kind: slider
+		range: [0, 60]
+		whole: true
+		indent: 1
+		setting: text.min_contrast
+		help: "Lighten text that is too dark to read, or darken it on a light background. Text the same color as the background stays hidden. 0 turns this off."
+
+	## Its own one-row group under the scrim: it works with the halo or without it.
+	Outline:
+		label: Outline px
+		aliases: "stroke"
+		kind: slider
+		range: [0, 4]
+		whole: true
+		setting: text.outline
+		group: profile
+		help: "A sharp outline around each letter. It works alone or with the scrim."
+
+	Scrolling:
+		kind: heading
+		label: Scrolling
+		tab: Silk
+
+	SmoothScroll:
+		label: Smooth scrolling
+		aliases: ["animation", "easing"]
+		kind: toggle
+		setting: scroll.smooth
+		group: profile
+		help: "Scroll smoothly instead of jumping a whole line at a time."
+
+	## The 5 below are ordered as one output burst unfolds: it leaves rest,
+	## accelerates, tops out, winds down, stops. All 5 read the same way -
+	## higher is faster.
+
+	ScrollEaseIn:
+		label: Ease-in %
+		kind: slider
+		range: [1, 100]
+		whole: true
+		setting: scroll.ease_in_ms
+		gate: SmoothScroll
+		group: profile
+		help: "How fast scrolling starts when output begins."
+
+	ScrollRampUp:
+		label: Ramp-up %
+		kind: slider
+		range: [1, 100]
+		whole: true
+		setting: scroll.ramp_up_ms
+		gate: SmoothScroll
+		group: profile
+		help: "How fast scrolling speeds up once it is moving."
+
+	SingleScreenTau:
+		label: Single-screen speed %
+		aliases: "scroll speed"
+		kind: slider
+		range: [1, 100]
+		whole: true
+		setting: scroll.single_screen_tau_ms
+		gate: SmoothScroll
+		group: profile
+		help: "Top scrolling speed while new output fits on one screen."
+
+	ScrollRampDown:
+		label: Ramp-down %
+		kind: slider
+		range: [1, 100]
+		whole: true
+		setting: scroll.ramp_down_ms
+		gate: SmoothScroll
+		group: profile
+		help: "How fast scrolling slows down as output stops."
+
+	ScrollEaseOut:
+		label: Ease-out %
+		kind: slider
+		range: [1, 100]
+		whole: true
+		setting: scroll.ease_out_ms
+		gate: SmoothScroll
+		group: profile
+		help: "How sharply scrolling stops on the last line."
+
+	## -------------------------------------------------------------------- Themes
 
 	## A heading whose label is its own tab's title says nothing the tab strip
-	## has not, so it draws nothing - but it still assigns the rows below it.
+	## hasn't, so it draws nothing - but it still assigns the rows below it.
+	Themes:
+		kind: heading
+		label: Themes
+		aliases: ["colors", "colours", "palette", "color scheme"]
+		tab: Appearance/Themes
+
+	Theme:
+		label: Theme
+		aliases: ["colors", "color scheme", "palette"]
+		kind: dropdown
+		setting: theme
+		help: "The color scheme for the terminal and this dialog."
+
+	ThemeMode:
+		label: Mode
+		aliases: ["dark mode", "light mode", "night mode"]
+		kind: dropdown
+		options: ["Dark", "Light", "System"]
+		indent: 1
+		setting: theme_mode
+		help: "Which variant of the theme to use. System follows the desktop."
+
+	FontIgnoresThemes:
+		label: Font settings ignore themes
+		kind: toggle
+		indent: 1
+		setting: font.ignore_themes
+		help: "When this is off, picking a saved theme also sets the font family, size, and line height saved with it. The built-in themes don't have a font."
+
+	ThemeActions:
+		label: ""
+		kind: buttons
+		options: ["Save", "Save as…", "Rename…", "Delete"]
+		help: "Save stores the colors below and the font settings under this theme's name. Only a saved theme can be renamed or deleted."
+
+	Colors:
+		kind: heading
+		label: Colors
+		aliases: ["colours", "palette"]
+		tab: Appearance/Themes
+
+	ColBg:
+		label: Terminal background
+		aliases: ["background color", "bg"]
+		kind: color
+		setting: colors.background
+		group: theme
+
+	ColFromWallpaper:
+		label: Text colors from wallpaper
+		kind: toggle
+		indent: 1
+		setting: colors.from_wallpaper
+		help: "Pick text and cursor colors that stand out against the wallpaper."
+
+	ColFg:
+		label: Foreground
+		aliases: ["text color", "fg"]
+		kind: color
+		setting: colors.foreground
+		auto: ColFromWallpaper
+		rule: wallpaper_fg
+		group: theme
+
+	ColCursor:
+		label: Cursor
+		aliases: "cursor color"
+		kind: color
+		setting: colors.cursor
+		auto: ColFromWallpaper
+		rule: wallpaper_cursor
+		group: theme
+
+	ColDialogBg:
+		label: Dialog background
+		kind: color
+		setting: colors.dialog_background
+		group: theme
+
+	ColDialogFg:
+		label: Dialog text
+		kind: color
+		indent: 1
+		setting: colors.dialog_foreground
+		group: theme
+
+	ColMenuBg:
+		label: Menu background
+		kind: color
+		indent: 1
+		setting: colors.menu_background
+		group: theme
+
+	ColMenuFg:
+		label: Menu text
+		kind: color
+		indent: 1
+		setting: colors.menu_foreground
+		group: theme
+
+	ColGutter:
+		label: Gutter
+		kind: color
+		indent: 1
+		setting: colors.gutter
+		group: theme
+		help: "Empty areas around the controls, such as the strip these tabs are on."
+
+	ColHighlight:
+		label: Highlight
+		aliases: "accent"
+		kind: color
+		indent: 1
+		setting: colors.highlight
+		group: theme
+		help: "Used for the active pane's border, slider handles, revert arrows, and the default button."
+
+	ColFocus:
+		label: Focus
+		aliases: ["accent", "focus ring"]
+		kind: color
+		indent: 1
+		setting: colors.focus
+		group: theme
+		help: "Marks the control the keyboard is on."
+
+	ColScrollbarThumb:
+		label: Scrollbar handle
+		aliases: "thumb"
+		kind: color
+		setting: colors.scrollbar_thumb
+		help: "This color is also used for the minimap marker. Themes don't change it or the Track color."
+
+	ColScrollbarTrough:
+		label: Track
+		aliases: ["trough", "scrollbar track"]
+		kind: color
+		indent: 1
+		setting: colors.scrollbar_trough
+
+	## ---------------------------------------------------------------- Background
+
 	Background:
 		kind: heading
 		label: Background
-		tab: Background
-
-	Transparency:
-		label: Transparency
-		kind: toggle
-		setting: transparency.enabled
-
-	Opacity:
-		label: Opacity
-		kind: slider
-		range: 0, 100
-		whole: true
-		indent: 1
-		setting: transparency.opacity
-
-	BackdropBlur:
-		label: Blur-behind
-		kind: toggle
-		indent: 1
-		setting: transparency.blur_behind
-		help: "Blur whatever is behind the window, where the desktop can do it."
+		aliases: ["image", "picture"]
+		tab: Appearance/Background
 
 	BgEnabled:
 		label: Wallpaper
+		aliases: ["background image", "picture"]
 		kind: toggle
 		setting: wallpaper.enabled
+		group: profile
 
 	BgImage:
 		label: File or folder
+		aliases: ["image", "picture", "path"]
 		kind: text
-		indent: 1
 		setting: wallpaper.image
+		gate: BgEnabled
+		rule: found_picture
+		help: "An image file, or a folder of images when Rotate folder is on."
 
 	BgFit:
 		label: Fit
+		aliases: ["scale", "stretch", "fill"]
 		kind: radio
-		options: "Stretch", "Zoom"
-		indent: 1
+		options: ["Stretch", "Zoom"]
 		setting: wallpaper.default_fit
-		help: "What to do when the image and the window are different shapes. An image carrying its own tag overrides this."
+		gate: BgEnabled
+		help: "What to do when the image and the window are different shapes. An image with its own Fit tag overrides this."
 
 	BgHonorXmp:
-		label: Honor tags
+		label: Honor layout tags
 		kind: toggle
-		indent: 1
 		setting: wallpaper.honor_xmp
-		help: "Let an image's own embedded Fit and Anchor tags decide how it is placed."
+		gate: BgEnabled
+		help: "Use an image's own Fit and Anchor tags to place it."
 
 	BgRotate:
 		label: Rotate folder
+		aliases: ["slideshow", "cycle"]
 		kind: toggle
-		indent: 1
 		setting: wallpaper.rotate.enabled
-		help: "Treat the path above as a folder and show a different image from it each time."
+		gate: BgEnabled
+		help: "Treat the path above as a folder, and show its images in turn."
 
 	BgOpacity:
-		label: Visibility
+		label: Visibility %
+		aliases: ["wallpaper opacity", "dim", "brightness"]
 		kind: slider
-		range: 0, 100
+		range: [0, 100]
 		whole: true
-		indent: 1
 		setting: wallpaper.opacity
-		help: "How strongly the wallpaper shows through the terminal background."
+		gate: BgEnabled
+		help: "How much the wallpaper shows through. With Honor look tags on, an image's own Opacity tag wins, so this only applies to images without one."
 
 	BgBlur:
-		label: Blur
+		label: Blur px
 		kind: slider
-		range: 0, 50
-		indent: 1
+		range: [0, 50]
+		typed_max: 100
+		whole: true
 		setting: wallpaper.blur
+		gate: BgEnabled
+		group: profile
+		help: "How much to blur the wallpaper. With Honor look tags on, an image's own Blur tag wins, so this only applies to images without one."
+
+	BgHonorXmpLook:
+		label: Honor look tags
+		kind: toggle
+		setting: wallpaper.honor_xmp_look
+		gate: BgEnabled
+		help: "Let an image's own Opacity and Blur tags win over the 2 sliders above. The sliders then only apply to images without those tags. The bundled wallpapers all have tags."
 
 	BgContrastMask:
 		label: Contrast mask
 		kind: toggle
 		setting: wallpaper.contrast_mask.enabled
-		help: "Quieten the wallpaper only where it would fight the text, leaving the rest alone."
+		gate: BgEnabled
+		group: profile
+		help: "Dim the wallpaper only where it makes the text hard to read."
 
 	BgContrastSize:
-		label: Size
+		label: Size %
 		kind: slider
-		range: 0, 100
+		range: [0, 100]
 		whole: true
-		indent: 1
 		setting: wallpaper.contrast_mask.size
-		help: "How large an area each point of the wallpaper is judged against."
+		gate: BgContrastMask
+		help: "The size of the area checked around each spot, to work out how much to dim it."
 
 	BgContrastStrength:
-		label: Strength
+		label: Strength %
 		kind: slider
-		range: 0, 100
+		range: [0, 100]
 		whole: true
-		indent: 1
 		setting: wallpaper.contrast_mask.strength
-		help: "How far the mask is allowed to push the wallpaper down."
+		gate: BgContrastMask
+		help: "How much the mask can dim the wallpaper."
 
 	BgContrastAuto:
-		label: Automask mix
+		label: Automask mix %
 		kind: slider
-		range: 0, 100
+		range: [0, 100]
 		whole: true
-		indent: 1
 		setting: wallpaper.contrast_mask.auto
-		help: "How much of the masking is left to the picture itself rather than the setting above."
+		gate: BgContrastMask
+		help: "How much the mask is based on the image itself, rather than on the 2 sliders above. At 100 it's based only on the image."
+
+	## Last on the tab, since it is the one that depends on the desktop.
+	Transparency:
+		label: Transparency
+		aliases: ["see-through", "translucent", "transparent"]
+		kind: toggle
+		setting: transparency.enabled
+		help: "See through the window to what's behind it. On Windows this takes effect at the next launch."
+		warning: "This needs a desktop compositor, so it may not work on every desktop."
+		windows_warning: "This needs a desktop compositor, so it may not work on every desktop. A window still on screen also keeps some of its graphics memory when idle."
+
+	Opacity:
+		label: Opacity %
+		aliases: ["transparency", "translucent"]
+		kind: slider
+		range: [0, 100]
+		whole: true
+		setting: transparency.opacity
+		gate: Transparency
+
+	BackdropBlur:
+		label: Blur-behind
+		aliases: ["frosted glass", "acrylic"]
+		kind: toggle
+		setting: transparency.blur_behind
+		gate: Transparency
+		help: "Blur what's behind the window, on desktops that support it."
 
 	## ---------------------------------------------------------------------- Text
 
 	Font:
 		kind: heading
 		label: Font
-		tab: Text
+		aliases: "typeface"
+		tab: Appearance/Text
 
+	## Each box switches its row below to the desktop's own monospace font.
+	## Family keeps the built-in list behind it. Where the desktop names none,
+	## the built-in list and 17 are used.
 	SystemFont:
 		label: Use system font
+		aliases: "desktop font"
 		kind: pair
-		options: "Face", "Size"
-		parts: SystemFont, SystemFontSize
-		setting: font.use_system_family, font.use_system_size
-		help: "Follow the desktop's own monospace font, for the face and the size independently."
+		options: ["Face", "Size"]
+		parts: [SystemFont, SystemFontSize]
+		setting: [font.use_system_family, font.use_system_size]
+		help: "Use the desktop's own monospace font. Face and Size can each be turned on separately."
 
 	FontFamily:
 		label: Family
+		aliases: ["font", "typeface", "font name"]
 		kind: text
 		setting: font.family
+		auto: SystemFont
+		rule: system_font_family
+		help: "Font names, separated by commas. The first one installed is used."
 
 	FontSize:
 		label: Size
+		aliases: ["font size", "text size", "zoom"]
 		kind: slider
-		range: 6, 40
+		range: [6, 40]
+		typed_max: 128
 		whole: true
 		setting: font.size
+		auto: SystemFontSize
+		rule: system_font_size
 
 	LineHeight:
 		label: Line height
+		aliases: ["line spacing", "leading"]
 		kind: slider
-		range: 0.8, 2
+		range: [0.8, 2]
+		typed_max: 4
 		setting: font.line_height_scale
-		help: "Space between lines, as a multiple of the font's own."
-
-	TextReadability:
-		kind: heading
-		label: Text readability
-		tab: Text
-
-	TextScrim:
-		label: Text scrim
-		kind: toggle
-		setting: text.scrim.enabled
-		help: "A soft halo behind the glyphs, so text stays readable over a busy wallpaper."
-
-	ScrimStrength:
-		## percent, where each 20% is one doubling of the finished halo's opacity
-		label: Strength
-		kind: slider
-		range: 0, 100
-		whole: true
-		indent: 1
-		setting: text.scrim.strength
-		help: "How solid the halo gets. High values close the gaps between glyphs into a plate."
-
-	ScrimRadius:
-		label: Scrim radius
-		kind: slider
-		range: 0, 20
-		indent: 1
-		setting: text.scrim.radius
-		help: "How far the halo reaches out from the ink."
-
-	ScrimSoftness:
-		label: Softness
-		kind: slider
-		range: 0, 100
-		whole: true
-		indent: 1
-		setting: text.scrim.softness
-		help: "How gradually the halo fades out toward its edge."
-
-	Outline:
-		label: Outline px
-		kind: slider
-		range: 0, 4
-		indent: 1
-		setting: text.outline
-		help: "A crisp outline drawn hard against the glyphs, on top of the halo."
-
-	ScrimFunction:
-		label: Function
-		kind: dropdown
-		options: "Distance field", "Distance transform", "Dilate + feather", "Gaussian [ugly]"
-		indent: 1
-		setting: text.scrim.function
-		help: "How the halo's shape is computed from the glyphs."
-
-	ScrimRamp:
-		label: Falloff
-		kind: dropdown
-		options: "Exponential", "Half-normal", "Logarithmic", "Sigmoid", "Linear"
-		indent: 1
-		setting: text.scrim.ramp
-		help: "The curve the halo fades along."
+		help: "The height of each line, as a multiple of the font's normal line height."
 
 	## -------------------------------------------------------------------- Cursor
 
 	Cursor:
 		kind: heading
 		label: Cursor
-		tab: Cursor
-
-	CursorBlink:
-		label: Blink rate
-		kind: slider
-		range: 100, 3000
-		whole: true
-		setting: cursor.blink_rate_ms
-		help: "One full animation cycle, in milliseconds."
+		aliases: "caret"
+		tab: Appearance/Cursor
 
 	CursorHeight:
-		label: Height
+		label: Height %
+		aliases: ["cursor size", "caret"]
 		kind: slider
-		range: 1, 100
+		range: [1, 100]
 		whole: true
 		setting: cursor.size.height
 		help: "Cursor height as a percentage of the cell, measured up from the bottom."
 
 	CursorWidth:
-		label: Width
+		label: Width %
+		aliases: ["cursor size", "caret"]
 		kind: slider
-		range: 1, 100
+		range: [1, 100]
 		whole: true
 		setting: cursor.size.width
 		help: "Cursor width as a percentage of the cell, measured from the left."
 
+	## The rows under Blink only count while it is on. They stay live, so
+	## they can be set up first and come back as they were.
+	CursorBlinking:
+		label: Blink
+		aliases: ["cursor blink", "flash"]
+		kind: toggle
+		setting: cursor.blink
+		group: profile
+		help: "Animate the cursor when typing stops."
+
+	CursorBlinkRate:
+		label: Rate s
+		aliases: "blink speed"
+		kind: slider
+		range: [0.2, 6]
+		typed_max: 20
+		setting: cursor.blink_rate_s
+		gate: CursorBlinking
+		help: "Seconds for one whole blink, from peak to peak."
+
 	CursorAnimation:
 		label: Animation
+		aliases: ["cursor trail", "smooth cursor"]
 		kind: dropdown
-		options: "None", "Phase", "Pulse vertical", "Pulse horizontal", "Pulse both"
+		options: ["Phase", "Pulse vertical", "Pulse horizontal", "Pulse both"]
 		setting: cursor.animation
+		gate: CursorBlinking
 
 	CursorResume:
-		label: Inactivity timer
+		label: Inactivity timer s
 		kind: slider
-		range: 0.1, 60
-		indent: 1
+		range: [0.1, 60]
+		typed_max: 3600
 		setting: cursor.animation_resume_s
-		help: "Seconds of no typing before the animation picks up again. Output does not wait this out."
+		gate: CursorBlinking
+		help: "How long after the last keystroke before the cursor animates again. Program output doesn't reset it."
 
 	CursorVisibility:
-		## Two independent switches sharing one label; the row itself edits
-		## nothing, so its own name is not a setting.
+		## One label over 2 independent switches. The row itself edits
+		## nothing, so its own name isn't a setting.
 		key: none
 		label: Visibility
 		kind: pair
-		options: "Scrim", "Outline"
-		parts: CursorScrim, CursorOutline
-		setting: cursor.scrim, cursor.outline
+		options: ["Scrim", "Outline"]
+		parts: [CursorScrim, CursorOutline]
+		setting: [cursor.scrim, cursor.outline]
 
 	CopyOnSelect:
 		label: Copy on select
+		aliases: ["clipboard", "auto copy", "selection"]
 		kind: toggle
 		setting: shell.copy_on_select
 		help: "Put selected text on the clipboard as soon as it is selected."
@@ -417,193 +835,52 @@ rows:
 		label: Movement
 		tab: Movement
 
-	SmoothScroll:
-		label: Smooth scrolling
-		kind: toggle
-		setting: scroll.smooth
-		help: "Ease the view instead of jumping a whole line at a time. Off makes every setting below inert."
-
-	## The five below are ordered as one output burst unfolds: it leaves rest,
-	## accelerates, tops out, winds down, lands. All five read the same way -
-	## higher is faster.
-
-	ScrollEaseIn:
-		label: Ease-in
-		kind: slider
-		range: 1, 100
-		whole: true
-		indent: 1
-		setting: scroll.ease_in_ms
-		help: "How sharply the view leaves a standstill when output starts."
-
-	ScrollRampUp:
-		label: Ramp-up
-		kind: slider
-		range: 1, 100
-		whole: true
-		indent: 1
-		setting: scroll.ramp_up_ms
-		help: "How quickly the view picks up speed once it is moving."
-
-	SingleScreenTau:
-		label: Single-screen speed
-		kind: slider
-		range: 1, 100
-		whole: true
-		indent: 1
-		setting: scroll.single_screen_tau_ms
-		help: "Top speed while the output still fits on one screen."
-
-	ScrollRampDown:
-		label: Ramp-down
-		kind: slider
-		range: 1, 100
-		whole: true
-		indent: 1
-		setting: scroll.ramp_down_ms
-		help: "How hard the view brakes as the output runs out."
-
-	ScrollEaseOut:
-		label: Ease-out
-		kind: slider
-		range: 1, 100
-		whole: true
-		indent: 1
-		setting: scroll.ease_out_ms
-		help: "How crisply the view lands on the final line."
-
 	WheelLines:
 		label: Wheel lines
+		aliases: ["mouse wheel", "scroll speed"]
 		kind: slider
-		range: 1, 10
+		range: [1, 10]
+		typed_max: 100
 		whole: true
 		setting: scroll.wheel_lines
-		help: "Lines traveled per notch of the mouse wheel."
+		help: "How many lines to scroll per notch of the mouse wheel."
 
 	Scrollbar:
 		label: Scrollbar
+		aliases: ["scroll bar", "scrollback", "history"]
 		kind: toggle
 		setting: scroll.scrollbar.enabled
 
 	ScrollbarThickness:
-		label: Width
+		label: Width px
 		kind: slider
-		range: 4, 64
+		range: [4, 64]
 		whole: true
-		indent: 1
 		setting: scroll.scrollbar.thickness
+		gate: Scrollbar
 
 	ScrollbarAutoHide:
 		label: Hide when idle
+		aliases: "auto hide"
 		kind: toggle
-		indent: 1
 		setting: scroll.scrollbar.auto_hide
-		help: "Fade the scrollbar out while the view sits still at the bottom."
+		gate: Scrollbar
+		help: "Fade out the scrollbar while the view is at the bottom and not scrolling."
 
-	ColScrollbarThumb:
-		label: Handle
-		kind: color
-		indent: 1
-		setting: colors.scrollbar_thumb
+	Minimap:
+		label: Minimap
+		aliases: ["overview", "scrollback", "history"]
+		kind: toggle
+		setting: scroll.minimap.enabled
+		help: "A small view of the whole scrollback beside the text. It takes up columns the text would have used."
 
-	ColScrollbarTrough:
-		label: Track
-		kind: color
-		indent: 1
-		setting: colors.scrollbar_trough
-
-	## -------------------------------------------------------------------- Themes
-
-	Themes:
-		kind: heading
-		label: Themes
-		tab: Themes
-
-	Theme:
-		label: Theme
-		kind: dropdown
-		setting: theme
-		help: "The color scheme the terminal and this dialog follow."
-
-	ThemeMode:
-		label: Mode
-		kind: dropdown
-		options: "Dark", "Light", "System"
-		indent: 1
-		setting: theme_mode
-		help: "Which variant of the theme to use. System follows the desktop."
-
-	ThemeActions:
-		label: ""
-		kind: buttons
-		options: "Save", "Save as...", "Rename", "Delete"
-		help: "Save keeps the colors below under this theme's name. Only a saved theme can be renamed or deleted."
-
-	Colors:
-		kind: heading
-		label: Colors
-		tab: Themes
-
-	ColBg:
-		label: Terminal background
-		kind: color
-		setting: colors.background
-
-	ColFg:
-		label: Foreground
-		kind: color
-		indent: 1
-		setting: colors.foreground
-
-	ColCursor:
-		label: Cursor
-		kind: color
-		indent: 1
-		setting: colors.cursor
-
-	ColDialogBg:
-		label: Dialog background
-		kind: color
-		setting: colors.dialog_background
-
-	ColDialogFg:
-		label: Dialog text
-		kind: color
-		indent: 1
-		setting: colors.dialog_foreground
-
-	ColMenuBg:
-		label: Menu background
-		kind: color
-		indent: 1
-		setting: colors.menu_background
-
-	ColMenuFg:
-		label: Menu text
-		kind: color
-		indent: 1
-		setting: colors.menu_foreground
-
-	ColGutter:
-		label: Gutter
-		kind: color
-		indent: 1
-		setting: colors.gutter
-		help: "Chrome that holds no control, such as the strip these tabs sit on."
-
-	ColHighlight:
-		label: Highlights
-		kind: color
-		indent: 1
-		setting: colors.highlight
-		help: "Marks several things at once - the live pane's ring, slider handles, revert arrows, the default button."
-
-	ColFocus:
-		label: Focus
-		kind: color
-		indent: 1
-		setting: colors.focus
-		help: "Marks only the one control the keyboard is on."
+	MinimapWidth:
+		label: Width px
+		kind: slider
+		range: [24, 400]
+		whole: true
+		setting: scroll.minimap.width
+		gate: Minimap
 
 	## -------------------------------------------------------------------- Window
 
@@ -612,85 +889,239 @@ rows:
 		label: Window
 		tab: Window
 
+	## Columns and Rows show the last size while it is on, and a size typed in
+	## turns it off.
 	RememberSize:
 		label: Remember last size
+		aliases: "window size"
 		kind: toggle
 		setting: window.remember_size
-		help: "Reopen at whatever size the window was last closed at, ignoring the two below."
+		help: "Reopen at the size the window was last closed at."
+
+	RememberPerMonitor:
+		label: Per monitor
+		kind: toggle
+		setting: window.remember_per_monitor
+		gate: RememberSize
+		help: "Remember a separate size for each monitor. A window moved to another monitor changes to that monitor's size."
+		warning: "When screens sleep and wake, this can fight the window manager, and the window may come back at an unexpected size or place."
 
 	Columns:
 		label: Columns
+		aliases: ["width", "window width"]
 		kind: slider
-		range: 20, 400
+		range: [20, 400]
+		typed_max: 1000
 		whole: true
-		indent: 1
 		setting: window.columns
+		auto: RememberSize
+		rule: remembered_columns
 
 	Rows:
 		label: Rows
+		aliases: ["height", "window height"]
 		kind: slider
-		range: 6, 120
+		range: [6, 120]
+		typed_max: 1000
 		whole: true
-		indent: 1
 		setting: window.rows
+		auto: RememberSize
+		rule: remembered_rows
 
-	TabMinWidth:
-		label: Tab width min %
+	RememberMaximized:
+		label: Remember maximized
+		kind: toggle
+		setting: window.remember_maximized
+		help: "Reopen maximized when the window was last closed maximized."
+
+	ResizeOnZoom:
+		label: Resize window on zoom
+		aliases: ["font size", "text zoom", "window size"]
+		kind: toggle
+		setting: window.resize_on_zoom
+		help: "Changing the font size from the keyboard or the View menu resizes the window to keep the same columns and rows. Once the window fills the screen it stops growing, and the grid gets smaller as usual. A maximized or fullscreen window keeps its size."
+
+	TabRegularWidth:
+		label: Tab width regular %
 		kind: slider
-		range: 4, 50
+		range: [4, 100]
 		whole: true
-		setting: window.tab_min_width_pct
-		help: "Narrowest a tab may be, as a percentage of the window. Raise it to keep tabs readable when many are open - the strip then shows them a page at a time."
+		setting: window.tab_regular_width_pct
+		help: "Normal tab width, as a percentage of the window. Tabs shrink below this when there are a lot of them."
 
 	TabMaxWidth:
 		label: Tab width max %
 		kind: slider
-		range: 4, 50
+		range: [4, 100]
 		whole: true
 		setting: window.tab_max_width_pct
-		help: "Widest a tab may be, as a percentage of the window."
+		help: "How far a tab may grow past its regular width when its text needs the room."
+
+	NewTabNextToCurrent:
+		label: New tabs go next to current
+		aliases: "tab position"
+		kind: toggle
+		setting: window.new_tab_next_to_current
+		help: "Open new tabs right after the current one, instead of at the end."
 
 	Margin:
 		label: Margin px
+		aliases: "padding"
 		kind: slider
-		range: 0, 40
+		range: [0, 40]
+		typed_max: 200
 		whole: true
 		setting: window.margin
 		help: "Clear space between the text and the window edge."
 
+	TabText:
+		kind: heading
+		label: Tab text
+		aliases: ["tab title", "tab label"]
+		tab: Window
+
+	## The flyover is the only place the macros are listed, so it runs longer
+	## than a row's usually does.
+	TabTemplate:
+		label: Template
+		aliases: ["macros", "tab name"]
+		kind: text
+		setting: window.tab_text
+		help: "What each tab says. A macro between percent signs is replaced by its value:◉NEWLINE◉%USER_DEFINED%: a name typed on the tab◉NEWLINE◉%PROGRAM_DEFINED%: the title the running program sets◉NEWLINE◉%SHELL%: the shell's name◉NEWLINE◉%PROGRAM%: the program the shell is running◉NEWLINE◉%LAST_PROGRAM%: the program it ran last◉NEWLINE◉%CURRENT_DIRECTORY%: the shell's current directory◉NEWLINE◉◉NEWLINE◉a || b shows a, or b if a is empty. { } groups parts without showing the braces, and [ ] groups them and shows the brackets. A group is left out, text and all, when all of its macros are empty. Text between 2 parts is left out too, unless both parts show. On a narrow tab the parts are shortened in a fixed order."
+
+	WindowTitle:
+		kind: heading
+		label: Window title
+		aliases: ["title bar", "caption"]
+		tab: Window
+
+	TitleShowsTab:
+		label: Show the tab's text
+		kind: toggle
+		setting: window.title_shows_tab
+		help: "Show the active tab's text in the title bar. A title set by the running program shows either way."
+
 	Hyperlinks:
 		kind: heading
 		label: Hyperlinks
+		aliases: ["urls", "web addresses"]
 		tab: Window
 
 	HyperlinksEnabled:
 		key: Hyperlinks
 		label: Enabled
+		aliases: ["hyperlinks", "links", "urls"]
 		kind: toggle
 		setting: hyperlinks.enabled
 
 	LinkOpenCommand:
 		label: Open command
+		aliases: ["browser", "url handler"]
+		kind: text
+		setting: hyperlinks.open_command
+		gate: Hyperlinks
+		rule: desktop_opener
+		help: "The command that opens a clicked link."
+
+	## ------------------------------------------------------------------- Program
+
+	## A split, or a tab from the Tabs menu's "New tab in tmux", in a tmux
+	## session of its own. Grayed where tmux can't be found, which is always
+	## on Windows. The 2 rows under the switch count for that menu row too,
+	## so they aren't gated by it.
+	Tmux:
+		kind: heading
+		label: Tmux
+		aliases: ["multiplexer", "persistent sessions"]
+		tab: Program
+
+	TmuxNewSession:
+		label: Always run in new tmux session
+		aliases: ["multiplexer", "detach", "persistent sessions"]
+		kind: toggle
+		setting: shell.tmux.always_new_session
+		help: "Start each new tab, split, and plain launch in a new tmux session. With this off, New tab in tmux on the Tabs menu still does it for one tab.◉NEWLINE◉◉NEWLINE◉Pros:◉NEWLINE◉- If your desktop crashes, your CLI sessions survive.◉NEWLINE◉- You can connect to existing CLI sessions remotely.◉NEWLINE◉- You can reconnect from any other installed terminal."
+		warning: "◉NEWLINE◉◉NEWLINE◉Cons:◉NEWLINE◉- Can't launch GUI programs without extra parameters.◉NEWLINE◉- The SilkTerm Minimap is not available.◉NEWLINE◉- SilkTerm can't adjust itself based on programs inside tmux, so you may see occasional weirdness with smooth-scrolling."
+
+	TmuxSessionName:
+		label: Session name template
+		aliases: "tmux"
 		kind: text
 		indent: 1
-		setting: hyperlinks.open_command
-		help: "What to run for a clicked link. Empty hands it to the desktop."
+		setting: shell.tmux.session_name
+		help: "What a new tmux session is called. A macro between percent signs is replaced by its value:◉NEWLINE◉%YYYYmmDD%: the date◉NEWLINE◉%HHMMSS%: the time◉NEWLINE◉%HHMMSSNN%: the time, to a hundredth of a second◉NEWLINE◉◉NEWLINE◉If tmux already has a session by that name, a number is added to the end. Dots, colons, and # are changed to underscores, since tmux doesn't accept them in a name."
+
+	TmuxOnClose:
+		label: When closed
+		aliases: ["detach", "kill session"]
+		kind: radio
+		options: ["Detach", "End", "Prompt"]
+		indent: 1
+		setting: shell.tmux.on_close
+		help: "What closing a tab or pane does to a tmux session SilkTerm started in it. Detach leaves it running, so it can be reattached later. End kills the session and everything running in it."
+
+	## What a window costs the machine. Last on the tab, since it is the part
+	## that depends on the graphics driver.
+	ResourceUse:
+		kind: heading
+		label: Resource use
+		aliases: ["memory", "power saving"]
+		tab: Program
+
+	IdleRelease:
+		label: Free resources when idle
+		aliases: ["memory", "sleep", "power saving"]
+		kind: toggle
+		setting: window.idle_release
+		help: "Free graphics memory while the window isn't being used, and get it back when it is. Programs in it keep running. It helps most with a lot of windows open, or on a graphics card that's low on memory."
+		warning: "Turn it off only if the graphics driver has trouble with it."
+
+	IdleHiddenMin:
+		label: Minutes when hidden
+		kind: slider
+		range: [1, 1440]
+		scale: log
+		typed_max: 10080  ## a week
+		whole: true
+		setting: window.idle_release_hidden_min
+		gate: IdleRelease
+		help: "How long a minimized or covered window waits before freeing memory. On Windows, getting it back can take about a second."
+
+	IdleMin:
+		label: Minutes otherwise
+		kind: slider
+		range: [1, 1440]
+		scale: log
+		typed_max: 10080  ## a week
+		whole: true
+		setting: window.idle_release_min
+		gate: IdleRelease
+		help: "How long a visible window waits when it's unfocused and quiet. On Windows with Transparency on, a visible window keeps some memory, so it doesn't turn black."
+
+	SoftwareRendering:
+		label: Always use software rendering
+		aliases: ["gpu", "graphics card"]
+		kind: toggle
+		setting: window.software_rendering
+		not_macos: true
+		help: "Draw with the processor instead of the graphics card. It's slower but uses no graphics memory. SilkTerm also switches to this by itself when the card fails."
 
 	## --------------------------------------------------------------------- Shell
 
 	Shell:
 		kind: heading
 		label: Shell
+		aliases: ["shells", "default shell", "command line"]
 		tab: Shell
 
-	## The shells the Tabs menu offers under "New Tab with Shell", in the order it
+	## The shells the Tabs menu offers under "New tab with shell", in the order it
 	## offers them - and the first switched-on one is the shell a plain new tab,
 	## pane or window runs. The list fills itself in a few seconds after launch;
 	## this grid is where it is ordered, renamed, switched off and pruned.
 	Shells:
 		label: ""
 		kind: shells
-		help: "The topmost switched-on shell is the default for new tabs, panes and windows."
+		help: "The top shell that's turned on is used for new tabs, panes, and windows."
 
 	## The lowest-precedence answer to "where does this shell start". A new tab,
 	## pane or window inherits the directory of the pane it came from, and a
@@ -700,81 +1131,405 @@ rows:
 	StartupDir:
 		kind: heading
 		label: "Default startup directory"
+		aliases: ["working directory", "start folder"]
 		tab: Shell
 
 	StartupDirectory:
 		label: Directory
+		aliases: ["working directory", "cwd", "start folder"]
 		kind: text
 		setting: shell.startup_directory
-		help: "Where a shell starts when nothing else has said. Understands ~ and environment variables ($HOME, %USERPROFILE%). Overridden by --directory on the command line, by an inherited directory, and by the directory SilkTerm was launched from."
+		help: "The directory a new shell starts in when nothing else sets one. It accepts ~ and environment variables. --directory, an inherited directory, and the launch directory all take priority over this."
 
-	## PowerShell is the one shell that cannot be asked where it is - it keeps
-	## its location to itself - so it is offered a block for its profile that
-	## says so. Every other shell moves its own process and needs nothing. A
-	## profile that already reports is left alone.
+	## The 2 things SilkTerm sets up in a shell it starts. PowerShell is the
+	## one shell that can't be asked where it is - it keeps its location to
+	## itself - so it is offered a block for its profile that says so, and a
+	## profile that already reports is left alone. The bash prompt is an offer
+	## through the environment; an rc file with a prompt of its own wins.
 	IntegrationHead:
 		kind: heading
 		label: "Shell integration"
 		tab: Shell
 
 	ShellIntegration:
-		label: "PowerShell profiles"
+		label: "Update PowerShell profiles"
 		kind: toggle
 		setting: shell.integration
-		help: "Add a directory-reporting block to each PowerShell profile, so a new tab, pane or window opens where that shell is. Other shells need nothing. A profile that already reports is left alone, and deleting the block switches it off for good."
+		help: "Add a block to each PowerShell profile, so new tabs, panes, and windows open in that shell's current directory. A profile that already does this is left alone. Delete the block to stop it for good."
+
+	BashPrompt:
+		label: "Use git-aware Bash prompt"
+		aliases: ["ps1", "git prompt"]
+		kind: toggle
+		setting: shell.bash_prompt
+		help: "Use the x9ps1-git prompt in new bash panes. It shows the git branch and status. It replaces the .bashrc prompt without changing any files."
+
+	## What Explorer opens a file type with, per user. Register writes it and
+	## saves what was there; the revert arrow puts that back. Both act at once,
+	## so Cancel doesn't undo them. Neither is a setting in the config file:
+	## the registry is the state, and the arrow is lit while it says SilkTerm.
+	OpenWith:
+		kind: heading
+		label: "Open with SilkTerm"
+		aliases: ["file types", "file associations"]
+		tab: Shell
+		windows: true
+
+	OpenBatch:
+		label: "Batch files"
+		kind: buttons
+		options: "Register"
+		windows: true
+		help: "Open .bat and .cmd files from Explorer in SilkTerm. The pane stays open after the script ends, and shows its exit code. Register again if SilkTerm is moved."
+		revert_help: "Put back whatever opened .bat and .cmd files before SilkTerm was registered."
+
+	OpenPowerShell:
+		label: "PowerShell scripts"
+		kind: buttons
+		options: "Register"
+		windows: true
+		help: "Open .ps1 files from Explorer in SilkTerm, with PowerShell 7 if installed, or else Windows PowerShell. Scripts follow the same signing rules as Windows' own Run with PowerShell."
+		revert_help: "Put back whatever opened .ps1 files before SilkTerm was registered."
+
+	OpenVbScript:
+		label: "VBScript files"
+		kind: buttons
+		options: "Register"
+		windows: true
+		help: "Open .vbs files from Explorer in SilkTerm. Their messages print in the pane instead of popping up."
+		revert_help: "Put back whatever opened .vbs files before SilkTerm was registered."
+
+	OpenFolder:
+		label: "Folder menu"
+		aliases: ["explorer", "right-click menu"]
+		kind: buttons
+		options: "Register"
+		windows: true
+		help: "Add Open in SilkTerm to the right-click menu for folders, drives, and folder backgrounds. On Windows 11 it's under Show more options."
+		revert_help: "Remove Open in SilkTerm from the folder menu."
+
+
+	## ---------------------------------------------------------------------- Keys
+
+	## Every hotkey under `keys:` in the config file, grouped the way the menu
+	## bar groups what they do. A row is set by pressing the new chord in its box;
+	## the file keeps the same spellings a hand edit would. The tab is a long list
+	## and scrolls, so it is left out of the dialog's height, as the Shell tab is.
+
+	## This group comes first, so it isn't lost under the hotkeys. Its setting is
+	## under `keys:` in the file, but it isn't a hotkey.
+	OptionKey:
+		kind: heading
+		label: Keyboard
+		aliases: ["option", "alt", "meta", "escape prefix", "emacs", "readline"]
+		tab: Keys
+		macos: true
+
+	OptionAsAlt:
+		label: Option key
+		kind: dropdown
+		options: ["Types special characters", "Left acts as Alt", "Right acts as Alt", "Both act as Alt"]
+		setting: keys.option_as_alt
+		macos: true
+		help: "Let Option act as Alt, so shell and editor shortcuts work, such as Option+B to go back a word. Pick Types special characters to keep Option typing its usual character, such as { on a German keyboard."
+
+	KeysFile:
+		kind: heading
+		label: File
+		aliases: ["shortcuts", "hotkeys", "keyboard", "key bindings"]
+		tab: Keys
+
+	HotkeyNewWindow:
+		label: "New window"
+		kind: hotkey
+		setting: keys.new_window
+
+	HotkeySettings:
+		label: "Settings"
+		aliases: ["preferences", "options"]
+		kind: hotkey
+		setting: keys.settings
+
+	HotkeyQuit:
+		label: "Quit"
+		aliases: "exit"
+		kind: hotkey
+		setting: keys.quit
+
+	KeysEdit:
+		kind: heading
+		label: Edit
+		tab: Keys
+
+	HotkeyCopy:
+		label: "Copy"
+		aliases: "clipboard"
+		kind: hotkey
+		setting: keys.copy
+
+	HotkeyPaste:
+		label: "Paste"
+		aliases: "clipboard"
+		kind: hotkey
+		setting: keys.paste
+
+	KeysView:
+		kind: heading
+		label: View
+		tab: Keys
+
+	HotkeyFontBigger:
+		label: "Increase font size"
+		aliases: ["zoom in", "larger"]
+		kind: hotkey
+		setting: keys.font_bigger
+
+	HotkeyFontSmaller:
+		label: "Decrease font size"
+		aliases: ["zoom out", "smaller"]
+		kind: hotkey
+		setting: keys.font_smaller
+
+	HotkeyFontReset:
+		label: "Reset font size"
+		aliases: "zoom reset"
+		kind: hotkey
+		setting: keys.font_reset
+
+	HotkeyFullscreen:
+		label: "Fullscreen"
+		aliases: "full screen"
+		kind: hotkey
+		setting: keys.fullscreen
+
+	HotkeyContextMenu:
+		label: "Right-click menu"
+		kind: hotkey
+		setting: keys.context_menu
+		help: "Opens the right-click menu on the focused pane, the way the Menu key does by default."
+
+	KeysTabs:
+		kind: heading
+		label: Tabs
+		tab: Keys
+
+	HotkeyNewTab:
+		label: "New tab"
+		kind: hotkey
+		setting: keys.new_tab
+
+	HotkeyCloseTab:
+		label: "Close tab"
+		kind: hotkey
+		setting: keys.close_tab
+
+	HotkeyPrevTab:
+		label: "Previous tab"
+		kind: hotkey
+		setting: keys.previous_tab
+
+	HotkeyNextTab:
+		label: "Next tab"
+		kind: hotkey
+		setting: keys.next_tab
+
+	HotkeyMoveTabBack:
+		label: "Move tab left"
+		kind: hotkey
+		setting: keys.move_tab_back
+
+	HotkeyMoveTabForward:
+		label: "Move tab right"
+		kind: hotkey
+		setting: keys.move_tab_forward
+
+	KeysPanes:
+		kind: heading
+		label: Panes
+		tab: Keys
+
+	HotkeySplitRight:
+		label: "Split vertical"
+		aliases: "split right"
+		kind: hotkey
+		setting: keys.split_right
+
+	HotkeySplitDown:
+		label: "Split horizontal"
+		aliases: "split down"
+		kind: hotkey
+		setting: keys.split_down
+
+	HotkeyClosePane:
+		label: "Close pane"
+		kind: hotkey
+		setting: keys.close_pane
+
+	HotkeyFocusLeft:
+		label: "Go to pane on left"
+		kind: hotkey
+		setting: keys.focus_left
+
+	HotkeyFocusRight:
+		label: "Go to pane on right"
+		kind: hotkey
+		setting: keys.focus_right
+
+	HotkeyFocusUp:
+		label: "Go to pane above"
+		kind: hotkey
+		setting: keys.focus_up
+
+	HotkeyFocusDown:
+		label: "Go to pane below"
+		kind: hotkey
+		setting: keys.focus_down
 
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-## Graying
+## Values with no row
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-## A control is grayed out while any setting listed against it is off - a
-## toggle that is false, or a number sitting at zero. A leading "!" reverses
-## it: grayed while that setting is ON. Listing several means all must hold.
-##
-## Not listed here: the two system-font switches, which the environment grays
-## when the desktop reports no font for them to follow. That is a fact about
-## the machine, so it is answered in code.
+## Settings no row edits, listed so a profile can set them or a row can stand
+## for them. Same fields as a row, less the ones that draw it.
 
-gates:
+values:
 
-	Opacity: Transparency
-	BackdropBlur: Transparency
+	SmoothApps:
+		label: Smooth scrolling in apps
+		setting: scroll.smooth_apps
+		gate: SmoothScroll
+		group: profile
 
-	BgImage: BgEnabled
-	BgRotate: BgEnabled
-	BgOpacity: BgEnabled
-	BgBlur: BgEnabled
-	BgFit: BgEnabled
-	BgHonorXmp: BgEnabled
-	BgContrastMask: BgEnabled
-	BgContrastSize: BgEnabled, BgContrastMask
-	BgContrastStrength: BgEnabled, BgContrastMask
-	BgContrastAuto: BgEnabled, BgContrastMask
+	## File or folder shows this one while Rotate folder is on
+	BgFolder:
+		label: Folder
+		setting: wallpaper.rotate.folder
+		gate: BgRotate
+		rule: usual_folder
 
-	ScrimStrength: TextScrim
-	ScrimRadius: TextScrim
-	ScrimSoftness: TextScrim
-	Outline: TextScrim
-	ScrimFunction: TextScrim
-	ScrimRamp: TextScrim
-	CursorScrim: TextScrim
-	CursorOutline: TextScrim, Outline    ## an outline to join, before it can join one
+## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+## Groups
+## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-	FontFamily: !SystemFont
-	FontSize: !SystemFontSize
+## A dropdown that picks a set of values: the performance profile and the
+## theme. Custom is the person's own values, which are the normal lines in
+## config.shcl. A temporary preset lasts until restart and stores nothing.
+## Values are in the file's units, a number of ms rather than a slider's %.
 
-	Columns: !RememberSize
-	Rows: !RememberSize
+groups:
 
-	ScrollEaseIn: SmoothScroll
-	ScrollRampUp: SmoothScroll
-	SingleScreenTau: SmoothScroll
-	ScrollRampDown: SmoothScroll
-	ScrollEaseOut: SmoothScroll
+	profile:
+		chooser: PerfProfile
+		noun: profile
+		custom: Custom
+		presets:
+			## the built-in defaults, every one
+			max:
+				label: Max silk
+				SmoothScroll: true
+				ScrollEaseIn: 82.0
+				ScrollRampUp: 96.0
+				SingleScreenTau: 32.0
+				ScrollRampDown: 144.0
+				ScrollEaseOut: 212.0
+				SmoothApps: true
+				CursorBlinking: true
+				TextScrim: true
+				ScrimRadius: 8.0
+				ScrimStrength: 20.0
+				ScrimSoftness: 0.5
+				ScrimFunction: sdf
+				Outline: 1.0
+				BgEnabled: true
+				BgBlur: 10.0
+				BgContrastMask: true
+			## shorter eases on the 3 stretches a slow display shows most, and a
+			## halo that costs fewer taps
+			high:
+				label: High
+				SmoothScroll: true
+				ScrollEaseIn: 41.0
+				ScrollRampUp: 96.0
+				SingleScreenTau: 16.0
+				ScrollRampDown: 144.0
+				ScrollEaseOut: 106.0
+				SmoothApps: true
+				CursorBlinking: true
+				TextScrim: true
+				ScrimRadius: 5.0
+				ScrimStrength: 20.0
+				ScrimSoftness: 0.5
+				ScrimFunction: dilate
+				Outline: 1.0
+				BgEnabled: true
+				BgBlur: 10.0
+				BgContrastMask: true
+			## the wallpaper is decoded once and costs nothing per frame, so Low
+			## keeps it and drops the halo, which is paid on every frame
+			low:
+				label: Low
+				SmoothScroll: true
+				ScrollEaseIn: 41.0
+				ScrollRampUp: 96.0
+				SingleScreenTau: 16.0
+				ScrollRampDown: 144.0
+				ScrollEaseOut: 106.0
+				SmoothApps: true
+				CursorBlinking: false
+				TextScrim: false
+				ScrimRadius: 5.0
+				ScrimStrength: 20.0
+				ScrimSoftness: 0.5
+				ScrimFunction: dilate
+				Outline: 1.0
+				BgEnabled: true
+				BgBlur: 10.0
+				BgContrastMask: true
+			standard:
+				label: Standard terminal
+				SmoothScroll: false
+				ScrollEaseIn: 82.0
+				ScrollRampUp: 96.0
+				SingleScreenTau: 32.0
+				ScrollRampDown: 144.0
+				ScrollEaseOut: 212.0
+				SmoothApps: false
+				CursorBlinking: false
+				TextScrim: false
+				ScrimRadius: 8.0
+				ScrimStrength: 20.0
+				ScrimSoftness: 0.5
+				ScrimFunction: sdf
+				Outline: 0.0
+				BgEnabled: false
+				BgBlur: 0.0
+				BgContrastMask: false
+			## Standard's values, for a remote screen
+			remote:
+				label: Remote (temporary)
+				temporary: true
+				SmoothScroll: false
+				ScrollEaseIn: 82.0
+				ScrollRampUp: 96.0
+				SingleScreenTau: 32.0
+				ScrollRampDown: 144.0
+				ScrollEaseOut: 212.0
+				SmoothApps: false
+				CursorBlinking: false
+				TextScrim: false
+				ScrimRadius: 8.0
+				ScrimStrength: 20.0
+				ScrimSoftness: 0.5
+				ScrimFunction: sdf
+				Outline: 0.0
+				BgEnabled: false
+				BgBlur: 0.0
+				BgContrastMask: false
 
-	ScrollbarThickness: Scrollbar
-	ScrollbarAutoHide: Scrollbar
-	ColScrollbarThumb: Scrollbar
-	ColScrollbarTrough: Scrollbar
-
-	LinkOpenCommand: Hyperlinks
+	## The built-in themes, the ones saved from the Themes tab, each in the
+	## mode in force
+	theme:
+		chooser: Theme
+		noun: theme
+		custom: Custom
+		from_program: true

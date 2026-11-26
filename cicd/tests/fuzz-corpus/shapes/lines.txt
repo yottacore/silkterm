@@ -1,0 +1,5 @@
+/home/u/My Documents/report.txt:12
+C:\Program Files\Thing\bin\x.exe
+\\srv\share\dir\file.log
+github.com:jim-collier/silkterm.git:dev
+~/src/x (modified) [3 ahead]

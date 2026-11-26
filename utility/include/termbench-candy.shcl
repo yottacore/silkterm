@@ -1,0 +1,8 @@
+## SilkTerm as shipped, for the "+candy" row of the shootout table. Every setting is
+## left at its default. Only the automatic profile is pinned off: left on, it rates
+## the renderer and turns effects down on a slow one, such as the size rig's software
+## X server, and the row would then be measured with its effects off.
+
+performance:
+	automatic: false
+	profile: custom

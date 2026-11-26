@@ -11,10 +11,18 @@ RUST_MIN_STACK = "16777216"
 [target.x86_64-pc-windows-gnu]
 linker = "x86_64-w64-mingw32-gcc"
 ar = "x86_64-w64-mingw32-ar"
-# statically link the gcc/pthread runtime so the .exe is self-contained
-rustflags = ["-C", "target-feature=+crt-static"]
+# statically link the gcc/pthread runtime so the .exe is self-contained. And no
+# link time in the PE header, or the same commit built twice differs in the
+# timestamp and the checksum over it.
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=-Wl,--no-insert-timestamp"]
 
 # Native Windows (MSVC ABI). Static-CRT folds VCRUNTIME140 + the UCRT into the
 # .exe so it needs no VC++ Redistributable - self-contained like the gnu build.
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
+
+# Windows ARM64, cross-built with zig. Its linker writes the link time into the
+# PE header too, so the same commit built twice differed in that one field. zig
+# refuses --no-insert-timestamp, and -Brepro puts a hash of the contents there.
+[target.aarch64-pc-windows-gnullvm]
+rustflags = ["-C", "link-arg=-Wl,-Brepro"]

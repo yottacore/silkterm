@@ -1,0 +1,5 @@
+C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe
+Administrator: C:\Windows\System32\cmd.exe
+build.bat - VIM
+~/src/silkterm - nvim
+user@box:~/work

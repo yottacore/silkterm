@@ -1,0 +1,17 @@
+## Pinned versions of the helper tools the pipelines probe for. cicd.bash and
+## cicd-win.ps1 both read this file and warn, without failing, when an installed
+## tool has drifted, so a box update can't silently change results. The rustc
+## and clippy toolchain itself is pinned by rust-toolchain.toml at repo root.
+##
+## name|version|platform|command, where platform is linux, windows or both. On
+## Windows, makensis is looked up in the NSIS install folders when it is not on
+## PATH.
+cargo-deny|0.19.9|both|cargo deny --version
+cargo-zigbuild|0.23.0|both|cargo-zigbuild --version
+cargo-deb|3.7.0|linux|cargo-deb --version
+cargo-generate-rpm|0.21.0|linux|cargo-generate-rpm --version
+makensis|3.12|both|makensis -VERSION
+zig|0.16.0|linux|zig version
+shellcheck|0.11.0|linux|shellcheck --version
+ruff|0.15.22|linux|ruff --version
+mypy|2.3.0|linux|mypy --version

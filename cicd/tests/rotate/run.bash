@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+
+##	- Purpose:
+##		gfs_rotate prunes the run logs and flamegraphs. A wrong role or count
+##		would quietly delete old ones, so this fills a scratch folder with 2
+##		years of dated files, rotates it at a fixed time, and checks what is left:
+##		the first file, the newest few, and the last file of each recent hour,
+##		day, week, and month, about 30 in all, and nothing else touched.
+##	- Test ID: dd5nq
+##	- History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
+set -euo pipefail
+meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=cicd/tests/_testdir.bash
+source "${meDir}/../_testdir.bash"; fTestDir_Use
+# shellcheck source=cicd/tests/_forks.bash
+source "${meDir}/../_forks.bash"
+cicd="$(cd "${meDir}/../.." && pwd)"
+# shellcheck source=cicd/utility/include/gfs-rotate.bash
+source "${cicd}/utility/include/gfs-rotate.bash"
+
+failures=0
+fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
+
+work="$(mktemp -d "${TMPDIR:-/tmp}/silk-rotate.XXXXXX")"
+fEnd(){ local -r rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"; }
+trap fEnd EXIT
+unset GFS_KEEP_FREQUENT GFS_KEEP_HOURLY GFS_KEEP_DAILY GFS_KEEP_WEEKLY GFS_KEEP_MONTHLY GFS_KEEP_YEARLY
+export TZ=UTC
+export GFS_NOW
+GFS_NOW="$(date -d '2026-09-26 12:30:00' +%s)"
+
+## 200 runs: 80 over the last 3 days, about an hour apart, and 120 spread
+## over the 2 years before that.
+dir="${work}/logs"
+mkdir -p "${dir}"
+declare -a stamps=()
+for ((i = 1; i <= 80; i++)); do printf -v s '%(%Y%m%d-%H%M%S)T' "$((GFS_NOW - i * 3300))"; stamps+=("${s}"); done
+for ((i = 0; i < 120; i++)); do printf -v s '%(%Y%m%d-%H%M%S)T' "$((GFS_NOW - 3 * 86400 - i * 527000))"; stamps+=("${s}"); done
+for s in "${stamps[@]}"; do : >"${dir}/run_${s}.log"; done
+printf '%s\n' "${stamps[@]}" >"${work}/stamps.txt"
+
+## Neighbors the rotation must leave alone: another prefix, another extension,
+## and a name with no date at all.
+echo a >"${dir}/flame_20250101-000000.svg"
+echo b >"${dir}/run_20250101-000000.txt"
+echo c >"${dir}/notes.log"
+neighbours="$(cd "${dir}" && sha256sum flame_20250101-000000.svg run_20250101-000000.txt notes.log)"
+
+## Dates are read and written without date, so date itself is the reference:
+## times a clock change skips or repeats, impossible dates, zones with odd
+## offsets, and the 2 epochs printf reads as "now".
+fSameAsDate(){
+	local z s e want got bad=0
+	local -a cases=(20260308-023000 20261101-013000 20261101-010000 20261101-020000 20261025-013000 20260329-013000
+		20260405-014500 20261004-021500 20260230-000000 20260101-240000 20260101-235960 20261310-000000 20260010-000000
+		19010601-000000 19691231-235959 19691231-235958 19700101-000000 20240229-120000 20250229-120000 20991231-235959)
+	for z in America/Los_Angeles UTC Europe/London Australia/Lord_Howe Asia/Kolkata Pacific/Chatham Antarctica/Troll; do
+		for s in "${cases[@]}"; do
+			want="$(TZ="${z}" date -d "${s:0:4}-${s:4:2}-${s:6:2} ${s:9:2}:${s:11:2}:${s:13:2}" +%s 2>/dev/null || true)"
+			got=""; TZ="${z}" _gfs_epoch got "${s:0:8}" "${s:9:6}"
+			if [[ "${got}" != "${want}" ]]; then echo "    ${z} ${s}: ${got:-none}, date says ${want:-none}"; bad=1; fi
+			[[ -n "${want}" ]] || continue
+			for e in "${want}" -1 -2; do
+				want="$(TZ="${z}" date -d "@${e}" +%Y%m%d-%H%M%S%G%V)"
+				got=""; TZ="${z}" _gfs_fmt got '%Y%m%d-%H%M%S%G%V' "${e}"
+				if [[ "${got}" != "${want}" ]]; then echo "    ${z} @${e}: ${got}, date says ${want}"; bad=1; fi
+			done
+		done
+	done
+	return "${bad}"
+}
+fCheck "names are read and stamps written the way date does it" fSameAsDate
+
+## One fork per file per field was most of the run time, about 3,000 here. What
+## is left is the sorts plus the rm or mv each output line reports.
+fFewForks(){
+	local n lines=0 limit _
+	fForkCount n "source $(printf '%q' "${cicd}/utility/include/gfs-rotate.bash")
+		source $(printf '%q' "${cicd}/tests/_testdir.bash"); fTestDir_Rm $(printf '%q' "${work}/forks"); cp -a $(printf '%q' "${dir}") $(printf '%q' "${work}/forks")" \
+		"gfs_rotate $(printf '%q' "${work}/forks") run log >$(printf '%q' "${work}/forks.out")"
+	while read -r _; do lines=$((lines + 1)); done <"${work}/forks.out"
+	fTestDir_Rm "${work}/forks"
+	limit=$((forkCountExact ? 30 : 300)); echo "    $((n - lines)) forks beyond the files changed, limit ${limit}"; ((n - lines <= limit))
+}
+fCheck "rotating 200 files costs a few forks beyond the files it changes" fFewForks
+
+gfs_rotate "${dir}" run log >/dev/null
+(cd "${dir}" && ls run_*.log) >"${work}/kept.txt"
+
+fVerify(){ python3 - "${work}/stamps.txt" "${work}/kept.txt" "${GFS_NOW}" <<'PY'
+import sys
+from datetime import datetime, timezone
+stamps = sorted(open(sys.argv[1]).read().split())
+kept = open(sys.argv[2]).read().split()
+now = datetime.fromtimestamp(int(sys.argv[3]), timezone.utc)
+when = lambda s: datetime.strptime(s, "%Y%m%d-%H%M%S").replace(tzinfo=timezone.utc)
+periods = {
+	"hour": lambda t: t.strftime("%Y%m%d%H"),
+	"day": lambda t: t.strftime("%Y%m%d"),
+	"week": lambda t: t.strftime("%G%V"),
+	"month": lambda t: t.strftime("%Y%m"),
+	"year": lambda t: t.strftime("%Y"),
+}
+limits = {"frequent": 10, "hour": 4, "day": 5, "week": 4, "month": 4, "year": 2}
+bad = []
+roles = {}
+for name in kept:
+	stem = name[len("run_"):-len(".log")]
+	stamp, _, role = stem.rpartition("_")
+	if stamp not in stamps:
+		bad.append(f"{name} was not one of the runs")
+	roles.setdefault(role, []).append(stamp)
+if not 20 <= len(kept) <= 30:
+	bad.append(f"{len(kept)} kept, not about thirty")
+if roles.get("first") != [stamps[0]]:
+	bad.append(f"first is {roles.get('first')}, not the oldest run {stamps[0]}")
+if roles.get("latest") != [stamps[-1]]:
+	bad.append(f"latest is {roles.get('latest')}, not the newest run {stamps[-1]}")
+newest = set(stamps[-10:])
+keptStamps = {name[4:19] for name in kept}
+if not newest <= keptStamps:
+	bad.append(f"of the newest ten runs, {sorted(newest - keptStamps)} went")
+for s in roles.get("frequent", []):
+	if s not in newest:
+		bad.append(f"{s} is frequent but not among the newest ten")
+for role, key in periods.items():
+	got = roles.get(role, [])
+	if len(got) > limits[role]:
+		bad.append(f"{len(got)} {role} files, over the {limits[role]} kept")
+	for s in got:
+		p = key(when(s))
+		if p == key(now):
+			bad.append(f"{s} is tagged {role} while that {role} is still open")
+		if max(x for x in stamps if key(when(x)) == p) != s:
+			bad.append(f"{s} is tagged {role} but is not the last run of it")
+	ended = sorted({key(when(x)) for x in stamps if key(when(x)) != key(now)})
+	if ended:
+		last = max(x for x in stamps if key(when(x)) == ended[-1])
+		if last not in keptStamps:
+			bad.append(f"the last run of the latest ended {role}, {last}, went")
+	if role != "year" and not got:
+		bad.append(f"no {role} file kept")
+for line in bad:
+	print(f"    {line}")
+sys.exit(1 if bad else 0)
+PY
+}
+fCheck "what is kept is the first, the newest ten, and one per ended period" fVerify
+fCheck "the neighbours are untouched" test "$(cd "${dir}" && sha256sum flame_20250101-000000.svg run_20250101-000000.txt notes.log)" = "${neighbours}"
+out="$(gfs_rotate "${dir}" run log)"
+fCheck "a second run changes nothing" test -z "${out}" -a "$(cd "${dir}" && ls run_*.log)" = "$(cat "${work}/kept.txt")"
+
+## A run an hour later takes over the latest role.
+: >"${dir}/run_$(date -d "@$((GFS_NOW + 3600))" +%Y%m%d-%H%M%S).log"
+GFS_NOW=$((GFS_NOW + 3600)) gfs_rotate "${dir}" run log >/dev/null
+fCheck "a new run takes the latest role" test "$(cd "${dir}" && ls ./*_latest.log | wc -l)" -eq 1 -a -e "${dir}/run_$(date -d "@$((GFS_NOW + 3600))" +%Y%m%d-%H%M%S)_latest.log"
+fCheck "and the first run is still kept" test -e "${dir}/run_$(head -1 < <(sort "${work}/stamps.txt"))_first.log"
+
+if ((failures)); then echo "${failures} failed"; exit 1; fi
+echo "all passed"
+
+##	History:
+##		- 20260926 JC: Created.

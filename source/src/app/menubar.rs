@@ -1,0 +1,356 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
+//! The menu bar: its titles, the Alt underlines, and the copy-mode boxes at its
+//! right end.
+
+use super::{COPYBOX_BOX_GAP, COPYBOX_LABELS, COPYBOX_LEAD_GAP, COPYBOX_PAIR_GAP, MENU_BAR, MENU_BAR_PAD, State, save_live};
+use crate::pane::{CopyKind, Rect};
+use crate::term::PaneId;
+use crate::text::TextCtx;
+
+/// macOS has no in-window menu bar, since the system menu bar has the same
+/// menus. `--hide-menu` is accepted there and does nothing. Elsewhere it
+/// outranks the saved setting.
+pub(super) fn menu_bar_at_launch(hide_menu: Option<bool>, saved: bool, mac: bool) -> bool {
+	!mac && hide_menu.map_or(saved, |hide| !hide)
+}
+
+/// The menu bar's measured text: each title's box width with its padding, and
+/// each copy-mode label's width. Every hit test and frame used to measure them
+/// all again. Now they're measured once per text context, since a font, size,
+/// or scale change builds a new one.
+#[derive(Debug, Default)]
+pub(super) struct BarWidths {
+	generation: u64,
+	titles: [f32; MENU_BAR.len()],
+	labels: [f32; COPYBOX_LABELS.len()],
+	#[cfg(test)]
+	measured: usize,
+}
+
+impl BarWidths {
+	fn get(&mut self, text: &mut TextCtx) -> ([f32; MENU_BAR.len()], [f32; COPYBOX_LABELS.len()]) {
+		if self.generation != text.generation {
+			let attrs = crate::text::ui_attrs();
+			let pad = text.dip(MENU_BAR_PAD) * 2.0;
+			self.titles = MENU_BAR.map(|title| text.measure_ui_text(title, &attrs) + pad);
+			self.labels = COPYBOX_LABELS.map(|label| text.measure_ui_text(label, &attrs));
+			self.generation = text.generation;
+			#[cfg(test)]
+			{
+				self.measured += 1;
+			}
+		}
+		(self.titles, self.labels)
+	}
+}
+
+/// The menu bar's right-side copy-mode cluster: "Copy on [ ] select [ ] output".
+/// Drawing, label placement, and click hit-testing all read this one layout.
+#[derive(Debug)]
+pub(super) struct CopyBoxes {
+	pub(super) boxes: [Rect; 2], // select, output checkbox squares
+	label_x: [f32; 3],           // left edge per COPYBOX_LABELS entry
+	label_w: [f32; 3],
+	shown: [bool; 3], // which labels there is room for at this window width
+}
+
+impl CopyBoxes {
+	// Everything the cluster occupies, left edge first.
+	fn left(&self) -> f32 {
+		if self.shown[0] { self.label_x[0] } else { self.boxes[0].x }
+	}
+
+	// Where a click counts as hitting checkbox `i`: the box, plus its word when
+	// the word is there to be aimed at.
+	fn hit_range(&self, i: usize) -> (f32, f32) {
+		let label = i + 1;
+		let right = if self.shown[label] { self.label_x[label] + self.label_w[label] } else { self.boxes[i].x + self.boxes[i].w };
+		(self.boxes[i].x, right)
+	}
+}
+
+// What the cluster is measured from. Split out so the shedding order is a pure
+// function of the numbers, testable without a window.
+struct CopyMetrics {
+	right: f32, // where the cluster's right edge sits
+	label_w: [f32; 3],
+	box_sz: f32,
+	box_y: f32,
+	box_gap: f32,  // checkbox to its own word
+	pair_gap: f32, // one pair to the next
+	lead_gap: f32, // "Copy on:" to the first checkbox
+}
+
+/// Where menu-bar buffer `i` is drawn: (left, clip left, clip right, top). The
+/// titles come first, then the right-aligned copy-mode labels, and at a narrow
+/// width some of those aren't there at all.
+///
+/// Everything on the bar shares one baseline. The copy labels used to center
+/// their whole ink box, which left them half a descent above the titles.
+pub(super) fn menubar_text_slot(text: &TextCtx, menu_h: f32, bar_layout: &[(f32, f32)], copyboxes: Option<&CopyBoxes>, i: usize) -> Option<(f32, f32, f32, f32)> {
+	let bar_top = text.ui_text_top(0.0, menu_h);
+	if let Some(&(x, w)) = bar_layout.get(i) {
+		return Some((x + text.dip(MENU_BAR_PAD), x, x + w, bar_top));
+	}
+	let j = i - bar_layout.len();
+	let cb = copyboxes.filter(|cb| cb.shown[j])?;
+	let (x, w) = (cb.label_x[j], cb.label_w[j]);
+	Some((x, x, x + w, bar_top))
+}
+
+// The widest arrangement that still clears `titles_right`, or None when even the
+// bare boxes can't. Ordered widest first: whole thing, then without the lead-in,
+// then boxes alone.
+fn copybox_fit(m: &CopyMetrics, titles_right: f32) -> Option<CopyBoxes> {
+	[[true; 3], [false, true, true], [false; 3]].into_iter().map(|shown| copybox_place(m, shown)).find(|cb| cb.left() >= titles_right)
+}
+
+// Laid out right to left, with a hidden label taking its own gap with it.
+fn copybox_place(m: &CopyMetrics, shown: [bool; 3]) -> CopyBoxes {
+	let mut label_w = m.label_w;
+	for (w, on) in label_w.iter_mut().zip(shown) {
+		if !on {
+			*w = 0.0;
+		}
+	}
+	let gap_if = |on: bool, gap: f32| if on { gap } else { 0.0 };
+	let square = |x: f32| Rect { x, y: m.box_y, w: m.box_sz, h: m.box_sz };
+	let out_x = m.right - label_w[2];
+	let out_box = square(out_x - gap_if(shown[2], m.box_gap) - m.box_sz);
+	let sel_x = out_box.x - m.pair_gap - label_w[1];
+	let sel_box = square(sel_x - gap_if(shown[1], m.box_gap) - m.box_sz);
+	let lead_x = sel_box.x - m.lead_gap - label_w[0];
+	CopyBoxes { boxes: [sel_box, out_box], label_x: [lead_x, sel_x, out_x], label_w, shown }
+}
+
+/// The top-level menu Alt plus `ch` opens: the one whose title starts with it.
+pub(super) fn bar_menu_for(ch: char) -> Option<usize> {
+	let ch = ch.to_ascii_uppercase();
+	MENU_BAR.iter().position(|title| title.starts_with(ch))
+}
+
+/// Which bar titles get their accelerator underlined, and on which letter: all
+/// of them while Alt is held, none while a dropdown is open, since the dropdown
+/// underlines its own rows then.
+pub(super) fn bar_title_underlines(alt_held: bool, open: Option<usize>, titles: &[&str]) -> Vec<(usize, char)> {
+	if !alt_held || open.is_some() {
+		return Vec::new();
+	}
+	titles.iter().enumerate().filter_map(|(i, title)| title.chars().next().map(|c| (i, c))).collect()
+}
+
+impl State {
+	/// Per-title (`x_left`, width) layout of the menu bar, used for drawing and
+	/// hit-testing so they can't disagree. Titles use the proportional font.
+	pub(super) fn menubar_layout(&mut self) -> [(f32, f32); MENU_BAR.len()] {
+		let (titles, _) = self.bar_widths.get(&mut self.text);
+		let mut x = 0.0;
+		titles.map(|w| {
+			let at = (x, w);
+			x += w;
+			at
+		})
+	}
+
+	pub(super) fn menubar_hit(&mut self, mx: f32) -> Option<usize> {
+		self.menubar_layout().iter().position(|&(x, w)| mx >= x && mx < x + w)
+	}
+
+	/// The "Copy on [ ] select [ ] output" pair on the right of the menu bar. It
+	/// has to show when the focused pane is auto-copying, so it drops parts
+	/// rather than overlap the titles. The lead-in goes first, then the 2 words,
+	/// and it's None only when even the boxes don't fit. `label_x` and `label_w`
+	/// index-match `COPYBOX_LABELS`.
+	pub(super) fn copybox_layout(&mut self) -> Option<CopyBoxes> {
+		let titles_right = self.menubar_layout().last().map_or(0.0, |&(x, w)| x + w) + self.text.dip(MENU_BAR_PAD);
+		let (_, label_w) = self.bar_widths.get(&mut self.text);
+		let box_sz = (self.text.ui_line_h * 0.6).round();
+		let metrics = CopyMetrics { right: self.surface_px.0 as f32 - self.text.dip(MENU_BAR_PAD), label_w, box_sz, box_y: (self.menu_bar_h() - box_sz) / 2.0, box_gap: self.text.dip(COPYBOX_BOX_GAP), pair_gap: self.text.dip(COPYBOX_PAIR_GAP), lead_gap: self.text.dip(COPYBOX_LEAD_GAP) };
+		copybox_fit(&metrics, titles_right)
+	}
+
+	/// Which copy-mode checkbox (the square or its word) a menu-bar click hit.
+	pub(super) fn copybox_hit(&mut self, mx: f32) -> Option<CopyKind> {
+		let cb = self.copybox_layout()?;
+		for (i, kind) in [CopyKind::Select, CopyKind::Output].into_iter().enumerate() {
+			let (left, right) = cb.hit_range(i);
+			if mx >= left && mx <= right {
+				return Some(kind);
+			}
+		}
+		None
+	}
+
+	/// Flip one of a pane's 2 auto-copy triggers, which can both be on. Other
+	/// panes keep theirs, and only the focused pane of the active tab copies. A
+	/// toggle from the context menu of an unfocused pane focuses it, so the menu
+	/// bar's checkboxes show the pane that changed.
+	pub(super) fn toggle_copy(&mut self, target: PaneId, kind: CopyKind) {
+		let Some(p) = self.tabs.find_pane_mut(target) else {
+			return;
+		};
+		let now = !p.copy_enabled(kind);
+		p.set_copy(kind, now);
+		if kind == CopyKind::Select {
+			remember_copy_select(now);
+		}
+		if self.tabs.cur().panes.contains_key(&target) {
+			self.tabs.cur_mut().focused = target;
+		}
+	}
+}
+
+// The last choice is what the next launch and new tabs start with. Other panes
+// keep their own, which is why this skips apply_new_settings.
+fn remember_copy_select(now: bool) {
+	save_live(|live| {
+		let changed = live.copy_on_select != now;
+		let on = knobs::Value::Bool(now);
+		crate::fields::set(live, crate::ui_spec::Key::CopyOnSelect, &on, None);
+		changed
+	});
+}
+
+#[cfg(test)]
+mod tests {
+	use super::super::{MENU_BAR, MENU_BAR_VPAD};
+	use super::{CopyBoxes, CopyMetrics, bar_menu_for, bar_title_underlines, copybox_fit, copybox_place, menubar_text_slot};
+	use crate::text::TextCtx;
+
+	// Copy on select turned on or off from a menu is saved as the setting, so
+	// the next launch starts with the last choice.
+	// Test ID: dejj7
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_menu_s_copy_on_select_choice_lasts_to_the_next_launch() {
+		let _guard = crate::config::test_config_lock();
+		let saved = crate::config::settings();
+		let _store = crate::config::test_store_lock();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_copysel_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		crate::config::set_config_override(path.clone());
+		crate::config::update(crate::config::reload_from_disk());
+		for on in [false, true, false] {
+			super::remember_copy_select(on);
+			assert_eq!(crate::config::reload_from_disk().copy_on_select, on, "the next launch reads {on}");
+		}
+		crate::config::update((*saved).clone());
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A narrow window used to draw "Copy on:" over "Panes" and "Help", so none
+	// of it could be read. The cluster drops parts instead, and the checkboxes
+	// go last because they show the state.
+	// Test ID: dbsya
+	#[test]
+	fn the_copy_cluster_sheds_parts_before_it_reaches_the_menu_titles() {
+		let metrics = |right: f32| CopyMetrics { right, label_w: [56.0, 34.0, 40.0], box_sz: 10.0, box_y: 4.0, box_gap: 6.0, pair_gap: 14.0, lead_gap: 10.0 };
+		let titles_right = 300.0;
+		let shown_at = |right: f32| copybox_fit(&metrics(right), titles_right).map(|cb| cb.shown);
+		assert_eq!(shown_at(700.0), Some([true; 3]), "room for all of it");
+		assert_eq!(shown_at(450.0), Some([false, true, true]), "the lead-in goes first");
+		assert_eq!(shown_at(400.0), Some([false; 3]), "then the two words");
+		assert_eq!(shown_at(330.0), None, "and then the cluster itself");
+	}
+
+	// A word that isn't drawn can't be aimed at, so the box has to take the
+	// click itself, or the narrow arrangement has a dead checkbox.
+	// Test ID: dbsyb
+	#[test]
+	fn a_checkbox_with_no_word_is_still_clickable() {
+		let metrics = CopyMetrics { right: 400.0, label_w: [56.0, 34.0, 40.0], box_sz: 10.0, box_y: 4.0, box_gap: 6.0, pair_gap: 14.0, lead_gap: 10.0 };
+		let bare = copybox_place(&metrics, [false; 3]);
+		for i in 0..2 {
+			let (left, right) = bare.hit_range(i);
+			assert_eq!(left, bare.boxes[i].x);
+			assert_eq!(right, bare.boxes[i].x + bare.boxes[i].w);
+		}
+		let full = copybox_place(&metrics, [true; 3]);
+		let (_, right) = full.hit_range(0);
+		assert_eq!(right, full.label_x[1] + full.label_w[1], "the word counts too");
+	}
+
+	// Test ID: dd5pw
+	#[test]
+	fn alt_and_a_title_letter_opens_that_menu() {
+		for (i, ch) in "fevtph".chars().enumerate() {
+			assert_eq!(bar_menu_for(ch), Some(i), "{ch}");
+			assert_eq!(bar_menu_for(ch.to_ascii_uppercase()), Some(i), "{ch}");
+		}
+		assert_eq!(bar_menu_for('x'), None);
+		let mut firsts: Vec<char> = MENU_BAR.iter().filter_map(|t| t.chars().next()).collect();
+		firsts.sort_unstable();
+		firsts.dedup();
+		assert_eq!(firsts.len(), MENU_BAR.len(), "two titles share a letter");
+	}
+
+	// Test ID: dd5px
+	#[test]
+	fn the_bar_titles_are_underlined_only_while_alt_is_held_and_nothing_is_open() {
+		assert!(bar_title_underlines(false, None, &MENU_BAR).is_empty());
+		assert!(bar_title_underlines(true, Some(2), &MENU_BAR).is_empty());
+		assert!(bar_title_underlines(false, Some(2), &MENU_BAR).is_empty());
+		let marks = bar_title_underlines(true, None, &MENU_BAR);
+		assert_eq!(marks.len(), MENU_BAR.len());
+		for (i, ch) in marks {
+			assert!(MENU_BAR[i].starts_with(ch));
+			// the letter drawn is the letter that opens it
+			assert_eq!(bar_menu_for(ch), Some(i));
+		}
+	}
+
+	// The titles and the copy labels beside them are one row of text, so they
+	// sit on one baseline. The labels once centered their whole ink box instead
+	// and sat half a descent higher.
+	// Test ID: dd5qp
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_bar_titles_and_the_copy_labels_share_a_baseline() {
+		let text = TextCtx::new_cpu(1.0);
+		let menu_h = text.ui_line_h + text.dip(MENU_BAR_VPAD);
+		let layout = [(0.0, 40.0), (40.0, 40.0)];
+		let cb = copybox_place(&CopyMetrics { right: 900.0, label_w: [56.0, 34.0, 40.0], box_sz: 10.0, box_y: 4.0, box_gap: 6.0, pair_gap: 14.0, lead_gap: 10.0 }, [true; 3]);
+		let top = |i| menubar_text_slot(&text, menu_h, &layout, Some(&cb), i).map(|slot| slot.3);
+		let title = top(0).expect("a title");
+		for label in 0..3 {
+			assert_eq!(top(layout.len() + label), Some(title), "copy label {label}");
+		}
+		// a label with no room isn't drawn at all
+		let narrow = CopyBoxes { shown: [false, true, true], ..cb };
+		assert_eq!(menubar_text_slot(&text, menu_h, &layout, Some(&narrow), layout.len()), None);
+	}
+
+	// Every hit test on the menu bar measured all its titles and labels again.
+	// They're measured once per text context now, and measured again after a
+	// font, size, or scale change makes a new context.
+	// Test ID: dfe5t
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_menu_bar_measures_its_text_once() {
+		use super::super::{COPYBOX_LABELS, MENU_BAR_PAD};
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut kept = super::BarWidths::default();
+		let (titles, labels) = kept.get(&mut text);
+		let attrs = crate::text::ui_attrs();
+		for (w, title) in titles.iter().zip(MENU_BAR) {
+			let want = text.measure_ui_text(title, &attrs) + text.dip(MENU_BAR_PAD) * 2.0;
+			assert_eq!(*w, want, "{title}");
+		}
+		for (w, label) in labels.iter().zip(COPYBOX_LABELS) {
+			assert_eq!(*w, text.measure_ui_text(label, &attrs), "{label}");
+		}
+		for _ in 0..240 {
+			assert_eq!(kept.get(&mut text), (titles, labels));
+		}
+		assert_eq!(kept.measured, 1, "measured again with nothing changed");
+		let mut bigger = TextCtx::new_cpu(2.0);
+		let (titles_2x, _) = kept.get(&mut bigger);
+		assert_eq!(kept.measured, 2, "a new text context kept the old widths");
+		assert!(titles_2x[0] > titles[0] * 1.5);
+	}
+}

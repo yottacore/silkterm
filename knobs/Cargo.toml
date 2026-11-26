@@ -1,0 +1,19 @@
+[package]
+name = "knobs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+description = "Settings declared in shcl, and what a change to one does to the others"
+license = "MIT"
+publish = false
+
+# Its docs have no examples, and the doc test run makes a temp folder of its own,
+# outside the test run's folder.
+[lib]
+doctest = false
+
+[dependencies]
+shcl = "3.0.0-beta1"
+
+[lints]
+workspace = true

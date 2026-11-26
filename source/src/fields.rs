@@ -1,0 +1,815 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
+//! The settings the Settings dialog edits, as knobs sees them. Each one has a
+//! field in `Settings`, read and written here in the file's units, and the
+//! spec knobs works from is built out of `settings_ui.shcl` and this table. See
+//! `project/design_docs/20261008-180516_automatic_settings.md`.
+
+use crate::config::{self, Choice, Settings};
+use crate::ui_spec::{Key, ui};
+use knobs::Value;
+use std::sync::{Arc, OnceLock};
+
+#[derive(Debug)]
+pub struct Field {
+	pub key: Key,
+	get: fn(&Settings) -> Value,
+	// false when the value isn't one the field takes
+	put: fn(&mut Settings, &Value) -> bool,
+}
+
+// A float the way the file writes it, so 0.95 comes back as 0.95 and a
+// preset's 41.0 equals a slider that stopped at 41.
+fn float(x: f32) -> Value {
+	Value::Float((f64::from(x) * 1000.0).round() / 1000.0)
+}
+
+fn number(v: &Value) -> Option<f32> {
+	match v {
+		Value::Int(i) => Some(*i as f32),
+		Value::Float(f) if f.is_finite() => Some(*f as f32),
+		_ => None,
+	}
+}
+
+fn hex(rgb: [u8; 3]) -> Value {
+	Value::Text(config::format_hex(rgb))
+}
+
+macro_rules! flag {
+	($key:ident, $field:ident) => {
+		Field {
+			key: Key::$key,
+			get: |s| Value::Bool(s.$field),
+			put: |s, v| match v {
+				Value::Bool(b) => {
+					s.$field = *b;
+					true
+				}
+				_ => false,
+			},
+		}
+	};
+}
+
+macro_rules! num {
+	($key:ident, $field:ident, $range:expr) => {
+		Field {
+			key: Key::$key,
+			get: |s| float(s.$field),
+			put: |s, v| {
+				let (lo, hi) = $range;
+				number(v).map(|x| s.$field = x.clamp(lo, hi)).is_some()
+			},
+		}
+	};
+}
+
+macro_rules! count {
+	($key:ident, $field:ident, $range:expr) => {
+		Field {
+			key: Key::$key,
+			get: |s| Value::Int(s.$field as i64),
+			put: |s, v| {
+				let (lo, hi) = $range;
+				number(v).map(|x| s.$field = (x.round().max(0.0) as usize).clamp(lo, hi)).is_some()
+			},
+		}
+	};
+}
+
+macro_rules! word {
+	($key:ident, $field:ident) => {
+		Field { key: Key::$key, get: |s| Value::Text(s.$field.key().to_string()), put: |s, v| Choice::parse(v.as_text()).map(|c| s.$field = c).is_some() }
+	};
+}
+
+macro_rules! color {
+	($key:ident, $field:ident) => {
+		Field { key: Key::$key, get: |s| hex(s.$field), put: |s, v| config::parse_hex(v.as_text()).map(|c| s.$field = c).is_some() }
+	};
+}
+
+macro_rules! line {
+	($key:ident, $field:ident) => {
+		Field {
+			key: Key::$key,
+			get: |s| Value::Text(s.$field.clone()),
+			put: |s, v| match v {
+				Value::Text(t) => {
+					s.$field.clone_from(t);
+					true
+				}
+				_ => false,
+			},
+		}
+	};
+}
+
+use config::limits;
+
+/// Every setting knobs stores, in no order that matters.
+#[rustfmt::skip]
+pub static FIELDS: &[Field] = &[
+	flag!(PerfAuto, performance_automatic),
+	Field {
+		key: Key::PerfProfile,
+		get: |s| Value::Text(s.performance_profile.key().to_string()),
+		put: |s, v| {
+			s.performance_profile = crate::profile::Profile::parse(v.as_text());
+			s.performance_profile.key().eq_ignore_ascii_case(v.as_text().trim())
+		},
+	},
+	flag!(PerfCheckHardware, performance_check_hardware),
+	flag!(PerfCheckNext, performance_check_next_run),
+	flag!(PerfDetectRemote, performance_detect_remote),
+	flag!(Transparency, transparent_background),
+	num!(Opacity, opacity, (0.0, 1.0)),
+	flag!(BackdropBlur, transparent_background_blur),
+	flag!(BgEnabled, wallpaper_enabled),
+	line!(BgImage, wallpaper_raw),
+	line!(BgFolder, wallpaper_folder_raw),
+	flag!(BgRotate, wallpaper_rotate_enabled),
+	num!(BgOpacity, wallpaper_opacity, (0.0, 1.0)),
+	num!(BgBlur, wallpaper_blur, (0.0, 100.0)),
+	Field {
+		key: Key::BgFit,
+		get: |s| Value::Text(match s.wallpaper_default_fit {
+			config::Fit::Zoom => "zoom",
+			config::Fit::Stretch => "stretch",
+		}.to_string()),
+		put: |s, v| {
+			s.wallpaper_default_fit = if v.as_text().trim().eq_ignore_ascii_case("zoom") {
+				config::Fit::Zoom
+			} else {
+				config::Fit::Stretch
+			};
+			matches!(v, Value::Text(_))
+		},
+	},
+	flag!(BgHonorXmp, wallpaper_honor_xmp),
+	flag!(BgHonorXmpLook, wallpaper_honor_xmp_look),
+	flag!(BgContrastMask, wallpaper_contrast_mask),
+	num!(BgContrastSize, wallpaper_contrast_mask_size, (0.0, 1.0)),
+	num!(BgContrastStrength, wallpaper_contrast_mask_strength, (0.0, 1.0)),
+	num!(BgContrastAuto, wallpaper_contrast_mask_auto, (0.0, 1.0)),
+	flag!(TextScrim, text_scrim),
+	num!(ScrimRadius, text_scrim_radius, (0.0, 50.0)),
+	num!(ScrimSoftness, text_scrim_softness, (0.0, 1.0)),
+	num!(ScrimStrength, text_scrim_strength, (0.0, 100.0)),
+	word!(ScrimFunction, text_scrim_function),
+	word!(ScrimRamp, text_scrim_ramp),
+	num!(Outline, text_outline, (0.0, 8.0)),
+	num!(MinContrast, text_min_contrast, (0.0, 0.6)),
+	flag!(CursorScrim, cursor_scrim),
+	flag!(CursorOutline, cursor_outline),
+	flag!(CursorBlinking, cursor_blink),
+	num!(CursorBlinkRate, cursor_blink_rate_s, limits::BLINK_S),
+	num!(CursorHeight, cursor_size_height, (1.0, 100.0)),
+	num!(CursorWidth, cursor_size_width, (1.0, 100.0)),
+	word!(CursorAnimation, cursor_animation),
+	num!(CursorResume, cursor_animation_resume_s, (0.05, 3600.0)),
+	flag!(SystemFont, use_system_font),
+	flag!(SystemFontSize, use_system_font_size),
+	flag!(FontIgnoresThemes, font_ignores_themes),
+	line!(FontFamily, font_family),
+	num!(FontSize, font_size, limits::FONT_SIZE),
+	num!(LineHeight, line_height_scale, limits::LINE_HEIGHT),
+	flag!(RememberSize, remember_size),
+	count!(Columns, columns, limits::GRID),
+	count!(Rows, rows, limits::GRID),
+	flag!(RememberPerMonitor, remember_per_monitor),
+	flag!(RememberMaximized, remember_maximized),
+	flag!(ResizeOnZoom, resize_on_zoom),
+	num!(Margin, margin, limits::MARGIN),
+	num!(TabRegularWidth, tab_regular_pct, (2.0, 100.0)),
+	num!(TabMaxWidth, tab_max_pct, (2.0, 100.0)),
+	flag!(NewTabNextToCurrent, new_tab_beside),
+	flag!(IdleRelease, idle_release),
+	count!(IdleHiddenMin, idle_release_hidden_min, limits::IDLE_MIN),
+	count!(IdleMin, idle_release_min, limits::IDLE_MIN),
+	flag!(SoftwareRendering, software_rendering),
+	flag!(TmuxNewSession, tmux_new_session),
+	line!(TmuxSessionName, tmux_session_name),
+	word!(TmuxOnClose, tmux_on_close),
+	word!(OptionAsAlt, option_as_alt),
+	line!(TabTemplate, tab_text),
+	flag!(TitleShowsTab, title_shows_tab),
+	line!(StartupDirectory, startup_directory),
+	flag!(ShellIntegration, shell_integration),
+	flag!(BashPrompt, bash_prompt),
+	flag!(CopyOnSelect, copy_on_select),
+	flag!(Hyperlinks, hyperlinks),
+	line!(LinkOpenCommand, hyperlink_open_command),
+	flag!(SmoothScroll, scroll_smooth),
+	num!(ScrollEaseIn, scroll_ease_in_ms, limits::EASE_MS),
+	num!(ScrollRampUp, scroll_ramp_up_ms, limits::EASE_MS),
+	num!(SingleScreenTau, scroll_single_screen_tau_ms, limits::EASE_MS),
+	num!(ScrollRampDown, scroll_ramp_down_ms, limits::EASE_MS),
+	num!(ScrollEaseOut, scroll_ease_out_ms, limits::EASE_MS),
+	flag!(SmoothApps, smooth_scroll_apps),
+	num!(WheelLines, wheel_lines, limits::WHEEL_LINES),
+	flag!(Scrollbar, scrollbar),
+	num!(ScrollbarThickness, scrollbar_thickness, (4.0, 64.0)),
+	flag!(ScrollbarAutoHide, scrollbar_auto_hide),
+	flag!(Minimap, minimap),
+	num!(MinimapWidth, minimap_width, (24.0, 400.0)),
+	color!(ColBg, bg),
+	flag!(ColFromWallpaper, colors_from_wallpaper),
+	color!(ColFg, fg),
+	color!(ColCursor, cursor),
+	color!(ColHighlight, highlight),
+	color!(ColFocus, focus),
+	color!(ColGutter, gutter),
+	color!(ColMenuBg, menu_bg),
+	color!(ColMenuFg, menu_fg),
+	color!(ColDialogBg, dialog_bg),
+	color!(ColDialogFg, dialog_fg),
+	color!(ColScrollbarThumb, scrollbar_thumb),
+	color!(ColScrollbarTrough, scrollbar_trough),
+	line!(Theme, theme),
+	word!(ThemeMode, theme_mode),
+];
+
+pub fn field(key: Key) -> Option<&'static Field> {
+	FIELDS.iter().find(|f| f.key == key)
+}
+
+/// The value a setting field has in `settings`, in the file's units.
+pub fn get(settings: &Settings, key: Key) -> Option<Value> {
+	field(key).map(|f| (f.get)(settings))
+}
+
+/// A value set by hand, or set for the run, rather than the default.
+pub fn by_hand(settings: &Settings, key: Key) -> bool {
+	let values = &settings.model.values;
+	values.own.contains_key(key.name()) || values.held.contains_key(key.name())
+}
+
+/// The theme colors, in the order `theme::PALETTE_KEYS` lists them.
+pub const THEME_KEYS: [Key; 10] = [Key::ColBg, Key::ColFg, Key::ColCursor, Key::ColHighlight, Key::ColFocus, Key::ColMenuBg, Key::ColMenuFg, Key::ColDialogBg, Key::ColDialogFg, Key::ColGutter];
+
+/// The font rows a saved theme has, in the order `theme::ThemeFont` has them.
+pub const THEME_FONT_KEYS: [Key; 3] = [Key::FontFamily, Key::FontSize, Key::LineHeight];
+
+/// The knobs id of the profile and the theme.
+pub const PROFILE: &str = "profile";
+pub const THEME: &str = "theme";
+
+/// The spec, built once from `settings_ui.shcl` and the table.
+pub fn spec() -> &'static Arc<knobs::Spec> {
+	static SPEC: OnceLock<Arc<knobs::Spec>> = OnceLock::new();
+	// Unreachable in a tested build, as with ui_spec: both halves are compiled in.
+	SPEC.get_or_init(|| match build() {
+		Ok(spec) => Arc::new(spec),
+		Err(problems) => panic!("settings spec: {}", problems.join("; ")),
+	})
+}
+
+/// A model with nothing stored, for a fresh `Settings`.
+pub fn model() -> knobs::Model {
+	knobs::Model::new(Arc::clone(spec()))
+}
+
+// What a setting is called in a tip that lists it, such as the changed rows.
+fn label_of(key: Key) -> &'static str {
+	let ui = ui();
+	for spec in &ui.specs {
+		match spec.kind {
+			crate::ui_spec::Kind::Dual { keys, labels } => {
+				if let Some(i) = keys.iter().position(|k| *k == key) {
+					return labels[i];
+				}
+			}
+			_ if spec.key == key => return spec.label,
+			_ => {}
+		}
+	}
+	ui.hidden.iter().find(|(k, _)| *k == key).map_or("", |(_, label)| label)
+}
+
+fn build() -> Result<knobs::Spec, Vec<String>> {
+	let ui = ui();
+	let defaults = Settings::bare();
+	let choosers: Vec<Key> = ui.groups.iter().map(|g| g.chooser).collect();
+	let mut problems = Vec::new();
+	let settings: Vec<knobs::Setting> = FIELDS
+		.iter()
+		.map(|f| {
+			let rel = ui.rel(f.key);
+			let default = (f.get)(&defaults);
+			let chooser = choosers.contains(&f.key);
+			let kind = match default {
+				Value::Bool(_) => knobs::Kind::Bool,
+				Value::Int(_) => knobs::Kind::Int,
+				Value::Float(_) => knobs::Kind::Float,
+				Value::Text(_) if chooser => knobs::Kind::Choice,
+				Value::Text(_) => knobs::Kind::Text,
+			};
+			let path = ui.settings_of(f.key).first().copied().unwrap_or_default();
+			if path.is_empty() {
+				problems.push(format!("{}: no setting path", f.key.name()));
+			}
+			knobs::Setting {
+				id: f.key.name().to_string(),
+				label: label_of(f.key).to_string(),
+				tab: 0,
+				control: if chooser {
+					knobs::Control::Dropdown
+				} else if kind == knobs::Kind::Bool {
+					knobs::Control::Checkbox
+				} else {
+					knobs::Control::Text
+				},
+				kind,
+				path: path.to_string(),
+				store: knobs::Store::Config,
+				default,
+				min: f64::NEG_INFINITY,
+				max: f64::INFINITY,
+				scale: knobs::Scale::Linear,
+				detents: Vec::new(),
+				options: Vec::new(),
+				tip: String::new(),
+				indent: 0,
+				gate: rel.gate.map(|k| k.name().to_string()),
+				auto: rel.auto.map(|k| k.name().to_string()),
+				rule: rel.rule.map(|r| knobs::Rule::Named(r.to_string())),
+				group: rel.group.map(str::to_string),
+			}
+		})
+		.collect();
+	let mut scratch = Settings::bare();
+	let mut groups = Vec::new();
+	for g in &ui.groups {
+		let members: Vec<Key> = FIELDS.iter().filter(|f| ui.rel(f.key).group == Some(g.id)).map(|f| f.key).collect();
+		let mut presets = Vec::new();
+		for p in &g.presets {
+			let mut values = std::collections::BTreeMap::new();
+			for (key, raw) in &p.values {
+				match normal(*key, raw, &mut scratch) {
+					Some(v) if members.contains(key) => {
+						values.insert(key.name().to_string(), v);
+					}
+					Some(_) => problems.push(format!("{}.{}: not in the group", p.key, key.name())),
+					None => {
+						problems.push(format!("{}.{}: not a value it takes", p.key, key.name()));
+					}
+				}
+			}
+			for key in &members {
+				if !values.contains_key(key.name()) {
+					problems.push(format!("{}: no value for {}", p.key, key.name()));
+				}
+			}
+			presets.push(knobs::Preset { key: p.key.to_string(), label: p.label.to_string(), temporary: p.temporary, values });
+		}
+		groups.push(knobs::Group { id: g.id.to_string(), chooser: g.chooser.name().to_string(), noun: g.noun.to_string(), custom: Some(g.custom.to_string()), presets, from_program: g.from_program, members: Vec::new() });
+	}
+	if !problems.is_empty() {
+		return Err(problems);
+	}
+	knobs::Spec { tabs: vec![knobs::Tab { path: "Settings".into(), label: "Settings".into(), parent: None }], settings, groups }.finish()
+}
+
+// A value as the field would write it back: clamped, its case fixed, a float
+// rounded the way the file has it. None when the field doesn't take it.
+fn normal(key: Key, v: &Value, scratch: &mut Settings) -> Option<Value> {
+	let f = field(key)?;
+	(f.put)(scratch, v).then(|| (f.get)(scratch))
+}
+
+/// The stored values from the config file. A value a field doesn't take is
+/// dropped, the way knobs drops one that fails its checks, and text that is
+/// empty is no value where a rule or a switch has one to give.
+pub fn load(config: &shcl::Document) -> knobs::Model {
+	let mut m = knobs::Model::load_docs(Arc::clone(spec()), config, &shcl::Document::new());
+	// "none" was how a file said no blink before `cursor.blink`. It's no
+	// animation, so the model never takes it in.
+	let animation = spec().get(Key::CursorAnimation.name()).map_or("cursor.animation", |s| s.path.as_str());
+	if config.get_string(animation).is_ok_and(|v| v.trim().eq_ignore_ascii_case("none")) {
+		m.values.own.remove(Key::CursorAnimation.name());
+		m.values.own.insert(Key::CursorBlinking.name().into(), Value::Bool(false));
+	}
+	let mut scratch = Settings::bare();
+	let tidy = |values: &mut std::collections::BTreeMap<String, Value>, scratch: &mut Settings| {
+		values.retain(|id, v| {
+			let Some(key) = Key::parse(id) else {
+				return false;
+			};
+			let rel = ui().rel(key);
+			if (rel.rule.is_some() || rel.auto.is_some()) && matches!(v, Value::Text(_)) && v.as_text().trim().is_empty() {
+				return false;
+			}
+			// the usual folder written out is what an older build wrote for none
+			if key == Key::BgFolder && v.as_text().trim() == config::WALLPAPER_DIR_TOKEN {
+				return false;
+			}
+			match normal(key, v, scratch) {
+				Some(n) => {
+					*v = n;
+					true
+				}
+				None => false,
+			}
+		});
+	};
+	tidy(&mut m.values.own, &mut scratch);
+	tidy(&mut m.values.changes, &mut scratch);
+	// A file with no line for a font switch reads as builds before 10-09 read
+	// it: a family of its own turns the face off, and the size follows the face
+	// unless it has a size of its own.
+	let line = |path: &str| config.get_string(path).is_ok_and(|v| !v.trim().is_empty());
+	let switch = |path: &str| config.get_bool(path).is_ok();
+	let face_on = match m.values.own.get(Key::SystemFont.name()) {
+		Some(on) => on.as_bool(),
+		None => !line("font.family"),
+	};
+	if !switch("font.use_system_family") && !face_on {
+		m.values.own.insert(Key::SystemFont.name().into(), Value::Bool(false));
+	}
+	if !switch("font.use_system_size") && (!face_on || line("font.size")) {
+		m.values.own.insert(Key::SystemFontSize.name().into(), Value::Bool(false));
+	}
+	m
+}
+
+/// What the program gives for a rule, and the themes as presets.
+#[derive(Debug)]
+pub struct Env<'a> {
+	monitor: Option<&'a str>,
+	mode: crate::theme::Mode,
+	per_monitor: bool,
+	facts: Facts<'a>,
+}
+
+// The settings fields that the rules and presets read. The model is left out,
+// so a change can borrow the model mutably while an Env is alive.
+#[derive(Debug)]
+struct Facts<'a> {
+	wallpaper: Option<crate::autotheme::Derived>,
+	last: config::KeptWindow,
+	monitor_sizes: &'a [config::MonitorSize],
+	stepped_profile: Option<crate::profile::Profile>,
+	tested_profile: Option<crate::profile::Profile>,
+	found_picture: &'a str,
+	user_themes: &'a [crate::theme::UserTheme],
+}
+
+// Field by field rather than through a function, so the borrows don't
+// include `model` beside them.
+macro_rules! facts {
+	($s:expr) => {
+		Facts { wallpaper: $s.wallpaper_derived, last: config::last_window($s), monitor_sizes: &$s.monitor_sizes, stepped_profile: $s.stepped_profile, tested_profile: $s.tested_profile, found_picture: &$s.found_picture, user_themes: &$s.user_themes }
+	};
+}
+
+impl<'a> Env<'a> {
+	pub fn new(settings: &'a Settings, monitor: Option<&'a str>) -> Env<'a> {
+		Env::over(&settings.model, monitor, facts!(settings))
+	}
+
+	/// Settings fields that knobs stores are read from the model, since the
+	/// fields may not be filled from it yet.
+	fn over(model: &knobs::Model, monitor: Option<&'a str>, facts: Facts<'a>) -> Env<'a> {
+		let plain = |key: Key| model.value(key.name(), &knobs::NoEnv);
+		Env { monitor, mode: Choice::parse(plain(Key::ThemeMode).as_text()).unwrap_or(crate::theme::Mode::Dark), per_monitor: plain(Key::RememberPerMonitor).as_bool(), facts }
+	}
+}
+
+// The model to change, and an Env over the rest of the settings, so a change
+// doesn't have to copy the model first.
+fn split<'a>(settings: &'a mut Settings, monitor: Option<&'a str>) -> (&'a mut knobs::Model, Env<'a>) {
+	let env = Env::over(&settings.model, monitor, facts!(settings));
+	(&mut settings.model, env)
+}
+
+impl knobs::Env for Env<'_> {
+	fn rule(&self, name: &str) -> Option<Value> {
+		let s = &self.facts;
+		match name {
+			"system_font_family" => crate::sysfont::monospace().family.as_deref().map(|desktop| Value::Text(config::desktop_font_stack(desktop))),
+			"system_font_size" => crate::sysfont::monospace().size_pt.map(crate::sysfont::px_from_pt).filter(|px| *px >= 4.0).map(float),
+			"remembered_columns" | "remembered_rows" => {
+				let kept = config::remembered_in(s.last, s.monitor_sizes, self.monitor, self.per_monitor);
+				let n = if name == "remembered_columns" { kept.columns } else { kept.rows };
+				Some(Value::Int(n as i64))
+			}
+			"wallpaper_fg" => s.wallpaper.map(|d| hex(d.fg)),
+			"wallpaper_cursor" => s.wallpaper.map(|d| hex(d.cursor)),
+			"machine_profile" => {
+				// a step only ever goes down from the tested pick
+				let pick = match (s.stepped_profile, s.tested_profile) {
+					(Some(step), Some(tested)) if step.index() <= tested.index() => tested,
+					(Some(step), _) => step,
+					(None, tested) => tested?,
+				};
+				Some(Value::Text(pick.key().to_string()))
+			}
+			"desktop_opener" => Some(Value::Text(crate::links::desktop_opener().to_string())),
+			"found_picture" => Some(Value::Text(s.found_picture.to_string())),
+			"usual_folder" => Some(Value::Text(config::WALLPAPER_DIR_TOKEN.to_string())),
+			_ => None,
+		}
+	}
+
+	fn preset(&self, group: &str, key: &str) -> Option<knobs::Preset> {
+		if group != THEME {
+			return None;
+		}
+		let user = self.facts.user_themes;
+		let name = crate::theme::all_names(user).into_iter().find(|n| n.eq_ignore_ascii_case(key.trim()))?;
+		let pal = crate::theme::resolve_in(user, &name, self.mode, config::os_dark());
+		Some(knobs::Preset { key: key.to_string(), label: name, temporary: false, values: THEME_KEYS.iter().enumerate().map(|(i, k)| (k.name().to_string(), hex(pal.get(i)))).collect() })
+	}
+}
+
+/// Fill every setting field from the stored values, then what follows from
+/// them. `monitor` is the one Columns and Rows are shown for.
+pub fn fill(settings: &mut Settings, monitor: Option<&str>) {
+	let was = (settings.wallpaper_raw.clone(), settings.wallpaper_folder_raw.clone());
+	// worked out from the theme's colors, never from the last answer
+	settings.wallpaper_derived = None;
+	let values: Vec<Value> = {
+		let env = Env::new(settings, monitor);
+		FIELDS.iter().map(|f| settings.model.value(f.key.name(), &env)).collect()
+	};
+	for (f, v) in FIELDS.iter().zip(&values) {
+		let _ = (f.put)(settings, v);
+	}
+	// the wallpaper's colors are worked out from everything else
+	if settings.colors_from_wallpaper
+		&& settings.wallpaper_enabled
+		&& let Some(sum) = settings.wallpaper_summary
+	{
+		settings.wallpaper_derived = Some(crate::autotheme::derive(&sum, settings));
+		let pair = {
+			let env = Env::new(settings, monitor);
+			[Key::ColFg, Key::ColCursor].map(|k| settings.model.value(k.name(), &env))
+		};
+		for (k, v) in [Key::ColFg, Key::ColCursor].into_iter().zip(&pair) {
+			if let Some(f) = field(k) {
+				let _ = (f.put)(settings, v);
+			}
+		}
+	}
+	config::retheme(settings);
+	config::rewallpaper(settings, (&was.0, &was.1));
+}
+
+/// The window's grid on `monitor`, where Columns and Rows follow the last size.
+pub fn grid(settings: &Settings, monitor: Option<&str>) -> (usize, usize) {
+	let env = Env::new(settings, monitor);
+	let n = |key: Key| match settings.model.value(key.name(), &env) {
+		Value::Int(n) => usize::try_from(n).unwrap_or(1).max(1),
+		other => number(&other).map_or(1, |x| x.round().max(1.0) as usize),
+	};
+	(n(Key::Columns), n(Key::Rows))
+}
+
+/// Put `v` into the field for `key`, as a fill would. False when the field
+/// doesn't take it.
+pub fn put(settings: &mut Settings, key: Key, v: &Value) -> bool {
+	field(key).is_some_and(|f| (f.put)(settings, v))
+}
+
+/// A value the program sets for itself, such as Re-test next run turning off
+/// after the test. Stored as it is, with nothing else changed by it.
+pub fn store(settings: &mut Settings, key: Key, v: Value) {
+	if field(key).is_some() {
+		settings.model.values.own.insert(key.name().to_string(), v);
+		fill(settings, None);
+	}
+}
+
+/// A change made on screen: what knobs does with it, then every field filled
+/// again.
+pub fn set(settings: &mut Settings, key: Key, v: &Value, monitor: Option<&str>) {
+	if field(key).is_none() {
+		return;
+	}
+	let (model, env) = split(settings, monitor);
+	model.set(key.name(), v, &env);
+	fill(settings, monitor);
+	if key == Key::Theme {
+		follow_theme_font(settings, monitor);
+	}
+}
+
+/// The reset arrow, then every field filled again.
+pub fn reset(settings: &mut Settings, key: Key, monitor: Option<&str>) {
+	if field(key).is_none() {
+		return;
+	}
+	let (model, env) = split(settings, monitor);
+	model.reset(key.name(), &env);
+	fill(settings, monitor);
+	// the theme's arrow is a pick of the default theme
+	if key == Key::Theme {
+		follow_theme_font(settings, monitor);
+	}
+}
+
+// The font a saved theme has, as the rows' values. A built-in has none.
+fn theme_font(settings: &Settings, name: &str) -> Vec<(Key, Value)> {
+	let Some(theme) = crate::theme::find_user(&settings.user_themes, name) else {
+		return Vec::new();
+	};
+	let font = &theme.font;
+	let values = [font.family.clone().map(Value::Text), font.size.map(float), font.line_height_scale.map(float)];
+	THEME_FONT_KEYS.into_iter().zip(values).filter_map(|(key, v)| v.map(|v| (key, v))).collect()
+}
+
+// A theme pick sets the saved theme's font as if it were typed in, so it
+// turns a system font switch off. A value already showing is left alone, so
+// saving a theme and picking it again turns nothing off.
+fn follow_theme_font(settings: &mut Settings, monitor: Option<&str>) {
+	if settings.font_ignores_themes {
+		return;
+	}
+	let name = chosen(settings, Key::Theme);
+	for (key, v) in theme_font(settings, &name) {
+		if get(settings, key).as_ref() != Some(&v) {
+			let (model, env) = split(settings, monitor);
+			model.set(key.name(), &v, &env);
+			fill(settings, monitor);
+		}
+	}
+}
+
+/// The font rows that differ from the saved theme picked. None while the font
+/// ignores themes, or for a theme with no font of its own.
+pub fn font_changed(settings: &Settings) -> Vec<Key> {
+	if settings.font_ignores_themes {
+		return Vec::new();
+	}
+	theme_font(settings, &chosen(settings, Key::Theme)).into_iter().filter(|(key, v)| get(settings, *key).as_ref() != Some(v)).map(|(key, _)| key).collect()
+}
+
+/// What a setting under a switch would show with the switch off: a preset's
+/// value, a change to it, or its own. None for one with no switch.
+pub fn without_switch(settings: &Settings, key: Key) -> Option<Value> {
+	field(key)?;
+	let switch = ui().rel(key).auto?;
+	// a what-if, so the stored values stay as they are
+	let mut model = settings.model.clone();
+	model.values.own.insert(switch.name().to_string(), Value::Bool(false));
+	Some(model.value(key.name(), &Env::new(settings, None)))
+}
+
+pub fn can_reset(settings: &Settings, key: Key, monitor: Option<&str>) -> bool {
+	field(key).is_some() && settings.model.can_reset(key.name(), &Env::new(settings, monitor))
+}
+
+/// What a setting has with nothing of its own, for a tip.
+pub fn default_of(settings: &Settings, key: Key, monitor: Option<&str>) -> Option<Value> {
+	field(key)?;
+	Some(settings.model.default_of(key.name(), &Env::new(settings, monitor)))
+}
+
+/// Where a setting's value comes from.
+pub fn source(settings: &Settings, key: Key, monitor: Option<&str>) -> Option<knobs::Source> {
+	field(key)?;
+	Some(settings.model.source(key.name(), &Env::new(settings, monitor)))
+}
+
+fn group_of(chooser: Key) -> Option<&'static str> {
+	ui().groups.iter().find(|g| g.chooser == chooser).map(|g| g.id)
+}
+
+/// The preset a chooser row is on, or Custom, with a temporary one in force.
+pub fn chosen(settings: &Settings, chooser: Key) -> String {
+	match group_of(chooser) {
+		Some(group) => settings.model.chosen(group, &Env::new(settings, None)),
+		None => String::new(),
+	}
+}
+
+/// What a chooser's box says: the preset, with " *" after a change under it.
+/// A font that differs from the saved theme's counts as one.
+pub fn shown_choice(settings: &Settings, chooser: Key) -> String {
+	let label = settings.model.shown_choice(chooser.name(), &Env::new(settings, None));
+	if chooser == Key::Theme && !label.ends_with(" *") && !font_changed(settings).is_empty() {
+		return format!("{label} *");
+	}
+	label
+}
+
+/// The rows changed on top of the preset a chooser is on. For the theme that
+/// includes a font row that differs from a saved theme's.
+pub fn changed(settings: &Settings, chooser: Key) -> Vec<Key> {
+	let Some(group) = group_of(chooser) else {
+		return Vec::new();
+	};
+	let mut out: Vec<Key> = settings.model.changed(group, &Env::new(settings, None)).into_iter().filter_map(Key::parse).collect();
+	if chooser == Key::Theme {
+		out.extend(font_changed(settings));
+	}
+	out
+}
+
+/// What a chooser calls the person's own values.
+pub fn custom_label(chooser: Key) -> &'static str {
+	ui().groups.iter().find(|g| g.chooser == chooser).map_or("Custom", |g| g.custom)
+}
+
+/// The tip's line on where a value comes from, with each value written by
+/// `show` in the row's own units. Empty for a value at its default.
+pub fn state_line(settings: &Settings, key: Key, monitor: Option<&str>, show: &dyn Fn(Key, &Value) -> String) -> String {
+	if field(key).is_none() {
+		return String::new();
+	}
+	let line = settings.model.state_line_shown(key.name(), &Env::new(settings, monitor), &|s, v| Key::parse(&s.id).map_or_else(|| v.show(), |k| show(k, v)));
+	let font = if key == Key::Theme { font_changed(settings) } else { Vec::new() };
+	if font.is_empty() {
+		return line;
+	}
+	let labels: Vec<&str> = font.into_iter().map(label_of).collect();
+	let font = format!("Font changed here: {}.", labels.join(", "));
+	if line.is_empty() { font } else { format!("{line} {font}") }
+}
+
+/// A preset that changed its name, such as a saved theme renamed. The chooser
+/// follows it, and so do its "*" changes, where a pick would drop them.
+pub fn rename_preset(settings: &mut Settings, chooser: Key, old: &str, new: &str) {
+	let Some(group) = group_of(chooser) else {
+		return;
+	};
+	let values = &mut settings.model.values;
+	if values.own.get(chooser.name()).is_some_and(|v| v.as_text().eq_ignore_ascii_case(old)) {
+		values.own.insert(chooser.name().to_string(), Value::Text(new.to_string()));
+	}
+	if values.changed_on.get(group).is_some_and(|on| on.eq_ignore_ascii_case(old)) {
+		values.changed_on.insert(group.to_string(), new.to_string());
+	}
+	fill(settings, None);
+}
+
+/// Turns fields a test set directly into stored values, the way a file with
+/// those lines would load. Only a field whose value differs from the stored one
+/// is taken.
+#[cfg(test)]
+pub fn adopt(mut settings: Settings) -> Settings {
+	let shown: Vec<(Key, Value)> = FIELDS.iter().map(|f| (f.key, (f.get)(&settings))).collect();
+	fill(&mut settings, None);
+	for (key, v) in shown {
+		if (field(key).map(|f| (f.get)(&settings))).as_ref() != Some(&v) {
+			settings.model.values.own.insert(key.name().to_string(), v);
+		}
+	}
+	fill(&mut settings, None);
+	settings
+}
+
+/// Settings with these stored as the person's own. For tests.
+#[cfg(test)]
+pub fn owning(mut settings: Settings, values: &[(Key, Value)]) -> Settings {
+	for (key, v) in values {
+		settings.model.values.own.insert(key.name().to_string(), v.clone());
+	}
+	fill(&mut settings, None);
+	settings
+}
+
+/// Every line the settings file would have, config and kept, for tests.
+#[cfg(test)]
+pub fn lines_of(settings: &Settings) -> Vec<(String, Value)> {
+	let lines = settings.model.lines(&Env::new(settings, None));
+	lines.config.into_iter().chain(lines.kept).collect()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	// A change copied the whole model before setting one value, about 135
+	// allocations with every setting stored, on top of the fill after it.
+	// Test ID: dfe70
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_change_does_not_copy_the_model() {
+		let mut s = Settings::default();
+		for f in FIELDS {
+			let v = (f.get)(&s);
+			s.model.values.own.insert(f.key.name().to_string(), v);
+		}
+		fill(&mut s, None);
+		let stored = s.model.values.own.len();
+		let allocs = |s: &mut Settings, f: &dyn Fn(&mut Settings)| {
+			let before = crate::perf::thread_allocs();
+			f(s);
+			crate::perf::thread_allocs() - before
+		};
+		let filled = allocs(&mut s, &|s| fill(s, None));
+		let margin = number(&get(&s, Key::Margin).expect("a margin")).expect("a number");
+		let set_cost = allocs(&mut s, &|s| set(s, Key::Margin, &float(margin + 1.0), None));
+		assert_eq!(number(&get(&s, Key::Margin).expect("a margin")), Some(margin + 1.0));
+		let reset_cost = allocs(&mut s, &|s| reset(s, Key::Margin, None));
+		assert!(!s.model.values.own.contains_key(Key::Margin.name()));
+		// a copy costs at least one per stored value, the change itself a few
+		for (what, n) in [("set", set_cost), ("reset", reset_cost)] {
+			assert!(n.saturating_sub(filled) < stored as u64 / 4, "{what} made {n} allocations, a fill alone {filled}");
+		}
+	}
+}

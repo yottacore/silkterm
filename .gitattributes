@@ -11,10 +11,20 @@
 cicd/utility/n8git_backup-and-publish   text eol=lf
 utility/git-hooks/pre-commit            text eol=lf
 utility/git-hooks/pre-push              text eol=lf
+utility/runterm                         text eol=lf
 
 # PowerShell is the mirror case: CRLF is the form it ships in, so pin that rather
 # than leave it to whoever checks it out.
 *.ps1           text eol=crlf
+*.cmd           text eol=crlf
+
+# The launcher is the exception: it carries a shebang so it can be run
+# directly on Linux and macOS, and a CR would break that. pwsh 7 reads it
+# fine on Windows, and nothing runs it under PowerShell 5.1.
+utility/n8runterm.ps1                   text eol=lf
+
+# The installer carries a shebang too, and 5.1 reads LF as well as CRLF.
+install.ps1                             text eol=lf
 
 # Rust sources and .shcl documents are deliberately left alone. They build and test
 # the same either way, and settings_ui.shcl is compiled in with include_str!, so
