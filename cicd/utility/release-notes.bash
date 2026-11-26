@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 ##	Purpose:
-##		- The release notes, with the downloads in a table: target OS in rows,
-##		  CPU architecture in columns. Built from the files being uploaded, so a
+##		- The release notes. The version's changelog section goes first, then the
+##		  downloads in a table, with target OS in rows and CPU architecture in
+##		  columns. The table is built from the files being uploaded, so a
 ##		  build that is missing leaves its cell marked rather than a dead link.
 ##		- Sourced by release.bash. No network and no gh, so a test can run it on
 ##		  made-up file names.
@@ -31,8 +32,25 @@ fReleaseNotes_RepoSlug(){
 	printf '%s/%s' "${owner}" "${repo}"
 }
 
+## fReleaseNotes_Changes <version> < changelog.md
+## That version's section of the changelog, without its heading or the blank
+## lines around it. Nothing when it has none.
+fReleaseNotes_Changes(){
+	local -r want="## v${1}"
+	awk -v want="${want}" '
+		$0 == want || index($0, want " ") == 1 { on = 1; next }
+		on && /^## / { exit }
+		on { lines[++n] = $0 }
+		END {
+			first = 1; while (first <= n && lines[first] ~ /^[[:space:]]*$/) first++
+			last = n; while (last >= first && lines[last] ~ /^[[:space:]]*$/) last--
+			for (i = first; i <= last; i++) print lines[i]
+		}'
+}
+
 ## fReleaseNotes <owner/repo> <tag> <exe name> <version> <build id or ""> <file>...
 ## Prints the notes. Files are paths or bare names; only the name is used.
+## RELEASE_CHANGELOG names the changelog, whose section for the version goes first.
 fReleaseNotes(){
 	local -r slug="${1}" tag="${2}" exeName="${3}" version="${4}" buildId="${5}"
 	shift 5
@@ -95,6 +113,11 @@ fReleaseNotes(){
 		if (( ${#grid[i]} > ${width[col]:-0} )); then width[col]=${#grid[i]}; fi
 	done
 
+	local changes=""
+	if [[ -n "${RELEASE_CHANGELOG:-}" && -r "${RELEASE_CHANGELOG}" ]]; then
+		changes="$(fReleaseNotes_Changes "${version}" < "${RELEASE_CHANGELOG}")"
+	fi
+	[[ -z "${changes}" ]] || printf '%s\n\n' "${changes}"
 	printf '%s\n\n' "See the README for details."
 	local line=""
 	for i in "${!grid[@]}"; do
@@ -127,3 +150,4 @@ fReleaseNotes(){
 
 ##	History:
 ##		- 20261004 JC: Created.
+##		- 20261126 JC: The version's changelog section goes first.

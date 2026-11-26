@@ -107,7 +107,7 @@ if ((doPublish)); then
 	##  shellcheck source=cicd/utility/release-notes.bash
 	source "${here}/release-notes.bash"
 	slug="$(fReleaseNotes_RepoSlug "$(git remote get-url origin)")" || fDie "no GitHub owner/repo for the download links"
-	notes="$(fReleaseNotes "${slug}" "${tag}" "${EXE_NAME}" "${ver}" "${buildId}" "${assets[@]}")"
+	notes="$(RELEASE_CHANGELOG="${root}/changelog.md" fReleaseNotes "${slug}" "${tag}" "${EXE_NAME}" "${ver}" "${buildId}" "${assets[@]}")"
 fi
 
 fEcho_Clean
@@ -147,3 +147,4 @@ fi
 ##	History:
 ##		- 20260711: Created.
 ##		- 20261006: Output through the shared fEcho and fDie helpers.
+##		- 20261126: The notes start with the version's changelog section.

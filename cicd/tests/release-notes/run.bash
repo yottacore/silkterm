@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		The release notes' download table: OS in rows, architecture in columns,
+##		The release notes' changelog section, and its download table: OS in rows, architecture in columns,
 ##		each cell linking only the files that are uploaded, under the
 ##		names GitHub gives them.
 ##	- Test ID: ddgbk
@@ -48,6 +48,7 @@ fCellIs(){ [[ "$(fCell "${1}" "${2}")" == "${3}" ]]; }
 fTableRows(){ grep -c '^| ' <<< "${notes}" || true; }
 fRowsAre(){ [[ "$(fTableRows)" == "${1}" ]]; }
 fNoTrailingPipe(){ ! grep -q '|[[:space:]]*$' <<< "${notes}"; }
+fNotesStart(){ [[ "${notes}" == "${1}"* ]]; }
 
 ## Paths, as release.bash passes them; only the name may reach a link.
 fNotes "Bxyz" "${all[@]/#//some/dir/}"
@@ -110,6 +111,22 @@ echo "renamed asset:"
 fCheck "link uses GitHub's name" fCellIs Linux 1 "[Binary](https://github.com/${slug}/releases/download/v1.0.0-alpha.1/silkterm-1.0.0.alpha.1-linux-x86_64)"
 fCheck "no '~' in any link" fLacks "~"
 
+## The version's changelog section goes above the table, and no other.
+cl=$'# Changelog\n\n<!--\n## vNEXT - DATE\n\n### Added\n-->\n\n## v1.2.3-beta4 - 2026-11-26\n\n### Added\n\n- A minimap.\n\n- Tabs name themselves.\n\n## v1.2.3-beta3 - 2026-08-23\n\n### Notes\n\n- Older.\n'
+fChangesAre(){ [[ "$(fReleaseNotes_Changes "${1}" <<< "${cl}")" == "${2}" ]]; }
+echo "changelog section:"
+fCheck "the version's section, without its heading" fChangesAre 1.2.3-beta4 $'### Added\n\n- A minimap.\n\n- Tabs name themselves.'
+fCheck "an older version gets its own" fChangesAre 1.2.3-beta3 $'### Notes\n\n- Older.'
+fCheck "a version that only starts the same gets nothing" fChangesAre 1.2.3-beta ""
+fCheck "a version with no section gets nothing" fChangesAre 9.9.9 ""
+notes="$(RELEASE_CHANGELOG=<(printf '%s' "${cl}") fReleaseNotes "${slug}" "${tag}" silkterm 1.2.3-beta4 "" "${all[@]}")"
+fCheck "the notes start with it" fHas $'### Added\n\n- A minimap.\n\n- Tabs name themselves.\n\nSee the README for details.'
+fCheck "and leave the rest out" fLacks "Older."
+fCheck "the table is still there" fRowsAre 4
+notes="$(RELEASE_CHANGELOG=/nonexistent/changelog.md fReleaseNotes "${slug}" "${tag}" silkterm 1.2.3-beta4 "" "${all[@]}")"
+fCheck "no changelog, no section" fHas $'See the README for details.\n\n| OS'
+fCheck "and nothing before the README line" fNotesStart "See the README"
+
 echo "owner/repo from the remote:"
 fSlugIs(){ [[ "$(fReleaseNotes_RepoSlug "${1}" 2>/dev/null || true)" == "${2}" ]]; }
 fCheck "ssh alias" fSlugIs "github_jim-collier:yottacore/silkterm.git" "yottacore/silkterm"
@@ -124,3 +141,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261004 JC: Created.
+##		- 20261126 JC: The changelog section.
