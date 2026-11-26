@@ -7,8 +7,8 @@
 	on Windows the only word of it went to a console a release build doesn't
 	have.
 .DESCRIPTION
-	Now a standard message box says so, a few seconds after launch, when the
-	shell scan's save is refused.
+	Now a standard message box says so, a few seconds after launch, when a
+	launch save is refused.
 .NOTES
 	History: At bottom of file.
 #>
@@ -27,11 +27,13 @@ function fText([IntPtr]$H) { $sb = New-Object System.Text.StringBuilder 2048; [v
 function fClass([IntPtr]$H) { $sb = New-Object System.Text.StringBuilder 256; [void][SilkBox.Win]::GetClassNameW($h, $sb, 256); $sb.ToString() }
 
 $cfg = Join-Path $OutDir "savenotice-config.shcl"
-##	The margin line steps back to a depth nothing uses, so the reader can't place
+##	The oo line steps back to a depth nothing uses, so the reader can't place
 ##	it. shcl writes such a line back as it was, and saves go through beside it,
-##	unless the save falls back to the canonical form. A shells block written twice
-##	makes the shell scan's save do that.
-fFreshConfig $cfg @("window:", "`t`topacity: 1.0", "`tmargin: 4", "shells:", "`tcmd:", "`t`tcommand: cmd.exe", "shells:", "`tpwsh:", "`t`tcommand: pwsh.exe")
+##	unless the save falls back to the canonical form. A shell block written twice
+##	makes the launch's move of the old shell.default into the shell list do that.
+##	A doubled shells block no longer does, since that save keeps the lines.
+$bad = "`too: 2"
+fFreshConfig $cfg @("shell:", "`tdefault: `"cmd.exe`"", "shells:", "`tcmd:", "`t`tcommand: cmd.exe", "shell:", "`t`tnn: 1", $bad, "", "##", "##    Format   3", "##")
 
 $p = fStartSilk -Exe $Exe -SilkArgs @("--config=$cfg", "--columns", "100", "--rows", "30") -EnvVars @{}
 $h = fWaitWindow $p 40
@@ -47,16 +49,17 @@ if (fCheck "a message box came up for the refused save" ($box -ne [IntPtr]::Zero
 	$body = fText ([SilkBox.Win]::GetDlgItem($box, 0xFFFF))
 	fNote "box says: $title / $($body -replace '\s+', ' ')"
 	$onDisk = @(Get-Content $cfg)
-	$at = 1 + [array]::FindIndex([string[]]$onDisk, [Predicate[string]] { param($l) $l -eq "`tmargin: 4" })
+	$at = 1 + [array]::FindIndex([string[]]$onDisk, [Predicate[string]] { param($l) $l -eq $bad })
 	fNote "the file has $($onDisk.Count) lines, the bad one at $at"
 	[void](fCheck "it is titled as the notice" ($title -eq 'Settings not saved'))
 	##	The launch has filled in the missing settings by then, so the bad line has moved down.
 	[void](fCheck "it names the file and the line as the file has it" ($body.Contains($cfg) -and $body -like "*Line $at can't be read*"))
 	[void](fShot $box "notice")
-	[void](fCheck "the settings file was left as it was" (@(Get-Content $cfg) -contains "`tmargin: 4"))
+	[void](fCheck "the settings file was left as it was" (@(Get-Content $cfg) -contains $bad))
 }
 fStop $p
 
 ##	History:
 ##		- 20260918 JC: Created.
 ##		- 20261006 JC: Help block, typed parameters, named arguments.
+##		- 20261126 JC: The refused save comes from moving the old shell.default.
