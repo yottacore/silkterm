@@ -893,9 +893,9 @@ mod tests {
 		}
 	}
 
-	// Transparency's mark adds that it keeps a window from giving its memory
-	// back, in the Windows build only, since only there is a window in view
-	// with Transparency on never let go. No other row's mark differs.
+	// Transparency's mark adds that it keeps a window from giving all its
+	// memory back, in the Windows build only, since only there does a window
+	// in view with Transparency on keep its device. No other row's mark differs.
 	// Test ID: ddkgy
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

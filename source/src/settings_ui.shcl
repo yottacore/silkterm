@@ -680,7 +680,7 @@ rows:
 		setting: transparency.enabled
 		help: "See through the window to what's behind it. On Windows this takes effect at the next launch."
 		warning: "This needs a desktop compositor, so it may not work on every desktop."
-		windows_warning: "This needs a desktop compositor, so it may not work on every desktop. A window still on screen also can't free its graphics memory when idle."
+		windows_warning: "This needs a desktop compositor, so it may not work on every desktop. A window still on screen also keeps some of its graphics memory when idle."
 
 	Opacity:
 		label: Opacity %
@@ -1096,7 +1096,7 @@ rows:
 		whole: true
 		setting: window.idle_release_min
 		gate: IdleRelease
-		help: "How long a visible window waits when it's unfocused and quiet. On Windows with Transparency on, a visible window never frees memory, since it would turn black."
+		help: "How long a visible window waits when it's unfocused and quiet. On Windows with Transparency on, a visible window keeps some memory, so it doesn't turn black."
 
 	SoftwareRendering:
 		label: Always use software rendering

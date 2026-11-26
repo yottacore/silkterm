@@ -14,10 +14,12 @@
 	- Partly in view: the other window leaves a strip on the left. "Minutes
 	  when hidden" is 30, so only "Minutes otherwise", at 1, can let it go.
 	  With Transparency off it has to let its device go within a minute and a
-	  quarter, and come back on a click. With Transparency on, a window still
-	  partly in view keeps its device, since it would go black without it (see
-	  the releasing resources design doc), and the log has to say so. Neither
-	  may ever be taken as covered.
+	  quarter, and come back on a click. With Transparency on it has to let go
+	  of all but its device and swapchain in the same time, since it would go
+	  black without them (see the releasing resources design doc). The strip
+	  in view must still show the same picture a few seconds later, and a
+	  click must bring the rest back on the kept device. Neither may ever be
+	  taken as covered.
 	- All covered: the other window covers all of it. "Minutes otherwise" is
 	  30, so only "Minutes when hidden", at 1, can let it go, and it has to,
 	  with either Transparency setting, within a minute and a quarter. Then
@@ -41,6 +43,13 @@ function fLog([string]$Path) {
 		$fs.Close()
 		$text
 	} catch { "" }
+}
+
+##	The strip a partly covered window leaves in view, inside its frame.
+function fStrip([IntPtr]$H, [string]$Name) {
+	$bmp = fShot $h $name
+	if (-not $bmp -or $bmp.Width -lt 160 -or $bmp.Height -lt 120) { return $null }
+	$bmp.Clone((New-Object System.Drawing.Rectangle 12, 50, 136, ($bmp.Height - 100)), [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
 }
 
 ##	Another program's window, in a process of its own so it has its own
@@ -102,6 +111,11 @@ foreach ($arm in $idleArms) {
 	[void][Silk.Win]::SetCursorPos($cr.x + [int]($cr.w / 2), $cr.y + [int]($cr.h / 2))
 	$t0 = Get-Date
 	fNote "$arm covered, foreground ours: $(fForegroundIsOurs $h)"
+	$before = $null
+	if ($seethru -and -not $full) {
+		Start-Sleep -Seconds 2
+		$before = fStrip $h "idlebehind-$arm-before"
+	}
 
 	$released = $false
 	for ($i = 0; $i -lt 80 -and -not $released; $i++) {
@@ -116,7 +130,14 @@ foreach ($arm in $idleArms) {
 	} else {
 		[void](fCheck "$arm partly in view is never taken as covered" (-not ((fLog $err) -match 'covered by other windows')))
 		if ($seethru) {
-			[void](fCheck "$arm partly in view keeps its device, as one that would go black" ((-not $released) -and ((fLog $err) -match 'kept: on screen, and would go blank')))
+			$log = fLog $err
+			[void](fCheck "$arm partly in view lets go of all but its device and swapchain within a minute and a quarter" ($released -and ($log -match 'device released but for itself and its swapchain') -and -not ($log -match 'kept: on screen')))
+			##	It went black within 4 seconds when the device went with the rest.
+			Start-Sleep -Seconds 6
+			$after = fStrip $h "idlebehind-$arm-after"
+			$moved = fDiff $before $after
+			fNote "$arm strip ink before $(fInk $before 3), after $(fInk $after 3), moved $moved"
+			[void](fCheck "$arm partly in view still shows its last frame" ($after -and $moved -lt 0.1))
 		} else {
 			[void](fCheck "$arm behind another window let its device go within a minute and a quarter" $released)
 		}
@@ -172,6 +193,9 @@ foreach ($arm in $idleArms) {
 			$back = (fLog $err) -match 'device rebuilt'
 		}
 		[void](fCheck "$arm a click brings it back" $back)
+		if ($seethru -and -not $full) {
+			[void](fCheck "$arm a click brings it back on the kept device" ((fLog $err) -match 'device rebuilt.*on the kept device'))
+		}
 	}
 
 	fStop $p
@@ -181,3 +205,4 @@ foreach ($arm in $idleArms) {
 
 ##	History:
 ##		- 20261125 JC: Created, from idlebehind.ps1, with all covered arms.
+##		- 20261125 JC: Transparency on, partly in view: lets go of all but its device and swapchain, and keeps its last frame up.

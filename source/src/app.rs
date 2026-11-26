@@ -653,9 +653,15 @@ impl Gpu {
 	// The renderers first and the device last: `Gfx::release` needs every
 	// handle on the device gone before it runs.
 	fn release(self) -> Rebirth {
+		self.into_gfx().release()
+	}
+
+	// Everything but the device and its swapchain, for a window that would
+	// go blank without them (`State::release_gpu`).
+	fn into_gfx(self) -> Gfx {
 		let Self { gfx, rects, minimap, wallpaper_img, scrim } = self;
 		drop((wallpaper_img, minimap, scrim, rects));
-		gfx.release()
+		gfx
 	}
 }
 
@@ -669,6 +675,10 @@ struct State {
 	// may ask for it.
 	gpu: Option<Gpu>,
 	rebirth: Option<Rebirth>,
+	// The device and its swapchain, kept through an idle release by a window
+	// in view that has nothing else on screen (see `release_gpu`). The last
+	// frame stays up while everything else is let go.
+	kept_gfx: Option<Gfx>,
 	text: TextCtx,
 	// posts worker results (wallpaper) back into this event loop
 	proxy: EventLoopProxy<UserEvent>,
@@ -3224,6 +3234,7 @@ impl ApplicationHandler<UserEvent> for App {
 				scrim,
 			}),
 			rebirth: None,
+			kept_gfx: None,
 			text,
 			proxy: self.proxy.clone(),
 			tabs: Tabs { list, active: 0 },
@@ -3569,6 +3580,11 @@ impl ApplicationHandler<UserEvent> for App {
 				let now = state.window.inner_size();
 				window_size::mondbg(&format!("resized {}x{}", now.width, now.height), state.watch.key.as_deref(), None, None);
 				state.no_area = now.width == 0 || now.height == 0;
+				// the kept swapchain still has the old size, and its last frame
+				// would be stretched or cut
+				if state.kept_gfx.is_some() && !state.no_area {
+					state.note_active("resize");
+				}
 				state.resize_surface(now.width, now.height);
 				state.note_wallpaper_size();
 				state.relayout_all();
@@ -4726,12 +4742,13 @@ impl ApplicationHandler<UserEvent> for App {
 		if env_flag(EnvFlag::IdleDbg) {
 			state.trace_hold(&config::settings(), dialog_up);
 		}
-		if state.gpu.is_none() {
-			if state.idle.rebuild_due(hidden, Instant::now()) {
-				state.rebuild_gpu();
-			}
-		} else if !dialog_up && state.release_deadline(&config::settings()).is_some_and(|due| Instant::now() >= due) {
-			state.release_gpu();
+		if state.gpu.is_none() && state.idle.rebuild_due(hidden, Instant::now()) {
+			state.rebuild_gpu();
+		} else if !dialog_up
+			&& let Some((due, letting)) = state.next_release(&config::settings())
+			&& Instant::now() >= due
+		{
+			state.idle_release(letting);
 			// the dialogs' warm context is a second device; it comes back
 			// with the first (see the warm-up at the top of this pass)
 			self.gpu_warm.release();
@@ -4863,7 +4880,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// wake a parked cursor at its scheduled resume time, even when idle
 		let flow = wake_by(flow, cursor_wake);
 		// wake to let the device go once the window has sat idle long enough
-		let idle_wake = (state.gpu.is_some() && !dialog_up).then(|| state.release_deadline(&config::settings())).flatten();
+		let idle_wake = (!dialog_up).then(|| state.next_release(&config::settings())).flatten().map(|(due, _)| due);
 		let flow = wake_by(flow, idle_wake);
 		let memdbg_wake = env_flag(EnvFlag::MemDbg).then_some(self.memdbg_next);
 		let flow = wake_by(flow, memdbg_wake);
