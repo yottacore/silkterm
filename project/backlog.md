@@ -38,7 +38,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ID: 2026101906582193
 	- Type: Task
 	- Status: Stalled
-		- Held for the rc.1 merge to main, since the workflow runs from `main`.
+		- Held for a first pull request from someone else, to prove the check.
 	- Priority: Avg
 	- Opened: 20261019-065821
 	- Opened by: JC
@@ -54,6 +54,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261023: Neither a full run nor Mac CI runs `cla.yml`, which runs only on pull requests.
 		- 20261117: JC asked for it in the next release. `CLA.md`, the contributing.md section and `cla.yml` are on `dev`, not yet on `main`. They'll go to `main` with the rc.1 merge. The first outside pull request after that proves the check.
 		- 20261118: It's held for the rc.1 merge to main, since cla.yml runs from main, and then for a first pull request from someone else to prove the check. The files and the pull_request_target and issue_comment triggers are on dev.
+		- 20261126: The files and `cla.yml` went to `main` with the beta4 cut. Only the first outside pull request is left.
 
 - ttf-parser is unmaintained, and the advisory scan ignores that until the crates that pull it in move off it
 	- ID: 2026101715240000
