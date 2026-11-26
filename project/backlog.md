@@ -942,6 +942,33 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261117-091811
 	- Closed reason: Done
 
+- Windows: the `savenotice` scenario no longer gets a refused save, so its notice never comes up
+	- ID: 2026112612100000
+	- Type: Bug
+	- Status: Closed
+	- Severity: Low
+	- Opened: 20261126-121000
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.1
+	- Incorrect behavior: `savenotice` (dct88) fails "a message box came up for the refused save" on vm925w, twice in a row, on the beta4 build.
+	- Reproduced: 20261126, on vm925w. On Linux the same file, with or without a Format line, is filled from the template at launch. The unreadable line and both `shells:` blocks are kept, and the save goes through.
+	- Possible cause: Since the 11-19 template work, a save beside an unreadable line keeps it rather than refusing. The scenario's file no longer leads to a refused save. The notice may still work for a save that is refused some other way.
+	- 20261126: JC asked for it fixed before beta4.
+	- Actual cause: A save beside the doubled `shells:` block keeps the lines now, so the scenario's file never had a refused save. With a save that is still refused, a second fault showed: the notice named the line where the early launch save found it. The launch then fills in the missing settings, so the file had that line 317 lines further down.
+	- Actual fix: The scenario's file has the old `shell.default` and a second `shell:` block with the unreadable line. Moving the old default into the shell list is refused there, as `an_old_default_shell_waits_for_a_save_that_can_happen` already shows. The notice reads the lines from the file as it is when it goes up, and says nothing if the file reads clean by then.
+	- Expected behavior: The scenario sets up a save that is still refused, and sees the notice. If no save can be refused any more, the notice and its scenario go.
+	- Notes:
+		- b29w's console has been locked in recent full runs, so the scenario skipped there and this went unseen.
+		- Nothing is lost: the line stays in the file.
+	- Verified: 20261126 on vm925w, `savenotice` with a Windows build of this tree: the box names line 328, where the file has it. With the beta4 exe the box came up naming line 11. The unit tests, clippy, and the quick run's 5 areas pass.
+	- Swept: `take_refusal` is the one way the window gets a refusal, so every notice reads the file again.
+	- Test case: dfv0a `a_refusal_names_the_line_where_the_file_has_it_now`, which fails without the fix. `cicd/tests/wingui/savenotice.ps1` (dct88), by hand on vm925w: `cicd/tests/wingui/run.bash --host vm925w savenotice`.
+	- Branch: savenotice2
+	- Acceptance signoff: Self-closed: the scenario passes on vm925w, and the new test fails without the fix.
+	- Closed: 20261126-123500
+	- Closed reason: Done
+
 - Dragging the scrollbar thumb while output arrives can make the text jump
 	- ID: 2026112017124593
 	- Type: Bug
@@ -2174,6 +2201,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Code review 20261120 item 43.
 		- It covers the left half only now. alacritty, kitty and wezterm draw it 2 cells wide.
 		- Detail: `detail_backlog.md`, under this ID.
+
+- A launch's messages name a line one above where the file has it, after a refused save
+	- ID: 2026112612350000
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261126-123500
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: With the `savenotice` file, the launch prints "1 line(s) couldn't be read line 327", and "nothing reads `shell.nn` line 326". The file has those lines at 328 and 327.
+	- Reproduced: 20261126, on b23 with the beta4 Linux build.
+	- Possible cause: The launch reads the file through `loaded_text`, which drops the old `shell.default` in memory. The refused save left it in the file, so every line below it is numbered one too low.
+	- Expected behavior: The messages name each line where the file has it.
 
 - A pre-nesting file's look settings stop applying after it converts
 	- ID: 2026111917532694

@@ -2326,7 +2326,21 @@ static REFUSED: std::sync::Mutex<Option<Refusal>> = std::sync::Mutex::new(None);
 
 /// The refusal waiting to be shown, if any. Taking it clears it.
 pub fn take_refusal() -> Option<Refusal> {
-	crate::locks::lock(&REFUSED).take()
+	let refusal = crate::locks::lock(&REFUSED).take()?;
+	as_the_file_has_it(refusal)
+}
+
+// The lines as the file has them when the notice goes up. A launch step after
+// the refused save fills in missing settings, which moves the bad line down, so
+// the line the save saw is no longer the one to look at. None once the file
+// reads clean, since there is nothing left to fix.
+fn as_the_file_has_it(refusal: Refusal) -> Option<Refusal> {
+	let Ok(body) = std::fs::read(&refusal.path) else {
+		return Some(refusal);
+	};
+	let doc = parse_kept(&settings_text(&body));
+	let lost = doc.lost_count();
+	(lost > 0).then(|| Refusal { lines: unreadable_lines(&doc), lost, ..refusal })
 }
 
 fn leave_refusal(refusal: Refusal) {
@@ -8278,6 +8292,29 @@ mod tests {
 		assert_eq!(take_refusal(), None, "taken once");
 		assert!(write_doc(&path, &shcl::Document::parse("font:\n\tsize: 12.0\n")));
 		assert_eq!(take_refusal(), None, "a save that went through");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The notice named the line where a launch save found it, and the launch then
+	// filled in settings above it, so the file had it hundreds of lines further down.
+	// Test ID: dfv0a
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't sync a folder")]
+	fn a_refusal_names_the_line_where_the_file_has_it_now() {
+		let _guard = super::test_config_lock();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_refusedmoved_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let text = "window:\n\t\tmargin: 4\n\tstray: 1\n";
+		std::fs::write(&path, text).unwrap();
+		let _ = take_refusal();
+		assert!(!write_doc(&path, &shcl::Document::parse(text)));
+		std::fs::write(&path, format!("font:\n\tsize: 12.0\n\n{text}")).unwrap();
+		assert_eq!(take_refusal(), Some(Refusal { path: path.clone(), lines: vec![6], lost: 1 }));
+
+		assert!(!write_doc(&path, &shcl::Document::parse(text)));
+		std::fs::write(&path, "window:\n\tmargin: 4\n").unwrap();
+		assert_eq!(take_refusal(), None, "fixed since, so nothing to say");
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
