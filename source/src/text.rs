@@ -97,7 +97,8 @@ fn pin_mono_family(fs: &FontSystem) {
 /// the pair, such as a menu label on dark chrome, gets neither.
 pub fn text_blend(fg: [u8; 3], bg: [u8; 3], amount: f32) -> (f32, f32, f32) {
 	let (fg_gray, bg_gray) = (gray_of(fg), gray_of(bg));
-	let on = crate::palette::to_oklab(fg).0 < crate::palette::to_oklab(bg).0;
+	// Equal colors are checked first because Miri makes cbrt slightly inexact on purpose, so the same color could come out darker than itself.
+	let on = fg != bg && crate::palette::to_oklab(fg).0 < crate::palette::to_oklab(bg).0;
 	(fg_gray, bg_gray, if on { amount.clamp(0.0, crate::config::MAX_DARK_ON_LIGHT) } else { 0.0 })
 }
 
