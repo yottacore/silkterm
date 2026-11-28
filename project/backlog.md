@@ -970,6 +970,24 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261126-123500
 	- Closed reason: Done
 
+- Miri: white text on white counts as dark on light
+	- ID: 2026112808150000
+	- Type: Bug
+	- Status: Closed
+	- Severity: Low
+	- Opened: 20261128-081500
+	- Opened by: JC
+	- Target version: rc.1
+	- Incorrect behavior: The 11-27 full run failed Regression tests on `only_text_darker_than_its_background_is_corrected` (dcxys) under Miri, `left: 1.0`, `right: 0.0`. The other 819 tests passed.
+	- Actual cause: Miri makes `cbrt` slightly inexact on purpose, so `to_oklab` of one color could come out darker than itself. Real hardware gives the same answer for the same color.
+	- Actual fix: `text_blend` treats equal colors as not dark on light before comparing their lightness.
+	- Verified: 20261128. dcxys under Miri over 24 seeds fails on 10 without the fix and passes on all with it. All 24 `text::tests` pass natively and under Miri.
+	- Test case: dcxys `only_text_darker_than_its_background_is_corrected`
+	- Branch: miriblend
+	- Acceptance signoff: Self-closed: the failing test passes under Miri on every seed tried, and fails without the fix.
+	- Closed: 20261128-082500
+	- Closed reason: Done
+
 - Dragging the scrollbar thumb while output arrives can make the text jump
 	- ID: 2026112017124593
 	- Type: Bug
